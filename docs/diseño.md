@@ -37,7 +37,7 @@ El sistema selecciona la estrategia según la versión de canasta:
 
 Para 2013, θ=1 para todos los genéricos: los ponderadores ENIGH 2010 fueron alineados
 al periodo base dic 2010, por lo que no hay desfase que normalizar.
-Para 2024, θ_j = 100 / I_j^{2Q Jul 2024} por genérico: los ponderadores ENIGH 2022
+Para 2024, $θ_j = \frac{100}{I_j^{2Q Jul 2024}}$ por genérico: los ponderadores ENIGH 2022
 están referenciados a jul 2024 mientras los índices publicados tienen base jul 2018.
 
 La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
