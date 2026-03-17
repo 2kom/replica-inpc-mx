@@ -32,8 +32,16 @@ sin modificar la lógica de negocio.
 `laspeyres.py` y `encadenado.py` implementan la misma interfaz `CalculadorBase`.
 El sistema selecciona la estrategia según la versión de canasta:
 
-- versiones 2018 y 2010 → Laspeyres directo
-- versiones 2013 y 2024 → Laspeyres encadenado
+- versiones 2010 y 2018 → `LaspeyresDirecto` — $INPC = \sum_j w_j \cdot I_j$
+- versiones 2013 y 2024 → `LaspeyresEncadenado` — $INPC = f \cdot \sum_j w_j \cdot \theta_j \cdot I_j$
+
+Para 2013, θ=1 para todos los genéricos: los ponderadores ENIGH 2010 fueron alineados
+al periodo base dic 2010, por lo que no hay desfase que normalizar.
+Para 2024, θ_j = 100 / I_j^{2Q Jul 2024} por genérico: los ponderadores ENIGH 2022
+están referenciados a jul 2024 mientras los índices publicados tienen base jul 2018.
+
+La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
+`encadenamiento` con valores → encadenado.
 
 Agregar una nueva variante de cálculo no requiere modificar el código existente.
 
@@ -538,3 +546,110 @@ class DiagnosticoFaltantes:
 | `tipo_faltante` válido | valores in `{'indice', 'ponderador'}` |
 | Consistencia índice | si `tipo_faltante == 'indice'` → `periodo` no NaN |
 | Consistencia ponderador | si `tipo_faltante == 'ponderador'` → `periodo` NaN |
+
+---
+
+## 6. Contratos de puertos
+
+Los puertos son los contratos que el dominio impone a sus dependencias externas.
+Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la
+implementación concreta. Un nuevo adaptador (xlsx, SQL, API, etc.) solo necesita
+implementar el puerto correspondiente sin tocar el dominio.
+
+`VersionCanasta` y `ManifestCorrida` se definen en `dominio/tipos.py` y son
+compartidos por todos los puertos y contratos.
+
+```python
+VersionCanasta = Literal[2010, 2013, 2018, 2024]
+
+@dataclass
+class ManifestCorrida:
+    id_corrida: str
+    version: VersionCanasta
+    ruta_canasta: Path
+    ruta_series: Path
+    fecha: datetime
+```
+
+---
+
+### 6.1 LectorCanasta
+
+Recibe una fuente de datos y devuelve una `CanastaCanoNica` lista para usar.
+La versión se pasa explícitamente para que el lector sepa qué columnas esperar
+y cómo interpretar el archivo.
+
+```python
+class LectorCanasta(Protocol):
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanoNica: ...
+```
+
+---
+
+### 6.2 LectorSeries
+
+Recibe un archivo de series y devuelve una `SerieNormalizada` lista para usar.
+Resuelve internamente la orientación (horizontal/vertical), la presencia de
+metadatos y el encoding. No filtra por versión — esa responsabilidad es del
+caso de uso.
+
+```python
+class LectorSeries(Protocol):
+    def leer(self, ruta: Path) -> SerieNormalizada: ...
+```
+
+---
+
+### 6.3 FuenteValidacion
+
+Obtiene el INPC publicado por el INEGI para los periodos solicitados.
+Devuelve `None` por periodo cuando el INEGI no tiene dato para ese periodo.
+Lanza excepción cuando la fuente no está disponible — el caso de uso la captura
+y marca la validación como `no_disponible`.
+
+```python
+class FuenteValidacion(Protocol):
+    def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]: ...
+```
+
+---
+
+### 6.4 EscritorResultados
+
+Exporta los artefactos de resultado al usuario. `ResultadoCalculo` no se exporta
+directamente — sus datos están contenidos en `ReporteDetalladoValidacion`.
+
+```python
+class EscritorResultados(Protocol):
+    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None: ...
+    def escribir_diagnostico(self, diagnostico: DiagnosticoFaltantes, ruta: Path) -> None: ...
+```
+
+---
+
+### 6.5 RepositorioCorridas
+
+Persiste y recupera los metadatos de cada corrida. `listar()` devuelve todos los
+`id_corrida` registrados — necesario para reconstruir historiales y unir resultados
+de distintas versiones.
+
+```python
+class RepositorioCorridas(Protocol):
+    def guardar(self, id_corrida: str, manifest: ManifestCorrida) -> None: ...
+    def obtener(self, id_corrida: str) -> ManifestCorrida: ...
+    def listar(self) -> list[str]: ...
+```
+
+---
+
+### 6.6 AlmacenArtefactos
+
+Persiste y recupera los artefactos generados por una corrida para trazabilidad
+interna. Opera con DataFrames genéricos — no necesita conocer el tipo de artefacto,
+solo el nombre con el que se guardó.
+
+```python
+class AlmacenArtefactos(Protocol):
+    def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
+    def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
+```
