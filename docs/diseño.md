@@ -653,3 +653,78 @@ class AlmacenArtefactos(Protocol):
     def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
     def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
 ```
+
+---
+
+## 7. Estrategia de errores
+
+### 7.1 Jerarquía de excepciones
+
+Todas las excepciones del sistema heredan de `ReplicaInpcError` y se definen
+en `dominio/errores.py`. Las capas superiores solo necesitan importar desde el
+dominio — nunca desde infraestructura.
+
+```python
+# Base
+class ReplicaInpcError(Exception): ...
+
+# Errores de importación — fallan la corrida inmediatamente
+class ErrorImportacion(ReplicaInpcError): ...
+class ArchivoNoEncontrado(ErrorImportacion): ...
+class ArchivoVacio(ErrorImportacion): ...
+class ArchivoCorrupto(ErrorImportacion): ...
+class EncodingNoLegible(ErrorImportacion): ...
+class OrientacionNoDetectable(ErrorImportacion): ...
+class ColumnasMinFaltantes(ErrorImportacion): ...
+class CanastaNoSoportada(ErrorImportacion): ...
+class PeriodoNoInterpretable(ErrorImportacion): ...
+class VersionNoCoincide(ErrorImportacion): ...
+
+# Errores de dominio — invariante violado al construir un contrato
+class ErrorDominio(ReplicaInpcError): ...
+class InvarianteViolado(ErrorDominio): ...
+
+# Errores de cálculo — fallan la corrida inmediatamente
+class ErrorCalculo(ReplicaInpcError): ...
+class CorrespondenciaInsuficiente(ErrorCalculo): ...
+class PonderadorFaltante(ErrorCalculo): ...
+class SerieVacia(ErrorCalculo): ...
+class CanastaSinGenericos(ErrorCalculo): ...
+
+# Errores de validación — no fallan la corrida
+class ErrorValidacion(ReplicaInpcError): ...
+class FuenteNoDisponible(ErrorValidacion): ...
+class RespuestaInvalida(ErrorValidacion): ...
+```
+
+### 7.2 Propagación
+
+Los errores se lanzan lo más cerca posible de donde ocurren y se capturan
+en el caso de uso, que decide qué hacer con ellos. Las capas intermedias
+no capturan ni envuelven — dejan pasar.
+
+| Error | Dónde se lanza | Quién lo captura | Efecto |
+| --- | --- | --- | --- |
+| `ErrorImportacion` | adaptador (infraestructura) | caso de uso | falla la corrida |
+| `ErrorDominio` | constructor del contrato (dominio) | caso de uso | falla la corrida |
+| `ErrorCalculo` | dominio (cálculo) | caso de uso | falla la corrida |
+| `ErrorValidacion` | adaptador (infraestructura) | caso de uso | validación `no_disponible` |
+
+### 7.3 Traducción en adaptadores
+
+Los adaptadores traducen excepciones externas a errores propios del sistema
+antes de que lleguen al caso de uso. El caso de uso nunca ve `FileNotFoundError`,
+`UnicodeDecodeError` ni excepciones de librerías externas.
+
+```python
+# Ejemplo en lector_series_csv.py
+try:
+    df = pd.read_csv(ruta, encoding="cp1252")
+except FileNotFoundError:
+    raise ArchivoNoEncontrado(ruta)
+except UnicodeDecodeError:
+    raise EncodingNoLegible(ruta)
+```
+
+Esto mantiene los casos de uso independientes de las librerías concretas
+y hace que los errores sean predecibles desde cualquier adaptador.
