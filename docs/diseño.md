@@ -239,3 +239,50 @@ INTERFACES
 api/corrida.py      ← notebook (interfaz principal)
 interfaces/cli.py   ← terminal (interfaz secundaria)
 ```
+
+---
+
+## 5. Contratos del dominio
+
+### 5.1 CanastaCanomica
+
+**Representación:** dataclass por fila. `CanastaCanomica` contiene una tupla de `RegistroCanasta`.
+La conversión a DataFrame ocurre explícitamente vía `.to_dataframe()`.
+
+```python
+@dataclass(frozen=True)
+class RegistroCanasta:
+    version:                int
+    generico:               str
+    ponderador:             float        # float64 — conversión desde str en infraestructura
+    encadenamiento:         float | None
+    COG:                    str | None   # → pd.Categorical en to_dataframe()
+    CCIF:                   str | None   # → pd.Categorical en to_dataframe()
+    inflacion_1:            str | None   # → pd.Categorical en to_dataframe()
+    inflacion_2:            str | None   # → pd.Categorical en to_dataframe()
+    inflacion_3:            str | None   # → pd.Categorical en to_dataframe()
+    SCIAN_sector:           str | None   # → pd.Categorical en to_dataframe()
+    SCIAN_sector_numero:    str | None   # → pd.Categorical en to_dataframe()
+    SCIAN_rama:             str | None   # → pd.Categorical en to_dataframe()
+    SCIAN_rama_numero:      str | None   # → pd.Categorical en to_dataframe()
+    canasta_basica:         bool
+    canasta_consumo_minimo: bool | None
+
+@dataclass(frozen=True)
+class CanastaCanomica:
+    registros: tuple[RegistroCanasta, ...]
+
+    def to_dataframe(self) -> pd.DataFrame:
+        # columnas str | None marcadas como categorical
+        ...
+```
+
+**Invariantes — validados al construir `CanastaCanomica`:**
+
+| Invariante | Regla |
+| ---------- | ----- |
+| Versión válida | `version` ∈ `{2010, 2013, 2018, 2024}` |
+| Genérico no vacío | `generico` no es string vacío |
+| Ponderador positivo | `ponderador` > 0 |
+| Sin duplicados | no hay dos registros con el mismo `generico` |
+| Suma unitaria | `abs(Σ ponderador − 1) ≤ 1e-5` |
