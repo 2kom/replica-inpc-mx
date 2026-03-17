@@ -145,3 +145,97 @@ replica-inpc-mx/
 ├── pyproject.toml
 └── README.md
 ```
+
+---
+
+## 3. Stack técnico
+
+| Componente      | Decisión                    | Razón                                              |
+| --------------- | --------------------------- | -------------------------------------------------- |
+| Python          | 3.10                        | `match/case` disponible, compatible con el entorno |
+| DataFrames      | pandas                      | Notebook-first, display automático en Jupyter      |
+| Numérico        | numpy                       | Operaciones vectorizadas en el cálculo             |
+| Correspondencia | rapidfuzz                   | Matching fuzzy genérico↔genérico                   |
+| HTTP            | requests                    | Simple, sin necesidad de async en v1               |
+| CLI             | argparse                    | Stdlib, sin dependencia extra para CLI secundario  |
+| Testing         | pytest                      | Estándar de facto en Python                        |
+| Visualización   | plotnine                    | Presente en el proyecto de referencia              |
+| Columnar        | pyarrow                     | Presente en el proyecto de referencia              |
+| Empaquetado     | setuptools + pyproject.toml | Estándar moderno, src layout                       |
+
+**Dependencias runtime** (`[project.dependencies]` en `pyproject.toml`):
+pandas, numpy, rapidfuzz, requests, python-dateutil, plotnine, pyarrow
+
+**Dependencias de desarrollo** (`[project.optional-dependencies.dev]`):
+pytest, ipython, jupyter, ipykernel
+
+Instalación:
+
+```bash
+pip install -e ".[dev]"
+```
+
+---
+
+## 4. Flujo de datos
+
+```text
+ENTRADAS
+────────────────────────────────────────────────────────────
+canasta_intermedia.csv                  series_genericos.csv
+        │                                       │
+        ▼                                       ▼
+┌───────────────────────┐       ┌───────────────────────────┐
+│  lector_canasta_csv   │       │     lector_series_csv     │
+│  · valida columnas    │       │  · detecta encoding       │
+│  · valida version     │       │    (cp1252 / latin-1)     │
+└───────────┬───────────┘       │  · detecta orientación    │
+            │                   │    (horizontal / vertical) │
+            ▼                   │  · elimina metadatos      │
+   canasta_intermedia           └──────────────┬────────────┘
+   (representacion interna)                    │
+            │                                  ▼
+            ▼                          SerieNormalizada
+   construir_canasta_canonica
+            │
+            ▼
+   CanastaCanomica
+            │                                  │
+            └──────────────┬───────────────────┘
+                           ▼
+                  correspondencia.py
+                  · vincula genérico↔genérico (rapidfuzz)
+                  · falla si correspondencia insuficiente
+                           │
+                           ▼
+                   laspeyres.py
+                   · INPC = Σ ωₖ · Iₖ por periodo
+                   · null si falta índice en periodo
+                   · falla si falta ponderador
+                           │
+                           ▼
+                   ResultadoCalculo
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │  fuente_validacion_api │
+              │  · descarga INPC INEGI │
+              │  · si falla →          │
+              │    no_disponible       │
+              └────────────┬───────────┘
+                           │
+                           ▼
+              ResumenValidacion
+              ReporteDetalladoValidacion
+              DiagnosticoFaltantes
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+     data/runs/<id_corrida>/         output/
+     (trazabilidad interna)    (exportación del usuario)
+
+INTERFACES
+────────────────────────────────────────────────────────────
+api/corrida.py      ← notebook (interfaz principal)
+interfaces/cli.py   ← terminal (interfaz secundaria)
+```
