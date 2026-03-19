@@ -163,7 +163,7 @@ replica-inpc-mx/
 | Python          | 3.10                        | `match/case` disponible, compatible con el entorno |
 | DataFrames      | pandas                      | Notebook-first, display automático en Jupyter      |
 | Numérico        | numpy                       | Operaciones vectorizadas en el cálculo             |
-| Correspondencia | rapidfuzz                   | Matching fuzzy genérico↔genérico                   |
+| Correspondencia | unicodedata (stdlib)        | Normalización exacta genérico↔genérico             |
 | HTTP            | requests                    | Simple, sin necesidad de async en v1               |
 | CLI             | argparse                    | Stdlib, sin dependencia extra para CLI secundario  |
 | Testing         | pytest                      | Estándar de facto en Python                        |
@@ -172,7 +172,7 @@ replica-inpc-mx/
 | Empaquetado     | setuptools + pyproject.toml | Estándar moderno, src layout                       |
 
 **Dependencias runtime** (`[project.dependencies]` en `pyproject.toml`):
-pandas, numpy, rapidfuzz, requests, python-dateutil, plotnine, pyarrow
+pandas, numpy, requests, python-dateutil, plotnine, pyarrow
 
 **Dependencias de desarrollo** (`[project.optional-dependencies.dev]`):
 pytest, ipython, jupyter, ipykernel
@@ -212,7 +212,7 @@ canasta_intermedia.csv                  series_genericos.csv
             └──────────────┬───────────────────┘
                            ▼
                   correspondencia.py
-                  · vincula genérico↔genérico (rapidfuzz)
+                  · vincula genérico↔genérico (normalización exacta)
                   · falla si correspondencia insuficiente
                            │
                            ▼
@@ -728,3 +728,82 @@ except UnicodeDecodeError:
 
 Esto mantiene los casos de uso independientes de las librerías concretas
 y hace que los errores sean predecibles desde cualquier adaptador.
+
+---
+
+## 8. Estrategia de testing
+
+### 8.1 Tipos de test
+
+| Componente | Tipo | Nota |
+| --- | --- | --- |
+| Contratos del dominio | Unit | |
+| `Periodo` | Unit | Explícito — parseo, orden, hash, `to_timestamp()` |
+| Lógica de cálculo | Unit | Solo `LaspeyresDirecto` en v1; `LaspeyresEncadenado` se agrega con canasta 2024 |
+| `correspondencia.py` | Unit | |
+| Adaptadores CSV | Integration | Archivos reales |
+| Casos de uso | Integration | Archivos reales |
+| `api/corrida.py` | Integration | Archivos reales |
+| API INEGI | Integration | Mockeada — ver §8.3 |
+| `interfaces/cli.py` | — | Fuera de v1 |
+
+---
+
+### 8.2 Fixtures
+
+Los fixtures viven en `tests/fixtures/` y son de dos tipos.
+
+**Sintéticos** — construidos a mano con 5-10 genéricos ficticios. Son la base del suite.
+Cubren las variantes de archivo de series:
+
+| Orientación | Metadatos | Ruido |
+| --- | --- | --- |
+| Horizontal | Con | Sin |
+| Horizontal | Sin | Sin |
+| Vertical | Con | Sin |
+| Vertical | Sin | Sin |
+| Horizontal | Con | Con ruido (subclasificaciones, índices adicionales) |
+
+Un CSV de canasta sintético por versión soportada en v1.
+
+**Test de humo** — usa los archivos reales de `docs/requerimientos/` para verificar
+que el sistema procesa un archivo INEGI real sin errores. No verifica el resultado
+numérico en detalle.
+
+---
+
+### 8.3 Mock de la API del INEGI
+
+`FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real.
+Los mocks cubren cuatro escenarios:
+
+| Escenario | Comportamiento esperado |
+| --- | --- |
+| Respuesta normal | Devuelve valores para todos los periodos |
+| Periodo sin dato | Devuelve `None` para algún periodo |
+| API no disponible | Lanza excepción → validación `no_disponible` |
+| Respuesta inválida | Lanza `RespuestaInvalida` → validación `no_disponible` |
+
+```python
+# Ejemplo de mock para respuesta normal
+class FuenteValidacionFalsa:
+    def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]:
+        return {p: 134.471 for p in periodos}
+```
+
+---
+
+### 8.4 Criterio de suficiencia para v1
+
+El suite es suficiente cuando cubre los siguientes comportamientos:
+
+- Corrida completa exitosa (canasta 2018, series completas)
+- Corrida con faltantes en series → periodos en `null`
+- Corrida con faltante en ponderador → falla inmediata
+- Corrida con API no disponible → continúa, validación `no_disponible`
+- Corrida con respuesta inválida de API → continúa, validación `no_disponible`
+- Invariantes de todos los contratos del dominio
+- `Periodo`: parseo, orden, hash, `to_timestamp()`
+- Las 4 variantes de archivo de series (con/sin metadatos × horizontal/vertical)
+- Correspondencia: match exitoso; match fallido por cobertura insuficiente
+- Test de humo con datos reales (canasta 2018)

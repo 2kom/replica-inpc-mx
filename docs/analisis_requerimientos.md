@@ -179,18 +179,23 @@ Sin importar si el archivo viene horizontal o vertical, el dato elemental que in
 
 ### 9.3 Formato normalizado minimo acordado
 
-La serie normalizada minima queda definida por estas columnas:
+La `SerieNormalizada` usa formato **ancho**:
 
-- `generico_limpio`
-- `periodo`
-- `indice`
-- `generico_original` opcional
+- `generico_limpio` como índice del DataFrame;
+- una columna por periodo (objetos `Periodo`);
+- valores `float64` o `NaN` cuando falta el índice.
+
+El dato elemental (generico + periodo + valor) está implícito en la estructura: cada celda `[generico_limpio, Periodo]` contiene el valor de índice correspondiente.
+
+Este formato fue elegido sobre el formato largo (columnas `generico_limpio`, `periodo`, `indice`) porque hace el cálculo Laspeyres eficiente — la agregación es una multiplicación matricial directa entre ponderadores y la matriz de índices.
+
+`generico_original` no es una columna del DataFrame. Vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), disponible para trazabilidad cuando se necesita reconstruir el nombre original.
 
 En este contexto, `generico_limpio` representa el texto util derivado de la columna `Título` del archivo de series una vez removido el contenido contextual que no aporta al calculo, conservando solo la parte necesaria para identificar el generico.
 
 ### 9.4 Alcance de `periodo`
 
-El campo `periodo` representa etiquetas como:
+El campo `periodo` no es un string sino un objeto `Periodo` con atributos `año`, `mes` y `quincena`. Se representa como etiqueta legible:
 
 - `1Q Ene 2020`
 - `2Q Jul 2024`
@@ -201,7 +206,7 @@ Es decir:
 - mes;
 - año.
 
-En esta etapa no se separa en columnas distintas para quincena, mes y año. El valor canonico se conserva como una sola etiqueta de periodo.
+El tipo propio permite sorting natural, uso como clave de diccionario y conversión a `pd.Timestamp` para graficación.
 
 ## 10. Canastas del sistema
 
