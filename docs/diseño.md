@@ -807,3 +807,86 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 - Las 4 variantes de archivo de series (con/sin metadatos × horizontal/vertical)
 - Correspondencia: match exitoso; match fallido por cobertura insuficiente
 - Test de humo con datos reales (canasta 2018)
+
+---
+
+## 9. Decisiones y razones
+
+### 9.1 `SerieNormalizada` en formato ancho
+
+**Decisión:** DataFrame con `generico_limpio` como índice y objetos `Periodo` como columnas.
+
+**Alternativa considerada:** formato largo — columnas `generico_limpio`, `periodo`, `indice`.
+
+**Razón:** el cálculo Laspeyres sobre todos los periodos es una multiplicación matricial directa entre el vector de ponderadores y la matriz de índices. El formato ancho lo hace eficiente y legible. El formato largo requeriría un pivot antes de cada cálculo.
+
+---
+
+### 9.2 `generico_original` como diccionario
+
+**Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), fuera del DataFrame.
+
+**Alternativa considerada:** columna opcional en el DataFrame de `SerieNormalizada`.
+
+**Razón:** `generico_original` es dato de trazabilidad, no de cálculo. Mantenerlo fuera del DataFrame evita que aparezca en operaciones sobre la matriz de índices y deja claro su propósito.
+
+---
+
+### 9.3 Correspondencia genérico↔genérico por normalización exacta
+
+**Decisión:** matching exacto después de normalizar — quitar tildes + lowercase (`unicodedata`). `rapidfuzz` removido del stack.
+
+**Alternativa considerada:** matching fuzzy con `rapidfuzz`.
+
+**Razón:** la divergencia entre nombres de series y canasta es sistemática y determinista — los ponderadores fueron extraídos sin tildes mientras las series las conservan. Después de normalizar ambos lados, los 299 genéricos de la canasta 2018 coinciden exactamente. El fuzzy resolvía un problema que la normalización resuelve de forma predecible y sin riesgo de falsos positivos entre genéricos con nombres parecidos.
+
+---
+
+### 9.4 pandas en el dominio
+
+**Decisión:** los contratos del dominio usan DataFrames de pandas directamente.
+
+**Alternativa considerada:** dominio sin dependencias externas, pandas solo en infraestructura.
+
+**Razón:** el proyecto es notebook-first. Aislar pandas del dominio agregaría una capa de conversión sin beneficio real — el dominio siempre va a operar sobre estructuras tabulares. El hexágono aísla formato y fuente de datos, no librerías de procesamiento.
+
+---
+
+### 9.5 `ponderador` y `encadenamiento` como `str`
+
+**Decisión:** se almacenan como `str` en `CanastaCanoNica`. La conversión a `float` ocurre solo en el momento del cálculo.
+
+**Alternativa considerada:** almacenar directamente como `float`.
+
+**Razón:** los archivos fuente tienen precisión decimal que puede perderse en la conversión binaria a `float`. Almacenar como `str` preserva el valor exacto extraído del CSV oficial. La conversión a `float` en el cálculo no acumula error adicional porque se aplica una sola vez por operación.
+
+---
+
+### 9.6 `Periodo` como tipo propio
+
+**Decisión:** value object `Periodo` con atributos `año`, `mes`, `quincena`.
+
+**Alternativa considerada:** `str` con formato `"1Q Ene 2020"` o `pd.Timestamp`.
+
+**Razón:** una quincena no tiene representación natural en Python ni en pandas. `str` no permite sorting natural ni uso como clave hashable confiable. `pd.Timestamp` requiere una convención arbitraria para el día (día 1 o día 16) que no es un dato real. `Periodo` encapsula esa convención en `to_timestamp()` y expone sorting, hash e igualdad de forma explícita.
+
+---
+
+### 9.7 Categorías de clasificación version-específicas
+
+**Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanoNica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
+
+**Advertencia para v2:** entre versiones hay cambios de nombre de categorías (ej. `"Comunicaciones"` en 2018 → `"Información y comunicación"` en 2024). Un join directo entre canastas de distintas versiones producirá categorías no coincidentes. Cuando se implementen subíndices en v2, se requerirá un componente de mapeo explícito entre categorías de versiones.
+
+---
+
+### 9.8 Tolerancia numérica por versión
+
+**Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es configurable por versión:
+
+| Versión | Tolerancia (`error_absoluto`) |
+| --- | --- |
+| 2018 | `<= 0.0005` |
+| 2024 | `<= 0.005` |
+
+**Razón:** las diferencias observadas entre el INPC replicado y el publicado por el INEGI varían por versión — la canasta 2024 usa Laspeyres encadenado con normalización, lo que introduce mayor variación numérica acumulada. Una tolerancia única global sería demasiado estricta para 2024 o demasiado laxa para 2018.

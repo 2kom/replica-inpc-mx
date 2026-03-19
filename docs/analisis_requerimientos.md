@@ -90,7 +90,12 @@ El sistema debe permitir exportar esta salida al menos en:
 
 La replicacion debe coincidir con lo publicado por el INEGI, salvo diferencias atribuibles a redondeo.
 
-La tolerancia numerica exacta queda **por definir**.
+La tolerancia es configurable por version:
+
+| Version | Tolerancia (`error_absoluto`) |
+| --- | --- |
+| 2018 | `<= 0.0005` |
+| 2024 | `<= 0.005` |
 
 ### 6.2 Faltantes en ponderadores
 
