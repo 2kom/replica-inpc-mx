@@ -208,3 +208,6 @@ __marimo__/
 
 # Analisis requerimientos
 docs/requerimientos
+
+# Data
+data/

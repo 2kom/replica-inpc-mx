@@ -549,6 +549,47 @@ class DiagnosticoFaltantes:
 
 ---
 
+### 5.8 CalculadorBase
+
+**Representación:** `ABC` interno del dominio. Define el contrato que deben cumplir
+`LaspeyresDirecto` y `LaspeyresEncadenado`. Se usa `ABC` (no `Protocol`) porque ambas
+implementaciones viven dentro del dominio y su relación con la base debe ser explícita.
+
+```python
+from abc import ABC, abstractmethod
+
+class CalculadorBase(ABC):
+    @abstractmethod
+    def calcular(
+        self,
+        canasta: CanastaCanoNica,
+        serie: SerieNormalizada,
+    ) -> ResultadoCalculo: ...
+```
+
+**Selección de implementación — `estrategia.py`:**
+
+La selección vive en `dominio/calculo/estrategia.py` como función de fábrica.
+La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
+con valores → encadenado.
+
+```python
+def para_canasta(canasta: CanastaCanoNica) -> CalculadorBase:
+    if canasta.df["encadenamiento"].isna().all():
+        return LaspeyresDirecto()
+    return LaspeyresEncadenado()
+```
+
+| Versión | Implementación | Archivo |
+| --- | --- | --- |
+| 2010, 2018 | `LaspeyresDirecto` | `dominio/calculo/laspeyres.py` |
+| 2013, 2024 | `LaspeyresEncadenado` | `dominio/calculo/encadenado.py` |
+
+El caso de uso `calcular_inpc.py` no necesita saber qué estrategia existe —
+solo llama `para_canasta(canasta).calcular(canasta, serie)`.
+
+---
+
 ## 6. Contratos de puertos
 
 Los puertos son los contratos que el dominio impone a sus dependencias externas.
@@ -569,6 +610,13 @@ class ManifestCorrida:
     ruta_canasta: Path
     ruta_series: Path
     fecha: datetime
+
+@dataclass
+class ResultadoCorrida:
+    id_corrida: str
+    resumen: ResumenValidacion
+    reporte: ReporteDetalladoValidacion
+    diagnostico: DiagnosticoFaltantes
 ```
 
 ---
@@ -653,6 +701,34 @@ class AlmacenArtefactos(Protocol):
     def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
     def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
 ```
+
+---
+
+### Orquestación del pipeline — ejecutar_corrida.py
+
+`ejecutar_corrida.py` es el caso de uso central. Orquesta todos los pasos del pipeline
+en un solo llamado y es lo que `api/corrida.py` invoca internamente.
+
+**Entradas:** `ruta_canasta: Path`, `ruta_series: Path`, `version: VersionCanasta`
+
+**Pasos en orden:**
+
+1. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
+2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanoNica`
+3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (independiente del paso 2, secuencial en v1)
+4. `correspondencia.py` — valida y alinea genérico↔genérico
+5. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
+6. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
+7. Construir `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
+8. `RepositorioCorridas.guardar(id_corrida, manifest)` + `AlmacenArtefactos.guardar(...)` para canasta, series y artefactos → `data/runs/<id_corrida>/`
+9. `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
+10. Devolver `ResultadoCorrida`
+
+**Extensibilidad:** el caso de uso no necesita cambiar al agregar nuevas versiones —
+la selección de estrategia en `para_canasta()` absorbe la extensión.
+
+**Errores:** cualquier `ErrorImportacion`, `ErrorDominio` o `ErrorCalculo` falla la corrida
+inmediatamente. `ErrorValidacion` no falla la corrida — ver §7.
 
 ---
 
