@@ -59,7 +59,9 @@ class ErrorCalculo(ReplicaInpcError):
 
 
 class CorrespondenciaInsuficiente(ErrorCalculo):
-    pass
+    def __init__(self, faltantes: list[str]) -> None:
+        super().__init__(f"Genericos sin serie: {faltantes}")
+        self.faltantes = faltantes
 
 
 class PonderadorFaltante(ErrorCalculo):

@@ -3,10 +3,11 @@ from __future__ import annotations
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
+from replica_inpc.dominio.tipos import VersionCanasta
 
 
 class CanastaCanonica:
-    def __init__(self, df: pd.DataFrame, version: int) -> None:
+    def __init__(self, df: pd.DataFrame, version: VersionCanasta) -> None:
         if df.index.duplicated().any():
             raise InvarianteViolado(
                 "El índice del DataFrame de la canasta no puede tener valores duplicados."
@@ -36,14 +37,14 @@ class CanastaCanonica:
             )
 
         self._df = df
-        self._version = version
+        self._version: VersionCanasta = version
 
     @property
     def df(self) -> pd.DataFrame:
         return self._df
 
     @property
-    def version(self) -> int:
+    def version(self) -> VersionCanasta:
         return self._version
 
     def _repr_html_(self) -> str:

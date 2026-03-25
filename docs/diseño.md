@@ -466,6 +466,10 @@ class ResumenValidacion:
 **Representación:** DataFrame-backed. Índice compuesto `(Periodo, subindice)` — agrupa
 todos los subíndices de una corrida. `id_corrida` como atributo. `version` como columna.
 
+**Nota v1:** en v1 el único subíndice calculado es el INPC general, por lo que `subindice`
+toma siempre el valor `"INPC general"`. El índice compuesto se mantiene para que en v2,
+al agregar subíndices, el schema no cambie — solo aparecen más filas.
+
 ```python
 class ReporteDetalladoValidacion:
     def __init__(self, df: pd.DataFrame, id_corrida: str) -> None: ...
