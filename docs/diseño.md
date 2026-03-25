@@ -295,13 +295,13 @@ class CanastaCanonica:
 
 **Invariantes — validados al construir:**
 
-| Invariante | Regla |
-| --- | --- |
-| Versión válida | `version` in `{2010, 2013, 2018, 2024}` |
-| Genérico no vacío | ningún valor del índice es string vacío |
-| Ponderador positivo | `float(ponderador) > 0` para cada fila |
-| Sin duplicados | el índice no tiene valores repetidos |
-| Suma de ponderadores | `abs(sum(ponderador) - 100) <= 1e-5` |
+| Invariante              | Regla                                        |
+| ----------------------- | -------------------------------------------- |
+| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`      |
+| Genérico no vacío       | ningún valor del índice es string vacío      |
+| Ponderador positivo     | `float(ponderador) > 0` para cada fila       |
+| Sin duplicados          | el índice no tiene valores repetidos         |
+| Suma de ponderadores    | `abs(sum(ponderador) - 100) <= 1e-5`         |
 | Encadenamiento positivo | cuando presente: `float(encadenamiento) > 0` |
 
 ---
@@ -403,14 +403,14 @@ class ResultadoCalculo:
 
 **Invariantes — validados al construir:**
 
-| Invariante | Regla |
-| --- | --- |
-| Versión válida | `version` in `{2010, 2013, 2018, 2024}` |
-| Sin duplicados | el índice no tiene valores repetidos |
-| Al menos un periodo | el DataFrame no está vacío |
-| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}` |
-| Consistencia ok | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN y `motivo_error` NaN |
-| Consistencia fallo | si `estado_calculo != 'ok'` → `inpc_replicado` NaN y `motivo_error` con valor |
+| Invariante              | Regla                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`                                       |
+| Sin duplicados          | el índice no tiene valores repetidos                                          |
+| Al menos un periodo     | el DataFrame no está vacío                                                    |
+| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                          |
+| Consistencia ok         | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN y `motivo_error` NaN    |
+| Consistencia fallo      | si `estado_calculo != 'ok'` → `inpc_replicado` NaN y `motivo_error` con valor |
 
 ---
 
@@ -432,28 +432,28 @@ class ResumenValidacion:
 
 **Esquema del DataFrame (índice: `id_corrida`):**
 
-| Columna | dtype pandas | Notas |
-| --- | --- | --- |
-| `version` | `int` | |
-| `total_periodos_esperados` | `int` | |
-| `total_periodos_calculados` | `int` | |
-| `total_periodos_con_null` | `int` | |
-| `error_absoluto_max` | `float` / `NaN` | NaN si validación no disponible |
-| `error_relativo_max` | `float` / `NaN` | NaN si validación no disponible |
-| `total_faltantes_indice` | `int` | |
-| `total_faltantes_ponderador` | `int` | |
-| `estado_validacion_global` | `object` (str) | `'ok'`, `'diferencia_detectada'`, `'no_disponible'` |
-| `estado_corrida` | `object` (str) | `'ok'`, `'parcial'`, `'fallida'` |
+| Columna                      | dtype pandas    | Notas                                               |
+| ---------------------------- | --------------- | --------------------------------------------------- |
+| `version`                    | `int`           |                                                     |
+| `total_periodos_esperados`   | `int`           |                                                     |
+| `total_periodos_calculados`  | `int`           |                                                     |
+| `total_periodos_con_null`    | `int`           |                                                     |
+| `error_absoluto_max`         | `float` / `NaN` | NaN si validación no disponible                     |
+| `error_relativo_max`         | `float` / `NaN` | NaN si validación no disponible                     |
+| `total_faltantes_indice`     | `int`           |                                                     |
+| `total_faltantes_ponderador` | `int`           |                                                     |
+| `estado_validacion_global`   | `object` (str)  | `'ok'`, `'diferencia_detectada'`, `'no_disponible'` |
+| `estado_corrida`             | `object` (str)  | `'ok'`, `'parcial'`, `'fallida'`                    |
 
 **Invariantes — validados al construir:**
 
-| Invariante | Regla |
-| --- | --- |
-| Versión válida | `version` in `{2010, 2013, 2018, 2024}` |
-| `estado_corrida` válido | valores in `{'ok', 'parcial', 'fallida'}` |
+| Invariante                        | Regla                                                        |
+| --------------------------------- | ------------------------------------------------------------ |
+| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                      |
+| `estado_corrida` válido           | valores in `{'ok', 'parcial', 'fallida'}`                    |
 | `estado_validacion_global` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}` |
-| Periodos calculados | `total_periodos_calculados` <= `total_periodos_esperados` |
-| Periodos null | `total_periodos_con_null` <= `total_periodos_calculados` |
+| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`    |
+| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`     |
 
 ---
 
@@ -497,15 +497,15 @@ class ReporteDetalladoValidacion:
 
 **Invariantes — validados al construir:**
 
-| Invariante | Regla |
-| --- | --- |
-| Versión válida | `version` in `{2010, 2013, 2018, 2024}` |
-| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}` |
-| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}` |
-| Consistencia ok | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN |
-| Consistencia fallo | si `estado_calculo != 'ok'` → `inpc_replicado` NaN |
-| Consistencia validacion | si `estado_validacion == 'no_disponible'` → `inpc_inegi`, `error_absoluto`, `error_relativo` NaN |
-| Al menos una fila | el DataFrame no está vacío |
+| Invariante                 | Regla                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                          |
+| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                             |
+| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                                     |
+| Consistencia ok            | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN                                            |
+| Consistencia fallo         | si `estado_calculo != 'ok'` → `inpc_replicado` NaN                                               |
+| Consistencia validacion    | si `estado_validacion == 'no_disponible'` → `inpc_inegi`, `error_absoluto`, `error_relativo` NaN |
+| Al menos una fila          | el DataFrame no está vacío                                                                       |
 
 ---
 
@@ -539,12 +539,12 @@ class DiagnosticoFaltantes:
 
 **Invariantes — validados al construir:**
 
-| Invariante | Regla |
-| --- | --- |
-| Versión válida | `version` in `{2010, 2013, 2018, 2024}` |
-| `nivel_faltante` válido | valores in `{'periodo', 'estructural'}` |
-| `tipo_faltante` válido | valores in `{'indice', 'ponderador'}` |
-| Consistencia índice | si `tipo_faltante == 'indice'` → `periodo` no NaN |
+| Invariante              | Regla                                              |
+| ----------------------- | -------------------------------------------------- |
+| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`            |
+| `nivel_faltante` válido | valores in `{'periodo', 'estructural'}`            |
+| `tipo_faltante` válido  | valores in `{'indice', 'ponderador'}`              |
+| Consistencia índice     | si `tipo_faltante == 'indice'` → `periodo` no NaN  |
 | Consistencia ponderador | si `tipo_faltante == 'ponderador'` → `periodo` NaN |
 
 ---
@@ -580,9 +580,9 @@ def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
     return LaspeyresEncadenado()
 ```
 
-| Versión | Implementación | Archivo |
-| --- | --- | --- |
-| 2010, 2018 | `LaspeyresDirecto` | `dominio/calculo/laspeyres.py` |
+| Versión    | Implementación        | Archivo                         |
+| ---------- | --------------------- | ------------------------------- |
+| 2010, 2018 | `LaspeyresDirecto`    | `dominio/calculo/laspeyres.py`  |
 | 2013, 2024 | `LaspeyresEncadenado` | `dominio/calculo/encadenado.py` |
 
 El caso de uso `calcular_inpc.py` no necesita saber qué estrategia existe —
@@ -779,12 +779,12 @@ Los errores se lanzan lo más cerca posible de donde ocurren y se capturan
 en el caso de uso, que decide qué hacer con ellos. Las capas intermedias
 no capturan ni envuelven — dejan pasar.
 
-| Error | Dónde se lanza | Quién lo captura | Efecto |
-| --- | --- | --- | --- |
-| `ErrorImportacion` | adaptador (infraestructura) | caso de uso | falla la corrida |
-| `ErrorDominio` | constructor del contrato (dominio) | caso de uso | falla la corrida |
-| `ErrorCalculo` | dominio (cálculo) | caso de uso | falla la corrida |
-| `ErrorValidacion` | adaptador (infraestructura) | caso de uso | validación `no_disponible` |
+| Error              | Dónde se lanza                     | Quién lo captura | Efecto                     |
+| ------------------ | ---------------------------------- | ---------------- | -------------------------- |
+| `ErrorImportacion` | adaptador (infraestructura)        | caso de uso      | falla la corrida           |
+| `ErrorDominio`     | constructor del contrato (dominio) | caso de uso      | falla la corrida           |
+| `ErrorCalculo`     | dominio (cálculo)                  | caso de uso      | falla la corrida           |
+| `ErrorValidacion`  | adaptador (infraestructura)        | caso de uso      | validación `no_disponible` |
 
 ### 7.3 Traducción en adaptadores
 
@@ -811,17 +811,17 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 
 ### 8.1 Tipos de test
 
-| Componente | Tipo | Nota |
-| --- | --- | --- |
-| Contratos del dominio | Unit | |
-| `Periodo` | Unit | Explícito — parseo, orden, hash, `to_timestamp()` |
-| Lógica de cálculo | Unit | Solo `LaspeyresDirecto` en v1; `LaspeyresEncadenado` se agrega con canasta 2024 |
-| `correspondencia.py` | Unit | |
-| Adaptadores CSV | Integration | Archivos reales |
-| Casos de uso | Integration | Archivos reales |
-| `api/corrida.py` | Integration | Archivos reales |
-| API INEGI | Integration | Mockeada — ver §8.3 |
-| `interfaces/cli.py` | — | Fuera de v1 |
+| Componente            | Tipo        | Nota                                                                            |
+| --------------------- | ----------- | ------------------------------------------------------------------------------- |
+| Contratos del dominio | Unit        |                                                                                 |
+| `Periodo`             | Unit        | Explícito — parseo, orden, hash, `to_timestamp()`                               |
+| Lógica de cálculo     | Unit        | Solo `LaspeyresDirecto` en v1; `LaspeyresEncadenado` se agrega con canasta 2024 |
+| `correspondencia.py`  | Unit        |                                                                                 |
+| Adaptadores CSV       | Integration | Archivos reales                                                                 |
+| Casos de uso          | Integration | Archivos reales                                                                 |
+| `api/corrida.py`      | Integration | Archivos reales                                                                 |
+| API INEGI             | Integration | Mockeada — ver §8.3                                                             |
+| `interfaces/cli.py`   | ——————————— | Fuera de v1                                                                     |
 
 ---
 
@@ -832,13 +832,13 @@ Los fixtures viven en `tests/fixtures/` y son de dos tipos.
 **Sintéticos** — construidos a mano con 5-10 genéricos ficticios. Son la base del suite.
 Cubren las variantes de archivo de series:
 
-| Orientación | Metadatos | Ruido |
-| --- | --- | --- |
-| Horizontal | Con | Sin |
-| Horizontal | Sin | Sin |
-| Vertical | Con | Sin |
-| Vertical | Sin | Sin |
-| Horizontal | Con | Con ruido (subclasificaciones, índices adicionales) |
+| Orientación | Metadatos | Ruido                                               |
+| ----------- | --------- | --------------------------------------------------- |
+| Horizontal  | Con       | Sin                                                 |
+| Horizontal  | Sin       | Sin                                                 |
+| Vertical    | Con       | Sin                                                 |
+| Vertical    | Sin       | Sin                                                 |
+| Horizontal  | Con       | Con ruido (subclasificaciones, índices adicionales) |
 
 Un CSV de canasta sintético por versión soportada en v1.
 
@@ -853,11 +853,11 @@ numérico en detalle.
 `FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real.
 Los mocks cubren cuatro escenarios:
 
-| Escenario | Comportamiento esperado |
-| --- | --- |
-| Respuesta normal | Devuelve valores para todos los periodos |
-| Periodo sin dato | Devuelve `None` para algún periodo |
-| API no disponible | Lanza excepción → validación `no_disponible` |
+| Escenario          | Comportamiento esperado                                |
+| ------------------ | ------------------------------------------------------ |
+| Respuesta normal   | Devuelve valores para todos los periodos               |
+| Periodo sin dato   | Devuelve `None` para algún periodo                     |
+| API no disponible  | Lanza excepción → validación `no_disponible`           |
 | Respuesta inválida | Lanza `RespuestaInvalida` → validación `no_disponible` |
 
 ```python
@@ -961,8 +961,8 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 **Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es configurable por versión:
 
 | Versión | Tolerancia (`error_absoluto`) |
-| --- | --- |
-| 2018 | `<= 0.0005` |
-| 2024 | `<= 0.005` |
+| ------- | ----------------------------- |
+| 2018    | `<= 0.0005`                   |
+| 2024    | `<= 0.005`                    |
 
 **Razón:** las diferencias observadas entre el INPC replicado y el publicado por el INEGI varían por versión — la canasta 2024 usa Laspeyres encadenado con normalización, lo que introduce mayor variación numérica acumulada. Una tolerancia única global sería demasiado estricta para 2024 o demasiado laxa para 2018.
