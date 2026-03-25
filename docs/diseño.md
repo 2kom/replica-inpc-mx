@@ -252,14 +252,14 @@ interfaces/cli.py   ← terminal (interfaz secundaria)
 
 ## 5. Contratos del dominio
 
-### 5.1 CanastaCanoNica
+### 5.1 CanastaCanonica
 
 **Representación:** DataFrame-backed. `generico` es el índice. El DataFrame se expone
 directamente vía `.df`. La versión se almacena como atributo privado y se expone como
 propiedad de solo lectura. Display automático en Jupyter vía `_repr_html_`.
 
 ```python
-class CanastaCanoNica:
+class CanastaCanonica:
     def __init__(self, df: pd.DataFrame, version: int) -> None:
         # df: generico como índice, columnas según esquema canónico
         # validaciones al construir
@@ -562,7 +562,7 @@ class CalculadorBase(ABC):
     @abstractmethod
     def calcular(
         self,
-        canasta: CanastaCanoNica,
+        canasta: CanastaCanonica,
         serie: SerieNormalizada,
     ) -> ResultadoCalculo: ...
 ```
@@ -574,7 +574,7 @@ La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
 con valores → encadenado.
 
 ```python
-def para_canasta(canasta: CanastaCanoNica) -> CalculadorBase:
+def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
     if canasta.df["encadenamiento"].isna().all():
         return LaspeyresDirecto()
     return LaspeyresEncadenado()
@@ -623,13 +623,13 @@ class ResultadoCorrida:
 
 ### 6.1 LectorCanasta
 
-Recibe una fuente de datos y devuelve una `CanastaCanoNica` lista para usar.
+Recibe una fuente de datos y devuelve una `CanastaCanonica` lista para usar.
 La versión se pasa explícitamente para que el lector sepa qué columnas esperar
 y cómo interpretar el archivo.
 
 ```python
 class LectorCanasta(Protocol):
-    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanoNica: ...
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanonica: ...
 ```
 
 ---
@@ -714,7 +714,7 @@ en un solo llamado y es lo que `api/corrida.py` invoca internamente.
 **Pasos en orden:**
 
 1. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
-2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanoNica`
+2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanonica`
 3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (independiente del paso 2, secuencial en v1)
 4. `correspondencia.py` — valida y alinea genérico↔genérico
 5. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
@@ -930,7 +930,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 9.5 `ponderador` y `encadenamiento` como `str`
 
-**Decisión:** se almacenan como `str` en `CanastaCanoNica`. La conversión a `float` ocurre solo en el momento del cálculo.
+**Decisión:** se almacenan como `str` en `CanastaCanonica`. La conversión a `float` ocurre solo en el momento del cálculo.
 
 **Alternativa considerada:** almacenar directamente como `float`.
 
@@ -950,7 +950,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 9.7 Categorías de clasificación version-específicas
 
-**Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanoNica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
+**Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanonica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
 
 **Advertencia para v2:** entre versiones hay cambios de nombre de categorías (ej. `"Comunicaciones"` en 2018 → `"Información y comunicación"` en 2024). Un join directo entre canastas de distintas versiones producirá categorías no coincidentes. Cuando se implementen subíndices en v2, se requerirá un componente de mapeo explícito entre categorías de versiones.
 
