@@ -450,6 +450,7 @@ class ResumenValidacion:
 
 | Invariante                        | Regla                                                        |
 | --------------------------------- | ------------------------------------------------------------ |
+| Al menos una fila                 | el DataFrame no está vacío                                   |
 | Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                      |
 | `estado_corrida` válido           | valores in `{'ok', 'parcial', 'fallida'}`                    |
 | `estado_validacion_global` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}` |
@@ -548,6 +549,8 @@ class DiagnosticoFaltantes:
 | Consistencia índice     | si `tipo_faltante == 'indice'` → `periodo` no NaN  |
 | Consistencia ponderador | si `tipo_faltante == 'ponderador'` → `periodo` NaN |
 
+El DataFrame puede estar vacío — cero filas indica que no se detectaron faltantes en la corrida.
+
 ---
 
 ### 5.8 CalculadorBase
@@ -591,19 +594,29 @@ solo llama `para_canasta(canasta).calcular(canasta, serie)`.
 
 ---
 
-## 6. Contratos de puertos
+### 5.9 tipos.py — tipos compartidos
 
-Los puertos son los contratos que el dominio impone a sus dependencias externas.
-Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la
-implementación concreta. Un nuevo adaptador (xlsx, SQL, API, etc.) solo necesita
-implementar el puerto correspondiente sin tocar el dominio.
+`tipos.py` define los tipos compartidos por los puertos, los casos de uso y la API.
+No contienen lógica de negocio — son estructuras de datos puras.
 
-`VersionCanasta` y `ManifestCorrida` se definen en `dominio/tipos.py` y son
-compartidos por todos los puertos y contratos.
+#### VersionCanasta
+
+Alias de tipo que restringe los valores de versión al conjunto soportado por el sistema.
 
 ```python
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
+```
 
+**Nota:** reemplaza `int` como tipo de `version` en todos los modelos de §5.1–§5.7.
+
+---
+
+#### ManifestCorrida
+
+Registra la intención de la corrida: qué archivos se usaron, qué versión y cuándo.
+Se crea al inicio del pipeline, antes de calcular nada.
+
+```python
 @dataclass
 class ManifestCorrida:
     id_corrida: str
@@ -611,14 +624,57 @@ class ManifestCorrida:
     ruta_canasta: Path
     ruta_series: Path
     fecha: datetime
+```
 
+| Campo          | Tipo             | Notas                              |
+| -------------- | ---------------- | ---------------------------------- |
+| `id_corrida`   | `str`            | UUID generado por el caso de uso   |
+| `version`      | `VersionCanasta` |                                    |
+| `ruta_canasta` | `Path`           |                                    |
+| `ruta_series`  | `Path`           |                                    |
+| `fecha`        | `datetime`       | momento de inicio de la corrida    |
+
+No valida invariantes al construirse.
+
+---
+
+#### ResultadoCorrida
+
+Agrupa todos los artefactos producidos por el pipeline.
+Es lo que devuelve `ejecutar_corrida.py` al final.
+
+```python
 @dataclass
 class ResultadoCorrida:
-    id_corrida: str
+    manifest: ManifestCorrida
+    resultado: ResultadoCalculo
     resumen: ResumenValidacion
     reporte: ReporteDetalladoValidacion
     diagnostico: DiagnosticoFaltantes
 ```
+
+| Campo        | Tipo                          | Notas                              |
+| ------------ | ----------------------------- | ---------------------------------- |
+| `manifest`   | `ManifestCorrida`             | archivos usados, versión, fecha    |
+| `resultado`  | `ResultadoCalculo`            | INPC replicado por periodo         |
+| `resumen`    | `ResumenValidacion`           | vista compacta de la corrida       |
+| `reporte`    | `ReporteDetalladoValidacion`  | comparación periodo a periodo      |
+| `diagnostico`| `DiagnosticoFaltantes`        | faltantes detectados               |
+
+No valida invariantes al construirse.
+El `id_corrida` se accede vía `corrida.manifest.id_corrida`.
+
+---
+
+## 6. Contratos de puertos
+
+Los puertos son los contratos que el dominio impone a sus dependencias externas.
+Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la
+implementación concreta. Un nuevo adaptador (xlsx, SQL, API, etc.) solo necesita
+implementar el puerto correspondiente sin tocar el dominio.
+
+`VersionCanasta`, `ManifestCorrida` y `ResultadoCorrida` se definen en `dominio/tipos.py`
+— ver §5.9.
 
 ---
 
@@ -688,6 +744,9 @@ class RepositorioCorridas(Protocol):
     def obtener(self, id_corrida: str) -> ManifestCorrida: ...
     def listar(self) -> list[str]: ...
 ```
+
+> **Pendiente:** `id_corrida` en `guardar` es redundante — ya está dentro de
+> `manifest.id_corrida`. Revisar cuando se implemente el adaptador.
 
 ---
 
