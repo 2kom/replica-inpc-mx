@@ -7,6 +7,10 @@ from replica_inpc.dominio.errores import InvarianteViolado
 
 class CanastaCanonica:
     def __init__(self, df: pd.DataFrame, version: int) -> None:
+        if df.index.duplicated().any():
+            raise InvarianteViolado(
+                "El índice del DataFrame de la canasta no puede tener valores duplicados."
+            )
         if version not in {2010, 2013, 2018, 2024}:
             raise InvarianteViolado(
                 "La versión de la canasta debe ser 2010, 2013, 2018 o 2024."

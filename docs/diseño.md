@@ -99,6 +99,7 @@ replica-inpc-mx/
 │       │   │   └── encadenado.py
 │       │   ├── correspondencia.py
 │       │   ├── periodos.py
+│       │   ├── tipos.py
 │       │   └── errores.py
 │       ├── aplicacion/
 │       │   ├── casos_uso/
