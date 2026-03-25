@@ -666,6 +666,41 @@ El `id_corrida` se accede vía `corrida.manifest.id_corrida`.
 
 ---
 
+### 5.10 correspondencia.py
+
+Función del dominio que verifica y alinea los genéricos entre una `CanastaCanonica`
+y una `SerieNormalizada`. Es el paso previo obligatorio al cálculo.
+
+```python
+def alinear_genericos(
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+) -> SerieNormalizada: ...
+```
+
+**Qué hace:**
+
+1. Verifica que cada genérico del índice de la canasta tenga correspondencia en el índice de la serie
+2. Si falta alguno → lanza `CorrespondenciaInsuficiente` con la lista de genéricos no encontrados
+3. Filtra la serie para quedarse solo con los genéricos de la canasta
+4. Ordena el índice de la serie para que coincida con el orden de la canasta
+5. Devuelve la `SerieNormalizada` resultante
+
+**Precondición:** la normalización (quitar tildes + lowercase) ya fue aplicada por
+`LectorSeries` al producir `generico_limpio`. Esta función compara strings directos,
+sin normalización adicional.
+
+**Contrato de fallo:**
+
+| Condición | Excepción |
+| --------- | --------- |
+| Algún genérico de la canasta no tiene serie | `CorrespondenciaInsuficiente(faltantes)` |
+
+Donde `faltantes` es la lista de nombres de genéricos de la canasta que no se encontraron
+en la serie.
+
+---
+
 ## 6. Contratos de puertos
 
 Los puertos son los contratos que el dominio impone a sus dependencias externas.
@@ -822,7 +857,8 @@ class InvarianteViolado(ErrorDominio): ...
 
 # Errores de cálculo — fallan la corrida inmediatamente
 class ErrorCalculo(ReplicaInpcError): ...
-class CorrespondenciaInsuficiente(ErrorCalculo): ...
+class CorrespondenciaInsuficiente(ErrorCalculo):
+    def __init__(self, faltantes: list[str]) -> None: ...
 class PonderadorFaltante(ErrorCalculo): ...
 class SerieVacia(ErrorCalculo): ...
 class CanastaSinGenericos(ErrorCalculo): ...
