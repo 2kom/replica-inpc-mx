@@ -73,6 +73,8 @@ del puerto correspondiente:
 - `lector_series_csv.py` implementa `LectorSeries`
 - `fuente_validacion_api.py` implementa `FuenteValidacion`
 - `repositorio_corridas_fs.py` implementa `RepositorioCorridas`
+- `escritor_csv.py` implementa `EscritorResultados`
+- `almacen_artefactos_fs.py` implementa `AlmacenArtefactos`
 
 ---
 
@@ -810,11 +812,11 @@ en un solo llamado y es lo que `api/corrida.py` invoca internamente.
 
 1. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
 2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanonica`
-3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (independiente del paso 2, secuencial en v1)
+3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (no depende del paso 2 — podrían correr en paralelo, pero en v1 se ejecutan secuencialmente)
 4. `correspondencia.py` — valida y alinea genérico↔genérico
 5. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
 6. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
-7. Construir `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
+7. `validar_inpc.py` — recibe `ResultadoCalculo`, llama a `FuenteValidacion`, construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
 8. `RepositorioCorridas.guardar(id_corrida, manifest)` + `AlmacenArtefactos.guardar(...)` para canasta, series y artefactos → `data/runs/<id_corrida>/`
 9. `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
 10. Devolver `ResultadoCorrida`
