@@ -571,6 +571,7 @@ class CalculadorBase(ABC):
         self,
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
+        id_corrida: str,
     ) -> ResultadoCalculo: ...
 ```
 
@@ -701,6 +702,32 @@ sin normalización adicional.
 
 Donde `faltantes` es la lista de nombres de genéricos de la canasta que no se encontraron
 en la serie.
+
+---
+
+### 5.11 validar_inpc.py
+
+Función del dominio que construye los tres artefactos de validación a partir del resultado del cálculo y los datos del INEGI ya obtenidos por el caso de uso.
+
+```python
+def validar(
+    resultado: ResultadoCalculo,
+    inegi: dict[Periodo, float | None],
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+    id_corrida: str,
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+```
+
+| Parámetro   | Tipo                            | Notas                                                    |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `resultado` | `ResultadoCalculo`              | INPC calculado por periodo                               |
+| `inegi`     | `dict[Periodo, float \| None]`  | Dict vacío `{}` si la fuente no estaba disponible        |
+| `canasta`   | `CanastaCanonica`               | Para contar genéricos esperados y ponderadores totales   |
+| `serie`     | `SerieNormalizada`              | Para calcular cobertura por periodo — en v1 siempre 100% |
+| `id_corrida`| `str`                           | Para etiquetar los artefactos                            |
+
+**Comportamiento cuando `inegi` es vacío:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
 
 ---
 
@@ -1057,11 +1084,47 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 9.8 Tolerancia numérica por versión
 
-**Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es configurable por versión:
+**Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es fija por versión:
 
-| Versión | Tolerancia (`error_absoluto`) |
-| ------- | ----------------------------- |
-| 2018    | `<= 0.0005`                   |
-| 2024    | `<= 0.005`                    |
+| Versión | Tolerancia (`error_absoluto`) | Nota                                      |
+| ------- | ----------------------------- | ----------------------------------------- |
+| 2010    | `<= 0.0005`                   | provisional — sin validación empírica aún |
+| 2013    | `<= 0.0005`                   | provisional — sin validación empírica aún |
+| 2018    | `<= 0.0005`                   | basada en experiencia previa              |
+| 2024    | `<= 0.005`                    | mayor variación por encadenamiento        |
 
-**Razón:** las diferencias observadas entre el INPC replicado y el publicado por el INEGI varían por versión — la canasta 2024 usa Laspeyres encadenado con normalización, lo que introduce mayor variación numérica acumulada. Una tolerancia única global sería demasiado estricta para 2024 o demasiado laxa para 2018.
+**Razón:** las diferencias observadas entre el INPC replicado y el publicado por el INEGI varían por versión — la canasta 2024 usa Laspeyres encadenado con normalización, lo que introduce mayor variación numérica acumulada. Una tolerancia única global sería demasiado estricta para 2024 o demasiado laxa para 2018. Las tolerancias de 2010 y 2013 son provisionales y deben revisarse cuando se implemente y pruebe con datos reales.
+
+---
+
+### 9.9 Reglas de `estado_corrida`
+
+**Decisión:** `estado_corrida` en `ResumenValidacion` se determina a partir de `estado_calculo` por periodo:
+
+| Condición                                                    | `estado_corrida` |
+| ------------------------------------------------------------ | ---------------- |
+| Todos los periodos con `estado_calculo = 'ok'`               | `'ok'`           |
+| Algunos periodos con `estado_calculo = 'null_por_faltantes'` | `'parcial'`      |
+| Todos los periodos con `estado_calculo != 'ok'`              | `'fallida'`      |
+
+---
+
+### 9.10 Detección de `null_por_faltantes`
+
+**Decisión:** la detección de valores faltantes en la serie por periodo es responsabilidad del calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`), no de `validar_inpc.py`.
+
+**Razón:** el calculador es quien conoce si el cálculo fue íntegro. Si la serie tiene NaN para un genérico en un periodo, ese periodo se marca como `estado_calculo = 'null_por_faltantes'` e `inpc_replicado = NaN`. `validar_inpc.py` solo valida — no recalcula ni inspecciona la serie.
+
+---
+
+### 9.11 Firma de `validar_inpc.py`
+
+**Decisión:** el dominio no recibe el puerto `FuenteValidacion` — recibe el dict ya obtenido por `ejecutar_corrida.py`. Si la fuente no estaba disponible, el caso de uso pasa `{}`. Ver contrato completo en §5.11.
+
+---
+
+### 9.12 `id_corrida` en `ResultadoCalculo`
+
+**Decisión:** `ejecutar_corrida.py` genera el UUID y lo pasa como parámetro `id_corrida: str` a `calcular()`. La firma de `CalculadorBase.calcular()` se actualiza para incluirlo.
+
+**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar el `id_corrida` como parámetro mantiene el calculador como función pura.

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 
 from replica_inpc.dominio.calculo.base import CalculadorBase
@@ -8,8 +10,10 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 
 class LaspeyresDirecto(CalculadorBase):
     def calcular(
-        self, canasta: CanastaCanonica, serie: SerieNormalizada
+        self, canasta: CanastaCanonica, serie: SerieNormalizada, id_corrida: str
     ) -> ResultadoCalculo:
+
+        periodos_null = serie.df.isnull().any(axis=0)
 
         # Hacemos una suma ponderada de los precios de la serie utilizando los ponderadores de la canasta
         ponderadores = canasta.df["ponderador"].astype(float)
@@ -26,5 +30,7 @@ class LaspeyresDirecto(CalculadorBase):
             },
             index=resultado.index,
         )
+        df_resultado.loc[periodos_null, "estado_calculo"] = "null_por_faltantes"
+        df_resultado.loc[periodos_null, "inpc_replicado"] = None
 
-        return ResultadoCalculo(df_resultado, "")
+        return ResultadoCalculo(df_resultado, id_corrida)

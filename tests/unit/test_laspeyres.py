@@ -63,7 +63,7 @@ def test_laspeyres_valido():
     # INPC esperado para cada periodo
     inpc_esperado = [100.0, 103.0, 106.0]
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie)
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "")
 
     # extraemos los valores de INPC calculados y periodos del resultado para compararlos con los esperados
     valores_inpc = df_calculado.df["inpc_replicado"].tolist()
@@ -75,7 +75,7 @@ def test_laspeyres_valido():
 
 def test_laspeyres_estructura_valida():
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie)
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "")
 
     # verificamos que el df tenga las columnas esperadas
     columnas_esperadas = ["version", "inpc_replicado", "estado_calculo", "motivo_error"]
