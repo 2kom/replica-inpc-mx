@@ -81,5 +81,6 @@ def test_alinear_genericos_insuficiente():
     del mapeo_faltante["Huevo"]
     serie_faltante = SerieNormalizada(df_faltante, mapeo_faltante)
 
+    # verificar que alinear_genericos lance CorrespondenciaInsuficiente al faltar un generico de la canasta en la serie
     with pytest.raises(CorrespondenciaInsuficiente):
         alinear_genericos(canasta, serie_faltante)

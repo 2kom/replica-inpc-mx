@@ -96,20 +96,17 @@ replica-inpc-mx/
 │       │   │   ├── resultado.py
 │       │   │   └── validacion.py
 │       │   ├── calculo/
+│       │   │   ├── base.py
 │       │   │   ├── estrategia.py
 │       │   │   ├── laspeyres.py
 │       │   │   └── encadenado.py
 │       │   ├── correspondencia.py
+│       │   ├── validar_inpc.py
 │       │   ├── periodos.py
 │       │   ├── tipos.py
 │       │   └── errores.py
 │       ├── aplicacion/
 │       │   ├── casos_uso/
-│       │   │   ├── importar_canasta.py
-│       │   │   ├── importar_series.py
-│       │   │   ├── calcular_inpc.py
-│       │   │   ├── validar_inpc.py
-│       │   │   ├── exportar_corrida.py
 │       │   │   └── ejecutar_corrida.py
 │       │   └── puertos/
 │       │       ├── lector_canasta.py
