@@ -25,19 +25,24 @@ df_canasta = pd.DataFrame(
 
 """
 La serie queda como:
-generico | 2018-07-02 | 2018-08-01 | 2018-08-02
-arroz    | 100        | 101        | 102
-frijol   | 100        | 102        | 104
-leche    | 100        | 103        | 106
-huevo    | 100        | 104        | 108
+generico | 2018-Jul-2Q | 2018-Ago-1Q | 2018-Ago-2Q | 2018-Sep-1Q
+arroz    | 100         | 101         | 102         | 103
+frijol   | 100         | 102         | 104         | 106
+leche    | 100         | 103         | 106         | 109
+huevo    | 100         | 104         | 108         | 112
 """
-periodos = [Periodo(2018, 7, 2), Periodo(2018, 8, 1), Periodo(2018, 8, 2)]
+periodos = [
+    Periodo(2018, 7, 2),
+    Periodo(2018, 8, 1),
+    Periodo(2018, 8, 2),
+    Periodo(2018, 9, 1),
+]
 df_serie = pd.DataFrame(
     {
-        "arroz": [100, 101, 102],
-        "frijol": [100, 102, 104],
-        "leche": [100, 103, 106],
-        "huevo": [100, 104, 108],
+        "arroz": [100, 101, 102, 103],
+        "frijol": [100, 102, 104, 106],
+        "leche": [100, 103, 106, 109],
+        "huevo": [100, 104, 108, 112],
     },
     index=periodos,
 ).T
@@ -63,7 +68,7 @@ def test_alinear_genericos_valido():
 
 def test_alinear_genericos_sobrantes():
     df_extra = df_serie.copy()
-    df_extra.loc["azucar"] = [100, 105, 110]
+    df_extra.loc["azucar"] = [100, 105, 110, 115]
     mapeo_extra = mapeo_serie.copy()
     mapeo_extra["Azucar"] = "azucar"
     serie_extra = SerieNormalizada(df_extra, mapeo_extra)

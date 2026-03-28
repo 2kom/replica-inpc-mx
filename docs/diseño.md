@@ -1128,3 +1128,21 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 **Decisión:** `ejecutar_corrida.py` genera el UUID y lo pasa como parámetro `id_corrida: str` a `calcular()`. La firma de `CalculadorBase.calcular()` se actualiza para incluirlo.
 
 **Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar el `id_corrida` como parámetro mantiene el calculador como función pura.
+
+---
+
+## 10. Gaps conocidos y mejoras futuras
+
+Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.
+
+---
+
+### 10.1 `estado_validacion_global` no distingue cobertura parcial
+
+**Comportamiento actual:** `estado_validacion_global` tiene tres estados: `'ok'`, `'diferencia_detectada'`, `'no_disponible'`. El estado `'ok'` se asigna cuando todos los periodos comparados pasaron la tolerancia, aunque al menos uno no haya sido comparado.
+
+**Problema:** un usuario que solo lee `ResumenValidacion` puede interpretar `'ok'` como validación completa cuando en realidad al menos un periodo no fue comparado contra el INEGI. El detalle de cobertura solo es visible en `ReporteDetalladoValidacion`.
+
+**Mejora propuesta:** agregar el estado `'ok_parcial'` para cuando al menos un periodo pasó la comparación pero al menos uno quedó sin comparar. Requiere actualizar los invariantes de `ResumenValidacion` y `ReporteDetalladoValidacion`, y la lógica de `validar_inpc.py`.
+
+**Cuándo implementar:** cuando `FuenteValidacion` esté implementada y haya datos reales que permitan observar cobertura parcial en la práctica.

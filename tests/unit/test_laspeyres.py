@@ -23,19 +23,24 @@ df_canasta = pd.DataFrame(
 
 """
 La serie queda como:
-generico | 2018-07-02 | 2018-08-01 | 2018-08-02
-arroz    | 100        | 101        | 102
-frijol   | 100        | 102        | 104
-leche    | 100        | 103        | 106
-huevo    | 100        | 104        | 108
+generico | 2018-Jul-2Q | 2018-Ago-1Q | 2018-Ago-2Q | 2018-Sep-1Q
+arroz    | 100         | 101         | 102         | 103
+frijol   | 100         | 102         | 104         | 106
+leche    | 100         | 103         | 106         | 109
+huevo    | 100         | 104         | 108         | 112
 """
-periodos = [Periodo(2018, 7, 2), Periodo(2018, 8, 1), Periodo(2018, 8, 2)]
+periodos = [
+    Periodo(2018, 7, 2),
+    Periodo(2018, 8, 1),
+    Periodo(2018, 8, 2),
+    Periodo(2018, 9, 1),
+]
 df_serie = pd.DataFrame(
     {
-        "arroz": [100, 101, 102],
-        "frijol": [100, 102, 104],
-        "leche": [100, 103, 106],
-        "huevo": [100, 104, 108],
+        "arroz": [100, 101, 102, 103],
+        "frijol": [100, 102, 104, 106],
+        "leche": [100, 103, 106, 109],
+        "huevo": [100, 104, 108, 112],
     },
     index=periodos,
 ).T
@@ -46,12 +51,15 @@ mapeo_serie = {
     "Leche": "leche",
     "Huevo": "huevo",
 }
+
+
 """
-El INPC para los 3 periodos en este ejemplo es:
+El INPC para los 4 periodos en este ejemplo es:
 periodo     | INPC
-2018-07-02  | 100.0
-2018-08-01  | 103.0
-2018-08-02  | 106.0
+2018-Jul-2Q | 100.0
+2018-Ago-1Q | 103.0
+2018-Ago-2Q | 106.0
+2018-Sep-1Q | 109.0
 """
 
 canasta = CanastaCanonica(df_canasta, 2018)
@@ -61,7 +69,7 @@ serie = SerieNormalizada(df_serie, mapeo_serie)
 def test_laspeyres_valido():
 
     # INPC esperado para cada periodo
-    inpc_esperado = [100.0, 103.0, 106.0]
+    inpc_esperado = [100.0, 103.0, 106.0, 109.0]
 
     df_calculado = LaspeyresDirecto().calcular(canasta, serie, "")
 
