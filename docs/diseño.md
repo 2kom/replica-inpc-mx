@@ -731,7 +731,14 @@ def validar(
 
 ---
 
-## 6. Contratos de puertos
+## 6. Capa de aplicación
+
+Contiene los contratos de puertos y los casos de uso. No conoce CSV, filesystem ni APIs
+— solo opera con los contratos definidos en esta sección.
+
+---
+
+### 6.1 Puertos
 
 Los puertos son los contratos que el dominio impone a sus dependencias externas.
 Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la
@@ -743,7 +750,7 @@ implementar el puerto correspondiente sin tocar el dominio.
 
 ---
 
-### 6.1 LectorCanasta
+#### 6.1.1 LectorCanasta
 
 Recibe una fuente de datos y devuelve una `CanastaCanonica` lista para usar.
 La versión se pasa explícitamente para que el lector sepa qué columnas esperar
@@ -756,7 +763,7 @@ class LectorCanasta(Protocol):
 
 ---
 
-### 6.2 LectorSeries
+#### 6.1.2 LectorSeries
 
 Recibe un archivo de series y devuelve una `SerieNormalizada` lista para usar.
 Resuelve internamente la orientación (horizontal/vertical), la presencia de
@@ -770,7 +777,7 @@ class LectorSeries(Protocol):
 
 ---
 
-### 6.3 FuenteValidacion
+#### 6.1.3 FuenteValidacion
 
 Obtiene el INPC publicado por el INEGI para los periodos solicitados.
 Devuelve `None` por periodo cuando el INEGI no tiene dato para ese periodo.
@@ -784,7 +791,7 @@ class FuenteValidacion(Protocol):
 
 ---
 
-### 6.4 EscritorResultados
+#### 6.1.4 EscritorResultados
 
 Exporta los artefactos de resultado al usuario. `ResultadoCalculo` no se exporta
 directamente — sus datos están contenidos en `ReporteDetalladoValidacion`.
@@ -797,7 +804,7 @@ class EscritorResultados(Protocol):
 
 ---
 
-### 6.5 RepositorioCorridas
+#### 6.1.5 RepositorioCorridas
 
 Persiste y recupera los metadatos de cada corrida. `listar()` devuelve todos los
 `id_corrida` registrados — necesario para reconstruir historiales y unir resultados
@@ -815,7 +822,7 @@ class RepositorioCorridas(Protocol):
 
 ---
 
-### 6.6 AlmacenArtefactos
+#### 6.1.6 AlmacenArtefactos
 
 Persiste y recupera los artefactos generados por una corrida para trazabilidad
 interna. Opera con DataFrames genéricos — no necesita conocer el tipo de artefacto,
@@ -829,12 +836,34 @@ class AlmacenArtefactos(Protocol):
 
 ---
 
-### Orquestación del pipeline — ejecutar_corrida.py
+### 6.2 EjecutarCorrida
 
-`ejecutar_corrida.py` es el caso de uso central. Orquesta todos los pasos del pipeline
-en un solo llamado y es lo que `api/corrida.py` invoca internamente.
+Caso de uso central. Orquesta todos los pasos del pipeline en un solo llamado
+y es lo que `api/corrida.py` invoca internamente.
 
-**Entradas:** `ruta_canasta: Path`, `ruta_series: Path`, `version: VersionCanasta`
+Los puertos se inyectan en el constructor — el composition root es `api/corrida.py`.
+`ruta_salida` es configuración del entorno (fija por deployment), no varía por corrida.
+
+```python
+class EjecutarCorrida:
+    def __init__(
+        self,
+        lector_canasta: LectorCanasta,
+        lector_series: LectorSeries,
+        fuente_validacion: FuenteValidacion,
+        repositorio: RepositorioCorridas,
+        almacen: AlmacenArtefactos,
+        escritor: EscritorResultados,
+        ruta_salida: Path,
+    ) -> None: ...
+
+    def ejecutar(
+        self,
+        ruta_canasta: Path,
+        ruta_series: Path,
+        version: VersionCanasta,
+    ) -> ResultadoCorrida: ...
+```
 
 **Pasos en orden:**
 
