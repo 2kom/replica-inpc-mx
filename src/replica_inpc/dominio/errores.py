@@ -44,6 +44,14 @@ class VersionNoCoincide(ErrorImportacion):
     pass
 
 
+class SerieVacia(ErrorImportacion):
+    pass
+
+
+class PeriodosInsuficientes(ErrorImportacion):
+    pass
+
+
 # Errores de dominio - invariante violado al construir un contrato
 class ErrorDominio(ReplicaInpcError):
     pass
@@ -65,10 +73,6 @@ class CorrespondenciaInsuficiente(ErrorCalculo):
 
 
 class PonderadorFaltante(ErrorCalculo):
-    pass
-
-
-class SerieVacia(ErrorCalculo):
     pass
 
 

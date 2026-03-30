@@ -13,6 +13,7 @@ from replica_inpc.dominio.errores import (
 )
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.tipos import VersionCanasta
+from replica_inpc.infraestructura.csv._utils import _normalizar
 
 COLUMNAS_REQUERIDAS = [
     "ponderador",
@@ -51,6 +52,8 @@ class LectorCanastaCsv:
             raise EncodingNoLegible(
                 f"No se pudo leer el archivo debido a un problema de encoding: {ruta}"
             )
+
+        df.index = pd.Index([_normalizar(g) for g in df.index], name="generico")
 
         if not all(col in df.columns for col in COLUMNAS_REQUERIDAS):
             columnas_faltantes = [

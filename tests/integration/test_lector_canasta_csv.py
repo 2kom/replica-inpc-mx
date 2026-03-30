@@ -43,6 +43,8 @@ df_canasta = pd.DataFrame(
     }
 ).set_index("generico")
 
+DATA_DIR = Path(__file__).parent.parent.parent / "data" / "inputs"
+
 
 def test_lector_canasta_csv_valido(tmp_path: Path):
     ruta_canasta = tmp_path / "canasta_prueba.csv"
@@ -88,3 +90,10 @@ def test_lector_canasta_csv_encoding_no_legible(tmp_path: Path):
         f.write(df_canasta.to_csv())
     with pytest.raises(EncodingNoLegible):
         LectorCanastaCsv().leer(ruta_canasta, 2018)
+
+
+def test_lector_canasta_csv_real_2018():
+    ruta = DATA_DIR / "ponderadores_2018.csv"
+    resultado = LectorCanastaCsv().leer(ruta, 2018)
+    assert isinstance(resultado, CanastaCanonica)
+    assert len(resultado.df) == 299

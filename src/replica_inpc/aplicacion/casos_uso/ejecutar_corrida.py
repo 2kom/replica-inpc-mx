@@ -12,8 +12,15 @@ from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.aplicacion.puertos.repositorio_corridas import RepositorioCorridas
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.correspondencia import alinear_genericos
-from replica_inpc.dominio.errores import ErrorValidacion
-from replica_inpc.dominio.tipos import ManifestCorrida, ResultadoCorrida, VersionCanasta
+from replica_inpc.dominio.errores import ErrorValidacion, PeriodosInsuficientes
+from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.tipos import (
+    RANGOS_VALIDOS,
+    ManifestCorrida,
+    ResultadoCorrida,
+    VersionCanasta,
+)
 from replica_inpc.dominio.validar_inpc import validar
 
 
@@ -52,6 +59,19 @@ class EjecutarCorrida:
 
         canasta = self._lector_canasta.leer(ruta_canasta, version)
         serie = self._lector_series.leer(ruta_series)
+
+        inicio, fin = RANGOS_VALIDOS[version]
+        cols = [
+            p
+            for p in serie.df.columns
+            if isinstance(p, Periodo) and p >= inicio and (fin is None or p <= fin)
+        ]
+        if not cols:
+            raise PeriodosInsuficientes(
+                f"No hay periodos validos para canasta {version}, valida para {inicio} - {fin}, pero se encontraron: {serie.df.columns}"
+            )
+
+        serie = SerieNormalizada(serie.df[cols], serie.mapeo)
 
         serie = alinear_genericos(canasta, serie)
 

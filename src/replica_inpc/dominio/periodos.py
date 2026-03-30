@@ -4,6 +4,8 @@ import functools
 
 import pandas as pd
 
+from replica_inpc.dominio.errores import PeriodoNoInterpretable
+
 _MESES: dict[str, int] = {
     "Ene": 1,
     "Feb": 2,
@@ -78,7 +80,7 @@ class Periodo:
             año = int(año_str)
             return cls(año, mes, quincena)
         except Exception as e:
-            raise ValueError(
+            raise PeriodoNoInterpretable(
                 f"Formato de periodo inválido: '{periodo_str}'. Se esperaba formato '1Q Mes AAAA' o '2Q Mes AAAA'"
             ) from e
 

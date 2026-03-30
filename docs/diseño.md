@@ -5,6 +5,81 @@ El historial de cambios vive en git.
 
 ---
 
+## Índice
+
+- [Diseño del sistema — replica-inpc-mx](#diseño-del-sistema--replica-inpc-mx)
+  - [Índice](#índice)
+  - [1. Arquitectura](#1-arquitectura)
+    - [1.1 Patrón principal: Hexagonal (Ports \& Adapters)](#11-patrón-principal-hexagonal-ports--adapters)
+    - [1.2 Patrones de diseño](#12-patrones-de-diseño)
+      - [Strategy — cálculo del INPC](#strategy--cálculo-del-inpc)
+      - [Facade — api/corrida.py](#facade--apicorridapy)
+      - [Repository — persistencia de corridas y artefactos](#repository--persistencia-de-corridas-y-artefactos)
+      - [Adapter — infraestructura](#adapter--infraestructura)
+  - [2. Estructura del proyecto](#2-estructura-del-proyecto)
+  - [3. Stack técnico](#3-stack-técnico)
+  - [4. Flujo de datos](#4-flujo-de-datos)
+  - [5. Contratos del dominio](#5-contratos-del-dominio)
+    - [5.1 CanastaCanonica](#51-canastacanonica)
+    - [5.2 SerieNormalizada](#52-serienormalizada)
+    - [5.3 Periodo](#53-periodo)
+    - [5.4 ResultadoCalculo](#54-resultadocalculo)
+    - [5.5 ResumenValidacion](#55-resumenvalidacion)
+    - [5.6 ReporteDetalladoValidacion](#56-reportedetalladovalidacion)
+    - [5.7 DiagnosticoFaltantes](#57-diagnosticofaltantes)
+    - [5.8 CalculadorBase](#58-calculadorbase)
+    - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
+      - [VersionCanasta](#versioncanasta)
+      - [RANGOS_VALIDOS](#rangos_validos)
+      - [ManifestCorrida](#manifestcorrida)
+      - [ResultadoCorrida](#resultadocorrida)
+    - [5.10 correspondencia.py](#510-correspondenciapy)
+    - [5.11 validar\_inpc.py](#511-validar_inpcpy)
+  - [6. Capa de aplicación](#6-capa-de-aplicación)
+    - [6.1 Puertos](#61-puertos)
+      - [6.1.1 LectorCanasta](#611-lectorcanasta)
+      - [6.1.2 LectorSeries](#612-lectorseries)
+      - [6.1.3 FuenteValidacion](#613-fuentevalidacion)
+      - [6.1.4 EscritorResultados](#614-escritorresultados)
+      - [6.1.5 RepositorioCorridas](#615-repositoriocorridas)
+      - [6.1.6 AlmacenArtefactos](#616-almacenartefactos)
+    - [6.2 EjecutarCorrida](#62-ejecutarcorrida)
+  - [7. Infraestructura](#7-infraestructura)
+    - [7.1 Formato del CSV canasta](#71-formato-del-csv-canasta)
+    - [7.2 Formato del CSV de series](#72-formato-del-csv-de-series)
+  - [8. Estrategia de errores](#8-estrategia-de-errores)
+    - [8.1 Jerarquía de excepciones](#81-jerarquía-de-excepciones)
+    - [8.2 Propagación](#82-propagación)
+    - [8.3 Traducción en adaptadores](#83-traducción-en-adaptadores)
+  - [9. Estrategia de testing](#9-estrategia-de-testing)
+    - [9.1 Tipos de test](#91-tipos-de-test)
+    - [9.2 Fixtures](#92-fixtures)
+    - [9.3 Mock de la API del INEGI](#93-mock-de-la-api-del-inegi)
+    - [9.4 Criterio de suficiencia para v1](#94-criterio-de-suficiencia-para-v1)
+  - [10. Decisiones y razones](#10-decisiones-y-razones)
+    - [10.1 `SerieNormalizada` en formato ancho](#101-serienormalizada-en-formato-ancho)
+    - [10.2 `generico_original` como diccionario](#102-generico_original-como-diccionario)
+    - [10.3 Correspondencia genérico↔genérico por normalización exacta](#103-correspondencia-genéricogenérico-por-normalización-exacta)
+    - [10.4 pandas en el dominio](#104-pandas-en-el-dominio)
+    - [10.5 `ponderador` y `encadenamiento` como `str`](#105-ponderador-y-encadenamiento-como-str)
+    - [10.6 `Periodo` como tipo propio](#106-periodo-como-tipo-propio)
+    - [10.7 Categorías de clasificación version-específicas](#107-categorías-de-clasificación-version-específicas)
+    - [10.8 Tolerancia numérica por versión](#108-tolerancia-numérica-por-versión)
+    - [10.9 Reglas de `estado_corrida`](#109-reglas-de-estado_corrida)
+    - [10.10 Detección de `null_por_faltantes`](#1010-detección-de-null_por_faltantes)
+    - [10.11 Firma de `validar_inpc.py`](#1011-firma-de-validar_inpcpy)
+    - [10.12 `id_corrida` en `ResultadoCalculo`](#1012-id_corrida-en-resultadocalculo)
+  - [11. Gaps conocidos y mejoras futuras](#11-gaps-conocidos-y-mejoras-futuras)
+    - [11.1 `estado_validacion_global` no distingue cobertura parcial](#111-estado_validacion_global-no-distingue-cobertura-parcial)
+    - [11.2 Validación por niveles en `LectorCanastaCsv`](#112-validación-por-niveles-en-lectorcanastacsv)
+    - [11.3 Agregados CCIF en `LectorSeriesCsv`](#113-agregados-ccif-en-lectorseriescsv)
+    - [11.4 Detección dinámica del header en `LectorSeriesCsv`](#114-detección-dinámica-del-header-en-lectorseriescsv)
+    - [11.5 ñ en canasta intermedia](#115-ñ-en-canasta-intermedia)
+    - [11.6 Formato de series BIE en versiones 2010 y 2013](#116-formato-de-series-bie-en-versiones-2010-y-2013)
+    - [11.7 Cobertura parcial de periodos no reportada explícitamente](#117-cobertura-parcial-de-periodos-no-reportada-explícitamente)
+
+---
+
 ## 1. Arquitectura
 
 ### 1.1 Patrón principal: Hexagonal (Ports & Adapters)
@@ -197,6 +272,7 @@ canasta_intermedia.csv                  series_genericos.csv
 │  lector_canasta_csv   │       │     lector_series_csv     │
 │  · valida columnas    │       │  · detecta encoding       │
 │  · valida version     │       │    (cp1252 / latin-1)     │
+│  · normaliza índice   │       │                           │
 └───────────┬───────────┘       │  · detecta orientación    │
             │                   │    (horizontal / vertical) │
             ▼                   │  · elimina metadatos      │
@@ -615,6 +691,29 @@ VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
 ---
 
+#### RANGOS_VALIDOS
+
+Diccionario que define los periodos válidos por versión de canasta. Es conocimiento
+del dominio — los rangos son fijos y están determinados por las fechas de vigencia
+de cada canasta base del INPC.
+
+```python
+RANGOS_VALIDOS: dict[VersionCanasta, tuple[Periodo, Periodo | None]] = {
+    2010: (Periodo(2010, 12, 2), Periodo(2013, 4, 1)),
+    2013: (Periodo(2013, 4, 1), Periodo(2018, 7, 2)),
+    2018: (Periodo(2018, 7, 2), Periodo(2024, 7, 2)),
+    2024: (Periodo(2024, 7, 2), None),  # None = hasta el último periodo disponible
+}
+```
+
+El `fin = None` para la canasta 2024 indica que no hay límite superior — se usan
+todos los periodos disponibles desde `2Q Jul 2024` en adelante.
+
+`RANGOS_VALIDOS` se usa en `ejecutar_corrida.py` para filtrar la `SerieNormalizada`
+antes de pasarla a `correspondencia.py` — ver §6.2 paso 3.5.
+
+---
+
 #### ManifestCorrida
 
 Registra la intención de la corrida: qué archivos se usaron, qué versión y cuándo.
@@ -869,14 +968,15 @@ class EjecutarCorrida:
 
 1. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
 2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanonica`
-3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (no depende del paso 2 — podrían correr en paralelo, pero en v1 se ejecutan secuencialmente)
-4. `correspondencia.py` — valida y alinea genérico↔genérico
-5. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
-6. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
-7. `validar_inpc.py` — recibe `ResultadoCalculo`, llama a `FuenteValidacion`, construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
-8. `RepositorioCorridas.guardar(id_corrida, manifest)` + `AlmacenArtefactos.guardar(...)` para canasta, series y artefactos → `data/runs/<id_corrida>/`
-9. `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
-10. Devolver `ResultadoCorrida`
+3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 2)
+4. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
+5. `correspondencia.py` — valida y alinea genérico↔genérico
+6. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
+7. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
+8. `validar_inpc.py` — recibe `ResultadoCalculo`, llama a `FuenteValidacion`, construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
+9. `RepositorioCorridas.guardar(id_corrida, manifest)` + `AlmacenArtefactos.guardar(...)` para canasta, series y artefactos → `data/runs/<id_corrida>/`
+10. `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
+11. Devolver `ResultadoCorrida`
 
 **Extensibilidad:** el caso de uso no necesita cambiar al agregar nuevas versiones —
 la selección de estrategia en `para_canasta()` absorbe la extensión.
@@ -920,6 +1020,94 @@ de CSV intermedio. Este archivo es generado en el proceso de preparación de dat
 `encadenamiento` a `str` antes de construir `CanastaCanonica` — ver §10.5.
 Las columnas de clasificación (COG, CCIF, etc.) se pasan al DataFrame sin modificar.
 
+**Normalización del índice:** el índice `generico` se normaliza con la misma función
+que `LectorSeriesCsv` aplica para producir `generico_limpio`: eliminar tildes vocálicas
+(`á`→`a`, etc.), conservar `ñ`, eliminar puntuación y convertir a minúsculas. Esto
+garantiza que ambas fuentes sean comparables directamente en `correspondencia.py`.
+Verificado: con normalización simétrica los 299 genéricos de la canasta 2018 coinciden
+exactamente con los 299 extraídos de las series BIE.
+
+**Adaptador:**
+
+```python
+class LectorCanastaCsv:
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanonica: ...
+```
+
+**Errores que lanza:**
+
+| Error                  | Causa                                              |
+| ---------------------- | -------------------------------------------------- |
+| `ArchivoNoEncontrado`  | El archivo no existe en la ruta indicada           |
+| `ArchivoVacio`         | El archivo existe pero está vacío                  |
+| `ArchivoCorrupto`      | El archivo no es un CSV válido                     |
+| `EncodingNoLegible`    | El archivo no puede decodificarse                  |
+| `ColumnasMinFaltantes` | Faltan columnas requeridas del esquema canónico    |
+
+---
+
+### 7.2 Formato del CSV de series
+
+Archivo descargado desde el BIE del INEGI. Todas las versiones comparten el mismo
+formato de exportación con dos variantes: con columnas de metadatos o sin ellas.
+
+**Encabezado INEGI:** siempre 5 líneas a saltar (`skiprows=5`): 4 líneas de
+metadatos institucionales + 1 línea vacía.
+
+**Orientación horizontal** (filas = genéricos, columnas = periodos):
+
+| Columna                         | Notas                                                   |
+| ------------------------------- | ------------------------------------------------------- |
+| `Título` (posición 0)           | Descripción larga del genérico o agregado               |
+| Metadatos opcionales            | `Periodicidad`, `Unidad`, `Base`, `Aviso`, etc.         |
+| `Cifra`, `Serie`                | Presentes en ambas variantes; se descartan              |
+| `1Q Ene 2018`, `2Q Ene 2018`, … | Columnas de periodo; formato `[12]Q Mes YYYY`           |
+
+**Orientación vertical** (filas = periodos, columnas = genéricos): el `Título`
+en posición 0 contiene las cadenas de periodo; el resto de columnas son los
+títulos largos de las series. Se normaliza a horizontal transponiendo.
+
+**Detección de orientación:**
+
+1. Leer con `skiprows=5`. Si `df.columns[0] != 'Título'` → `ArchivoCorrupto` (encabezado incorrecto o skiprows desalineado).
+2. Si `'Cifra' in df.columns` → horizontal.
+3. Si `'Cifra' in df.iloc[:, 0].values` → vertical.
+4. Si ninguno → `OrientacionNoDetectable`.
+
+El metadata (`Periodicidad`, `Unidad`, `Base`, etc.) se descarta implícitamente: en horizontal se conservan solo columnas cuyo nombre coincide con el patrón de periodo; en vertical se conservan solo filas cuyo `Título` coincide con ese patrón.
+
+**Extracción del genérico desde `Título`:** se aplica regex `\b\d{3}\b\s*(.*)`
+sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto
+son agregados CCIF y se descartan (ver §11.3).
+
+**Normalización de nombres:** se eliminan tildes vocálicas (`á`→`a`, etc.),
+se conserva `ñ`, se elimina puntuación y se pone en minúsculas. El resultado
+es `generico_limpio`; el nombre antes de normalizar es `generico_original`.
+
+**Parseo de periodos:** `"1Q Ene 2018"` → `Periodo(2018, 1, 1)`. Mes en
+español abreviado (`Ene`…`Dic`). Se usa `Periodo.desde_str()` internamente;
+si el string no puede parsearse lanza `PeriodoNoInterpretable` directamente
+(la traducción ocurre en `periodos.py`, no en el adaptador).
+
+**Adaptador:**
+
+```python
+class LectorSeriesCsv:
+    def leer(self, ruta: Path) -> SerieNormalizada: ...
+```
+
+**Errores que lanza:**
+
+| Error                      | Causa                                                         |
+| -------------------------- | ------------------------------------------------------------- |
+| `ArchivoNoEncontrado`      | El archivo no existe en la ruta indicada                      |
+| `ArchivoVacio`             | El archivo existe pero está vacío                             |
+| `ArchivoCorrupto`          | El archivo no es un CSV válido, o `df.columns[0] != 'Título'` |
+| `EncodingNoLegible`        | No se puede decodificar con cp1252 ni con latin-1             |
+| `OrientacionNoDetectable`  | No se puede determinar si el archivo es horizontal o vertical |
+| `PeriodoNoInterpretable`   | Una columna de periodo no puede parsearse                     |
+| `SerieVacia`               | Ninguna fila tiene código de 3 dígitos en el `Título`         |
+
 ---
 
 ## 8. Estrategia de errores
@@ -945,6 +1133,8 @@ class ColumnasMinFaltantes(ErrorImportacion): ...
 class CanastaNoSoportada(ErrorImportacion): ...
 class PeriodoNoInterpretable(ErrorImportacion): ...
 class VersionNoCoincide(ErrorImportacion): ...
+class SerieVacia(ErrorImportacion): ...
+class PeriodosInsuficientes(ErrorImportacion): ...
 
 # Errores de dominio — invariante violado al construir un contrato
 class ErrorDominio(ReplicaInpcError): ...
@@ -955,7 +1145,6 @@ class ErrorCalculo(ReplicaInpcError): ...
 class CorrespondenciaInsuficiente(ErrorCalculo):
     def __init__(self, faltantes: list[str]) -> None: ...
 class PonderadorFaltante(ErrorCalculo): ...
-class SerieVacia(ErrorCalculo): ...
 class CanastaSinGenericos(ErrorCalculo): ...
 
 # Errores de validación — no fallan la corrida
@@ -1211,3 +1400,75 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 **Mejora propuesta:** agregar el estado `'ok_parcial'` para cuando al menos un periodo pasó la comparación pero al menos uno quedó sin comparar. Requiere actualizar los invariantes de `ResumenValidacion` y `ReporteDetalladoValidacion`, y la lógica de `validar_inpc.py`.
 
 **Cuándo implementar:** cuando `FuenteValidacion` esté implementada y haya datos reales que permitan observar cobertura parcial en la práctica.
+
+---
+
+### 11.2 Validación por niveles en `LectorCanastaCsv`
+
+**Comportamiento actual:** `LectorCanastaCsv` valida todas las columnas del esquema canónico o falla. No hay distinción entre "mínimo para calcular INPC" y "completo para calcular subíndices".
+
+**Problema:** en el futuro puede haber CSVs que solo tengan `ponderador` y `encadenamiento` (suficientes para INPC) pero sin clasificaciones (COG, CCIF, etc.). Con el validador actual, ese CSV falla aunque el cálculo sea posible.
+
+**Mejora propuesta:** agregar un parámetro `nivel` al método `leer` y actualizar el Protocol `LectorCanasta`. Tres niveles: `"inpc"` (solo ponderador), `"subindices"` (+ clasificaciones), `"completo"` (todas las columnas).
+
+**Cuándo implementar:** cuando se requiera calcular subíndices en v2.
+
+---
+
+### 11.3 Agregados CCIF en `LectorSeriesCsv`
+
+**Comportamiento actual:** `LectorSeriesCsv` filtra y descarta todas las filas que no tienen código de 3 dígitos en el `Título` — es decir, descarta los agregados CCIF (`01 Alimentos...`, `01.1 Alimentos`, etc.).
+
+**Problema:** en v2 los subíndices requieren las series de los agregados CCIF, no solo los genéricos.
+
+**Mejora propuesta:** agregar un parámetro `incluir_agregados: bool = False` al método `leer`.
+
+**Cuándo implementar:** cuando se implemente el cálculo de subíndices en v2.
+
+---
+
+### 11.4 Detección dinámica del header en `LectorSeriesCsv`
+
+**Comportamiento actual:** `LectorSeriesCsv` usa `skiprows=5` fijo para saltar el encabezado de INEGI, asumiendo que siempre son exactamente 5 líneas.
+
+**Problema:** si INEGI cambia el formato de exportación (más o menos líneas de encabezado), el lector fallaría silenciosamente — leería datos incorrectos sin lanzar error.
+
+**Mejora propuesta:** detectar dinámicamente la fila del header contando la moda de separadores (comas) en las primeras 25 líneas y usando la primera fila que alcanza ese conteo como header. Enfoque usado en el proyecto anterior (`archivos.py: cargar_de_raw`).
+
+**Cuándo implementar:** si se detecta que INEGI cambia su formato de exportación, o al implementar soporte para otras fuentes de series.
+
+---
+
+### 11.5 ñ en canasta intermedia
+
+**Comportamiento actual:** los CSV de canasta intermedia (2010, 2013, 2018, 2024) tienen los nombres de genéricos sin ñ (ej: `"pina"` en lugar de `"piña"`). La normalización de `LectorSeriesCsv` conserva ñ, lo que causaría mismatch en genéricos con ñ si ambas fuentes no son consistentes.
+
+**Problema:** los nombres normalizados de las series tendrán ñ (ej: `"piña"`) pero los índices de la canasta no (ej: `"pina"`), haciendo que `alinear_genericos` falle para esos genéricos.
+
+**Mejora propuesta:** regenerar los CSV de canasta intermedia con ñ donde corresponda.
+
+**Cuándo implementar:** antes de implementar corridas de cualquier versión — prerrequisito para que el matching funcione en los 11 genéricos afectados (ej: piña, pañales, enseñanza adicional).
+
+---
+
+### 11.6 Formato de series BIE en versiones 2010 y 2013
+
+**Comportamiento actual:** `LectorSeriesCsv` extrae genéricos con el patrón `\b\d{3}\b` en el campo `Título`. Verificado solo contra series de la canasta 2018.
+
+**Problema:** las series 2010 y 2013 descargadas del BIE podrían tener un formato de título distinto donde los códigos de genérico no sean de 3 dígitos. Si no hay matches, el lector lanzaría `SerieVacia` sin indicar que el problema es de formato.
+
+**Mejora propuesta:** verificar el formato real de las series 2010/2013 en el BIE y ajustar el patrón si es necesario.
+
+**Cuándo implementar:** antes de implementar corridas 2010 y 2013.
+
+---
+
+### 11.7 Cobertura parcial de periodos no reportada explícitamente
+
+**Comportamiento actual:** el paso 4 de `ejecutar_corrida.py` filtra la `SerieNormalizada` al rango de `RANGOS_VALIDOS[version]`. Si la serie cubre solo parte del rango (ej. llega hasta `1Q Ene 2022` en lugar de `2Q Jul 2024`), la corrida continúa con los periodos disponibles. La cobertura parcial es inferible comparando `total_periodos_esperados` con `total_periodos_calculados` en `ResumenValidacion`, pero no hay un indicador explícito.
+
+**Problema:** `estado_corrida = 'parcial'` está semánticamente reservado para cuando el cálculo produjo `null_por_faltantes` en algunos periodos — no para cuando la serie no cubre el rango completo. Estos son dos tipos distintos de parcialidad que el diseño actual no distingue.
+
+**Mejora propuesta:** agregar un nuevo valor a `estado_corrida` (ej. `'cobertura_incompleta'`) o un campo booleano `cobertura_periodo_completa` a `ResumenValidacion`.
+
+**Cuándo implementar:** cuando el reporte de cobertura sea un requerimiento explícito del usuario final.

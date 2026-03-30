@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from replica_inpc.dominio.errores import PeriodoNoInterpretable
 from replica_inpc.dominio.periodos import Periodo
 
 
@@ -40,7 +41,7 @@ def test_desde_str_valido():
 
 def test_str_invalido():
     # test de construccion desde string con formato invalido
-    with pytest.raises(ValueError):
+    with pytest.raises(PeriodoNoInterpretable):
         Periodo.desde_str("formato incorrecto")
 
 
