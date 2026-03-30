@@ -882,13 +882,49 @@ class EjecutarCorrida:
 la selección de estrategia en `para_canasta()` absorbe la extensión.
 
 **Errores:** cualquier `ErrorImportacion`, `ErrorDominio` o `ErrorCalculo` falla la corrida
-inmediatamente. `ErrorValidacion` no falla la corrida — ver §7.
+inmediatamente. `ErrorValidacion` no falla la corrida — ver §8.
 
 ---
 
-## 7. Estrategia de errores
+## 7. Infraestructura
 
-### 7.1 Jerarquía de excepciones
+Adaptadores concretos que implementan los puertos de §6.1. El dominio y la capa de
+aplicación no conocen estos detalles — solo operan con los contratos.
+
+---
+
+### 7.1 Formato del CSV canasta
+
+Todas las versiones de canasta (2010, 2013, 2018, 2024) comparten el mismo esquema
+de CSV intermedio. Este archivo es generado en el proceso de preparación de datos
+(fuera del pipeline de cálculo) a partir de los archivos fuente (.xlsx, .pdf).
+
+**Esquema:**
+
+| Columna                  | Tipo     | Notas                                              |
+| ------------------------ | -------- | -------------------------------------------------- |
+| `generico`               | `str`    | Índice — nombre del genérico                       |
+| `ponderador`             | `float`  | Peso del genérico; suma 100 por versión            |
+| `encadenamiento`         | `float`  | Factor de encadenamiento; vacío en 2010 y 2018     |
+| `COG`                    | `str`    | Clasificación por objeto del gasto                 |
+| `CCIF`                   | `str`    | Clasificación del consumo individual por finalidad |
+| `inflacion 1`            | `str`    | Categoría de inflación nivel 1                     |
+| `inflacion 2`            | `str`    | Categoría de inflación nivel 2                     |
+| `inflacion 3`            | `str`    | Categoría de inflación nivel 3                     |
+| `SCIAN 1`                | `str`    | Clasificación SCIAN nivel 1                        |
+| `SCIAN 2`                | `str`    | Clasificación SCIAN nivel 2                        |
+| `canasta basica`         | `str`    | `'X'` si pertenece, vacío si no                    |
+| `canasta consumo minimo` | `str`    | `'X'` si pertenece, vacío si no                    |
+
+`LectorCanastaCsv` lee `generico` como índice y convierte `ponderador` y
+`encadenamiento` a `str` antes de construir `CanastaCanonica` — ver §10.5.
+Las columnas de clasificación (COG, CCIF, etc.) se pasan al DataFrame sin modificar.
+
+---
+
+## 8. Estrategia de errores
+
+### 8.1 Jerarquía de excepciones
 
 Todas las excepciones del sistema heredan de `ReplicaInpcError` y se definen
 en `dominio/errores.py`. Las capas superiores solo necesitan importar desde el
@@ -928,7 +964,7 @@ class FuenteNoDisponible(ErrorValidacion): ...
 class RespuestaInvalida(ErrorValidacion): ...
 ```
 
-### 7.2 Propagación
+### 8.2 Propagación
 
 Los errores se lanzan lo más cerca posible de donde ocurren y se capturan
 en el caso de uso, que decide qué hacer con ellos. Las capas intermedias
@@ -941,7 +977,7 @@ no capturan ni envuelven — dejan pasar.
 | `ErrorCalculo`     | dominio (cálculo)                  | caso de uso      | falla la corrida           |
 | `ErrorValidacion`  | adaptador (infraestructura)        | caso de uso      | validación `no_disponible` |
 
-### 7.3 Traducción en adaptadores
+### 8.3 Traducción en adaptadores
 
 Los adaptadores traducen excepciones externas a errores propios del sistema
 antes de que lleguen al caso de uso. El caso de uso nunca ve `FileNotFoundError`,
@@ -962,9 +998,9 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 
 ---
 
-## 8. Estrategia de testing
+## 9. Estrategia de testing
 
-### 8.1 Tipos de test
+### 9.1 Tipos de test
 
 | Componente            | Tipo        | Nota                                                                            |
 | --------------------- | ----------- | ------------------------------------------------------------------------------- |
@@ -975,12 +1011,12 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 | Adaptadores CSV       | Integration | Archivos reales                                                                 |
 | Casos de uso          | Integration | Archivos reales                                                                 |
 | `api/corrida.py`      | Integration | Archivos reales                                                                 |
-| API INEGI             | Integration | Mockeada — ver §8.3                                                             |
+| API INEGI             | Integration | Mockeada — ver §9.3                                                             |
 | `interfaces/cli.py`   | ——————————— | Fuera de v1                                                                     |
 
 ---
 
-### 8.2 Fixtures
+### 9.2 Fixtures
 
 Los fixtures viven en `tests/fixtures/` y son de dos tipos.
 
@@ -1003,7 +1039,7 @@ numérico en detalle.
 
 ---
 
-### 8.3 Mock de la API del INEGI
+### 9.3 Mock de la API del INEGI
 
 `FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real.
 Los mocks cubren cuatro escenarios:
@@ -1024,7 +1060,7 @@ class FuenteValidacionFalsa:
 
 ---
 
-### 8.4 Criterio de suficiencia para v1
+### 9.4 Criterio de suficiencia para v1
 
 El suite es suficiente cuando cubre los siguientes comportamientos:
 
@@ -1041,9 +1077,9 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-## 9. Decisiones y razones
+## 10. Decisiones y razones
 
-### 9.1 `SerieNormalizada` en formato ancho
+### 10.1 `SerieNormalizada` en formato ancho
 
 **Decisión:** DataFrame con `generico_limpio` como índice y objetos `Periodo` como columnas.
 
@@ -1053,7 +1089,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.2 `generico_original` como diccionario
+### 10.2 `generico_original` como diccionario
 
 **Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), fuera del DataFrame.
 
@@ -1063,7 +1099,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.3 Correspondencia genérico↔genérico por normalización exacta
+### 10.3 Correspondencia genérico↔genérico por normalización exacta
 
 **Decisión:** matching exacto después de normalizar — quitar tildes + lowercase (`unicodedata`). `rapidfuzz` removido del stack.
 
@@ -1073,7 +1109,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.4 pandas en el dominio
+### 10.4 pandas en el dominio
 
 **Decisión:** los contratos del dominio usan DataFrames de pandas directamente.
 
@@ -1083,7 +1119,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.5 `ponderador` y `encadenamiento` como `str`
+### 10.5 `ponderador` y `encadenamiento` como `str`
 
 **Decisión:** se almacenan como `str` en `CanastaCanonica`. La conversión a `float` ocurre solo en el momento del cálculo.
 
@@ -1093,7 +1129,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.6 `Periodo` como tipo propio
+### 10.6 `Periodo` como tipo propio
 
 **Decisión:** value object `Periodo` con atributos `año`, `mes`, `quincena`.
 
@@ -1103,7 +1139,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.7 Categorías de clasificación version-específicas
+### 10.7 Categorías de clasificación version-específicas
 
 **Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanonica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
 
@@ -1111,7 +1147,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.8 Tolerancia numérica por versión
+### 10.8 Tolerancia numérica por versión
 
 **Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es fija por versión:
 
@@ -1126,7 +1162,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.9 Reglas de `estado_corrida`
+### 10.9 Reglas de `estado_corrida`
 
 **Decisión:** `estado_corrida` en `ResumenValidacion` se determina a partir de `estado_calculo` por periodo:
 
@@ -1138,7 +1174,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.10 Detección de `null_por_faltantes`
+### 10.10 Detección de `null_por_faltantes`
 
 **Decisión:** la detección de valores faltantes en la serie por periodo es responsabilidad del calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`), no de `validar_inpc.py`.
 
@@ -1146,13 +1182,13 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 9.11 Firma de `validar_inpc.py`
+### 10.11 Firma de `validar_inpc.py`
 
 **Decisión:** el dominio no recibe el puerto `FuenteValidacion` — recibe el dict ya obtenido por `ejecutar_corrida.py`. Si la fuente no estaba disponible, el caso de uso pasa `{}`. Ver contrato completo en §5.11.
 
 ---
 
-### 9.12 `id_corrida` en `ResultadoCalculo`
+### 10.12 `id_corrida` en `ResultadoCalculo`
 
 **Decisión:** `ejecutar_corrida.py` genera el UUID y lo pasa como parámetro `id_corrida: str` a `calcular()`. La firma de `CalculadorBase.calcular()` se actualiza para incluirlo.
 
@@ -1160,13 +1196,13 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-## 10. Gaps conocidos y mejoras futuras
+## 11. Gaps conocidos y mejoras futuras
 
 Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.
 
 ---
 
-### 10.1 `estado_validacion_global` no distingue cobertura parcial
+### 11.1 `estado_validacion_global` no distingue cobertura parcial
 
 **Comportamiento actual:** `estado_validacion_global` tiene tres estados: `'ok'`, `'diferencia_detectada'`, `'no_disponible'`. El estado `'ok'` se asigna cuando todos los periodos comparados pasaron la tolerancia, aunque al menos uno no haya sido comparado.
 
