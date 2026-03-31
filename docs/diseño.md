@@ -49,6 +49,9 @@ El historial de cambios vive en git.
     - [7.2 Formato del CSV de series](#72-formato-del-csv-de-series)
     - [7.3 Repositorio de corridas (filesystem)](#73-repositorio-de-corridas-filesystem)
     - [7.4 Almacén de artefactos (filesystem)](#74-almacén-de-artefactos-filesystem)
+    - [7.5 Formato de los CSV de salida (escritor)](#75-formato-de-los-csv-de-salida-escritor)
+      - [reporte\_\<id\_corrida\>.csv](#reporte_id_corridacsv)
+      - [diagnostico\_\<id\_corrida\>.csv](#diagnostico_id_corridacsv)
   - [8. Estrategia de errores](#8-estrategia-de-errores)
     - [8.1 Jerarquía de excepciones](#81-jerarquía-de-excepciones)
     - [8.2 Propagación](#82-propagación)
@@ -1206,6 +1209,62 @@ class AlmacenArtefactosFs:
 | Error                   | Causa                                             |
 | ----------------------- | ------------------------------------------------- |
 | `ArtefactoNoEncontrado` | No existe el archivo Parquet para ese artefacto   |
+
+---
+
+### 7.5 Formato de los CSV de salida (escritor)
+
+Archivos exportados a `output/` para consumo del usuario. Generados por
+`EscritorResultados` cuando `persistir=True`.
+
+#### reporte_<id_corrida>.csv
+
+El MultiIndex `(periodo, subindice)` de `ReporteDetalladoValidacion.df` se aplana
+como columnas regulares. `Periodo` se serializa a string (`"1Q Ene 2024"`).
+Diseñado para concatenarse con reportes de otras versiones y construir un historial
+completo del INPC — el par `(periodo, subindice)` identifica unívocamente cada fila.
+
+| Columna                       | Tipo     | Notas                                        |
+| ----------------------------- | -------- | -------------------------------------------- |
+| `periodo`                     | `str`    | Ej. `"1Q Ene 2018"`                          |
+| `subindice`                   | `str`    | Ej. `"INPC general"`                         |
+| `version`                     | `int`    |                                              |
+| `inpc_replicado`              | `float`  | `null` si `estado_calculo != 'ok'`           |
+| `inpc_inegi`                  | `float`  | `null` si validación no disponible           |
+| `error_absoluto`              | `float`  | `null` si validación no disponible           |
+| `error_relativo`              | `float`  | `null` si validación no disponible           |
+| `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`        |
+| `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`            |
+| `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `no_disponible`|
+| `total_genericos_esperados`   | `int`    |                                              |
+| `total_genericos_con_indice`  | `int`    |                                              |
+| `total_genericos_sin_indice`  | `int`    |                                              |
+| `cobertura_genericos_pct`     | `float`  |                                              |
+| `ponderador_total_esperado`   | `float`  |                                              |
+| `ponderador_total_cubierto`   | `float`  |                                              |
+
+#### diagnostico_<id_corrida>.csv
+
+Índice entero descartado (`index=False`). `Periodo` en columna `periodo` serializado
+a string.
+
+| Columna          | Tipo  | Notas                                      |
+| ---------------- | ----- | ------------------------------------------ |
+| `id_corrida`     | `str` |                                            |
+| `version`        | `int` |                                            |
+| `periodo`        | `str` | `null` si `nivel_faltante = 'estructural'` |
+| `generico`       | `str` |                                            |
+| `nivel_faltante` | `str` | `periodo`, `estructural`                   |
+| `tipo_faltante`  | `str` | `indice`, `ponderador`                     |
+| `detalle`        | `str` |                                            |
+
+**Adaptador:**
+
+```python
+class EscritorResultadosCsv:
+    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None: ...
+    def escribir_diagnostico(self, diagnostico: DiagnosticoFaltantes, ruta: Path) -> None: ...
+```
 
 ---
 
