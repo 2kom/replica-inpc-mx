@@ -30,7 +30,7 @@ El historial de cambios vive en git.
     - [5.8 CalculadorBase](#58-calculadorbase)
     - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
       - [VersionCanasta](#versioncanasta)
-      - [RANGOS_VALIDOS](#rangos_validos)
+      - [RANGOS\_VALIDOS](#rangos_validos)
       - [ManifestCorrida](#manifestcorrida)
       - [ResultadoCorrida](#resultadocorrida)
     - [5.10 correspondencia.py](#510-correspondenciapy)
@@ -47,6 +47,8 @@ El historial de cambios vive en git.
   - [7. Infraestructura](#7-infraestructura)
     - [7.1 Formato del CSV canasta](#71-formato-del-csv-canasta)
     - [7.2 Formato del CSV de series](#72-formato-del-csv-de-series)
+    - [7.3 Repositorio de corridas (filesystem)](#73-repositorio-de-corridas-filesystem)
+    - [7.4 Almacén de artefactos (filesystem)](#74-almacén-de-artefactos-filesystem)
   - [8. Estrategia de errores](#8-estrategia-de-errores)
     - [8.1 Jerarquía de excepciones](#81-jerarquía-de-excepciones)
     - [8.2 Propagación](#82-propagación)
@@ -77,6 +79,7 @@ El historial de cambios vive en git.
     - [11.5 ñ en canasta intermedia](#115-ñ-en-canasta-intermedia)
     - [11.6 Formato de series BIE en versiones 2010 y 2013](#116-formato-de-series-bie-en-versiones-2010-y-2013)
     - [11.7 Cobertura parcial de periodos no reportada explícitamente](#117-cobertura-parcial-de-periodos-no-reportada-explícitamente)
+    - [11.8 `AlmacenArtefactos.obtener` devuelve índice como string](#118-almacenartefactosobtener-devuelve-índice-como-string)
 
 ---
 
@@ -1041,6 +1044,9 @@ garantiza que ambas fuentes sean comparables directamente en `correspondencia.py
 Verificado: con normalización simétrica los 299 genéricos de la canasta 2018 coinciden
 exactamente con los 299 extraídos de las series BIE.
 
+La función de normalización está implementada en `infraestructura/csv/_utils.py`
+y es compartida por `LectorCanastaCsv` y `LectorSeriesCsv`.
+
 **Adaptador:**
 
 ```python
@@ -1097,6 +1103,7 @@ son agregados CCIF y se descartan (ver §11.3).
 **Normalización de nombres:** se eliminan tildes vocálicas (`á`→`a`, etc.),
 se conserva `ñ`, se elimina puntuación y se pone en minúsculas. El resultado
 es `generico_limpio`; el nombre antes de normalizar es `generico_original`.
+Implementada en `infraestructura/csv/_utils.py`, compartida con `LectorCanastaCsv`.
 
 **Parseo de periodos:** `"1Q Ene 2018"` → `Periodo(2018, 1, 1)`. Mes en
 español abreviado (`Ene`…`Dic`). Se usa `Periodo.desde_str()` internamente;
@@ -1121,6 +1128,84 @@ class LectorSeriesCsv:
 | `OrientacionNoDetectable`  | No se puede determinar si el archivo es horizontal o vertical |
 | `PeriodoNoInterpretable`   | Una columna de periodo no puede parsearse                     |
 | `SerieVacia`               | Ninguna fila tiene código de 3 dígitos en el `Título`         |
+
+---
+
+### 7.3 Repositorio de corridas (filesystem)
+
+`RepositorioCorridas` persiste el `ManifestCorrida` de cada corrida como un archivo
+JSON en `data/runs/<id_corrida>/manifest.json`.
+
+**Esquema JSON:**
+
+```json
+{
+  "id_corrida": "uuid-string",
+  "version": 2018,
+  "ruta_canasta": "/ruta/absoluta/canasta.csv",
+  "ruta_series": "/ruta/absoluta/series.csv",
+  "fecha": "2026-03-30T14:23:00.123456"
+}
+```
+
+| Campo          | Tipo Python    | Serialización JSON       |
+| -------------- | -------------- | ------------------------ |
+| `id_corrida`   | `str`          | string                   |
+| `version`      | `int`          | number                   |
+| `ruta_canasta` | `Path`         | string (`str(path)`)     |
+| `ruta_series`  | `Path`         | string (`str(path)`)     |
+| `fecha`        | `datetime`     | ISO 8601 (`isoformat()`) |
+
+**`listar()`:** escanea los subdirectorios de `data/runs/` y devuelve los nombres
+de aquellos que contienen un `manifest.json`. Directorios sin manifest se ignoran.
+Si `data/runs/` no existe, devuelve lista vacía.
+
+**Adaptador:**
+
+```python
+class RepositorioCorridasFs:
+    def __init__(self, ruta_base: Path) -> None: ...
+    def guardar(self, manifest: ManifestCorrida) -> None: ...
+    def obtener(self, id_corrida: str) -> ManifestCorrida: ...
+    def listar(self) -> list[str]: ...
+```
+
+**Errores que lanza:**
+
+| Error                   | Causa                                         |
+| ----------------------- | --------------------------------------------- |
+| `ArtefactoNoEncontrado` | No existe `manifest.json` para ese id_corrida |
+
+---
+
+### 7.4 Almacén de artefactos (filesystem)
+
+`AlmacenArtefactos` persiste los DataFrames computados por el pipeline como archivos
+Parquet en `data/runs/<id_corrida>/<nombre>.parquet`.
+
+**Artefactos guardados:** `resultado`, `resumen`, `reporte`, `diagnostico`.
+
+**Serialización de `Periodo`:** los objetos `Periodo` en el índice o en columnas
+se convierten a string con `str(Periodo)` antes de guardar (produce `"1Q Ene 2024"`).
+El MultiIndex de `reporte` (`["periodo", "subindice"]`) se preserva gracias a Parquet.
+
+**`obtener()`:** devuelve el DataFrame con el índice como string — no re-parsea
+`Periodo`. Ver gap §11.8.
+
+**Adaptador:**
+
+```python
+class AlmacenArtefactosFs:
+    def __init__(self, ruta_base: Path) -> None: ...
+    def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
+    def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
+```
+
+**Errores que lanza:**
+
+| Error                   | Causa                                             |
+| ----------------------- | ------------------------------------------------- |
+| `ArtefactoNoEncontrado` | No existe el archivo Parquet para ese artefacto   |
 
 ---
 
