@@ -91,3 +91,17 @@ class FuenteNoDisponible(ErrorValidacion):
 
 class RespuestaInvalida(ErrorValidacion):
     pass
+
+
+# Errores de configuracion - el sistema fue ensamblado incorrectamente
+class ErrorConfiguracion(ReplicaInpcError):
+    pass
+
+
+# Errores de persistencia - fallo al leer o escribir artefactos internos
+class ErrorPersistencia(ReplicaInpcError):
+    pass
+
+
+class ArtefactoNoEncontrado(ErrorPersistencia):
+    pass

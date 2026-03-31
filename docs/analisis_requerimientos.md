@@ -119,11 +119,14 @@ Esto se considera un error local por periodo.
 
 El objetivo de esta seccion es declarar unicamente que artefactos deben persistirse en la `v1`.
 
-Se acordó persistir:
+Se acordó persistir unicamente los **artefactos computados** por el pipeline:
 
-- las **series normalizadas**;
-- la **canasta canonica** usada por el sistema;
-- los **artefactos de validacion** definidos formalmente en la seccion `11`.
+- el **resultado del calculo** (`ResultadoCalculo`);
+- los **artefactos de validacion** definidos formalmente en la seccion 11 (`ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`).
+
+La trazabilidad de los insumos queda cubierta por las rutas registradas en `ManifestCorrida`. No se persisten copias de los archivos fuente porque el flujo de uso esperado es local: el usuario gestiona sus propios archivos y los reemplaza cuando hay actualizaciones.
+
+La persistencia es **opcional por corrida**. El caso de uso acepta un parametro `persistir: bool`. Cuando `persistir=False`, el pipeline corre completo en memoria y devuelve `ResultadoCorrida` sin escribir nada a disco — util para exploracion en notebooks. Cuando `persistir=True`, se escriben todos los artefactos y metadatos a disco.
 
 ## 8. Prioridades no funcionales de la version 1
 

@@ -12,7 +12,11 @@ from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.aplicacion.puertos.repositorio_corridas import RepositorioCorridas
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.correspondencia import alinear_genericos
-from replica_inpc.dominio.errores import ErrorValidacion, PeriodosInsuficientes
+from replica_inpc.dominio.errores import (
+    ErrorConfiguracion,
+    ErrorValidacion,
+    PeriodosInsuficientes,
+)
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
@@ -30,10 +34,10 @@ class EjecutarCorrida:
         lector_canasta: LectorCanasta,
         lector_series: LectorSeries,
         fuente_validacion: FuenteValidacion,
-        repositorio: RepositorioCorridas,
-        almacen: AlmacenArtefactos,
-        escritor: EscritorResultados,
-        ruta_salida: Path,
+        repositorio: RepositorioCorridas | None = None,
+        almacen: AlmacenArtefactos | None = None,
+        escritor: EscritorResultados | None = None,
+        ruta_salida: Path | None = None,
     ) -> None:
         self._lector_canasta = lector_canasta
         self._lector_series = lector_series
@@ -48,9 +52,17 @@ class EjecutarCorrida:
         ruta_canasta: Path,
         ruta_series: Path,
         version: VersionCanasta,
+        persistir: bool = False,
     ) -> ResultadoCorrida:
 
-        # crear el manifiesto de la ejecucion
+        if persistir and any(
+            p is None
+            for p in (self._repositorio, self._almacen, self._escritor, self._ruta_salida)
+        ):
+            raise ErrorConfiguracion(
+                "persistir=True requiere repositorio, almacen, escritor y ruta_salida"
+            )
+
         fecha_hora_ejecucion = datetime.now()
         id_corrida = str(uuid.uuid4())
         manifiesto = ManifestCorrida(
@@ -72,9 +84,7 @@ class EjecutarCorrida:
             )
 
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
-
         serie = alinear_genericos(canasta, serie)
-
         resultado = para_canasta(canasta).calcular(canasta, serie, id_corrida)
 
         try:
@@ -86,19 +96,18 @@ class EjecutarCorrida:
             resultado, inegi, canasta, serie, id_corrida
         )
 
-        self._repositorio.guardar(id_corrida, manifiesto)
-        self._almacen.guardar(id_corrida, "canasta", canasta.df)
-        self._almacen.guardar(id_corrida, "serie", serie.df)
-        self._almacen.guardar(id_corrida, "resumen", resumen.df)
-        self._almacen.guardar(id_corrida, "reporte", reporte.df)
-        self._almacen.guardar(id_corrida, "diagnostico", diagnostico.df)
-
-        self._escritor.escribir_reporte(
-            reporte, self._ruta_salida / f"reporte_{id_corrida}.csv"
-        )
-        self._escritor.escribir_diagnostico(
-            diagnostico, self._ruta_salida / f"diagnostico_{id_corrida}.csv"
-        )
+        if persistir:
+            self._repositorio.guardar(manifiesto)  # type: ignore[union-attr]
+            self._almacen.guardar(id_corrida, "resultado", resultado.df)  # type: ignore[union-attr]
+            self._almacen.guardar(id_corrida, "resumen", resumen.df)  # type: ignore[union-attr]
+            self._almacen.guardar(id_corrida, "reporte", reporte.df)  # type: ignore[union-attr]
+            self._almacen.guardar(id_corrida, "diagnostico", diagnostico.df)  # type: ignore[union-attr]
+            self._escritor.escribir_reporte(  # type: ignore[union-attr]
+                reporte, self._ruta_salida / f"reporte_{id_corrida}.csv"  # type: ignore[operator]
+            )
+            self._escritor.escribir_diagnostico(  # type: ignore[union-attr]
+                diagnostico, self._ruta_salida / f"diagnostico_{id_corrida}.csv"  # type: ignore[operator]
+            )
 
         return ResultadoCorrida(
             manifest=manifiesto,

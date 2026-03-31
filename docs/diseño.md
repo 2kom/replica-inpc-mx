@@ -139,6 +139,9 @@ dónde y cómo se persiste cada corrida.
 En v1 se implementan sobre filesystem. Si se agrega SQL, se implementa
 el mismo puerto sin tocar el dominio.
 
+La persistencia es opcional por corrida — ver §6.2. Cuando `persistir=False`,
+estos puertos no se invocan y pueden ser `None`.
+
 #### Adapter — infraestructura
 
 Cada módulo en `infraestructura/` adapta una tecnología concreta al contrato
@@ -911,20 +914,21 @@ de distintas versiones.
 
 ```python
 class RepositorioCorridas(Protocol):
-    def guardar(self, id_corrida: str, manifest: ManifestCorrida) -> None: ...
+    def guardar(self, manifest: ManifestCorrida) -> None: ...
     def obtener(self, id_corrida: str) -> ManifestCorrida: ...
     def listar(self) -> list[str]: ...
 ```
-
-> **Pendiente:** `id_corrida` en `guardar` es redundante — ya está dentro de
-> `manifest.id_corrida`. Revisar cuando se implemente el adaptador.
 
 ---
 
 #### 6.1.6 AlmacenArtefactos
 
-Persiste y recupera los artefactos generados por una corrida para trazabilidad
-interna. Opera con DataFrames genéricos — no necesita conocer el tipo de artefacto,
+Persiste y recupera los artefactos **computados** por el pipeline. No almacena
+los insumos (canasta, serie) — su trazabilidad queda cubierta por las rutas en
+`ManifestCorrida`. Los artefactos que guarda son: `resultado`, `resumen`,
+`reporte` y `diagnostico`.
+
+Opera con DataFrames genéricos — no necesita conocer el tipo de artefacto,
 solo el nombre con el que se guardó.
 
 ```python
@@ -932,6 +936,12 @@ class AlmacenArtefactos(Protocol):
     def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
     def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
 ```
+
+> **Formato:** el adaptador filesystem usa **Parquet** (`pyarrow`), ya incluido en
+> las dependencias. Parquet preserva la estructura del MultiIndex (niveles y nombres)
+> de forma nativa — necesario para la combinación futura de reportes entre versiones
+> y subíndices. Los índices `Periodo` se serializan a string (`str(Periodo)`) antes
+> de guardar; `obtener` los devuelve como string — ver §11.8.
 
 ---
 
@@ -950,10 +960,10 @@ class EjecutarCorrida:
         lector_canasta: LectorCanasta,
         lector_series: LectorSeries,
         fuente_validacion: FuenteValidacion,
-        repositorio: RepositorioCorridas,
-        almacen: AlmacenArtefactos,
-        escritor: EscritorResultados,
-        ruta_salida: Path,
+        repositorio: RepositorioCorridas | None = None,
+        almacen: AlmacenArtefactos | None = None,
+        escritor: EscritorResultados | None = None,
+        ruta_salida: Path | None = None,
     ) -> None: ...
 
     def ejecutar(
@@ -961,21 +971,25 @@ class EjecutarCorrida:
         ruta_canasta: Path,
         ruta_series: Path,
         version: VersionCanasta,
+        persistir: bool = False,
     ) -> ResultadoCorrida: ...
 ```
 
 **Pasos en orden:**
 
-1. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
-2. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanonica`
-3. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 2)
-4. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
-5. `correspondencia.py` — valida y alinea genérico↔genérico
-6. `para_canasta(canasta).calcular(canasta, serie)` → `ResultadoCalculo`
-7. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
-8. `validar_inpc.py` — recibe `ResultadoCalculo`, llama a `FuenteValidacion`, construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
-9. `RepositorioCorridas.guardar(id_corrida, manifest)` + `AlmacenArtefactos.guardar(...)` para canasta, series y artefactos → `data/runs/<id_corrida>/`
-10. `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
+1. Si `persistir=True` y alguno de `repositorio`, `almacen`, `escritor`, `ruta_salida` es `None` → lanza `ErrorConfiguracion`
+2. Generar `id_corrida` (UUID) y crear `ManifestCorrida`
+3. `LectorCanasta.leer(ruta_canasta, version)` → `CanastaCanonica`
+4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
+5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
+6. `correspondencia.py` — valida y alinea genérico↔genérico
+7. `para_canasta(canasta).calcular(canasta, serie, id_corrida)` → `ResultadoCalculo`
+8. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
+9. `validar_inpc.py` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
+10. Si `persistir=True`:
+    - `RepositorioCorridas.guardar(manifest)` → `data/runs/<id_corrida>/`
+    - `AlmacenArtefactos.guardar(...)` para `resultado`, `resumen`, `reporte`, `diagnostico` → `data/runs/<id_corrida>/`
+    - `EscritorResultados.escribir_reporte()` + `escribir_diagnostico()` → `output/`
 11. Devolver `ResultadoCorrida`
 
 **Extensibilidad:** el caso de uso no necesita cambiar al agregar nuevas versiones —
@@ -1151,6 +1165,13 @@ class CanastaSinGenericos(ErrorCalculo): ...
 class ErrorValidacion(ReplicaInpcError): ...
 class FuenteNoDisponible(ErrorValidacion): ...
 class RespuestaInvalida(ErrorValidacion): ...
+
+# Errores de configuración — el sistema fue ensamblado incorrectamente
+class ErrorConfiguracion(ReplicaInpcError): ...
+
+# Errores de persistencia — fallo al leer o escribir artefactos internos
+class ErrorPersistencia(ReplicaInpcError): ...
+class ArtefactoNoEncontrado(ErrorPersistencia): ...
 ```
 
 ### 8.2 Propagación
@@ -1472,3 +1493,15 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 **Mejora propuesta:** agregar un nuevo valor a `estado_corrida` (ej. `'cobertura_incompleta'`) o un campo booleano `cobertura_periodo_completa` a `ResumenValidacion`.
 
 **Cuándo implementar:** cuando el reporte de cobertura sea un requerimiento explícito del usuario final.
+
+---
+
+### 11.8 `AlmacenArtefactos.obtener` devuelve índice como string
+
+**Comportamiento actual:** `AlmacenArtefactosFs.obtener` lee el Parquet y devuelve el DataFrame con el índice `Periodo` como string (`"1Q Ene 2024"`). La estructura del MultiIndex (niveles, nombres) se preserva gracias a Parquet, pero los valores siguen siendo strings.
+
+**Problema:** el consumidor que llame a `obtener` y quiera operar sobre el DataFrame con lógica de dominio (ordenar por periodo, filtrar por rango) tendrá que re-parsear el índice manualmente con `Periodo.desde_str()`.
+
+**Mejora propuesta:** agregar métodos tipados por artefacto (`obtener_resultado`, `obtener_reporte`, etc.) que re-parseen el índice y devuelvan el tipo correcto.
+
+**Cuándo implementar:** cuando haya un caso de uso que necesite operar sobre artefactos recuperados del almacén (ej. comparar corridas, generar históricos).
