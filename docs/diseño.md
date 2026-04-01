@@ -35,46 +35,46 @@ El historial de cambios vive en git.
       - [ResultadoCorrida](#resultadocorrida)
     - [5.10 correspondencia.py](#510-correspondenciapy)
     - [5.11 validar\_inpc.py](#511-validar_inpcpy)
-  - [6. Capa de aplicación](#6-capa-de-aplicación)
-    - [6.1 Puertos](#61-puertos)
-      - [6.1.1 LectorCanasta](#611-lectorcanasta)
-      - [6.1.2 LectorSeries](#612-lectorseries)
-      - [6.1.3 FuenteValidacion](#613-fuentevalidacion)
-      - [6.1.4 EscritorResultados](#614-escritorresultados)
-      - [6.1.5 RepositorioCorridas](#615-repositoriocorridas)
-      - [6.1.6 AlmacenArtefactos](#616-almacenartefactos)
-    - [6.2 EjecutarCorrida](#62-ejecutarcorrida)
-  - [7. Infraestructura](#7-infraestructura)
-    - [7.1 Formato del CSV canasta](#71-formato-del-csv-canasta)
-    - [7.2 Formato del CSV de series](#72-formato-del-csv-de-series)
-    - [7.3 Repositorio de corridas (filesystem)](#73-repositorio-de-corridas-filesystem)
-    - [7.4 Almacén de artefactos (filesystem)](#74-almacén-de-artefactos-filesystem)
-    - [7.5 Formato de los CSV de salida (escritor)](#75-formato-de-los-csv-de-salida-escritor)
+  - [7. Capa de aplicación](#7-capa-de-aplicación)
+    - [7.1 Puertos](#71-puertos)
+      - [7.1.1 LectorCanasta](#711-lectorcanasta)
+      - [7.1.2 LectorSeries](#712-lectorseries)
+      - [7.1.3 FuenteValidacion](#713-fuentevalidacion)
+      - [7.1.4 EscritorResultados](#714-escritorresultados)
+      - [7.1.5 RepositorioCorridas](#715-repositoriocorridas)
+      - [7.1.6 AlmacenArtefactos](#716-almacenartefactos)
+    - [7.2 EjecutarCorrida](#72-ejecutarcorrida)
+  - [8. Infraestructura](#8-infraestructura)
+    - [8.1 Formato del CSV canasta](#81-formato-del-csv-canasta)
+    - [8.2 Formato del CSV de series](#82-formato-del-csv-de-series)
+    - [8.3 Repositorio de corridas (filesystem)](#83-repositorio-de-corridas-filesystem)
+    - [8.4 Almacén de artefactos (filesystem)](#84-almacén-de-artefactos-filesystem)
+    - [8.5 Formato de los CSV de salida (escritor)](#85-formato-de-los-csv-de-salida-escritor)
       - [reporte\_\<id\_corrida\>.csv](#reporte_id_corridacsv)
       - [diagnostico\_\<id\_corrida\>.csv](#diagnostico_id_corridacsv)
-  - [8. Estrategia de errores](#8-estrategia-de-errores)
-    - [8.1 Jerarquía de excepciones](#81-jerarquía-de-excepciones)
-    - [8.2 Propagación](#82-propagación)
-    - [8.3 Traducción en adaptadores](#83-traducción-en-adaptadores)
-  - [9. Estrategia de testing](#9-estrategia-de-testing)
-    - [9.1 Tipos de test](#91-tipos-de-test)
-    - [9.2 Fixtures](#92-fixtures)
-    - [9.3 Mock de la API del INEGI](#93-mock-de-la-api-del-inegi)
-    - [9.4 Criterio de suficiencia para v1](#94-criterio-de-suficiencia-para-v1)
-  - [10. Decisiones y razones](#10-decisiones-y-razones)
-    - [10.1 `SerieNormalizada` en formato ancho](#101-serienormalizada-en-formato-ancho)
-    - [10.2 `generico_original` como diccionario](#102-generico_original-como-diccionario)
-    - [10.3 Correspondencia genérico↔genérico por normalización exacta](#103-correspondencia-genéricogenérico-por-normalización-exacta)
-    - [10.4 pandas en el dominio](#104-pandas-en-el-dominio)
-    - [10.5 `ponderador` y `encadenamiento` como `str`](#105-ponderador-y-encadenamiento-como-str)
-    - [10.6 `Periodo` como tipo propio](#106-periodo-como-tipo-propio)
-    - [10.7 Categorías de clasificación version-específicas](#107-categorías-de-clasificación-version-específicas)
-    - [10.8 Tolerancia numérica por versión](#108-tolerancia-numérica-por-versión)
-    - [10.9 Reglas de `estado_corrida`](#109-reglas-de-estado_corrida)
-    - [10.10 Detección de `null_por_faltantes`](#1010-detección-de-null_por_faltantes)
-    - [10.11 Firma de `validar_inpc.py`](#1011-firma-de-validar_inpcpy)
-    - [10.12 `id_corrida` en `ResultadoCalculo`](#1012-id_corrida-en-resultadocalculo)
-  - [11. Gaps conocidos y mejoras futuras](#11-gaps-conocidos-y-mejoras-futuras)
+  - [9. Estrategia de errores](#9-estrategia-de-errores)
+    - [9.1 Jerarquía de excepciones](#91-jerarquía-de-excepciones)
+    - [9.2 Propagación](#92-propagación)
+    - [9.3 Traducción en adaptadores](#93-traducción-en-adaptadores)
+  - [10. Estrategia de testing](#10-estrategia-de-testing)
+    - [10.1 Tipos de test](#101-tipos-de-test)
+    - [10.2 Fixtures](#102-fixtures)
+    - [10.3 Mock de la API del INEGI](#103-mock-de-la-api-del-inegi)
+    - [10.4 Criterio de suficiencia para v1](#104-criterio-de-suficiencia-para-v1)
+  - [11. Decisiones y razones](#11-decisiones-y-razones)
+    - [11.1 `SerieNormalizada` en formato ancho](#111-serienormalizada-en-formato-ancho)
+    - [11.2 `generico_original` como diccionario](#112-generico_original-como-diccionario)
+    - [11.3 Correspondencia genérico↔genérico por normalización exacta](#113-correspondencia-genéricogenérico-por-normalización-exacta)
+    - [11.4 pandas en el dominio](#114-pandas-en-el-dominio)
+    - [11.5 `ponderador` y `encadenamiento` como `str`](#115-ponderador-y-encadenamiento-como-str)
+    - [11.6 `Periodo` como tipo propio](#116-periodo-como-tipo-propio)
+    - [11.7 Categorías de clasificación version-específicas](#117-categorías-de-clasificación-version-específicas)
+    - [11.8 Tolerancia numérica por versión](#118-tolerancia-numérica-por-versión)
+    - [11.9 Reglas de `estado_corrida`](#119-reglas-de-estado_corrida)
+    - [11.10 Detección de `null_por_faltantes`](#1110-detección-de-null_por_faltantes)
+    - [11.11 Firma de `validar_inpc.py`](#1111-firma-de-validar_inpcpy)
+    - [11.12 `id_corrida` en `ResultadoCalculo`](#1112-id_corrida-en-resultadocalculo)
+  - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [11.1 `estado_validacion_global` no distingue cobertura parcial](#111-estado_validacion_global-no-distingue-cobertura-parcial)
     - [11.2 Validación por niveles en `LectorCanastaCsv`](#112-validación-por-niveles-en-lectorcanastacsv)
     - [11.3 Agregados CCIF en `LectorSeriesCsv`](#113-agregados-ccif-en-lectorseriescsv)
@@ -145,7 +145,7 @@ dónde y cómo se persiste cada corrida.
 En v1 se implementan sobre filesystem. Si se agrega SQL, se implementa
 el mismo puerto sin tocar el dominio.
 
-La persistencia es opcional por corrida — ver §6.2. Cuando `persistir=False`,
+La persistencia es opcional por corrida — ver §7.2. Cuando `persistir=False`,
 estos puertos no se invocan y pueden ser `None`.
 
 #### Adapter — infraestructura
@@ -719,7 +719,7 @@ El `fin = None` para la canasta 2024 indica que no hay límite superior — se u
 todos los periodos disponibles desde `2Q Jul 2024` en adelante.
 
 `RANGOS_VALIDOS` se usa en `ejecutar_corrida.py` para filtrar la `SerieNormalizada`
-antes de pasarla a `correspondencia.py` — ver §6.2 paso 3.5.
+antes de pasarla a `correspondencia.py` — ver §7.2 paso 3.5.
 
 ---
 
@@ -775,6 +775,20 @@ class ResultadoCorrida:
 
 No valida invariantes al construirse.
 El `id_corrida` se accede vía `corrida.manifest.id_corrida`.
+
+`_repr_html_` muestra los 4 artefactos apilados en orden de mayor resumen a mayor
+detalle: `resumen` → `reporte` → `diagnostico` → `resultado`. Compatible con
+JupyterLab, Jupyter clásico, Google Colab, VS Code y Databricks (DBR >= 11.3).
+
+```python
+def _repr_html_(self) -> str:
+    return (
+        "<h3>Resumen</h3>" + self.resumen.df._repr_html_() +
+        "<h3>Reporte</h3>" + self.reporte.df._repr_html_() +
+        "<h3>Diagnóstico</h3>" + self.diagnostico.df._repr_html_() +
+        "<h3>Resultado</h3>" + self.resultado.df._repr_html_()
+    )
+```
 
 ---
 
@@ -839,14 +853,80 @@ def validar(
 
 ---
 
-## 6. Capa de aplicación
+## 6. Fachada — api/corrida.py
+
+Punto de entrada principal para notebooks. Composition root: instancia todos los
+adaptadores concretos y los inyecta en `EjecutarCorrida`.
+
+```python
+class Corrida:
+    def __init__(
+        self,
+        ruta_datos: str | Path = "data/runs",
+        ruta_salida: str | Path = "output",
+        token_inegi: str | None = None,
+    ) -> None: ...
+
+    def ejecutar(
+        self,
+        canasta: str | Path,
+        series: str | Path,
+        version: VersionCanasta,
+        tipo: str = "inpc",
+        persistir: bool = False,
+    ) -> ResultadoCorrida: ...
+```
+
+**Parámetros de `__init__`:**
+
+| Parámetro | Default | Notas |
+| --- | --- | --- |
+| `ruta_datos` | `"data/runs"` | Base para `RepositorioCorridasFs` y `AlmacenArtefactosFs`. Relativa al CWD del notebook. |
+| `ruta_salida` | `"output"` | Destino de los CSV exportados. Relativa al CWD del notebook. |
+| `token_inegi` | `None` | Token para la API del INEGI. Si es `None`, la validación queda `no_disponible`. |
+
+**Parámetros de `ejecutar`:**
+
+| Parámetro | Obligatorio | Default | Notas |
+| --- | --- | --- | --- |
+| `canasta` | sí | — | Ruta al CSV de canasta |
+| `series` | sí | — | Ruta al CSV de series |
+| `version` | sí | — | `VersionCanasta`: `2010`, `2013`, `2018`, `2024` |
+| `tipo` | no | `"inpc"` | Tipo de índice a calcular. Lanza `ErrorConfiguracion` si no es válido. |
+| `persistir` | no | `False` | Si `True`, guarda artefactos en `ruta_datos` y exporta CSV a `ruta_salida`. La fachada crea los directorios si no existen. |
+
+**Uso típico:**
+
+```python
+corrida = Corrida(token_inegi="mi_token")
+inpc_2018 = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
+inpc_2024 = corrida.ejecutar(canasta="data/canasta_2024.csv", series="data/series_2024.csv", version=2024)
+cog_2018  = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018, tipo="COG")
+```
+
+**`_FuenteValidacionNula`:**
+
+Clase interna. Se usa cuando `token_inegi=None`. Lanza `FuenteNoDisponible` en
+`obtener()` — el caso de uso la captura y marca la validación como `no_disponible`.
+
+**Errores que puede lanzar `ejecutar`:**
+
+| Error | Causa |
+| --- | --- |
+| `ErrorConfiguracion` | `tipo` no válido, o `persistir=True` con configuración incompleta |
+| `ErrorImportacion` | Archivo no encontrado, vacío, corrupto o mal formado |
+| `ErrorCalculo` | Correspondencia insuficiente o ponderador faltante |
+
+---
+
+## 7. Capa de aplicación
 
 Contiene los contratos de puertos y los casos de uso. No conoce CSV, filesystem ni APIs
 — solo opera con los contratos definidos en esta sección.
 
 ---
 
-### 6.1 Puertos
+### 7.1 Puertos
 
 Los puertos son los contratos que el dominio impone a sus dependencias externas.
 Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la
@@ -858,7 +938,7 @@ implementar el puerto correspondiente sin tocar el dominio.
 
 ---
 
-#### 6.1.1 LectorCanasta
+#### 7.1.1 LectorCanasta
 
 Recibe una fuente de datos y devuelve una `CanastaCanonica` lista para usar.
 La versión se pasa explícitamente para que el lector sepa qué columnas esperar
@@ -871,7 +951,7 @@ class LectorCanasta(Protocol):
 
 ---
 
-#### 6.1.2 LectorSeries
+#### 7.1.2 LectorSeries
 
 Recibe un archivo de series y devuelve una `SerieNormalizada` lista para usar.
 Resuelve internamente la orientación (horizontal/vertical), la presencia de
@@ -885,7 +965,7 @@ class LectorSeries(Protocol):
 
 ---
 
-#### 6.1.3 FuenteValidacion
+#### 7.1.3 FuenteValidacion
 
 Obtiene el INPC publicado por el INEGI para los periodos solicitados.
 Devuelve `None` por periodo cuando el INEGI no tiene dato para ese periodo.
@@ -899,7 +979,7 @@ class FuenteValidacion(Protocol):
 
 ---
 
-#### 6.1.4 EscritorResultados
+#### 7.1.4 EscritorResultados
 
 Exporta los artefactos de resultado al usuario. `ResultadoCalculo` no se exporta
 directamente — sus datos están contenidos en `ReporteDetalladoValidacion`.
@@ -912,7 +992,7 @@ class EscritorResultados(Protocol):
 
 ---
 
-#### 6.1.5 RepositorioCorridas
+#### 7.1.5 RepositorioCorridas
 
 Persiste y recupera los metadatos de cada corrida. `listar()` devuelve todos los
 `id_corrida` registrados — necesario para reconstruir historiales y unir resultados
@@ -927,7 +1007,7 @@ class RepositorioCorridas(Protocol):
 
 ---
 
-#### 6.1.6 AlmacenArtefactos
+#### 7.1.6 AlmacenArtefactos
 
 Persiste y recupera los artefactos **computados** por el pipeline. No almacena
 los insumos (canasta, serie) — su trazabilidad queda cubierta por las rutas en
@@ -947,11 +1027,11 @@ class AlmacenArtefactos(Protocol):
 > las dependencias. Parquet preserva la estructura del MultiIndex (niveles y nombres)
 > de forma nativa — necesario para la combinación futura de reportes entre versiones
 > y subíndices. Los índices `Periodo` se serializan a string (`str(Periodo)`) antes
-> de guardar; `obtener` los devuelve como string — ver §11.8.
+> de guardar; `obtener` los devuelve como string — ver §12.8.
 
 ---
 
-### 6.2 EjecutarCorrida
+### 7.2 EjecutarCorrida
 
 Caso de uso central. Orquesta todos los pasos del pipeline en un solo llamado
 y es lo que `api/corrida.py` invoca internamente.
@@ -1002,18 +1082,18 @@ class EjecutarCorrida:
 la selección de estrategia en `para_canasta()` absorbe la extensión.
 
 **Errores:** cualquier `ErrorImportacion`, `ErrorDominio` o `ErrorCalculo` falla la corrida
-inmediatamente. `ErrorValidacion` no falla la corrida — ver §8.
+inmediatamente. `ErrorValidacion` no falla la corrida — ver §9.
 
 ---
 
-## 7. Infraestructura
+## 8. Infraestructura
 
-Adaptadores concretos que implementan los puertos de §6.1. El dominio y la capa de
+Adaptadores concretos que implementan los puertos de §7.1. El dominio y la capa de
 aplicación no conocen estos detalles — solo operan con los contratos.
 
 ---
 
-### 7.1 Formato del CSV canasta
+### 8.1 Formato del CSV canasta
 
 Todas las versiones de canasta (2010, 2013, 2018, 2024) comparten el mismo esquema
 de CSV intermedio. Este archivo es generado en el proceso de preparación de datos
@@ -1037,7 +1117,7 @@ de CSV intermedio. Este archivo es generado en el proceso de preparación de dat
 | `canasta consumo minimo` | `str`    | `'X'` si pertenece, vacío si no                    |
 
 `LectorCanastaCsv` lee `generico` como índice y convierte `ponderador` y
-`encadenamiento` a `str` antes de construir `CanastaCanonica` — ver §10.5.
+`encadenamiento` a `str` antes de construir `CanastaCanonica` — ver §11.5.
 Las columnas de clasificación (COG, CCIF, etc.) se pasan al DataFrame sin modificar.
 
 **Normalización del índice:** el índice `generico` se normaliza con la misma función
@@ -1069,7 +1149,7 @@ class LectorCanastaCsv:
 
 ---
 
-### 7.2 Formato del CSV de series
+### 8.2 Formato del CSV de series
 
 Archivo descargado desde el BIE del INEGI. Todas las versiones comparten el mismo
 formato de exportación con dos variantes: con columnas de metadatos o sin ellas.
@@ -1101,7 +1181,7 @@ El metadata (`Periodicidad`, `Unidad`, `Base`, etc.) se descarta implícitamente
 
 **Extracción del genérico desde `Título`:** se aplica regex `\b\d{3}\b\s*(.*)`
 sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto
-son agregados CCIF y se descartan (ver §11.3).
+son agregados CCIF y se descartan (ver §12.3).
 
 **Normalización de nombres:** se eliminan tildes vocálicas (`á`→`a`, etc.),
 se conserva `ñ`, se elimina puntuación y se pone en minúsculas. El resultado
@@ -1134,7 +1214,7 @@ class LectorSeriesCsv:
 
 ---
 
-### 7.3 Repositorio de corridas (filesystem)
+### 8.3 Repositorio de corridas (filesystem)
 
 `RepositorioCorridas` persiste el `ManifestCorrida` de cada corrida como un archivo
 JSON en `data/runs/<id_corrida>/manifest.json`.
@@ -1181,7 +1261,7 @@ class RepositorioCorridasFs:
 
 ---
 
-### 7.4 Almacén de artefactos (filesystem)
+### 8.4 Almacén de artefactos (filesystem)
 
 `AlmacenArtefactos` persiste los DataFrames computados por el pipeline como archivos
 Parquet en `data/runs/<id_corrida>/<nombre>.parquet`.
@@ -1193,7 +1273,7 @@ se convierten a string con `str(Periodo)` antes de guardar (produce `"1Q Ene 202
 El MultiIndex de `reporte` (`["periodo", "subindice"]`) se preserva gracias a Parquet.
 
 **`obtener()`:** devuelve el DataFrame con el índice como string — no re-parsea
-`Periodo`. Ver gap §11.8.
+`Periodo`. Ver gap §12.8.
 
 **Adaptador:**
 
@@ -1212,7 +1292,7 @@ class AlmacenArtefactosFs:
 
 ---
 
-### 7.5 Formato de los CSV de salida (escritor)
+### 8.5 Formato de los CSV de salida (escritor)
 
 Archivos exportados a `output/` para consumo del usuario. Generados por
 `EscritorResultados` cuando `persistir=True`.
@@ -1268,9 +1348,9 @@ class EscritorResultadosCsv:
 
 ---
 
-## 8. Estrategia de errores
+## 9. Estrategia de errores
 
-### 8.1 Jerarquía de excepciones
+### 9.1 Jerarquía de excepciones
 
 Todas las excepciones del sistema heredan de `ReplicaInpcError` y se definen
 en `dominio/errores.py`. Las capas superiores solo necesitan importar desde el
@@ -1318,7 +1398,7 @@ class ErrorPersistencia(ReplicaInpcError): ...
 class ArtefactoNoEncontrado(ErrorPersistencia): ...
 ```
 
-### 8.2 Propagación
+### 9.2 Propagación
 
 Los errores se lanzan lo más cerca posible de donde ocurren y se capturan
 en el caso de uso, que decide qué hacer con ellos. Las capas intermedias
@@ -1331,7 +1411,7 @@ no capturan ni envuelven — dejan pasar.
 | `ErrorCalculo`     | dominio (cálculo)                  | caso de uso      | falla la corrida           |
 | `ErrorValidacion`  | adaptador (infraestructura)        | caso de uso      | validación `no_disponible` |
 
-### 8.3 Traducción en adaptadores
+### 9.3 Traducción en adaptadores
 
 Los adaptadores traducen excepciones externas a errores propios del sistema
 antes de que lleguen al caso de uso. El caso de uso nunca ve `FileNotFoundError`,
@@ -1352,9 +1432,9 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 
 ---
 
-## 9. Estrategia de testing
+## 10. Estrategia de testing
 
-### 9.1 Tipos de test
+### 10.1 Tipos de test
 
 | Componente            | Tipo        | Nota                                                                            |
 | --------------------- | ----------- | ------------------------------------------------------------------------------- |
@@ -1365,12 +1445,12 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 | Adaptadores CSV       | Integration | Archivos reales                                                                 |
 | Casos de uso          | Integration | Archivos reales                                                                 |
 | `api/corrida.py`      | Integration | Archivos reales                                                                 |
-| API INEGI             | Integration | Mockeada — ver §9.3                                                             |
+| API INEGI             | Integration | Mockeada — ver §10.3                                                            |
 | `interfaces/cli.py`   | ——————————— | Fuera de v1                                                                     |
 
 ---
 
-### 9.2 Fixtures
+### 10.2 Fixtures
 
 Los fixtures viven en `tests/fixtures/` y son de dos tipos.
 
@@ -1393,7 +1473,7 @@ numérico en detalle.
 
 ---
 
-### 9.3 Mock de la API del INEGI
+### 10.3 Mock de la API del INEGI
 
 `FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real.
 Los mocks cubren cuatro escenarios:
@@ -1414,7 +1494,7 @@ class FuenteValidacionFalsa:
 
 ---
 
-### 9.4 Criterio de suficiencia para v1
+### 10.4 Criterio de suficiencia para v1
 
 El suite es suficiente cuando cubre los siguientes comportamientos:
 
@@ -1431,9 +1511,9 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-## 10. Decisiones y razones
+## 11. Decisiones y razones
 
-### 10.1 `SerieNormalizada` en formato ancho
+### 11.1 `SerieNormalizada` en formato ancho
 
 **Decisión:** DataFrame con `generico_limpio` como índice y objetos `Periodo` como columnas.
 
@@ -1443,7 +1523,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.2 `generico_original` como diccionario
+### 11.2 `generico_original` como diccionario
 
 **Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), fuera del DataFrame.
 
@@ -1453,7 +1533,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.3 Correspondencia genérico↔genérico por normalización exacta
+### 11.3 Correspondencia genérico↔genérico por normalización exacta
 
 **Decisión:** matching exacto después de normalizar — quitar tildes + lowercase (`unicodedata`). `rapidfuzz` removido del stack.
 
@@ -1463,7 +1543,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.4 pandas en el dominio
+### 11.4 pandas en el dominio
 
 **Decisión:** los contratos del dominio usan DataFrames de pandas directamente.
 
@@ -1473,7 +1553,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.5 `ponderador` y `encadenamiento` como `str`
+### 11.5 `ponderador` y `encadenamiento` como `str`
 
 **Decisión:** se almacenan como `str` en `CanastaCanonica`. La conversión a `float` ocurre solo en el momento del cálculo.
 
@@ -1483,7 +1563,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.6 `Periodo` como tipo propio
+### 11.6 `Periodo` como tipo propio
 
 **Decisión:** value object `Periodo` con atributos `año`, `mes`, `quincena`.
 
@@ -1493,7 +1573,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.7 Categorías de clasificación version-específicas
+### 11.7 Categorías de clasificación version-específicas
 
 **Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanonica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
 
@@ -1501,7 +1581,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.8 Tolerancia numérica por versión
+### 11.8 Tolerancia numérica por versión
 
 **Decisión:** la tolerancia para marcar `estado_validacion = diferencia_detectada` es fija por versión:
 
@@ -1516,7 +1596,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.9 Reglas de `estado_corrida`
+### 11.9 Reglas de `estado_corrida`
 
 **Decisión:** `estado_corrida` en `ResumenValidacion` se determina a partir de `estado_calculo` por periodo:
 
@@ -1528,7 +1608,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.10 Detección de `null_por_faltantes`
+### 11.10 Detección de `null_por_faltantes`
 
 **Decisión:** la detección de valores faltantes en la serie por periodo es responsabilidad del calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`), no de `validar_inpc.py`.
 
@@ -1536,13 +1616,13 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 10.11 Firma de `validar_inpc.py`
+### 11.11 Firma de `validar_inpc.py`
 
 **Decisión:** el dominio no recibe el puerto `FuenteValidacion` — recibe el dict ya obtenido por `ejecutar_corrida.py`. Si la fuente no estaba disponible, el caso de uso pasa `{}`. Ver contrato completo en §5.11.
 
 ---
 
-### 10.12 `id_corrida` en `ResultadoCalculo`
+### 11.12 `id_corrida` en `ResultadoCalculo`
 
 **Decisión:** `ejecutar_corrida.py` genera el UUID y lo pasa como parámetro `id_corrida: str` a `calcular()`. La firma de `CalculadorBase.calcular()` se actualiza para incluirlo.
 
@@ -1550,7 +1630,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-## 11. Gaps conocidos y mejoras futuras
+## 12. Gaps conocidos y mejoras futuras
 
 Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.
 
