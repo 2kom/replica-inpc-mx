@@ -30,11 +30,13 @@ El historial de cambios vive en git.
     - [5.8 CalculadorBase](#58-calculadorbase)
     - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
       - [VersionCanasta](#versioncanasta)
+      - [INDICE\_POR\_TIPO](#indice_por_tipo)
       - [RANGOS\_VALIDOS](#rangos_validos)
       - [ManifestCorrida](#manifestcorrida)
       - [ResultadoCorrida](#resultadocorrida)
     - [5.10 correspondencia.py](#510-correspondenciapy)
     - [5.11 validar\_inpc.py](#511-validar_inpcpy)
+  - [6. Fachada — api/corrida.py](#6-fachada--apicorridapy)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
       - [7.1.1 LectorCanasta](#711-lectorcanasta)
@@ -75,14 +77,15 @@ El historial de cambios vive en git.
     - [11.11 Firma de `validar_inpc.py`](#1111-firma-de-validar_inpcpy)
     - [11.12 `id_corrida` en `ResultadoCalculo`](#1112-id_corrida-en-resultadocalculo)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
-    - [11.1 `estado_validacion_global` no distingue cobertura parcial](#111-estado_validacion_global-no-distingue-cobertura-parcial)
-    - [11.2 Validación por niveles en `LectorCanastaCsv`](#112-validación-por-niveles-en-lectorcanastacsv)
-    - [11.3 Agregados CCIF en `LectorSeriesCsv`](#113-agregados-ccif-en-lectorseriescsv)
-    - [11.4 Detección dinámica del header en `LectorSeriesCsv`](#114-detección-dinámica-del-header-en-lectorseriescsv)
-    - [11.5 ñ en canasta intermedia](#115-ñ-en-canasta-intermedia)
-    - [11.6 Formato de series BIE en versiones 2010 y 2013](#116-formato-de-series-bie-en-versiones-2010-y-2013)
-    - [11.7 Cobertura parcial de periodos no reportada explícitamente](#117-cobertura-parcial-de-periodos-no-reportada-explícitamente)
-    - [11.8 `AlmacenArtefactos.obtener` devuelve índice como string](#118-almacenartefactosobtener-devuelve-índice-como-string)
+    - [12.1 `estado_validacion_global` no distingue cobertura parcial](#121-estado_validacion_global-no-distingue-cobertura-parcial)
+    - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
+    - [12.3 Agregados CCIF en `LectorSeriesCsv`](#123-agregados-ccif-en-lectorseriescsv)
+    - [12.4 Detección dinámica del header en `LectorSeriesCsv`](#124-detección-dinámica-del-header-en-lectorseriescsv)
+    - [12.5 ñ en canasta intermedia](#125-ñ-en-canasta-intermedia)
+    - [12.6 Formato de series BIE en versiones 2010 y 2013](#126-formato-de-series-bie-en-versiones-2010-y-2013)
+    - [12.7 Cobertura parcial de periodos no reportada explícitamente](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente)
+    - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
+    - [12.9 Validación INEGI solo disponible para tipos específicos](#129-validación-inegi-solo-disponible-para-tipos-específicos)
 
 ---
 
@@ -292,7 +295,7 @@ canasta_intermedia.csv                  series_genericos.csv
    construir_canasta_canonica
             │
             ▼
-   CanastaCanomica
+   CanastaCanonica
             │                                  │
             └──────────────┬───────────────────┘
                            ▼
@@ -460,8 +463,10 @@ class Periodo:
 
 ### 5.4 ResultadoCalculo
 
-**Representación:** DataFrame-backed. `Periodo` es el índice. `version` vive como
-columna (permite unir resultados de distintas versiones). `id_corrida` como atributo.
+**Representación:** DataFrame-backed. Índice compuesto `(Periodo, indice)` — permite
+múltiples subíndices por periodo. `version` y `tipo` como columnas. `id_corrida` como atributo.
+
+**Nota v1:** en v1 solo existe `tipo="inpc"`, con `indice="INPC"` como único valor.
 
 ```python
 class ResultadoCalculo:
@@ -473,29 +478,36 @@ class ResultadoCalculo:
     @property
     def df(self) -> pd.DataFrame: ...
 
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame: ...
+
     def _repr_html_(self) -> str:
-        return self.df._repr_html_()
+        return self.como_tabla(ancho=True)._repr_html_()
 ```
 
-**Esquema del DataFrame (índice: `Periodo`):**
+**`como_tabla(ancho=False)`:** devuelve el DataFrame interno en formato largo cuando
+`ancho=False` (default — facilita `pd.concat` entre corridas). Con `ancho=True` pivota
+`indice_replicado` sobre el nivel `indice`: índice resultante = `Periodo`, columnas = valores
+de `indice` (ej. `"INPC"`). Útil para visualización en notebooks.
 
-| Columna          | dtype pandas      | Notas                                          |
-| ---------------- | ----------------- | ---------------------------------------------- |
-| `version`        | `int`             |                                                |
-| `inpc_replicado` | `float64` / `NaN` | NaN cuando `estado_calculo != 'ok'`            |
-| `estado_calculo` | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`    |
-| `motivo_error`   | `object` (str/NaN)| NaN cuando `estado_calculo == 'ok'`            |
+**Esquema del DataFrame interno (índice compuesto: `(Periodo, indice)`):**
+
+| Columna              | dtype pandas      | Notas                                          |
+| -------------------- | ----------------- | ---------------------------------------------- |
+| `version`            | `int`             |                                                |
+| `tipo`               | `object` (str)    | `'inpc'` en v1                                 |
+| `indice_replicado`   | `float64` / `NaN` | NaN cuando `estado_calculo != 'ok'`            |
+| `estado_calculo`     | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`    |
+| `motivo_error`       | `object` (str/NaN)| NaN cuando `estado_calculo == 'ok'`            |
 
 **Invariantes — validados al construir:**
 
-| Invariante              | Regla                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`                                       |
-| Sin duplicados          | el índice no tiene valores repetidos                                          |
-| Al menos un periodo     | el DataFrame no está vacío                                                    |
-| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                          |
-| Consistencia ok         | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN y `motivo_error` NaN    |
-| Consistencia fallo      | si `estado_calculo != 'ok'` → `inpc_replicado` NaN y `motivo_error` con valor |
+| Invariante              | Regla                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`                                            |
+| Al menos una fila       | el DataFrame no está vacío                                                         |
+| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                               |
+| Consistencia ok         | si `estado_calculo == 'ok'` → `indice_replicado` no NaN y `motivo_error` NaN       |
+| Consistencia fallo      | si `estado_calculo != 'ok'` → `indice_replicado` NaN y `motivo_error` con valor    |
 
 ---
 
@@ -520,6 +532,7 @@ class ResumenValidacion:
 | Columna                      | dtype pandas    | Notas                                               |
 | ---------------------------- | --------------- | --------------------------------------------------- |
 | `version`                    | `int`           |                                                     |
+| `tipo`                       | `object` (str)  | `'inpc'` en v1                                      |
 | `total_periodos_esperados`   | `int`           |                                                     |
 | `total_periodos_calculados`  | `int`           |                                                     |
 | `total_periodos_con_null`    | `int`           |                                                     |
@@ -545,12 +558,10 @@ class ResumenValidacion:
 
 ### 5.6 ReporteDetalladoValidacion
 
-**Representación:** DataFrame-backed. Índice compuesto `(Periodo, subindice)` — agrupa
-todos los subíndices de una corrida. `id_corrida` como atributo. `version` como columna.
+**Representación:** DataFrame-backed. Índice compuesto `(Periodo, indice)` — agrupa
+todos los índices de una corrida. `id_corrida` como atributo. `version` y `tipo` como columnas.
 
-**Nota v1:** en v1 el único subíndice calculado es el INPC general, por lo que `subindice`
-toma siempre el valor `"INPC general"`. El índice compuesto se mantiene para que en v2,
-al agregar subíndices, el schema no cambie — solo aparecen más filas.
+**Nota v1:** en v1 solo existe `tipo="inpc"`, con `indice="INPC"` como único valor.
 
 ```python
 class ReporteDetalladoValidacion:
@@ -562,17 +573,23 @@ class ReporteDetalladoValidacion:
     @property
     def df(self) -> pd.DataFrame: ...
 
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame: ...
+
     def _repr_html_(self) -> str:
-        return self.df._repr_html_()
+        return self.como_tabla(ancho=True)._repr_html_()
 ```
 
-**Esquema del DataFrame (índice compuesto: `(Periodo, subindice)`):**
+**`como_tabla(ancho=False)`:** mismo comportamiento que en `ResultadoCalculo` — largo
+por default (facilita `pd.concat`), ancho con `ancho=True` (pivota `indice_replicado`).
+
+**Esquema del DataFrame (índice compuesto: `(Periodo, indice)`):**
 
 | Columna                      | dtype pandas      | Notas                                               |
 | ---------------------------- | ----------------- | --------------------------------------------------- |
 | `version`                    | `int`             |                                                     |
-| `inpc_replicado`             | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                 |
-| `inpc_inegi`                 | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
+| `tipo`                       | `object` (str)    | `'inpc'` en v1                                      |
+| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                 |
+| `indice_inegi`               | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
 | `error_absoluto`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
 | `error_relativo`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
 | `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`         |
@@ -587,15 +604,15 @@ class ReporteDetalladoValidacion:
 
 **Invariantes — validados al construir:**
 
-| Invariante                 | Regla                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                          |
-| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                             |
-| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                                     |
-| Consistencia ok            | si `estado_calculo == 'ok'` → `inpc_replicado` no NaN                                            |
-| Consistencia fallo         | si `estado_calculo != 'ok'` → `inpc_replicado` NaN                                               |
-| Consistencia validacion    | si `estado_validacion == 'no_disponible'` → `inpc_inegi`, `error_absoluto`, `error_relativo` NaN |
-| Al menos una fila          | el DataFrame no está vacío                                                                       |
+| Invariante                 | Regla                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                                |
+| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                                   |
+| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                                           |
+| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                                |
+| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                                   |
+| Consistencia validacion    | si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_absoluto`, `error_relativo` NaN     |
+| Al menos una fila          | el DataFrame no está vacío                                                                             |
 
 ---
 
@@ -621,6 +638,7 @@ class DiagnosticoFaltantes:
 | ---------------- | ------------------ | ---------------------------------------------- |
 | `id_corrida`     | `object` (str)     |                                                |
 | `version`        | `int`              |                                                |
+| `tipo`           | `object` (str)     | `'inpc'` en v1                                 |
 | `periodo`        | `Periodo` / `NaN`  | NaN cuando `tipo_faltante == 'ponderador'`     |
 | `generico`       | `object` (str)     |                                                |
 | `nivel_faltante` | `object` (str)     | `'periodo'`, `'estructural'`                   |
@@ -657,6 +675,8 @@ class CalculadorBase(ABC):
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
         id_corrida: str,
+        indice: str,
+        tipo: str,
     ) -> ResultadoCalculo: ...
 ```
 
@@ -697,6 +717,24 @@ VersionCanasta = Literal[2010, 2013, 2018, 2024]
 ```
 
 **Nota:** reemplaza `int` como tipo de `version` en todos los modelos de §5.1–§5.7.
+
+---
+
+#### INDICE_POR_TIPO
+
+Mapeo de `tipo` (parámetro del usuario) al string que se usa como valor en el nivel
+`indice` del MultiIndex `(Periodo, indice)`. Centraliza la correspondencia en `tipos.py`
+para que ni los calculadores ni `validar_inpc` necesiten conocer los strings.
+
+```python
+INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
+```
+
+`EjecutarCorrida` y la fachada validan `tipo` contra este dict y derivan:
+
+```python
+indice = INDICE_POR_TIPO[tipo]
+```
 
 ---
 
@@ -783,12 +821,15 @@ JupyterLab, Jupyter clásico, Google Colab, VS Code y Databricks (DBR >= 11.3).
 ```python
 def _repr_html_(self) -> str:
     return (
-        "<h3>Resumen</h3>" + self.resumen.df._repr_html_() +
-        "<h3>Reporte</h3>" + self.reporte.df._repr_html_() +
-        "<h3>Diagnóstico</h3>" + self.diagnostico.df._repr_html_() +
-        "<h3>Resultado</h3>" + self.resultado.df._repr_html_()
+        "<h3>Resumen</h3>" + self.resumen._repr_html_() +
+        "<h3>Reporte</h3>" + self.reporte._repr_html_() +
+        "<h3>Diagnóstico</h3>" + self.diagnostico._repr_html_() +
+        "<h3>Resultado</h3>" + self.resultado._repr_html_()
     )
 ```
+
+Nota: se llama `._repr_html_()` de cada artefacto (no `.df._repr_html_()`), de modo que
+`resultado` y `reporte` usan automáticamente `como_tabla(ancho=True)` para visualización.
 
 ---
 
@@ -1636,7 +1677,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.1 `estado_validacion_global` no distingue cobertura parcial
+### 12.1 `estado_validacion_global` no distingue cobertura parcial
 
 **Comportamiento actual:** `estado_validacion_global` tiene tres estados: `'ok'`, `'diferencia_detectada'`, `'no_disponible'`. El estado `'ok'` se asigna cuando todos los periodos comparados pasaron la tolerancia, aunque al menos uno no haya sido comparado.
 
@@ -1648,7 +1689,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.2 Validación por niveles en `LectorCanastaCsv`
+### 12.2 Validación por niveles en `LectorCanastaCsv`
 
 **Comportamiento actual:** `LectorCanastaCsv` valida todas las columnas del esquema canónico o falla. No hay distinción entre "mínimo para calcular INPC" y "completo para calcular subíndices".
 
@@ -1660,7 +1701,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.3 Agregados CCIF en `LectorSeriesCsv`
+### 12.3 Agregados CCIF en `LectorSeriesCsv`
 
 **Comportamiento actual:** `LectorSeriesCsv` filtra y descarta todas las filas que no tienen código de 3 dígitos en el `Título` — es decir, descarta los agregados CCIF (`01 Alimentos...`, `01.1 Alimentos`, etc.).
 
@@ -1672,7 +1713,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.4 Detección dinámica del header en `LectorSeriesCsv`
+### 12.4 Detección dinámica del header en `LectorSeriesCsv`
 
 **Comportamiento actual:** `LectorSeriesCsv` usa `skiprows=5` fijo para saltar el encabezado de INEGI, asumiendo que siempre son exactamente 5 líneas.
 
@@ -1684,7 +1725,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.5 ñ en canasta intermedia
+### 12.5 ñ en canasta intermedia
 
 **Comportamiento actual:** los CSV de canasta intermedia (2010, 2013, 2018, 2024) tienen los nombres de genéricos sin ñ (ej: `"pina"` en lugar de `"piña"`). La normalización de `LectorSeriesCsv` conserva ñ, lo que causaría mismatch en genéricos con ñ si ambas fuentes no son consistentes.
 
@@ -1696,7 +1737,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.6 Formato de series BIE en versiones 2010 y 2013
+### 12.6 Formato de series BIE en versiones 2010 y 2013
 
 **Comportamiento actual:** `LectorSeriesCsv` extrae genéricos con el patrón `\b\d{3}\b` en el campo `Título`. Verificado solo contra series de la canasta 2018.
 
@@ -1708,7 +1749,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.7 Cobertura parcial de periodos no reportada explícitamente
+### 12.7 Cobertura parcial de periodos no reportada explícitamente
 
 **Comportamiento actual:** el paso 4 de `ejecutar_corrida.py` filtra la `SerieNormalizada` al rango de `RANGOS_VALIDOS[version]`. Si la serie cubre solo parte del rango (ej. llega hasta `1Q Ene 2022` en lugar de `2Q Jul 2024`), la corrida continúa con los periodos disponibles. La cobertura parcial es inferible comparando `total_periodos_esperados` con `total_periodos_calculados` en `ResumenValidacion`, pero no hay un indicador explícito.
 
@@ -1720,7 +1761,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 11.8 `AlmacenArtefactos.obtener` devuelve índice como string
+### 12.8 `AlmacenArtefactos.obtener` devuelve índice como string
 
 **Comportamiento actual:** `AlmacenArtefactosFs.obtener` lee el Parquet y devuelve el DataFrame con el índice `Periodo` como string (`"1Q Ene 2024"`). La estructura del MultiIndex (niveles, nombres) se preserva gracias a Parquet, pero los valores siguen siendo strings.
 
@@ -1729,3 +1770,15 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 **Mejora propuesta:** agregar métodos tipados por artefacto (`obtener_resultado`, `obtener_reporte`, etc.) que re-parseen el índice y devuelvan el tipo correcto.
 
 **Cuándo implementar:** cuando haya un caso de uso que necesite operar sobre artefactos recuperados del almacén (ej. comparar corridas, generar históricos).
+
+---
+
+### 12.9 Validación INEGI solo disponible para tipos específicos
+
+**Comportamiento actual:** `ReporteDetalladoValidacion` incluye columnas `indice_inegi`, `error_absoluto` y `error_relativo` para todos los tipos de índice.
+
+**Problema:** el INEGI publica series de validación para `"inpc"` y los niveles de inflación (`"inflacion_1"`, `"inflacion_2"`), pero no para clasificaciones como `"COG"`, `"CCIF"` o `"SCIAN"`. Para esos tipos, las columnas de validación siempre serían `NaN`, lo que puede confundir al usuario.
+
+**Mejora propuesta:** documentar explícitamente qué tipos soportan validación INEGI. Considerar exponer una propiedad `tipos_con_validacion` en la fachada, o filtrar visualmente esas columnas en `como_tabla()` cuando no aplican.
+
+**Cuándo implementar:** cuando se implementen tipos distintos de `"inpc"` en v2.

@@ -10,5 +10,10 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 class CalculadorBase(ABC):
     @abstractmethod
     def calcular(
-        self, canasta: CanastaCanonica, serie: SerieNormalizada, id_corrida: str
+        self,
+        canasta: CanastaCanonica,
+        serie: SerieNormalizada,
+        id_corrida: str,
+        indice: str,
+        tipo: str,
     ) -> ResultadoCalculo: ...

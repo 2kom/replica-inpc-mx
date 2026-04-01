@@ -68,14 +68,12 @@ serie = SerieNormalizada(df_serie, mapeo_serie)
 
 def test_laspeyres_valido():
 
-    # INPC esperado para cada periodo
     inpc_esperado = [100.0, 103.0, 106.0, 109.0]
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "")
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
 
-    # extraemos los valores de INPC calculados y periodos del resultado para compararlos con los esperados
-    valores_inpc = df_calculado.df["inpc_replicado"].tolist()
-    periodos_de_calculo = df_calculado.df.index.tolist()
+    valores_inpc = df_calculado.df["indice_replicado"].tolist()
+    periodos_de_calculo = df_calculado.df.index.get_level_values("periodo").tolist()
 
     assert periodos == periodos_de_calculo
     assert inpc_esperado == valores_inpc
@@ -83,16 +81,22 @@ def test_laspeyres_valido():
 
 def test_laspeyres_estructura_valida():
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "")
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
 
-    # verificamos que el df tenga las columnas esperadas
-    columnas_esperadas = ["version", "inpc_replicado", "estado_calculo", "motivo_error"]
+    columnas_esperadas = ["version", "tipo", "indice_replicado", "estado_calculo", "motivo_error"]
     assert all(col in df_calculado.df.columns for col in columnas_esperadas)
 
-    # verificamos que cada columna tenga el tipo de dato esperado
     assert df_calculado.df["version"].dtype == int
 
-    # si estado_calculo == "ok", entonces inpc_replicado debe ser float y motivo_error debe ser None
     if df_calculado.df["estado_calculo"].eq("ok").all():
-        assert df_calculado.df["inpc_replicado"].dtype == float
+        assert df_calculado.df["indice_replicado"].dtype == float
         assert df_calculado.df["motivo_error"].isnull().all()
+
+
+def test_laspeyres_multiindex():
+
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
+
+    assert isinstance(df_calculado.df.index, pd.MultiIndex)
+    assert df_calculado.df.index.names == ["periodo", "indice"]
+    assert df_calculado.df.index.get_level_values("indice").unique().tolist() == ["INPC"]

@@ -19,27 +19,27 @@ def _almacen(tmp_path: Path) -> AlmacenArtefactosFs:
 # --- resultado ---
 
 def test_round_trip_resultado(tmp_path: Path):
+    idx = pd.MultiIndex.from_tuples([(P1, "INPC"), (P2, "INPC")], names=["periodo", "indice"])
     df = pd.DataFrame(
-        {"version": 2018, "inpc_replicado": [100.1, 100.2], "estado_calculo": "ok", "motivo_error": None},
-        index=pd.Index([P1, P2]),
+        {"version": 2018, "tipo": "inpc", "indice_replicado": [100.1, 100.2], "estado_calculo": "ok", "motivo_error": None},
+        index=idx,
     )
     almacen = _almacen(tmp_path)
     almacen.guardar(ID, "resultado", df)
     recuperado = almacen.obtener(ID, "resultado")
 
-    assert list(recuperado.index) == [str(P1), str(P2)]
-    assert list(recuperado["inpc_replicado"]) == [100.1, 100.2]
+    assert list(recuperado["indice_replicado"]) == [100.1, 100.2]
 
 
 # --- reporte (MultiIndex) ---
 
 def test_round_trip_reporte_preserva_multiindex(tmp_path: Path):
     idx = pd.MultiIndex.from_tuples(
-        [(P1, "INPC general"), (P2, "INPC general")],
-        names=["periodo", "subindice"],
+        [(P1, "INPC"), (P2, "INPC")],
+        names=["periodo", "indice"],
     )
     df = pd.DataFrame(
-        {"version": 2018, "inpc_replicado": [100.1, 100.2], "estado_validacion": "no_disponible"},
+        {"version": 2018, "tipo": "inpc", "indice_replicado": [100.1, 100.2], "estado_validacion": "no_disponible"},
         index=idx,
     )
     almacen = _almacen(tmp_path)
@@ -47,9 +47,9 @@ def test_round_trip_reporte_preserva_multiindex(tmp_path: Path):
     recuperado = almacen.obtener(ID, "reporte")
 
     assert isinstance(recuperado.index, pd.MultiIndex)
-    assert recuperado.index.names == ["periodo", "subindice"]
-    assert recuperado.index[0] == (str(P1), "INPC general")
-    assert list(recuperado["inpc_replicado"]) == [100.1, 100.2]
+    assert recuperado.index.names == ["periodo", "indice"]
+    assert recuperado.index[0] == (str(P1), "INPC")
+    assert list(recuperado["indice_replicado"]) == [100.1, 100.2]
 
 
 # --- resumen ---

@@ -76,15 +76,15 @@ class ReporteDetalladoValidacion:
             )
 
         filas_ok = df["estado_calculo"] == "ok"
-        if df.loc[filas_ok, "inpc_replicado"].isnull().any():
+        if df.loc[filas_ok, "indice_replicado"].isnull().any():
             raise InvarianteViolado(
-                "inpc_replicado no puede ser null cuando estado_calculo es 'ok'."
+                "indice_replicado no puede ser null cuando estado_calculo es 'ok'."
             )
 
         filas_fallo = df["estado_calculo"] != "ok"
-        if df.loc[filas_fallo, "inpc_replicado"].notnull().any():
+        if df.loc[filas_fallo, "indice_replicado"].notnull().any():
             raise InvarianteViolado(
-                "inpc_replicado debe ser null cuando estado_calculo no es 'ok'."
+                "indice_replicado debe ser null cuando estado_calculo no es 'ok'."
             )
 
         self._df = df
@@ -98,8 +98,13 @@ class ReporteDetalladoValidacion:
     def id_corrida(self) -> str:
         return self._id_corrida
 
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame:
+        if not ancho:
+            return self._df
+        return self._df["indice_replicado"].unstack(level="indice")
+
     def _repr_html_(self) -> str:
-        return self._df._repr_html_()  # type: ignore[operator]
+        return self.como_tabla(ancho=True)._repr_html_()  # type: ignore[operator]
 
 
 class DiagnosticoFaltantes:

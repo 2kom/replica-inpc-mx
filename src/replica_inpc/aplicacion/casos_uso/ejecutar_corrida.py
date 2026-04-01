@@ -20,6 +20,7 @@ from replica_inpc.dominio.errores import (
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
+    INDICE_POR_TIPO,
     RANGOS_VALIDOS,
     ManifestCorrida,
     ResultadoCorrida,
@@ -52,8 +53,14 @@ class EjecutarCorrida:
         ruta_canasta: Path,
         ruta_series: Path,
         version: VersionCanasta,
+        tipo: str = "inpc",
         persistir: bool = False,
     ) -> ResultadoCorrida:
+
+        if tipo not in INDICE_POR_TIPO:
+            raise ErrorConfiguracion(
+                f"tipo '{tipo}' no es válido. Valores aceptados: {list(INDICE_POR_TIPO)}"
+            )
 
         if persistir and any(
             p is None
@@ -85,10 +92,12 @@ class EjecutarCorrida:
 
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
         serie = alinear_genericos(canasta, serie)
-        resultado = para_canasta(canasta).calcular(canasta, serie, id_corrida)
+        indice = INDICE_POR_TIPO[tipo]
+        resultado = para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)
 
         try:
-            inegi = self._fuente_validacion.obtener(list(resultado.df.index))
+            periodos_unicos = resultado.df.index.get_level_values("periodo").unique().tolist()
+            inegi = self._fuente_validacion.obtener(periodos_unicos)
         except ErrorValidacion:
             inegi = {}
 

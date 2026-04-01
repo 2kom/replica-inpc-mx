@@ -16,14 +16,15 @@ ID = "abc-123"
 
 def _reporte() -> ReporteDetalladoValidacion:
     idx = pd.MultiIndex.from_tuples(
-        [(P1, "INPC general"), (P2, "INPC general")],
-        names=["periodo", "subindice"],
+        [(P1, "INPC"), (P2, "INPC")],
+        names=["periodo", "indice"],
     )
     df = pd.DataFrame(
         {
             "version": [2018, 2018],
-            "inpc_replicado": [100.1, 100.2],
-            "inpc_inegi": [float("nan"), float("nan")],
+            "tipo": ["inpc", "inpc"],
+            "indice_replicado": [100.1, 100.2],
+            "indice_inegi": [float("nan"), float("nan")],
             "error_absoluto": [float("nan"), float("nan")],
             "error_relativo": [float("nan"), float("nan")],
             "estado_calculo": ["ok", "ok"],
@@ -46,6 +47,7 @@ def _diagnostico_con_periodos() -> DiagnosticoFaltantes:
         {
             "id_corrida": [ID, ID],
             "version": [2018, 2018],
+            "tipo": ["inpc", "inpc"],
             "periodo": [P1, P2],
             "generico": ["arroz", "frijol"],
             "nivel_faltante": ["periodo", "periodo"],
@@ -61,6 +63,7 @@ def _diagnostico_estructural() -> DiagnosticoFaltantes:
         {
             "id_corrida": [ID],
             "version": [2018],
+            "tipo": ["inpc"],
             "periodo": [None],
             "generico": ["arroz"],
             "nivel_faltante": ["estructural"],
@@ -73,7 +76,7 @@ def _diagnostico_estructural() -> DiagnosticoFaltantes:
 
 def _diagnostico_vacio() -> DiagnosticoFaltantes:
     df = pd.DataFrame(
-        columns=["id_corrida", "version", "periodo", "generico",
+        columns=["id_corrida", "version", "tipo", "periodo", "generico",
                  "nivel_faltante", "tipo_faltante", "detalle"]
     )
     return DiagnosticoFaltantes(df)
@@ -87,9 +90,9 @@ def test_reporte_multiindex_aplanado(tmp_path: Path):
     df = pd.read_csv(ruta)
 
     assert "periodo" in df.columns
-    assert "subindice" in df.columns
+    assert "indice" in df.columns
     assert list(df["periodo"]) == [str(P1), str(P2)]
-    assert list(df["subindice"]) == ["INPC general", "INPC general"]
+    assert list(df["indice"]) == ["INPC", "INPC"]
 
 
 def test_reporte_valores_correctos(tmp_path: Path):
@@ -97,7 +100,7 @@ def test_reporte_valores_correctos(tmp_path: Path):
     EscritorResultadosCsv().escribir_reporte(_reporte(), ruta)
     df = pd.read_csv(ruta)
 
-    assert list(df["inpc_replicado"]) == [100.1, 100.2]
+    assert list(df["indice_replicado"]) == [100.1, 100.2]
     assert list(df["estado_validacion"]) == ["no_disponible", "no_disponible"]
 
 

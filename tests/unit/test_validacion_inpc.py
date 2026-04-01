@@ -58,19 +58,10 @@ mapeo_serie = {
 }
 
 
-"""
-El INPC para los 4 periodos en este ejemplo es:
-periodo     | INPC
-2018-Jul-2Q | 100.0
-2018-Ago-1Q | 103.0
-2018-Ago-2Q | 106.0
-2018-Sep-1Q | 109.0
-"""
-
 canasta = CanastaCanonica(df_canasta, 2018)
 serie = SerieNormalizada(df_serie, mapeo_serie)
 
-resultado = LaspeyresDirecto().calcular(canasta, serie, ID_CORRIDA)
+resultado = LaspeyresDirecto().calcular(canasta, serie, ID_CORRIDA, indice="INPC", tipo="inpc")
 
 
 def test_validar_inpc_inegi_no_disponible():
@@ -80,18 +71,15 @@ def test_validar_inpc_inegi_no_disponible():
         diagnostico,
     ) = validar(resultado, {}, canasta, serie, ID_CORRIDA)
 
-    # validaciones para resumen
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "no_disponible"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
 
-    # validaciones para reporte detallado
     assert len(reporte.df) == 4
     assert (reporte.df["estado_validacion"] == "no_disponible").all()
     assert (reporte.df["estado_calculo"] == "ok").all()
 
-    # validaciones para diagnostico faltantes
     assert diagnostico.df.empty
 
 
@@ -100,25 +88,24 @@ def test_validar_inpc_serie_con_nan():
     serie_con_nan = serie.df.copy()
     serie_con_nan.loc["arroz", Periodo(2018, 8, 2)] = float("nan")
     serie_nan = SerieNormalizada(serie_con_nan, mapeo_serie)
-    resultado_nan = LaspeyresDirecto().calcular(canasta, serie_nan, ID_CORRIDA)
+    resultado_nan = LaspeyresDirecto().calcular(
+        canasta, serie_nan, ID_CORRIDA, indice="INPC", tipo="inpc"
+    )
 
     resumen, reporte, diagnostico = validar(
         resultado_nan, {}, canasta, serie_nan, ID_CORRIDA
     )
 
-    # validaciones para resumen
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "parcial"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "no_disponible"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 1
 
-    # validaciones para reporte detallado
     assert len(reporte.df) == 4
     assert (reporte.df["estado_validacion"] == "no_disponible").all()
     assert (reporte.df["estado_calculo"] == "null_por_faltantes").sum() == 1
     assert (reporte.df["estado_calculo"] == "ok").sum() == 3
 
-    # validaciones para diagnostico faltantes
     assert len(diagnostico.df) == 1
     assert diagnostico.df.iloc[0]["periodo"] == Periodo(2018, 8, 2)
     assert diagnostico.df.iloc[0]["generico"] == "arroz"
@@ -139,39 +126,33 @@ def test_validar_inpc_dentro_de_tolerancia():
         resultado, inegi, canasta, serie, ID_CORRIDA
     )
 
-    # validaciones para resumen
-    # caso en los que si hay datos INEGI
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
 
-    # validaciones para reporte detallado
-    # caso en lo que si hay datos INEGI
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC general"), "estado_validacion"]  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
         == "ok"
     )
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC general"), "error_absoluto"] == 0.0  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "error_absoluto"] == 0.0  # type: ignore[index]
     )
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC general"), "inpc_inegi"] == 100.0  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "indice_inegi"] == 100.0  # type: ignore[index]
     )
 
-    # caso en lo que no hay datos INEGI
     assert (
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC general"), "estado_validacion"]  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
         == "no_disponible"
     )
     assert pd.isna(
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC general"), "error_absoluto"]  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "error_absoluto"]  # type: ignore[index]
     )
     assert pd.isna(
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC general"), "inpc_inegi"]  # type: ignore[index]
+        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "indice_inegi"]  # type: ignore[index]
     )
 
     assert (reporte.df["estado_validacion"] == "no_disponible").sum() == 2
 
-    # validaciones para diagnostico faltantes
     assert diagnostico.df.empty

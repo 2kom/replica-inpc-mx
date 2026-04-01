@@ -23,42 +23,38 @@ def validar(
     id_corrida: str,
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 
-    # datos basicos para la validacion
-    version = canasta.version
+    indice = resultado.df.index.get_level_values("indice").unique()[0]
+    tipo = resultado.df["tipo"].iloc[0]
+    version = resultado.df["version"].iloc[0]
     tolerancia = _TOLERANCIAS[version]
     ponderadores = canasta.df["ponderador"].astype(float)
     total_genericos_esperados = len(canasta.df)
     ponderador_total_esperado = ponderadores.sum()
 
-    # obtenemos los periodos a validar a partir del resultado
-    periodos = resultado.df.index
+    periodos = resultado.df.index.get_level_values("periodo").unique()
 
-    # --- aca se hace la validacion periodo a periodo contra lo publicado por el inegi ---
     filas_reporte = []
     for periodo in periodos:
-        # datos de calculo para el periodo
-        estado_calculo = resultado.df.loc[periodo, "estado_calculo"]
-        inpc_replicado = resultado.df.loc[periodo, "inpc_replicado"]
-        motivo_error = resultado.df.loc[periodo, "motivo_error"]
+        estado_calculo = resultado.df.loc[(periodo, indice), "estado_calculo"]
+        indice_replicado = resultado.df.loc[(periodo, indice), "indice_replicado"]
+        motivo_error = resultado.df.loc[(periodo, indice), "motivo_error"]
 
-        # cobertura de genericos para el periodo
-        serie_col = serie.df[periodo]  # indexada por generico
+        serie_col = serie.df[periodo]
         con_indice = serie_col.notna().sum()
         sin_indice = total_genericos_esperados - con_indice
         cobertura_genericos_pct = con_indice / total_genericos_esperados * 100
         ponderador_total_cubierto = ponderadores[serie_col.notna()].sum()
 
-        # defaults pq aun no esta implementada la validacion contra INEGI
-        inpc_inegi = float("nan")
+        indice_inegi = float("nan")
         error_absoluto = float("nan")
         error_relativo = float("nan")
         estado_validacion = "no_disponible"
 
         if inegi and periodo in inegi:
-            inpc_inegi = inegi[periodo]
-            if inpc_inegi is not None and estado_calculo == "ok":
-                error_absoluto = abs(inpc_replicado - inpc_inegi)  # type: ignore[operator]
-                error_relativo = error_absoluto / abs(inpc_inegi)
+            indice_inegi = inegi[periodo]
+            if indice_inegi is not None and estado_calculo == "ok":
+                error_absoluto = abs(indice_replicado - indice_inegi)  # type: ignore[operator]
+                error_relativo = error_absoluto / abs(indice_inegi)
 
                 if error_absoluto <= tolerancia:
                     estado_validacion = "ok"
@@ -68,8 +64,9 @@ def validar(
         filas_reporte.append(
             {
                 "version": version,
-                "inpc_replicado": inpc_replicado,
-                "inpc_inegi": inpc_inegi,
+                "tipo": tipo,
+                "indice_replicado": indice_replicado,
+                "indice_inegi": indice_inegi,
                 "error_absoluto": error_absoluto,
                 "error_relativo": error_relativo,
                 "estado_calculo": estado_calculo,
@@ -85,12 +82,11 @@ def validar(
         )
 
     index_reporte = pd.MultiIndex.from_tuples(
-        [(p, "INPC general") for p in periodos],
-        names=["periodo", "subindice"],
+        [(p, indice) for p in periodos],
+        names=["periodo", "indice"],
     )
     df_reporte = pd.DataFrame(filas_reporte, index=index_reporte)
 
-    # --- aca se hace la verificacion de faltantes en la serie para cada periodo ---
     filas_diagnostico = []
     for generico in canasta.df.index:
         serie_generico = serie.df.loc[generico]
@@ -108,6 +104,7 @@ def validar(
                 {
                     "id_corrida": id_corrida,
                     "version": version,
+                    "tipo": tipo,
                     "periodo": p,
                     "generico": generico,
                     "nivel_faltante": nivel,
@@ -123,6 +120,7 @@ def validar(
             columns=[
                 "id_corrida",
                 "version",
+                "tipo",
                 "periodo",
                 "generico",
                 "nivel_faltante",
@@ -153,6 +151,7 @@ def validar(
     df_resumen = pd.DataFrame(
         {
             "version": version,
+            "tipo": tipo,
             "total_periodos_esperados": numero_total,
             "total_periodos_calculados": numero_total,
             "total_periodos_con_null": numero_null,
@@ -163,7 +162,7 @@ def validar(
             if "error_relativo" in df_reporte
             else float("nan"),
             "total_faltantes_indice": len(df_diagnostico),
-            "total_faltantes_ponderador": 0,  # si se hizo el calculo es porque paso la validacion de canasta, entonces no hay faltantes de ponderador
+            "total_faltantes_ponderador": 0,
             "estado_validacion_global": estado_validacion_global,
             "estado_corrida": estado_corrida,
         },
