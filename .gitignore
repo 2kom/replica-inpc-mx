@@ -213,5 +213,12 @@ docs/requerimientos
 data/
 output/
 
+# Local settings
 .vscode/
 !.vscode/settings.json
+
+# Claude AI
+.claude/
+
+# Notebook
+notebook.ipynb

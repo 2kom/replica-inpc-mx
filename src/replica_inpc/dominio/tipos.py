@@ -44,8 +44,12 @@ class ResultadoCorrida:
 
     def _repr_html_(self) -> str:
         return (
-            "<h3>Resumen</h3>" + self.resumen._repr_html_()
-            + "<h3>Reporte</h3>" + self.reporte._repr_html_()
-            + "<h3>Diagnóstico</h3>" + self.diagnostico._repr_html_()
-            + "<h3>Resultado</h3>" + self.resultado._repr_html_()
+            "<h3>Resumen</h3>"
+            + self.resumen._repr_html_()
+            + "<h3>Reporte</h3>"
+            + self.reporte._repr_html_()
+            + "<h3>Diagnóstico</h3>"
+            + self.diagnostico._repr_html_()
+            + "<h3>Resultado</h3>"
+            + self.resultado._repr_html_()
         )

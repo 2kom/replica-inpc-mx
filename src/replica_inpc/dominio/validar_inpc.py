@@ -152,6 +152,8 @@ def validar(
         {
             "version": version,
             "tipo": tipo,
+            "periodo_inicio": min(periodos),
+            "periodo_fin": max(periodos),
             "total_periodos_esperados": numero_total,
             "total_periodos_calculados": numero_total,
             "total_periodos_con_null": numero_null,

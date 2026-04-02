@@ -1,10 +1,13 @@
 import uuid
 
 import pandas as pd
+import pytest
 
 from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
+from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.dominio.modelos.validacion import ResumenValidacion
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.validar_inpc import validar
 
@@ -75,6 +78,8 @@ def test_validar_inpc_inegi_no_disponible():
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "no_disponible"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
+    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == Periodo(2018, 7, 2)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == Periodo(2018, 9, 1)
 
     assert len(reporte.df) == 4
     assert (reporte.df["estado_validacion"] == "no_disponible").all()
@@ -156,3 +161,26 @@ def test_validar_inpc_dentro_de_tolerancia():
     assert (reporte.df["estado_validacion"] == "no_disponible").sum() == 2
 
     assert diagnostico.df.empty
+
+
+def test_resumen_validacion_invariante_periodo_inicio_mayor_que_fin():
+    df = pd.DataFrame(
+        {
+            "version": 2018,
+            "tipo": "inpc",
+            "periodo_inicio": Periodo(2018, 9, 1),
+            "periodo_fin": Periodo(2018, 7, 2),
+            "total_periodos_esperados": 4,
+            "total_periodos_calculados": 4,
+            "total_periodos_con_null": 0,
+            "error_absoluto_max": float("nan"),
+            "error_relativo_max": float("nan"),
+            "total_faltantes_indice": 0,
+            "total_faltantes_ponderador": 0,
+            "estado_validacion_global": "no_disponible",
+            "estado_corrida": "ok",
+        },
+        index=[ID_CORRIDA],
+    )
+    with pytest.raises(InvarianteViolado, match="periodo_inicio"):
+        ResumenValidacion(df)

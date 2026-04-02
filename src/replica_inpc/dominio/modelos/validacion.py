@@ -39,6 +39,10 @@ class ResumenValidacion:
             raise InvarianteViolado(
                 "La columna 'total_periodos_con_null' no puede tener más valores que 'total_periodos_calculados'."
             )
+        if (df["periodo_inicio"] > df["periodo_fin"]).any():
+            raise InvarianteViolado(
+                "periodo_inicio no puede ser mayor que periodo_fin."
+            )
 
         self._df = df
 

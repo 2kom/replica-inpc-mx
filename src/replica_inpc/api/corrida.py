@@ -6,11 +6,17 @@ from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import INDICE_POR_TIPO, ResultadoCorrida, VersionCanasta
-from replica_inpc.infraestructura.csv.escritor_resultados_csv import EscritorResultadosCsv
+from replica_inpc.infraestructura.csv.escritor_resultados_csv import (
+    EscritorResultadosCsv,
+)
 from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
-from replica_inpc.infraestructura.filesystem.almacen_artefactos_fs import AlmacenArtefactosFs
-from replica_inpc.infraestructura.filesystem.repositorio_corridas_fs import RepositorioCorridasFs
+from replica_inpc.infraestructura.filesystem.almacen_artefactos_fs import (
+    AlmacenArtefactosFs,
+)
+from replica_inpc.infraestructura.filesystem.repositorio_corridas_fs import (
+    RepositorioCorridasFs,
+)
 
 
 class _FuenteValidacionNula:

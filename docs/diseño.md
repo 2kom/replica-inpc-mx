@@ -81,7 +81,7 @@ El historial de cambios vive en git.
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
     - [12.3 Agregados CCIF en `LectorSeriesCsv`](#123-agregados-ccif-en-lectorseriescsv)
     - [12.4 Detección dinámica del header en `LectorSeriesCsv`](#124-detección-dinámica-del-header-en-lectorseriescsv)
-    - [12.5 ñ en canasta intermedia](#125-ñ-en-canasta-intermedia)
+    - [12.5 ñ en canasta intermedia ✓ RESUELTO](#125-ñ-en-canasta-intermedia--resuelto)
     - [12.6 Formato de series BIE en versiones 2010 y 2013](#126-formato-de-series-bie-en-versiones-2010-y-2013)
     - [12.7 Cobertura parcial de periodos no reportada explícitamente](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
@@ -533,6 +533,8 @@ class ResumenValidacion:
 | ---------------------------- | --------------- | --------------------------------------------------- |
 | `version`                    | `int`           |                                                     |
 | `tipo`                       | `object` (str)  | `'inpc'` en v1                                      |
+| `periodo_inicio`             | `Periodo`       | primer periodo calculado                            |
+| `periodo_fin`                | `Periodo`       | último periodo calculado                            |
 | `total_periodos_esperados`   | `int`           |                                                     |
 | `total_periodos_calculados`  | `int`           |                                                     |
 | `total_periodos_con_null`    | `int`           |                                                     |
@@ -553,6 +555,7 @@ class ResumenValidacion:
 | `estado_validacion_global` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}` |
 | Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`    |
 | Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`     |
+| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                            |
 
 ---
 
@@ -1725,15 +1728,9 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.5 ñ en canasta intermedia
+### 12.5 ñ en canasta intermedia ✓ RESUELTO
 
-**Comportamiento actual:** los CSV de canasta intermedia (2010, 2013, 2018, 2024) tienen los nombres de genéricos sin ñ (ej: `"pina"` en lugar de `"piña"`). La normalización de `LectorSeriesCsv` conserva ñ, lo que causaría mismatch en genéricos con ñ si ambas fuentes no son consistentes.
-
-**Problema:** los nombres normalizados de las series tendrán ñ (ej: `"piña"`) pero los índices de la canasta no (ej: `"pina"`), haciendo que `alinear_genericos` falle para esos genéricos.
-
-**Mejora propuesta:** regenerar los CSV de canasta intermedia con ñ donde corresponda.
-
-**Cuándo implementar:** antes de implementar corridas de cualquier versión — prerrequisito para que el matching funcione en los 11 genéricos afectados (ej: piña, pañales, enseñanza adicional).
+**Solución aplicada:** los CSV de canasta intermedia (2010, 2013, 2018, 2024) fueron regenerados con ñ donde corresponde. Los nombres de genéricos ahora son consistentes con la normalización de `LectorSeriesCsv` (ej: `"piña"`, `"pañales"`, `"enseñanza adicional"`).
 
 ---
 
@@ -1755,9 +1752,12 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 **Problema:** `estado_corrida = 'parcial'` está semánticamente reservado para cuando el cálculo produjo `null_por_faltantes` en algunos periodos — no para cuando la serie no cubre el rango completo. Estos son dos tipos distintos de parcialidad que el diseño actual no distingue.
 
-**Mejora propuesta:** agregar un nuevo valor a `estado_corrida` (ej. `'cobertura_incompleta'`) o un campo booleano `cobertura_periodo_completa` a `ResumenValidacion`.
+**Solución decidida:** agregar `periodo_inicio` y `periodo_fin` a `ResumenValidacion` (ver §5.5). El usuario puede comparar estos valores contra `RANGOS_VALIDOS[version]` para saber si la corrida cubre el rango completo. No se agrega un nuevo valor a `estado_corrida` — `'parcial'` sigue siendo exclusivo de `null_por_faltantes`.
 
-**Cuándo implementar:** cuando el reporte de cobertura sea un requerimiento explícito del usuario final.
+**Cambios requeridos:**
+
+- `dominio/modelos/validacion.py` — agregar invariante `periodo_inicio <= periodo_fin` a `ResumenValidacion`
+- `dominio/validar_inpc.py` — poblar `periodo_inicio = min(periodos)` y `periodo_fin = max(periodos)` al construir el resumen
 
 ---
 
