@@ -26,8 +26,25 @@ _MESES_INV: dict[int, str] = {v: k for k, v in _MESES.items()}
 
 @functools.total_ordering
 class Periodo:
+    """Representa un periodo quincenal del dominio.
+
+    Un periodo se modela como el triplete `(año, mes, quincena)`. Su orden
+    natural es cronológico, se puede usar como clave hashable y su
+    serialización canónica es `"1Q Ene 2024"`.
+
+    Args:
+        año: Año calendario del periodo. Debe ser un entero positivo.
+        mes: Mes calendario del periodo. Debe estar entre 1 y 12.
+        quincena: Quincena del mes. Solo se permiten los valores 1 y 2.
+
+    Raises:
+        ValueError: Si `año` no es positivo, `mes` no está entre 1 y 12
+            o `quincena` no es 1 ni 2.
+
+    Ver: docs/diseño.md §5.3, §11.6
+    """
+
     def __init__(self, año: int, mes: int, quincena: int) -> None:
-        # Validaciones basicas
         if quincena not in (1, 2):
             raise ValueError(f"quincena debe ser 1 o 2, se recibió {quincena}")
         if mes not in _MESES_INV:
@@ -35,12 +52,11 @@ class Periodo:
         if año <= 0:
             raise ValueError(f"año debe ser un entero positivo, se recibió {año}")
 
-        # Asignación de atributos
         self.año = año
         self.mes = mes
         self.quincena = quincena
 
-    def __eq__(self, other: object) -> bool:  # define ==
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Periodo):
             return NotImplemented
         return (self.año, self.mes, self.quincena) == (
@@ -49,7 +65,7 @@ class Periodo:
             other.quincena,
         )
 
-    def __lt__(self, other: Periodo) -> bool:  # define <
+    def __lt__(self, other: Periodo) -> bool:
         if not isinstance(other, Periodo):
             return NotImplemented
         return (self.año, self.mes, self.quincena) < (
@@ -59,20 +75,31 @@ class Periodo:
         )
 
     def __hash__(self) -> int:
-        # define hash(), permite usar Periodo como clave en diccionarios y columna de DataFrame
         return hash((self.año, self.mes, self.quincena))
 
     def __str__(self) -> str:
-        # define str(), devuelve en formato "1Q Ene 2024" o "2Q Ene 2024"
         return f"{self.quincena}Q {_MESES_INV[self.mes]} {self.año}"
 
     def __repr__(self) -> str:
-        # define repr(), devuelve en formato Periodo(2024, 1, 1)
         return f"Periodo({self.año}, {self.mes}, {self.quincena})"
 
     @classmethod
     def desde_str(cls, periodo_str: str) -> Periodo:
-        # parsea un string en formato "1Q Mes AAAA" y devuelve un objeto Periodo
+        """Construye un `Periodo` desde su representación textual canónica.
+
+        Args:
+            periodo_str: Texto en formato `"1Q Mes AAAA"`, por ejemplo
+                `"2Q Jul 2024"`.
+
+        Returns:
+            El periodo interpretado desde `periodo_str`.
+
+        Raises:
+            PeriodoNoInterpretable: Si el texto no corresponde a un periodo
+                válido o usa un mes fuera del catálogo esperado.
+
+        Ver: docs/diseño.md §5.3
+        """
         try:
             quincena_str, mes_str, año_str = periodo_str.split(" ")
             quincena = int(quincena_str[0])
@@ -85,6 +112,12 @@ class Periodo:
             ) from e
 
     def to_timestamp(self) -> pd.Timestamp:
-        # 1Q -> dia 1, 2Q -> dia 16
+        """Convierte el periodo a `pd.Timestamp` usando la convención quincenal.
+
+        Returns:
+            Un timestamp con día 1 para `1Q` y día 16 para `2Q`.
+
+        Ver: docs/diseño.md §5.3, §11.6
+        """
         dia = 1 if self.quincena == 1 else 16
         return pd.Timestamp(year=self.año, month=self.mes, day=dia)

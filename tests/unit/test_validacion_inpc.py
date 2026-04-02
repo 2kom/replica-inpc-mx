@@ -54,10 +54,10 @@ df_serie = pd.DataFrame(
 ).T
 
 mapeo_serie = {
-    "Arroz": "arroz",
-    "Frijol": "frijol",
-    "Leche": "leche",
-    "Huevo": "huevo",
+    "arroz": "Arroz",
+    "frijol": "Frijol",
+    "leche": "Leche",
+    "huevo": "Huevo",
 }
 
 

@@ -8,34 +8,50 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 def alinear_genericos(
     canasta: CanastaCanonica, serie: SerieNormalizada
 ) -> SerieNormalizada:
+    """Verifica y alinea los genéricos de una serie al orden de la canasta.
 
-    # la serie asi como la canasta tienen como indices los genericos y de esta manera verificamos si hay genericos en la canasta que no esten en la serie
+    Esta función asume que `canasta.df.index` y `serie.df.index` ya fueron
+    normalizados y pueden compararse por igualdad exacta, sin aplicar una
+    normalización adicional.
+
+    Args:
+        canasta: Canasta canónica cuyo índice contiene los genéricos esperados.
+        serie: Serie normalizada cuyos índices representan `generico_limpio` y
+            cuyo `mapeo` conserva la trazabilidad hacia `generico_original`.
+
+    Returns:
+        Una `SerieNormalizada` filtrada a los genéricos de la canasta y
+        reordenada para que su índice coincida exactamente con
+        `canasta.df.index`. El `mapeo` resultante se filtra al mismo
+        subconjunto de genéricos.
+
+    Raises:
+        CorrespondenciaInsuficiente: Si algún genérico de la canasta no está
+            presente en `serie.df.index`.
+
+    Example:
+        Antes:
+            canasta.df.index = ["arroz", "frijol", "leche"]
+            serie.df.index = ["frijol", "arroz", "leche", "huevo"]
+
+        Después:
+            resultado.df.index = ["arroz", "frijol", "leche"]
+            resultado.mapeo.keys() = ["arroz", "frijol", "leche"]
+
+    Ver: docs/diseño.md §5.10, §11.2, §11.3
+    """
+
     genericos_serie = set(serie.df.index)
     faltantes = [g for g in canasta.df.index if g not in genericos_serie]
     if faltantes:
         raise CorrespondenciaInsuficiente(faltantes)
 
-    # filtra y reordena la serie
-    # Ejemplo:
-    # serie.df tiene filas: ["frijol", "arroz", "leche", "huevo"]
-    # canasta.df.index es:  ["arroz", "frijol", "leche"]
-    # serie.df.loc[canasta.df.index] -> ["arroz", "frijol", "leche"] (reordenado y filtrado)
     serie_filtrada = serie.df.loc[canasta.df.index]
 
-    # reordenamos el mapeo de serie para que coincida con el orden de la serie filtrada
-    # ejemplo:
-    # serie.mapeo = {"Frijol": "frijol",
-    #                "Arroz": "arroz",
-    #                "Leche": "leche",
-    #                "Huevo": "huevo"}
-    # canasta.df.index es:  ["arroz", "frijol", "leche"]
-    # mapeo_reordenado = {"Arroz": "arroz",
-    #                     "Frijol": "frijol",
-    #                     "Leche": "leche"}
     mapeo_reordenado = {
         llave: valor
         for llave, valor in serie.mapeo.items()
-        if valor in serie_filtrada.index
+        if llave in serie_filtrada.index
     }
 
     return SerieNormalizada(serie_filtrada, mapeo_reordenado)

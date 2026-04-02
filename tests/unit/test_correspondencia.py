@@ -1,3 +1,9 @@
+"""Pruebas unitarias de `alinear_genericos()`.
+
+La suite cubre la alineación base, el descarte de genéricos sobrantes y el
+fallo cuando la serie no cubre todos los genéricos de la canasta.
+"""
+
 import pandas as pd
 import pytest
 
@@ -48,44 +54,46 @@ df_serie = pd.DataFrame(
 ).T
 
 mapeo_serie = {
-    "Arroz": "arroz",
-    "Frijol": "frijol",
-    "Leche": "leche",
-    "Huevo": "huevo",
+    "arroz": "Arroz",
+    "frijol": "Frijol",
+    "leche": "Leche",
+    "huevo": "Huevo",
 }
 
+# `mapeo` conserva la trazabilidad `generico_limpio -> generico_original`.
 canasta = CanastaCanonica(df_canasta, 2018)
 serie = SerieNormalizada(df_serie, mapeo_serie)
 
 
 def test_alinear_genericos_valido():
     serie_alineada = alinear_genericos(canasta, serie)
-    # verificar que el indice de la serie alineada sea igual al indice de la canasta
+
+    # La serie resultante adopta exactamente el orden de la canasta.
     assert serie_alineada.df.index.equals(canasta.df.index)
-    # verificar que el mapeo de la serie alineada tenga las mismas claves que el mapeo original
-    assert set(serie_alineada.mapeo.values()) == set(canasta.df.index)
+    # El mapeo conserva solo los genéricos presentes tras la alineación.
+    assert set(serie_alineada.mapeo.keys()) == set(canasta.df.index)
 
 
 def test_alinear_genericos_sobrantes():
     df_extra = df_serie.copy()
     df_extra.loc["azucar"] = [100, 105, 110, 115]
     mapeo_extra = mapeo_serie.copy()
-    mapeo_extra["Azucar"] = "azucar"
+    mapeo_extra["azucar"] = "Azucar"
     serie_extra = SerieNormalizada(df_extra, mapeo_extra)
 
     serie_alineada = alinear_genericos(canasta, serie_extra)
 
-    # verificar que el indice de la serie alineada sea igual al indice de la canasta aun con el generico extra
-    assert set(serie_alineada.mapeo.values()) == set(canasta.df.index)
+    # Un genérico sobrante en la serie no aparece en la salida.
+    assert set(serie_alineada.mapeo.keys()) == set(canasta.df.index)
 
 
 def test_alinear_genericos_insuficiente():
     df_faltante = df_serie.copy()
     df_faltante.drop("huevo", inplace=True)
     mapeo_faltante = mapeo_serie.copy()
-    del mapeo_faltante["Huevo"]
+    del mapeo_faltante["huevo"]
     serie_faltante = SerieNormalizada(df_faltante, mapeo_faltante)
 
-    # verificar que alinear_genericos lance CorrespondenciaInsuficiente al faltar un generico de la canasta en la serie
+    # La función falla cuando falta un genérico requerido por la canasta.
     with pytest.raises(CorrespondenciaInsuficiente):
         alinear_genericos(canasta, serie_faltante)
