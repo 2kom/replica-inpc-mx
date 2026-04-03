@@ -219,6 +219,7 @@ output/
 
 # Claude AI
 .claude/
+CLAUDE.md
 
 # Notebook
 notebook.ipynb
