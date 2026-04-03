@@ -481,13 +481,14 @@ class ResultadoCalculo:
     def como_tabla(self, ancho: bool = False) -> pd.DataFrame: ...
 
     def _repr_html_(self) -> str:
-        return self.como_tabla(ancho=True)._repr_html_()
+        return self.como_tabla(ancho=False)._repr_html_()
 ```
 
 **`como_tabla(ancho=False)`:** devuelve el DataFrame interno en formato largo cuando
 `ancho=False` (default — facilita `pd.concat` entre corridas). Con `ancho=True` pivota
 `indice_replicado` sobre el nivel `indice`: índice resultante = `Periodo`, columnas = valores
-de `indice` (ej. `"INPC"`). Útil para visualización en notebooks.
+de `indice` (ej. `"INPC"`). `_repr_html_()` conserva la vista larga; la vista ancha
+se obtiene llamando `como_tabla(ancho=True)` explícitamente.
 
 **Esquema del DataFrame interno (índice compuesto: `(Periodo, indice)`):**
 
@@ -579,11 +580,13 @@ class ReporteDetalladoValidacion:
     def como_tabla(self, ancho: bool = False) -> pd.DataFrame: ...
 
     def _repr_html_(self) -> str:
-        return self.como_tabla(ancho=True)._repr_html_()
+        return self.como_tabla(ancho=False)._repr_html_()
 ```
 
 **`como_tabla(ancho=False)`:** mismo comportamiento que en `ResultadoCalculo` — largo
 por default (facilita `pd.concat`), ancho con `ancho=True` (pivota `indice_replicado`).
+`_repr_html_()` conserva la vista larga; la vista ancha se obtiene llamando
+`como_tabla(ancho=True)` explícitamente.
 
 **Esquema del DataFrame (índice compuesto: `(Periodo, indice)`):**
 
@@ -831,8 +834,9 @@ def _repr_html_(self) -> str:
     )
 ```
 
-Nota: se llama `._repr_html_()` de cada artefacto (no `.df._repr_html_()`), de modo que
-`resultado` y `reporte` usan automáticamente `como_tabla(ancho=True)` para visualización.
+Nota: se llama `._repr_html_()` de cada artefacto (no `.df._repr_html_()`). En el caso de
+`resultado` y `reporte`, eso conserva la vista larga; para ver la forma ancha hay que usar
+`como_tabla(ancho=True)` explícitamente.
 
 ---
 

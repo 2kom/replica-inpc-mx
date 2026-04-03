@@ -7,6 +7,45 @@ from replica_inpc.dominio.tipos import VersionCanasta
 
 
 class CanastaCanonica:
+    """Representa la canasta canónica usada para el cálculo del índice.
+
+    Args:
+        df: DataFrame con `generico` como índice y columnas según el esquema
+            canónico de la canasta. Las columnas `ponderador` y
+            `encadenamiento` se conservan como texto del archivo fuente.
+        version: Versión base de la canasta. Debe ser 2010, 2013, 2018 o 2024.
+
+    Raises:
+        InvarianteViolado: Si la versión no es válida, si el índice contiene
+            duplicados o cadenas vacías, si algún ponderador no es positivo, si
+            la suma de ponderadores no es 100 o si algún encadenamiento no nulo
+            no es positivo.
+
+    Esquema del DataFrame (índice: `generico`):
+        ponderador (object/str): texto decimal exacto del ponderador.
+        encadenamiento (object/str/NaN): texto decimal exacto o `NaN` cuando no aplica.
+        columnas adicionales: clasificaciones y banderas auxiliares según la versión.
+
+    Example:
+        DataFrame interno:
+        | generico | ponderador | encadenamiento | COG       |
+        | -------- | ---------: | -------------: | --------: |
+        | arroz    | "10.0"     | NaN            | Legumbres |
+        | frijol   | "20.0"     | NaN            | Legumbres |
+        | leche    | "30.0"     | NaN            | Lácteos   |
+        | huevo    | "40.0"     | NaN            | Avicolas? |
+
+        Metadatos asociados:
+        | atributo | valor |
+        | -------- | ----- |
+        | version  | 2018  |
+
+        En este ejemplo, los ponderadores suman 100 y `encadenamiento` está
+        vacío porque la estrategia aplicable es directa.
+
+    Ver: docs/diseño.md §5.1, §11.5
+    """
+
     def __init__(self, df: pd.DataFrame, version: VersionCanasta) -> None:
         if df.index.duplicated().any():
             raise InvarianteViolado(
@@ -45,7 +84,9 @@ class CanastaCanonica:
 
     @property
     def version(self) -> VersionCanasta:
+        """Devuelve la versión base de la canasta."""
         return self._version
 
     def _repr_html_(self) -> str:
+        """Renderiza la canasta como tabla HTML en entornos interactivos."""
         return self._df._repr_html_()  # type: ignore[operator]

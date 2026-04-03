@@ -6,6 +6,63 @@ from replica_inpc.dominio.errores import InvarianteViolado
 
 
 class ResumenValidacion:
+    """Representa el resumen agregado de una corrida y su validación.
+
+    Args:
+        df: DataFrame con índice `id_corrida` y métricas agregadas de cálculo,
+            cobertura y comparación contra INEGI.
+
+    Raises:
+        InvarianteViolado: Si el DataFrame está vacío, si el índice tiene
+            duplicados, si `version`, `estado_corrida` o
+            `estado_validacion_global` contienen valores inválidos, si
+            `total_periodos_calculados` excede `total_periodos_esperados`, si
+            `total_periodos_con_null` excede `total_periodos_calculados` o si
+            `periodo_inicio` es mayor que `periodo_fin`.
+
+    Esquema del DataFrame (índice: `id_corrida`):
+        version (int): versión de la canasta usada en la corrida.
+        tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
+        periodo_inicio (Periodo): primer periodo calculado.
+        periodo_fin (Periodo): último periodo calculado.
+        total_periodos_esperados (int): periodos esperados en el rango.
+        total_periodos_calculados (int): periodos efectivamente calculados.
+        total_periodos_con_null (int): periodos con resultado nulo por faltantes.
+        error_absoluto_max (float/NaN): error absoluto máximo frente a INEGI.
+        error_relativo_max (float/NaN): error relativo máximo frente a INEGI.
+        total_faltantes_indice (int): cantidad de faltantes de índice.
+        total_faltantes_ponderador (int): cantidad de faltantes de ponderador.
+        estado_validacion_global (str): `ok`, `diferencia_detectada` o `no_disponible`.
+        estado_corrida (str): `ok`, `parcial` o `fallida`.
+
+    Example:
+        DataFrame interno (`df`):
+        | id     | version | tipo | inicio      | fin         | esperados | calculados | null   | err-abs | err-rel | fal-ind | fal-pon | val-gol               | est-co  |
+        | ------ | ------: | ---- | ----------- | ----------- | --------: | ---------: | -----: | ------: | ------: | ------: | ------: | --------------------- | ------- |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | 0.002   | 0.002   | 0       | 0       | ok                    | ok      |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 143        | 2      | 0.018   | 0.0002  | 3       | 0       | diferencia_detectada  | parcial |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | NaN     | NaN     | 0       | 0       | no_disponible         | ok      |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 145    | NaN     | NaN     | 0       | 1       | no_disponible         | fallida |
+
+        Abreviaciones:
+        | abreviacion | descripcion                |
+        | ----------- | -------------------------- |
+        | id          | id_corrida                 |
+        | inicio      | periodo_inicio             |
+        | fin         | periodo_fin                |
+        | esperados   | total_periodos_esperados   |
+        | calculados  | total_periodos_calculados  |
+        | null        | total_periodos_con_null    |
+        | err-abs     | error_absoluto_max         |
+        | err-rel     | error_relativo_max         |
+        | fal-ind     | total_faltantes_indice     |
+        | fal-pon     | total_faltantes_ponderador |
+        | val-gol     | estado_validacion_global   |
+        | est-co      | estado_corrida             |
+
+    Ver: docs/diseño.md §5.5
+    """
+
     def __init__(self, df: pd.DataFrame) -> None:
         if df.empty:
             raise InvarianteViolado(
@@ -51,10 +108,78 @@ class ResumenValidacion:
         return self._df
 
     def _repr_html_(self) -> str:
+        """Renderiza el resumen como tabla HTML en entornos interactivos."""
         return self._df._repr_html_()  # type: ignore[operator]
 
 
 class ReporteDetalladoValidacion:
+    """Representa el detalle por periodo del cálculo y su validación.
+
+    Args:
+        df: DataFrame con índice compuesto `(periodo, indice)` y métricas
+            detalladas de cálculo, validación y cobertura por periodo.
+        id_corrida: Identificador de la corrida a la que pertenece el reporte.
+
+    Raises:
+        InvarianteViolado: Si el DataFrame está vacío, si el índice tiene
+            duplicados, si `version`, `estado_calculo` o `estado_validacion`
+            contienen valores inválidos, si `indice_replicado` es nulo cuando
+            `estado_calculo == "ok"` o si `indice_replicado` no es nulo cuando
+            `estado_calculo != "ok"`.
+
+    Esquema del DataFrame (índice: `periodo`, `indice`):
+        version (int): versión de la canasta usada en el cálculo.
+        tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
+        indice_replicado (float/NaN): valor replicado del índice por periodo.
+        indice_inegi (float/NaN): valor oficial usado para validación.
+        error_absoluto (float/NaN): diferencia absoluta contra INEGI.
+        error_relativo (float/NaN): diferencia relativa contra INEGI.
+        estado_calculo (str): `ok`, `null_por_faltantes` o `fallida`.
+        motivo_error (str/NaN): detalle del fallo cuando aplica.
+        estado_validacion (str): `ok`, `diferencia_detectada` o `no_disponible`.
+        total_genericos_esperados (int): genéricos esperados por la canasta.
+        total_genericos_con_indice (int): genéricos con dato en el periodo.
+        total_genericos_sin_indice (int): genéricos sin dato en el periodo.
+        cobertura_genericos_pct (float): cobertura porcentual del periodo.
+        ponderador_total_esperado (float): suma total esperada de ponderadores.
+        ponderador_total_cubierto (float): suma de ponderadores cubiertos.
+
+    Example:
+        Vista larga (`como_tabla(False)`):
+        | (periodo, indice)          | ver  | tipo | inpc_rep | inegi   | err_abs | err_rel | est_calc            | mot_err   | est_val               | gen_esp | gen_con | gen_sin | cob_pct | pon_esp | pon_cub |
+        | -------------------------- | ---: | ---- | -------: | ------: | ------: | ------: | ------------------- | --------- | --------------------- | ------: | ------: | ------: | ------: | ------: | ------: |
+        | (Periodo(2018, 7, 2), INPC)| 2018 | inpc | 100.000  | 100.002 | 0.002   | 0.00002 | ok                  | NaN       | ok                    | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
+        | (Periodo(2018, 8, 1), INPC)| 2018 | inpc | NaN      | NaN     | NaN     | NaN     | null_por_faltantes  | faltantes | no_disponible         | 299     | 296     | 3       | 98.9967 | 100.0   | 98.7421 |
+        | (Periodo(2018, 8, 2), INPC)| 2018 | inpc | 103.500  | 103.518 | 0.018   | 0.00017 | ok                  | NaN       | diferencia_detectada  | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
+
+        Vista ancha (`como_tabla(True)`):
+        | periodo     | INPC    |
+        | ----------- | ------: |
+        | 2Q Jul 2018 | 100.000 |
+        | 1Q Ago 2018 | NaN     |
+        | 2Q Ago 2018 | 103.500 |
+
+        Abreviaciones:
+        | abreviacion | descripcion                 |
+        | ----------- | --------------------------- |
+        | ver         | version                     |
+        | inpc_rep    | indice_replicado            |
+        | inegi       | indice_inegi                |
+        | err_abs     | error_absoluto              |
+        | err_rel     | error_relativo              |
+        | est_calc    | estado_calculo              |
+        | mot_err     | motivo_error                |
+        | est_val     | estado_validacion           |
+        | gen_esp     | total_genericos_esperados   |
+        | gen_con     | total_genericos_con_indice  |
+        | gen_sin     | total_genericos_sin_indice  |
+        | cob_pct     | cobertura_genericos_pct     |
+        | pon_esp     | ponderador_total_esperado   |
+        | pon_cub     | ponderador_total_cubierto   |
+
+    Ver: docs/diseño.md §5.6
+    """
+
     def __init__(self, df: pd.DataFrame, id_corrida: str) -> None:
         if df.empty:
             raise InvarianteViolado(
@@ -100,18 +225,77 @@ class ReporteDetalladoValidacion:
 
     @property
     def id_corrida(self) -> str:
+        """Devuelve el identificador de la corrida asociada al reporte."""
         return self._id_corrida
 
     def como_tabla(self, ancho: bool = False) -> pd.DataFrame:
+        """Devuelve el reporte en formato largo o pivoteado para visualización.
+
+        Args:
+            ancho: Si es `False`, devuelve el DataFrame interno. Si es `True`,
+                pivota `indice_replicado` sobre el nivel `indice`.
+
+        Returns:
+            El reporte en formato largo o ancho, según `ancho`.
+
+        Ver: docs/diseño.md §5.6
+        """
         if not ancho:
             return self._df
         return self._df["indice_replicado"].unstack(level="indice")
 
     def _repr_html_(self) -> str:
-        return self.como_tabla(ancho=True)._repr_html_()  # type: ignore[operator]
+        """Renderiza el reporte en formato largo para notebooks."""
+        return self.como_tabla(ancho=False)._repr_html_()  # type: ignore[operator]
 
 
 class DiagnosticoFaltantes:
+    """Representa el diagnóstico detallado de faltantes detectados en una corrida.
+
+    Args:
+        df: DataFrame con índice entero y filas de trazabilidad por faltante
+            detectado. Puede estar vacío cuando la corrida no presenta faltantes.
+
+    Raises:
+        InvarianteViolado: Si `version`, `nivel_faltante` o `tipo_faltante`
+            contienen valores inválidos, si `periodo` es nulo cuando
+            `tipo_faltante == "indice"` o si `periodo` no es nulo cuando
+            `tipo_faltante == "ponderador"`.
+
+    Esquema del DataFrame (índice entero):
+        id_corrida (str): identificador de la corrida.
+        version (int): versión de la canasta usada en la corrida.
+        tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
+        periodo (Periodo/NaN): periodo afectado; `NaN` para faltantes de ponderador.
+        generico (str): genérico afectado por el faltante.
+        nivel_faltante (str): `periodo` o `estructural`.
+        tipo_faltante (str): `indice` o `ponderador`.
+        detalle (str): descripción textual del faltante.
+
+    Example:
+        DataFrame interno (`df`):
+        | id         | ver  | tipo | per         | gen    | nivel        | tipo_fal  | detalle                                      |
+        | ---------- | ---: | ---- | ----------- | ------ | ------------ | --------- | -------------------------------------------- |
+        | 'uuid'     | 2018 | inpc | 1Q Ago 2018 | frijol | periodo      | indice    | Sin dato de indice para generico frijol...   |
+        | 'uuid'     | 2018 | inpc | 2Q Ago 2018 | frijol | periodo      | indice    | Sin dato de indice para generico frijol...   |
+        | 'uuid'     | 2018 | inpc | NaN         | huevo  | estructural  | ponderador| Sin ponderador para generico huevo           |
+
+        Abreviaciones:
+        | abreviacion | descripcion     |
+        | ----------- | --------------- |
+        | id          | id_corrida      |
+        | ver         | version         |
+        | per         | periodo         |
+        | gen         | generico        |
+        | nivel       | nivel_faltante  |
+        | tipo_fal    | tipo_faltante   |
+
+        También es válido un DataFrame vacío: eso significa que no se
+        detectaron faltantes en la corrida.
+
+    Ver: docs/diseño.md §5.7
+    """
+
     def __init__(self, df: pd.DataFrame) -> None:
         if not df["version"].isin({2010, 2013, 2018, 2024}).all():
             raise InvarianteViolado(
@@ -145,4 +329,5 @@ class DiagnosticoFaltantes:
         return self._df
 
     def _repr_html_(self) -> str:
+        """Renderiza el diagnóstico como tabla HTML en entornos interactivos."""
         return self._df._repr_html_()  # type: ignore[operator]
