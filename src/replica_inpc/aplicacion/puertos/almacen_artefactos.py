@@ -6,6 +6,21 @@ import pandas as pd
 
 
 class AlmacenArtefactos(Protocol):
-    def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None: ...
+    """Contrato para persistir artefactos computados del pipeline.
 
-    def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame: ...
+    Implementado por `AlmacenArtefactosFs`.
+
+    Opera sobre DataFrames genéricos para guardar y recuperar `resultado`,
+    `resumen`, `reporte` y `diagnostico` sin acoplarse al tipo concreto del
+    artefacto.
+
+    Ver: docs/diseño.md §7.1.6, §8.4
+    """
+
+    def guardar(self, id_corrida: str, nombre: str, df: pd.DataFrame) -> None:
+        """Guarda el DataFrame de un artefacto identificado por `nombre`."""
+        ...
+
+    def obtener(self, id_corrida: str, nombre: str) -> pd.DataFrame:
+        """Recupera el DataFrame persistido para el artefacto solicitado."""
+        ...
