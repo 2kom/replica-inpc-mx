@@ -80,7 +80,7 @@ El historial de cambios vive en git.
     - [11.11 Firma de `validar_inpc.py`](#1111-firma-de-validar_inpcpy)
     - [11.12 `id_corrida` en `ResultadoCalculo`](#1112-id_corrida-en-resultadocalculo)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
-    - [12.1 `estado_validacion_global` no distingue cobertura parcial](#121-estado_validacion_global-no-distingue-cobertura-parcial)
+    - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
     - [12.3 Agregados CCIF en `LectorSeriesCsv`](#123-agregados-ccif-en-lectorseriescsv)
     - [12.4 Detección dinámica del header en `LectorSeriesCsv`](#124-detección-dinámica-del-header-en-lectorseriescsv)
@@ -531,33 +531,33 @@ class ResumenValidacion:
 
 **Esquema del DataFrame (índice: `id_corrida`):**
 
-| Columna                      | dtype pandas    | Notas                                               |
-| ---------------------------- | --------------- | --------------------------------------------------- |
-| `version`                    | `int`           |                                                     |
-| `tipo`                       | `object` (str)  | `'inpc'` en v1                                      |
-| `periodo_inicio`             | `Periodo`       | primer periodo calculado                            |
-| `periodo_fin`                | `Periodo`       | último periodo calculado                            |
-| `total_periodos_esperados`   | `int`           |                                                     |
-| `total_periodos_calculados`  | `int`           |                                                     |
-| `total_periodos_con_null`    | `int`           |                                                     |
-| `error_absoluto_max`         | `float` / `NaN` | NaN si validación no disponible                     |
-| `error_relativo_max`         | `float` / `NaN` | NaN si validación no disponible                     |
-| `total_faltantes_indice`     | `int`           |                                                     |
-| `total_faltantes_ponderador` | `int`           |                                                     |
-| `estado_validacion_global`   | `object` (str)  | `'ok'`, `'diferencia_detectada'`, `'no_disponible'` |
-| `estado_corrida`             | `object` (str)  | `'ok'`, `'parcial'`, `'fallida'`                    |
+| Columna                      | dtype pandas    | Notas                                                               |
+| ---------------------------- | --------------- | ------------------------------------------------------------------- |
+| `version`                    | `int`           |                                                                     |
+| `tipo`                       | `object` (str)  | `'inpc'` en v1                                                      |
+| `periodo_inicio`             | `Periodo`       | primer periodo calculado                                            |
+| `periodo_fin`                | `Periodo`       | último periodo calculado                                            |
+| `total_periodos_esperados`   | `int`           |                                                                     |
+| `total_periodos_calculados`  | `int`           |                                                                     |
+| `total_periodos_con_null`    | `int`           |                                                                     |
+| `error_absoluto_max`         | `float` / `NaN` | NaN si validación no disponible                                     |
+| `error_relativo_max`         | `float` / `NaN` | NaN si validación no disponible                                     |
+| `total_faltantes_indice`     | `int`           |                                                                     |
+| `total_faltantes_ponderador` | `int`           |                                                                     |
+| `estado_validacion_global`   | `object` (str)  | `'ok'`, `'ok_parcial'`, `'diferencia_detectada'`, `'no_disponible'` |
+| `estado_corrida`             | `object` (str)  | `'ok'`, `'ok_parcial'`, `'fallida'`                                 |
 
 **Invariantes — validados al construir:**
 
-| Invariante                        | Regla                                                        |
-| --------------------------------- | ------------------------------------------------------------ |
-| Al menos una fila                 | el DataFrame no está vacío                                   |
-| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                      |
-| `estado_corrida` válido           | valores in `{'ok', 'parcial', 'fallida'}`                    |
-| `estado_validacion_global` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}` |
-| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`    |
-| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`     |
-| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                            |
+| Invariante                        | Regla                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| Al menos una fila                 | el DataFrame no está vacío                                                 |
+| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                                    |
+| `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                               |
+| `estado_validacion_global` válido | valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}` |
+| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                  |
+| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`                   |
+| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                                          |
 
 ---
 
@@ -1825,15 +1825,14 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.1 `estado_validacion_global` no distingue cobertura parcial
+### 12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO
 
-**Comportamiento actual:** `estado_validacion_global` tiene tres estados: `'ok'`, `'diferencia_detectada'`, `'no_disponible'`. El estado `'ok'` se asigna cuando todos los periodos comparados pasaron la tolerancia, aunque al menos uno no haya sido comparado.
+**Solución aplicada:** se agregaron `'ok_parcial'` a `estado_validacion_global` y `estado_corrida` en `ResumenValidacion`.
 
-**Problema:** un usuario que solo lee `ResumenValidacion` puede interpretar `'ok'` como validación completa cuando en realidad al menos un periodo no fue comparado contra el INEGI. El detalle de cobertura solo es visible en `ReporteDetalladoValidacion`.
-
-**Mejora propuesta:** agregar el estado `'ok_parcial'` para cuando al menos un periodo pasó la comparación pero al menos uno quedó sin comparar. Requiere actualizar los invariantes de `ResumenValidacion` y `ReporteDetalladoValidacion`, y la lógica de `validar_inpc.py`.
-
-**Cuándo implementar:** cuando `FuenteValidacion` esté implementada y haya datos reales que permitan observar cobertura parcial en la práctica.
+- `estado_corrida = 'ok_parcial'`: al menos un periodo es `null_por_faltantes` pero no todos.
+- `estado_corrida = 'fallida'`: todos los periodos son `null_por_faltantes`, o hay faltantes de ponderador.
+- `estado_validacion_global = 'ok_parcial'`: entre los periodos con `estado_calculo == 'ok'`, al menos uno pasó la tolerancia y al menos uno no pudo ser comparado (`no_disponible`).
+- `estado_validacion_global = 'ok'`: todos los periodos comparables fueron verificados y pasaron.
 
 ---
 

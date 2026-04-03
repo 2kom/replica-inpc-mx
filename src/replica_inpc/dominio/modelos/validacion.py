@@ -32,17 +32,17 @@ class ResumenValidacion:
         error_relativo_max (float/NaN): error relativo máximo frente a INEGI.
         total_faltantes_indice (int): cantidad de faltantes de índice.
         total_faltantes_ponderador (int): cantidad de faltantes de ponderador.
-        estado_validacion_global (str): `ok`, `diferencia_detectada` o `no_disponible`.
-        estado_corrida (str): `ok`, `parcial` o `fallida`.
+        estado_validacion_global (str): `ok`, `ok_parcial`, `diferencia_detectada` o `no_disponible`.
+        estado_corrida (str): `ok`, `ok_parcial` o `fallida`.
 
     Example:
         DataFrame interno (`df`):
-        | id     | version | tipo | inicio      | fin         | esperados | calculados | null   | err-abs | err-rel | fal-ind | fal-pon | val-gol               | est-co  |
-        | ------ | ------: | ---- | ----------- | ----------- | --------: | ---------: | -----: | ------: | ------: | ------: | ------: | --------------------- | ------- |
-        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | 0.002   | 0.002   | 0       | 0       | ok                    | ok      |
-        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 143        | 2      | 0.018   | 0.0002  | 3       | 0       | diferencia_detectada  | parcial |
-        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | NaN     | NaN     | 0       | 0       | no_disponible         | ok      |
-        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 145    | NaN     | NaN     | 0       | 1       | no_disponible         | fallida |
+        | id     | version | tipo | inicio      | fin         | esperados | calculados | null   | err-abs | err-rel | fal-ind | fal-pon | val-gol               | est-co     |
+        | ------ | ------: | ---- | ----------- | ----------- | --------: | ---------: | -----: | ------: | ------: | ------: | ------: | --------------------- | ---------- |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | 0.002   | 0.002   | 0       | 0       | ok                    | ok         |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 143        | 2      | 0.018   | 0.0002  | 3       | 0       | diferencia_detectada  | ok_parcial |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 0      | NaN     | NaN     | 0       | 0       | ok_parcial            | ok         |
+        | 'uuid' | 2018    | inpc | 2Q Jul 2018 | 2Q Jul 2024 | 145       | 145        | 145    | NaN     | NaN     | 0       | 1       | no_disponible         | fallida    |
 
         Abreviaciones:
         | abreviacion | descripcion                |
@@ -76,17 +76,17 @@ class ResumenValidacion:
             raise InvarianteViolado(
                 "La columna 'version' debe contener solo los valores 2010, 2013, 2018 o 2024."
             )
-        if not df["estado_corrida"].isin({"ok", "parcial", "fallida"}).all():
+        if not df["estado_corrida"].isin({"ok", "ok_parcial", "fallida"}).all():
             raise InvarianteViolado(
-                "La columna 'estado_corrida' debe contener solo los valores 'ok', 'parcial' o 'fallida'."
+                "La columna 'estado_corrida' debe contener solo los valores 'ok', 'ok_parcial' o 'fallida'."
             )
         if (
             not df["estado_validacion_global"]
-            .isin({"ok", "diferencia_detectada", "no_disponible"})
+            .isin({"ok", "ok_parcial", "diferencia_detectada", "no_disponible"})
             .all()
         ):
             raise InvarianteViolado(
-                "La columna 'estado_validacion_global' debe contener solo los valores 'ok', 'diferencia_detectada' o 'no_disponible'."
+                "La columna 'estado_validacion_global' debe contener solo los valores 'ok', 'ok_parcial', 'diferencia_detectada' o 'no_disponible'."
             )
         if (df["total_periodos_calculados"] > df["total_periodos_esperados"]).any():
             raise InvarianteViolado(

@@ -137,14 +137,20 @@ def validar(
     elif numero_null == numero_total:
         estado_corrida = "fallida"
     else:
-        estado_corrida = "parcial"
+        estado_corrida = "ok_parcial"
 
-    estados = set(df_reporte["estado_validacion"])
+    estados = set(
+        df_reporte.loc[df_reporte["estado_calculo"] == "ok", "estado_validacion"]
+    )
 
-    if "diferencia_detectada" in estados:
+    if not estados:
+        estado_validacion_global = "no_disponible"
+    elif "diferencia_detectada" in estados:
         estado_validacion_global = "diferencia_detectada"
     elif estados == {"no_disponible"}:
         estado_validacion_global = "no_disponible"
+    elif "no_disponible" in estados:
+        estado_validacion_global = "ok_parcial"
     else:
         estado_validacion_global = "ok"
 
