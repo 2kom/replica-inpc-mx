@@ -31,8 +31,7 @@ def _serializar_periodos(df: pd.DataFrame) -> pd.DataFrame:
 
     if isinstance(df.index, pd.MultiIndex):
         arrays = [
-            level.map(str) if any(isinstance(v, Periodo) for v in level)
-            else level
+            level.map(str) if any(isinstance(v, Periodo) for v in level) else level
             for level in (df.index.get_level_values(i) for i in range(df.index.nlevels))
         ]
         df.index = pd.MultiIndex.from_arrays(arrays, names=df.index.names)
@@ -42,7 +41,12 @@ def _serializar_periodos(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         if df[col].dtype == object:
             muestra = df[col].dropna()
-            if not muestra.empty and muestra.apply(lambda x: isinstance(x, Periodo)).any():
-                df[col] = df[col].apply(lambda x: str(x) if isinstance(x, Periodo) else x)
+            if (
+                not muestra.empty
+                and muestra.apply(lambda x: isinstance(x, Periodo)).any()
+            ):
+                df[col] = df[col].apply(
+                    lambda x: str(x) if isinstance(x, Periodo) else x
+                )
 
     return df

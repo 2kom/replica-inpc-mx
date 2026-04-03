@@ -17,6 +17,10 @@ from replica_inpc.infraestructura.filesystem.almacen_artefactos_fs import (
 from replica_inpc.infraestructura.filesystem.repositorio_corridas_fs import (
     RepositorioCorridasFs,
 )
+from replica_inpc.infraestructura.inegi.fuente_validacion_api import (
+    INDICADORES_INEGI,
+    FuenteValidacionApi,
+)
 
 
 class _FuenteValidacionNula:
@@ -56,7 +60,10 @@ class Corrida:
             self._ruta_datos.mkdir(parents=True, exist_ok=True)
             self._ruta_salida.mkdir(parents=True, exist_ok=True)
 
-        fuente_validacion = _FuenteValidacionNula()
+        if self._token_inegi and tipo in INDICADORES_INEGI:
+            fuente_validacion = FuenteValidacionApi(self._token_inegi, tipo)
+        else:
+            fuente_validacion = _FuenteValidacionNula()
 
         if persistir:
             caso_uso = EjecutarCorrida(

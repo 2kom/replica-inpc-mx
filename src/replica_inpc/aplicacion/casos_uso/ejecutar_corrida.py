@@ -64,7 +64,12 @@ class EjecutarCorrida:
 
         if persistir and any(
             p is None
-            for p in (self._repositorio, self._almacen, self._escritor, self._ruta_salida)
+            for p in (
+                self._repositorio,
+                self._almacen,
+                self._escritor,
+                self._ruta_salida,
+            )
         ):
             raise ErrorConfiguracion(
                 "persistir=True requiere repositorio, almacen, escritor y ruta_salida"
@@ -93,10 +98,14 @@ class EjecutarCorrida:
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
         serie = alinear_genericos(canasta, serie)
         indice = INDICE_POR_TIPO[tipo]
-        resultado = para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)
+        resultado = para_canasta(canasta).calcular(
+            canasta, serie, id_corrida, indice, tipo
+        )
 
         try:
-            periodos_unicos = resultado.df.index.get_level_values("periodo").unique().tolist()
+            periodos_unicos = (
+                resultado.df.index.get_level_values("periodo").unique().tolist()
+            )
             inegi = self._fuente_validacion.obtener(periodos_unicos)
         except ErrorValidacion:
             inegi = {}
@@ -112,10 +121,12 @@ class EjecutarCorrida:
             self._almacen.guardar(id_corrida, "reporte", reporte.df)  # type: ignore[union-attr]
             self._almacen.guardar(id_corrida, "diagnostico", diagnostico.df)  # type: ignore[union-attr]
             self._escritor.escribir_reporte(  # type: ignore[union-attr]
-                reporte, self._ruta_salida / f"reporte_{id_corrida}.csv"  # type: ignore[operator]
+                reporte,
+                self._ruta_salida / f"reporte_{id_corrida}.csv",  # type: ignore[operator]
             )
             self._escritor.escribir_diagnostico(  # type: ignore[union-attr]
-                diagnostico, self._ruta_salida / f"diagnostico_{id_corrida}.csv"  # type: ignore[operator]
+                diagnostico,
+                self._ruta_salida / f"diagnostico_{id_corrida}.csv",  # type: ignore[operator]
             )
 
         return ResultadoCorrida(

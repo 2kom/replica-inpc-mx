@@ -20,9 +20,7 @@ class EscritorResultados(Protocol):
     Ver: docs/diseño.md §7.1.4, §8.5
     """
 
-    def escribir_reporte(
-        self, reporte: ReporteDetalladoValidacion, ruta: Path
-    ) -> None:
+    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None:
         """Escribe el reporte detallado en la ruta de salida indicada."""
         ...
 

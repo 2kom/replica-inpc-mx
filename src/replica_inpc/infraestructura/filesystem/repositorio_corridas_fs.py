@@ -33,6 +33,7 @@ class RepositorioCorridasFs:
             )
         datos = json.loads(ruta.read_text(encoding="utf-8"))
         from datetime import datetime
+
         return ManifestCorrida(
             id_corrida=datos["id_corrida"],
             version=datos["version"],

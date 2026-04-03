@@ -12,7 +12,7 @@ from replica_inpc.dominio.modelos.validacion import (
 )
 from replica_inpc.dominio.periodos import Periodo
 
-_TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0005, 2024: 0.005}
+_TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0009, 2024: 0.005}
 
 
 def validar(

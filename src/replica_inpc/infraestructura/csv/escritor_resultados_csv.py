@@ -10,9 +10,7 @@ from replica_inpc.dominio.periodos import Periodo
 
 
 class EscritorResultadosCsv:
-    def escribir_reporte(
-        self, reporte: ReporteDetalladoValidacion, ruta: Path
-    ) -> None:
+    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None:
         df = reporte.df.reset_index()
         df["periodo"] = df["periodo"].apply(
             lambda v: str(v) if isinstance(v, Periodo) else v

@@ -264,15 +264,15 @@ Cuando una columna no aplique a una version especifica, su valor debe quedar en 
 
 Para el calculo del `INPC general` en la `v1`, las columnas minimas necesarias de la `canasta_canonica` son:
 
-- `version`
 - `generico`
 - `ponderador`
+
+`version` no es una columna del DataFrame sino un atributo separado de `CanastaCanonica`, accesible via propiedad de solo lectura. Ver diseño §5.1.
 
 Las demas columnas se conservan como parte del contrato canonico del sistema, aunque no sean estrictamente necesarias para el calculo del `INPC general` en esta etapa.
 
 Las columnas acordadas son:
 
-- `version`
 - `generico`
 - `ponderador`
 - `encadenamiento`
@@ -289,10 +289,6 @@ Las columnas acordadas son:
 - `canasta_consumo_minimo`
 
 ### 10.4 Reglas de contenido y tipos de la canasta canonica
-
-- `version`
-  - entero
-  - valores esperados: `2010`, `2013`, `2018`, `2024`
 
 - `generico`
   - texto
@@ -494,10 +490,10 @@ Su interpretacion es la siguiente:
   - cuando la corrida produce resultados completos y utilizables, sin faltantes estructurales ni periodos en `null`.
 
 - `parcial`
-  - cuando la corrida produce resultados utilizables, pero con periodos en `null`, o con validacion no disponible, o con diferencias detectadas.
+  - cuando la corrida produce resultados utilizables, pero con algunos periodos en `null` por faltantes de indice. El estado de la validacion contra el INEGI se reporta por separado en `estado_validacion_global`.
 
 - `fallida`
-  - cuando la corrida no puede producir un resultado utilizable, por ejemplo por faltantes estructurales o por errores generales de importacion o preparacion de insumos.
+  - cuando todos los periodos del calculo producen `estado_calculo != 'ok'`. Los errores de importacion o preparacion de insumos lanzan una excepcion que interrumpe la corrida antes de producir artefactos — en esos casos no se genera ningun `ResultadoCorrida`.
 
 ### 11.6 Falla de la API del INEGI
 

@@ -28,6 +28,8 @@ El historial de cambios vive en git.
     - [5.6 ReporteDetalladoValidacion](#56-reportedetalladovalidacion)
     - [5.7 DiagnosticoFaltantes](#57-diagnosticofaltantes)
     - [5.8 CalculadorBase](#58-calculadorbase)
+      - [5.8.1 LaspeyresDirecto](#581-laspeyresdirecto)
+      - [5.8.2 LaspeyresEncadenado](#582-laspeyresencadenado)
     - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
       - [VersionCanasta](#versioncanasta)
       - [INDICE\_POR\_TIPO](#indice_por_tipo)
@@ -51,6 +53,7 @@ El historial de cambios vive en git.
     - [8.2 Formato del CSV de series](#82-formato-del-csv-de-series)
     - [8.3 Repositorio de corridas (filesystem)](#83-repositorio-de-corridas-filesystem)
     - [8.4 Almacén de artefactos (filesystem)](#84-almacén-de-artefactos-filesystem)
+    - [8.6 FuenteValidacionApi (API del INEGI)](#86-fuentevalidacionapi-api-del-inegi)
     - [8.5 Formato de los CSV de salida (escritor)](#85-formato-de-los-csv-de-salida-escritor)
       - [reporte\_\<id\_corrida\>.csv](#reporte_id_corridacsv)
       - [diagnostico\_\<id\_corrida\>.csv](#diagnostico_id_corridacsv)
@@ -83,7 +86,7 @@ El historial de cambios vive en git.
     - [12.4 Detección dinámica del header en `LectorSeriesCsv`](#124-detección-dinámica-del-header-en-lectorseriescsv)
     - [12.5 ñ en canasta intermedia ✓ RESUELTO](#125-ñ-en-canasta-intermedia--resuelto)
     - [12.6 Formato de series BIE en versiones 2010 y 2013](#126-formato-de-series-bie-en-versiones-2010-y-2013)
-    - [12.7 Cobertura parcial de periodos no reportada explícitamente](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente)
+    - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos](#129-validación-inegi-solo-disponible-para-tipos-específicos)
 
@@ -135,10 +138,8 @@ Agregar una nueva variante de cálculo no requiere modificar el código existent
 ocultando la orquestación interna de casos de uso:
 
 ```python
-corrida = Corrida.desde_archivos(canasta="...", series="...")
-corrida.calcular()
-corrida.validar()
-corrida.exportar()
+corrida = Corrida(token_inegi="mi_token")
+resultado = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
 ```
 
 #### Repository — persistencia de corridas y artefactos
@@ -160,7 +161,7 @@ del puerto correspondiente:
 - `lector_series_csv.py` implementa `LectorSeries`
 - `fuente_validacion_api.py` implementa `FuenteValidacion`
 - `repositorio_corridas_fs.py` implementa `RepositorioCorridas`
-- `escritor_csv.py` implementa `EscritorResultados`
+- `escritor_resultados_csv.py` implementa `EscritorResultados`
 - `almacen_artefactos_fs.py` implementa `AlmacenArtefactos`
 
 ---
@@ -206,7 +207,7 @@ replica-inpc-mx/
 │       │   ├── csv/
 │       │   │   ├── lector_canasta_csv.py
 │       │   │   ├── lector_series_csv.py
-│       │   │   └── escritor_csv.py
+│       │   │   └── escritor_resultados_csv.py
 │       │   ├── filesystem/
 │       │   │   ├── repositorio_corridas_fs.py
 │       │   │   └── almacen_artefactos_fs.py
@@ -262,7 +263,7 @@ replica-inpc-mx/
 pandas, numpy, requests, python-dateutil, plotnine, pyarrow
 
 **Dependencias de desarrollo** (`[project.optional-dependencies.dev]`):
-pytest, ipython, jupyter, ipykernel
+pytest, pytest-mock, ipython, jupyter, ipykernel
 
 Instalación:
 
@@ -709,6 +710,35 @@ solo llama `para_canasta(canasta).calcular(canasta, serie)`.
 
 ---
 
+#### 5.8.1 LaspeyresDirecto
+
+Implementa `CalculadorBase` para canastas sin encadenamiento (versiones 2010 y 2018).
+
+**Fórmula:**
+
+$$I^t = \frac{\sum_j w_j \cdot I_j^t}{100}$$
+
+Donde $w_j$ son los ponderadores de la canasta (suman 100) e $I_j^t$ es el índice del
+genérico $j$ en el periodo $t$.
+
+**Comportamiento ante NaN:** si algún genérico tiene `NaN` en un periodo, ese periodo
+se marca `estado_calculo = 'null_por_faltantes'` e `indice_replicado = NaN`. El resto
+de periodos se calcula normalmente.
+
+**Archivo:** `dominio/calculo/laspeyres.py`
+
+---
+
+#### 5.8.2 LaspeyresEncadenado
+
+Pendiente de implementación. Aplica a canastas con encadenamiento (versiones 2013 y 2024).
+
+Ver metodología en `docs/requerimientos/metodologia_inegi.md §3.4`.
+
+**Archivo:** `dominio/calculo/encadenado.py` (por crear)
+
+---
+
 ### 5.9 tipos.py — tipos compartidos
 
 `tipos.py` define los tipos compartidos por los puertos, los casos de uso y la API.
@@ -949,8 +979,19 @@ class Corrida:
 corrida = Corrida(token_inegi="mi_token")
 inpc_2018 = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
 inpc_2024 = corrida.ejecutar(canasta="data/canasta_2024.csv", series="data/series_2024.csv", version=2024)
-cog_2018  = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018, tipo="COG")
 ```
+
+**Selección de fuente de validación:**
+
+`ejecutar()` selecciona la fuente según `token_inegi` y `tipo`:
+
+| Condición | Fuente usada |
+| --- | --- |
+| `token_inegi=None` | `_FuenteValidacionNula` |
+| `token_inegi` presente y `tipo in INDICADORES_INEGI` | `FuenteValidacionApi(token_inegi, tipo)` |
+| `token_inegi` presente y `tipo not in INDICADORES_INEGI` | `_FuenteValidacionNula` (ver gap §12.9) |
+
+`INDICADORES_INEGI` vive en `infraestructura/inegi/fuente_validacion_api.py`. Ver §8.6.
 
 **`_FuenteValidacionNula`:**
 
@@ -1024,6 +1065,11 @@ y marca la validación como `no_disponible`.
 class FuenteValidacion(Protocol):
     def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]: ...
 ```
+
+Implementaciones:
+
+- `_FuenteValidacionNula` — usada cuando `token_inegi=None`. Siempre lanza `FuenteNoDisponible`.
+- `FuenteValidacionApi` — usada cuando `token_inegi` está presente y `tipo in INDICADORES_INEGI`. Ver §8.6.
 
 ---
 
@@ -1105,6 +1151,7 @@ class EjecutarCorrida:
         ruta_canasta: Path,
         ruta_series: Path,
         version: VersionCanasta,
+        tipo: str = "inpc",
         persistir: bool = False,
     ) -> ResultadoCorrida: ...
 ```
@@ -1117,8 +1164,8 @@ class EjecutarCorrida:
 4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
-7. `para_canasta(canasta).calcular(canasta, serie, id_corrida)` → `ResultadoCalculo`
-8. `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
+7. `indice = INDICE_POR_TIPO[tipo]`; `para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)` → `ResultadoCalculo`
+8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
 9. `validar_inpc.py` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
 10. Si `persistir=True`:
     - `RepositorioCorridas.guardar(manifest)` → `data/runs/<id_corrida>/`
@@ -1340,6 +1387,89 @@ class AlmacenArtefactosFs:
 
 ---
 
+### 8.6 FuenteValidacionApi (API del INEGI)
+
+Implementa `FuenteValidacion` consultando la API de indicadores del INEGI.
+
+**Archivo:** `infraestructura/inegi/fuente_validacion_api.py`
+
+**Constructor:**
+
+```python
+class FuenteValidacionApi:
+    def __init__(self, token: str, tipo: str) -> None: ...
+```
+
+Lanza `ErrorConfiguracion` si `tipo not in INDICADORES_INEGI`.
+
+**Mapeo tipo → indicador:**
+
+```python
+INDICADORES_INEGI: dict[str, str] = {
+    "inpc": "910420",
+    # v2 — subyacente
+    # "subyacente":            "910421",
+    # "subyacente_mercancias": "910422",
+    # "subyacente_servicios":  "910423",
+    # v2 — no subyacente
+    # "no_subyacente":                 "910424",
+    # "no_subyacente_agropecuarios":   "910425",
+    # "no_subyacente_energeticos":     "910426",
+}
+```
+
+El dict vive en el mismo archivo. Para agregar un subíndice en v2 basta descomentar
+la entrada correspondiente; `corrida.py` lo detecta automáticamente vía `tipo in INDICADORES_INEGI`.
+
+**URL de la API:**
+
+``` text
+https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/{indicador}/es/00/false/BIE-BISE/2.0/{token}?type=json
+```
+
+Una sola llamada devuelve todo el histórico disponible (~917 observaciones para INPC).
+El token no es validado por la API (cualquier string funciona).
+
+**Formato de respuesta:**
+
+```json
+{
+  "Series": [{
+    "OBSERVATIONS": [
+      {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "145.44600000000000000000", "OBS_STATUS": "3"},
+      ...
+    ]
+  }]
+}
+```
+
+Las observaciones vienen en orden cronológico descendente. `OBS_STATUS` siempre es `"3"` — no se filtra.
+
+**Mapeo `TIME_PERIOD` → `Periodo`:** `"YYYY/MM/QQ"` → `Periodo(int(YYYY), int(MM), int(QQ))`.
+Verificado: `"2018/07/02"` devuelve `100.0` (periodo base canasta 2018).
+
+**`OBS_VALUE`:** string con decimales (`"145.44600000000000000000"`). Se convierte con `float()`.
+Si es `null` (JSON `None`), se devuelve `None` para ese periodo sin interrumpir el parseo.
+
+**Cache de clase:** el resultado de la primera llamada se guarda en `_cache` (variable de clase),
+keyed por `indicador_id`. Las llamadas subsecuentes — incluso desde instancias distintas —
+no hacen requests adicionales. Para limpiar en tests: `FuenteValidacionApi._cache.clear()`.
+
+**Errores:**
+
+| Situación | Excepción |
+| --- | --- |
+| `tipo not in INDICADORES_INEGI` | `ErrorConfiguracion` (en `__init__`) |
+| Red, timeout (`requests.exceptions.RequestException`) | `FuenteNoDisponible` |
+| HTTP 4xx / 5xx (`raise_for_status`) | `FuenteNoDisponible` |
+| Respuesta no es JSON válido | `RespuestaInvalida` |
+| Sin clave `Series` / `OBSERVATIONS`, o `Series` vacío | `RespuestaInvalida` |
+| `TIME_PERIOD` o `OBS_VALUE` con formato inesperado | `RespuestaInvalida` |
+
+`timeout=10` segundos en cada request.
+
+---
+
 ### 8.5 Formato de los CSV de salida (escritor)
 
 Archivos exportados a `output/` para consumo del usuario. Generados por
@@ -1347,10 +1477,21 @@ Archivos exportados a `output/` para consumo del usuario. Generados por
 
 #### reporte_<id_corrida>.csv
 
-El MultiIndex `(periodo, subindice)` de `ReporteDetalladoValidacion.df` se aplana
+El MultiIndex `(Periodo, indice)` de `ReporteDetalladoValidacion.df` se aplana
 como columnas regulares. `Periodo` se serializa a string (`"1Q Ene 2024"`).
 Diseñado para concatenarse con reportes de otras versiones y construir un historial
 completo del INPC — el par `(periodo, subindice)` identifica unívocamente cada fila.
+
+**Renombrado al serializar:** las columnas del modelo se renombran en el CSV para
+mayor legibilidad en v1. El serializador aplica este mapeo:
+
+| Nombre en modelo (`§5.6`)     | Nombre en CSV       |
+| ----------------------------- | ------------------- |
+| nivel `indice` del MultiIndex | `subindice`         |
+| `indice_replicado`            | `inpc_replicado`    |
+| `indice_inegi`                | `inpc_inegi`        |
+
+En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
 
 | Columna                       | Tipo     | Notas                                        |
 | ----------------------------- | -------- | -------------------------------------------- |
@@ -1750,18 +1891,9 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.7 Cobertura parcial de periodos no reportada explícitamente
+### 12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO
 
-**Comportamiento actual:** el paso 4 de `ejecutar_corrida.py` filtra la `SerieNormalizada` al rango de `RANGOS_VALIDOS[version]`. Si la serie cubre solo parte del rango (ej. llega hasta `1Q Ene 2022` en lugar de `2Q Jul 2024`), la corrida continúa con los periodos disponibles. La cobertura parcial es inferible comparando `total_periodos_esperados` con `total_periodos_calculados` en `ResumenValidacion`, pero no hay un indicador explícito.
-
-**Problema:** `estado_corrida = 'parcial'` está semánticamente reservado para cuando el cálculo produjo `null_por_faltantes` en algunos periodos — no para cuando la serie no cubre el rango completo. Estos son dos tipos distintos de parcialidad que el diseño actual no distingue.
-
-**Solución decidida:** agregar `periodo_inicio` y `periodo_fin` a `ResumenValidacion` (ver §5.5). El usuario puede comparar estos valores contra `RANGOS_VALIDOS[version]` para saber si la corrida cubre el rango completo. No se agrega un nuevo valor a `estado_corrida` — `'parcial'` sigue siendo exclusivo de `null_por_faltantes`.
-
-**Cambios requeridos:**
-
-- `dominio/modelos/validacion.py` — agregar invariante `periodo_inicio <= periodo_fin` a `ResumenValidacion`
-- `dominio/validar_inpc.py` — poblar `periodo_inicio = min(periodos)` y `periodo_fin = max(periodos)` al construir el resumen
+**Solución aplicada:** se agregaron `periodo_inicio = min(periodos)` y `periodo_fin = max(periodos)` a `ResumenValidacion`. El usuario puede comparar estos valores contra `RANGOS_VALIDOS[version]` para saber si la corrida cubre el rango completo. `estado_corrida = 'parcial'` sigue siendo exclusivo de `null_por_faltantes`.
 
 ---
 
