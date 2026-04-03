@@ -15,20 +15,21 @@ El objetivo del proyecto es replicar el **INPC general** usando:
 - indices superiores nacionales de genericos publicados por el INEGI;
 - canastas y ponderadores publicados por el INEGI.
 
-## Alcance actual
+## Alcance actual (v1)
 
-La primera etapa del proyecto contempla:
+La v1 del proyecto permite:
 
-- soporte inicial para la `canasta y ponderadores actualizados a 2018`
-- extension posterior a la `canasta y ponderadores actualizados a 2024`.
+- importar canastas y series de genericos en formato CSV;
+- calcular el INPC general mediante Laspeyres directo (canasta 2018);
+- validar el resultado contra lo publicado por el INEGI via su API de indicadores;
+- exportar resultados de calculo y validacion.
 
-Por ahora, el proyecto **no** incluye:
+El proyecto **no** incluye todavia:
 
-- comparacion de resultados con datos oficiales;
 - subindices;
-- incidencias;
-- variaciones;
-- soporte operativo para `canasta y ponderadores actualizados a 2010` y `actualizacion de ponderadores a 2013`.
+- incidencias ni variaciones;
+- calculo encadenado (canastas 2013 y 2024);
+- soporte operativo para canastas 2010 y 2013.
 
 ## Politica de insumos
 
@@ -51,13 +52,9 @@ El flujo general de uso del proyecto es:
 
 1. descargar los insumos oficiales desde el INEGI;
 2. colocarlos en las rutas esperadas por el proyecto;
-3. ejecutar los scripts o comandos del proyecto para procesarlos y calcular el INPC.
+3. ejecutar la corrida desde un notebook o script.
 
-La documentacion de instalacion y uso se ira agregando conforme avance la implementacion.
-
-## Estado
-
-Proyecto en construccion.
+Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 
 ## Licencia
 

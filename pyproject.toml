@@ -4,9 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "replica-inpc-mx"
-version = "0.1.0"
+version = "1.0.0"
 description = "Replicación del INPC general de México a partir de series y canastas publicadas por el INEGI"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "elias" },
+]
+
 dependencies = [
     "pandas>=2.3.3",
     "numpy>=2.2.6",
@@ -15,6 +20,9 @@ dependencies = [
     "plotnine>=0.15.3",
     "pyarrow>=23.0.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/2kom/replica-inpc-mx"
 
 [project.optional-dependencies]
 dev = [
