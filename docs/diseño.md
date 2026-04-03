@@ -1792,7 +1792,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 | Condición                                                    | `estado_corrida` |
 | ------------------------------------------------------------ | ---------------- |
 | Todos los periodos con `estado_calculo = 'ok'`               | `'ok'`           |
-| Algunos periodos con `estado_calculo = 'null_por_faltantes'` | `'parcial'`      |
+| Algunos periodos con `estado_calculo = 'null_por_faltantes'` | `'ok_parcial'`   |
 | Todos los periodos con `estado_calculo != 'ok'`              | `'fallida'`      |
 
 ---

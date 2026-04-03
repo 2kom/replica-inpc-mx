@@ -377,6 +377,9 @@ El `resumen_validacion` debe ser:
 Las columnas acordadas son:
 
 - `version`
+- `tipo`
+- `periodo_inicio`
+- `periodo_fin`
 - `total_periodos_esperados`
 - `total_periodos_calculados`
 - `total_periodos_con_null`
@@ -462,13 +465,17 @@ El campo `estado_validacion_global` representa el resultado global de la validac
 Los valores acordados para `estado_validacion_global` son:
 
 - `ok`
+- `ok_parcial`
 - `diferencia_detectada`
 - `no_disponible`
 
 Su interpretacion es la siguiente:
 
 - `ok`
-  - cuando la validacion contra el INEGI estuvo disponible y no se detectaron diferencias.
+  - cuando la validacion contra el INEGI estuvo disponible para todos los periodos comparables y no se detectaron diferencias.
+
+- `ok_parcial`
+  - cuando entre los periodos con `estado_calculo == 'ok'`, al menos uno paso la tolerancia y al menos uno no pudo ser comparado (`no_disponible`).
 
 - `diferencia_detectada`
   - cuando la validacion contra el INEGI estuvo disponible y se detectaron diferencias.
@@ -481,7 +488,7 @@ Su interpretacion es la siguiente:
 Los valores acordados para `estado_corrida` son:
 
 - `ok`
-- `parcial`
+- `ok_parcial`
 - `fallida`
 
 Su interpretacion es la siguiente:
@@ -489,7 +496,7 @@ Su interpretacion es la siguiente:
 - `ok`
   - cuando la corrida produce resultados completos y utilizables, sin faltantes estructurales ni periodos en `null`.
 
-- `parcial`
+- `ok_parcial`
   - cuando la corrida produce resultados utilizables, pero con algunos periodos en `null` por faltantes de indice. El estado de la validacion contra el INEGI se reporta por separado en `estado_validacion_global`.
 
 - `fallida`
