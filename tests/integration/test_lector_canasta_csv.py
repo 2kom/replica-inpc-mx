@@ -15,11 +15,11 @@ from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 
 """
 La canasta queda como:
-generico | ponderador | encadenamiento | COG   | CCIF   | inflacion 1 | inflacion 2 | inflacion 3 | SCIAN 1       | SCIAN 2       | canasta basica | canasta consumo minimo |
-arroz    | 10.0       | None           | COG 1 | CCIF 1 | inf 1.1     | inf 2.1     | inf 3.1     | SCIAN 1.1 txt | SCIAN 2.1 txt | x              | X                      |
-frijol   | 20.0       | None           | COG 1 | CCIF 1 | inf 1.1     | inf 2.1     | inf 3.1     | SCIAN 1.1 txt | SCIAN 2.1 txt | x              | x                      |
-leche    | 30.0       | None           | COG 2 | CCIF 2 | inf 1.2     | inf 2.2     | inf 3.2     | SCIAN 1.2 txt | SCIAN 2.2 txt |                |                        |
-huevo    | 40.0       | None           | COG 3 | CCIF 3 | inf 1.3     | inf 2.3     | inf 3.3     | SCIAN 1.3 txt | SCIAN 2.3 txt | x              |                        |
+generico | ponderador | encadenamiento | COG   | CCIF   | inflacion 1 | inflacion 2 | inflacion 3 | SCIAN sector    | SCIAN rama      | canasta basica | canasta consumo minimo |
+arroz    | 10.0       | None           | COG 1 | CCIF 1 | inf 1.1     | inf 2.1     | inf 3.1     | SCIAN sect 1.1  | SCIAN rama 2.1  | x              | X                      |
+frijol   | 20.0       | None           | COG 1 | CCIF 1 | inf 1.1     | inf 2.1     | inf 3.1     | SCIAN sect 1.1  | SCIAN rama 2.1  | x              | x                      |
+leche    | 30.0       | None           | COG 2 | CCIF 2 | inf 1.2     | inf 2.2     | inf 3.2     | SCIAN sect 1.2  | SCIAN rama 2.2  |                |                        |
+huevo    | 40.0       | None           | COG 3 | CCIF 3 | inf 1.3     | inf 2.3     | inf 3.3     | SCIAN sect 1.3  | SCIAN rama 2.3  | x              |                        |
 """
 df_canasta = pd.DataFrame(
     {
@@ -36,8 +36,8 @@ df_canasta = pd.DataFrame(
         "inflacion 1": ["inf 1.1", "inf 1.1", "inf 1.2", "inf 1.3"],
         "inflacion 2": ["inf 2.1", "inf 2.1", "inf 2.2", "inf 2.3"],
         "inflacion 3": ["inf 3.1", "inf 3.1", "inf 3.2", "inf 3.3"],
-        "SCIAN 1": ["SCIAN 1.1 txt", "SCIAN 1.1 txt", "SCIAN 1.2 txt", "SCIAN 1.3 txt"],
-        "SCIAN 2": ["SCIAN 2.1 txt", "SCIAN 2.1 txt", "SCIAN 2.2 txt", "SCIAN 2.3 txt"],
+        "SCIAN sector": ["SCIAN sect 1.1", "SCIAN sect 1.1", "SCIAN sect 1.2", "SCIAN sect 1.3"],
+        "SCIAN rama": ["SCIAN rama 2.1", "SCIAN rama 2.1", "SCIAN rama 2.2", "SCIAN rama 2.3"],
         "canasta basica": ["x", "x", "", "x"],
         "canasta consumo minimo": ["x", "x", None, None],
     }

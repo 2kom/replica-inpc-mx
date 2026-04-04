@@ -23,8 +23,8 @@ COLUMNAS_REQUERIDAS = [
     "inflacion 1",
     "inflacion 2",
     "inflacion 3",
-    "SCIAN 1",
-    "SCIAN 2",
+    "SCIAN sector",
+    "SCIAN rama",
     "canasta basica",
     "canasta consumo minimo",
 ]
