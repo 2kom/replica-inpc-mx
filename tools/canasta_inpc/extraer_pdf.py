@@ -48,6 +48,31 @@ _RE_GENERICO_SIN_PREFIJO = re.compile(
 _RE_SOLO_PONDERADOR = re.compile(r"^\d+\.\d+$")
 
 # ---------------------------------------------------------------------------
+# Patrones 2024 (sidebar-tolerant: \b / (?<!\d) en vez de ^)
+# ---------------------------------------------------------------------------
+_RE_CCIF_GENERICO_2024 = re.compile(
+    r"\b(\d{3})\s+(.+?)\s+(No duradero|Semiduradero|Duradero|Servicio)\s+([\d.]+)\b"
+)
+_RE_CCIF_CLASE_2024 = re.compile(r"(?<!\d)(\d{2}\.\d\.\d)\s+(.+?)\s+([\d.]+)(?:\s+.+)?$")
+_RE_CCIF_GRUPO_2024 = re.compile(r"(?<!\d)(\d{2}\.\d)\s+(.+?)\s+([\d.]+)(?:\s+.+)?$")
+_RE_CCIF_DIVISION_2024 = re.compile(
+    r"(?<!\d)(0[1-9]|1[0-3])\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
+)
+
+_CODIGOS_SECTOR_SCIAN = (
+    r"11|21|22|23|31|32|33|31-33|43|46|48|49|48-49|51|52|53|54|56|61|62|71|72|81|93"
+)
+_RE_SCIAN_GENERICO_2024 = re.compile(
+    r"\b(\d{3})\s+(.+?)\s+(?:Primario|Secundario|Terciario)\s+([\d.]+)\b"
+)
+_RE_SCIAN_SECTOR_2024 = re.compile(
+    rf"(?<!\d)({_CODIGOS_SECTOR_SCIAN})\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
+)
+_RE_SCIAN_RAMA_2024 = re.compile(
+    r"(?<!\d)(\d{4})\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
+)
+
+# ---------------------------------------------------------------------------
 # Detección de secciones
 # ---------------------------------------------------------------------------
 _MARCADORES_SECCION = {
@@ -89,6 +114,8 @@ def extraer_pdf(ruta: Path, version: int) -> pd.DataFrame:
         return _extraer_2010(ruta)
     if version == 2018:
         return _extraer_2018(ruta)
+    if version == 2024:
+        return _extraer_2024(ruta)
     raise NotImplementedError(f"Versión {version} no implementada aún")
 
 
@@ -126,7 +153,7 @@ def _filtrar_ruido(lineas: list[tuple[int, str]]) -> list[tuple[int, str]]:
         if pagina_bloqueada is not None:
             continue
 
-        if l.startswith("(Contin") or l.startswith("Total general") or l.startswith("Nota:"):
+        if "(Contin" in l or "Total general" in l or l.startswith("Nota:"):
             pagina_bloqueada = p
             continue
 
@@ -139,15 +166,15 @@ def _filtrar_ruido(lineas: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def _es_ruido(linea: str) -> bool:
-    # Líneas cortas sin letras (fragmentos numéricos sueltos, puntuación)
-    if len(linea) <= 3 and not re.search(r"[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]", linea):
+    # Líneas muy cortas (fragmentos de sidebar, puntuación)
+    if len(linea) <= 3:
         return True
     # Headers de página
     if linea.startswith("Documento Metodológico") or linea.startswith("Dooccuummeennttoo"):
         return True
     if linea.startswith("Concepto Ponderación") or linea.startswith("CCoonncceeppttoo"):
         return True
-    if "INEGI. Índice nacional de precios al consumidor" in linea:
+    if "ndice" in linea and "onsumidor" in linea and "INEGI" in linea:
         return True
     # Encabezados de sección
     if any(linea.startswith(e) for e in _ENCABEZADOS):
@@ -449,6 +476,113 @@ def _combinar_2018(ccif: list[dict], cog: list[dict], scian: list[dict]) -> pd.D
             df = df.merge(df_extra, on="generico", how="left")
 
     for col in ("COG", "SCIAN sector", "SCIAN rama"):
+        if col not in df.columns:
+            df[col] = ""
+        else:
+            df[col] = df[col].fillna("")
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 2024
+# ---------------------------------------------------------------------------
+
+_MARCADORES_2024 = {
+    "ccif": "la CCIF",
+    "scian": "SCIAN 2023",
+}
+
+
+def _extraer_2024(ruta: Path) -> pd.DataFrame:
+    paginas = _leer_paginas(ruta)
+    secciones = _separar_secciones(paginas, _MARCADORES_2024)
+
+    lineas_ccif = _reconstruir_multilinea(_filtrar_ruido(secciones["ccif"]))
+    lineas_scian = _reconstruir_multilinea(_filtrar_ruido(secciones["scian"]))
+
+    datos_ccif = _parsear_ccif_2024(lineas_ccif)
+    datos_scian = _parsear_scian_2024(lineas_scian)
+    return _combinar_2024(datos_ccif, datos_scian)
+
+
+def _parsear_ccif_2024(lineas: list[str]) -> list[dict]:
+    division = ""
+    grupo = ""
+    clase = ""
+    resultados: list[dict] = []
+
+    for linea in lineas:
+        m = _RE_CCIF_GENERICO_2024.search(linea)
+        if m:
+            resultados.append({
+                "generico": m.group(2),
+                "ponderador": m.group(4),
+                "CCIF division": division,
+                "CCIF grupo": grupo,
+                "CCIF clase": clase,
+                "durabilidad": m.group(3),
+            })
+            continue
+
+        m = _RE_CCIF_CLASE_2024.search(linea)
+        if m:
+            clase = m.group(2)
+            continue
+
+        m = _RE_CCIF_GRUPO_2024.search(linea)
+        if m:
+            grupo = m.group(2)
+            clase = ""
+            continue
+
+        m = _RE_CCIF_DIVISION_2024.search(linea)
+        if m:
+            division = m.group(2)
+            grupo = ""
+            clase = ""
+
+    return resultados
+
+
+def _parsear_scian_2024(lineas: list[str]) -> list[dict]:
+    sector = ""
+    rama = ""
+    resultados: list[dict] = []
+
+    for linea in lineas:
+        m = _RE_SCIAN_RAMA_2024.search(linea)
+        if m:
+            rama = f"{m.group(1)} {m.group(2)}"
+            continue
+
+        m = _RE_SCIAN_SECTOR_2024.search(linea)
+        if m:
+            sector = f"{m.group(1)} {m.group(2)}"
+            rama = ""
+            continue
+
+        m = _RE_SCIAN_GENERICO_2024.search(linea)
+        if m:
+            resultados.append({
+                "generico": m.group(2),
+                "SCIAN sector": sector,
+                "SCIAN rama": rama,
+            })
+
+    return resultados
+
+
+def _combinar_2024(ccif: list[dict], scian: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(ccif)
+    if df.empty:
+        return pd.DataFrame()
+
+    df_scian = pd.DataFrame(scian)
+    if not df_scian.empty:
+        df = df.merge(df_scian, on="generico", how="left")
+
+    for col in ("SCIAN sector", "SCIAN rama"):
         if col not in df.columns:
             df[col] = ""
         else:
