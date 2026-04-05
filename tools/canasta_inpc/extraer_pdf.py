@@ -39,6 +39,11 @@ _RE_COG_TOPLEVEL = re.compile(r"^(\d)\.\s+(.+?)\s+([\d.]+)\s*$")
 # Genérico: "001 Botanas elaboradas con cereales 0.1628"
 _RE_COG_GENERICO = re.compile(r"^(\d{3})\s+(.+?)\s+([\d.]+)\s*$")
 
+# Genérico sin prefijo numérico (2010): "Arroz 0.1215"
+_RE_GENERICO_SIN_PREFIJO = re.compile(
+    r"^([A-ZÁÉÍÓÚÜÑa-záéíóúüñ].*?)\s+(\d+\.\d+)\s*$"
+)
+
 # Ponderador suelto (línea que es solo un número decimal)
 _RE_SOLO_PONDERADOR = re.compile(r"^\d+\.\d+$")
 
@@ -57,6 +62,9 @@ _SIDEBAR_INVERTIDO = {
     "ocigolodotem", "otnemucod", "rodimunsnoc",
     "laciremoc", "noicubirtsid", "noisimsnart", "noicareneg",
     "soicerp", "lanoican", "ecidni", ".igeni",
+    # 2010
+    "serodarednop", "erbmeicid", "la", "noc", "ona",
+    ".ocirotsih", ".8002", "hgine",
 }
 
 # Encabezados de sección y títulos de página
@@ -65,6 +73,7 @@ _ENCABEZADOS = (
     "Anexo C.", "Anexo D.", "Anexo E.", "Anexo F.",
     "C. Canasta", "D. Canasta",
     "Concepto Ponderador",
+    "Concepto Ponderación",
     "Concepto Durabilidad Ponderador",
     "relativos a la segunda quincena",
     "dos a la segunda quincena",
@@ -76,6 +85,8 @@ def extraer_pdf(ruta: Path, version: int) -> pd.DataFrame:
 
     Devuelve DataFrame con columnas: generico, ponderador, + columnas PDF de la versión.
     """
+    if version == 2010:
+        return _extraer_2010(ruta)
     if version == 2018:
         return _extraer_2018(ruta)
     raise NotImplementedError(f"Versión {version} no implementada aún")
@@ -175,6 +186,73 @@ def _separar_secciones(
     return secciones
 
 
+# ---------------------------------------------------------------------------
+# 2010
+# ---------------------------------------------------------------------------
+
+_MARCADORES_2010 = {
+    "ccif": "CCIF y ponderaciones",
+}
+
+
+def _extraer_2010(ruta: Path) -> pd.DataFrame:
+    paginas = _leer_paginas(ruta)
+    secciones = _separar_secciones(paginas, _MARCADORES_2010)
+    lineas = _reconstruir_multilinea(_filtrar_ruido(secciones["ccif"]))
+    datos = _parsear_ccif_2010(lineas)
+    if not datos:
+        return pd.DataFrame()
+    return pd.DataFrame(datos)
+
+
+def _parsear_ccif_2010(lineas: list[str]) -> list[dict]:
+    division = ""
+    grupo = ""
+    clase = ""
+    resultados: list[dict] = []
+
+    for linea in lineas:
+        # Clase: "01.1.1 Pan y cereales 3.6767"
+        m = _RE_CCIF_CLASE.match(linea)
+        if m:
+            clase = m.group(2)
+            continue
+
+        # Grupo: "01.1 ALIMENTOS 16.9006"
+        m = _RE_CCIF_GRUPO.match(linea)
+        if m:
+            grupo = m.group(2)
+            clase = ""
+            continue
+
+        # División: "01 ALIMENTOS Y BEBIDAS NO ALCOHÓLICAS 18.9173"
+        m = _RE_CCIF_DIVISION.match(linea)
+        if m:
+            division = m.group(2)
+            grupo = ""
+            clase = ""
+            continue
+
+        # Genérico: "Arroz 0.1215" (sin prefijo numérico)
+        m = _RE_GENERICO_SIN_PREFIJO.match(linea)
+        if m:
+            nombre = m.group(1)
+            # Saltar líneas de agregado (INPC, Total)
+            if nombre.upper() in ("INPC", "TOTAL"):
+                continue
+            if not division:
+                continue
+            resultados.append({
+                "generico": nombre,
+                "ponderador": m.group(2),
+                "CCIF division": division,
+                "CCIF grupo": grupo,
+                "CCIF clase": clase,
+            })
+
+    return resultados
+
+
 def _reconstruir_multilinea(lineas: list[tuple[int, str]]) -> list[str]:
     """Paso 4: une líneas partidas y devuelve líneas limpias sin número de página."""
     resultado: list[str] = []
@@ -237,12 +315,14 @@ def _tiene_ponderador_final(linea: str) -> bool:
 
 
 def _es_continuacion_texto(linea: str) -> bool:
-    """True si la línea parece continuación de un nombre (no empieza con dígito, no es ruido)."""
+    """True si la línea parece continuación de un nombre (no empieza con dígito, no es ruido, sin ponderador propio)."""
     if not linea or len(linea) < 4:
         return False
     if linea[0].isdigit():
         return False
     if _es_ruido(linea):
+        return False
+    if _tiene_ponderador_final(linea):
         return False
     return True
 
