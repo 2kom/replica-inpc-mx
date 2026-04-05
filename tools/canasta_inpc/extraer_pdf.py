@@ -6,6 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pdfplumber
 
+from canasta_inpc.normalizar import normalizar_celda
+
 
 # ---------------------------------------------------------------------------
 # Patrones CCIF (Anexo C en 2018)
@@ -46,6 +48,8 @@ _RE_GENERICO_SIN_PREFIJO = re.compile(
 
 # Ponderador suelto (línea que es solo un número decimal)
 _RE_SOLO_PONDERADOR = re.compile(r"^\d+\.\d+$")
+# Ponderador + factor (formato 2013)
+_RE_SOLO_PONDERADOR_FACTOR = re.compile(r"^\d+\.\d+\s+\d+\.\d+$")
 
 # ---------------------------------------------------------------------------
 # Patrones 2024 (sidebar-tolerant: \b / (?<!\d) en vez de ^)
@@ -112,6 +116,8 @@ def extraer_pdf(ruta: Path, version: int) -> pd.DataFrame:
     """
     if version == 2010:
         return _extraer_2010(ruta)
+    if version == 2013:
+        return _extraer_2013(ruta)
     if version == 2018:
         return _extraer_2018(ruta)
     if version == 2024:
@@ -352,6 +358,347 @@ def _es_continuacion_texto(linea: str) -> bool:
     if _tiene_ponderador_final(linea):
         return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# 2013
+# ---------------------------------------------------------------------------
+
+_MARCADORES_2013 = {
+    "scian": "Anexo II",   # verificar antes que "Anexo I" (es substring)
+    "ccif": "Anexo I",
+}
+
+# Línea con concepto + ponderador + factor (formato 2013)
+_RE_LINEA_2013 = re.compile(r"^(.+?)\s+([\d.]+)\s+([\d.]+)$")
+# División: "01 NOMBRE... pond factor"
+_RE_DIVISION_2013 = re.compile(r"^(\d{2})\s+(.+?)\s+[\d.]+\s+[\d.]+$")
+# Sub-nivel CCIF: "01.1" o "01.1.1"
+_RE_SUBNIVEL_2013 = re.compile(r"^\d{2}(?:\.\d)+")
+# Sector SCIAN: "11. Nombre" o "31-33. Nombre" con pond+factor
+_RE_SECTOR_2013 = re.compile(
+    r"^(\d{2}(?:-\d{2})?)\.?\s+(.+?)\s+([\d.]+)\s+([\d.]+)$"
+)
+# Rama SCIAN: "Rama 1111. Nombre" con pond+factor
+_RE_RAMA_2013 = re.compile(
+    r"^Rama\s+(\d{4})\.?\s+(.+?)\s+([\d.]+)\s+([\d.]+)$", re.IGNORECASE
+)
+
+
+def _des_duplicar_bold(texto: str) -> str:
+    """Des-duplica texto bold del PDF 2013 donde cada carácter aparece dos veces.
+
+    Opera token por token y solo colapsa los casos donde casi todos los
+    caracteres vienen en pares consecutivos (CClLaassee -> Clase, 1111.. -> 11.).
+    Evita degradar tokens válidos como II, III, 11 o 22.
+    """
+    palabras = texto.split(" ")
+    resultado: list[str] = []
+    for palabra in palabras:
+        if len(palabra) == 2 and palabra[0] == palabra[1] and palabra[0].islower():
+            resultado.append(palabra[0])
+            continue
+        if len(palabra) < 4:
+            resultado.append(palabra)
+            continue
+
+        limite_pares = len(palabra) - (len(palabra) % 2)
+        total_pares = limite_pares // 2
+        pares_ok = sum(
+            1
+            for i in range(0, limite_pares, 2)
+            if palabra[i] == palabra[i + 1]
+        )
+        if total_pares == 0 or (pares_ok / total_pares) < 0.8:
+            resultado.append(palabra)
+            continue
+
+        chars = [palabra[i] for i in range(0, limite_pares, 2)]
+        if len(palabra) % 2:
+            chars.append(palabra[-1])
+        resultado.append("".join(chars))
+    return " ".join(resultado)
+
+
+def _preprocesar_2013(lineas: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Aplica des-duplicación de bold a cada línea."""
+    return [(p, _des_duplicar_bold(l)) for p, l in lineas]
+
+
+def _separar_secciones_2013(
+    lineas: list[tuple[int, str]],
+) -> dict[str, list[tuple[int, str]]]:
+    """Separa anexos 2013 por coincidencia exacta en el PDF crudo.
+
+    No reutiliza _separar_secciones porque "Anexo I" es substring de
+    "Anexo II" y "Anexo III", y la des-duplicación puede alterar los romanos.
+    """
+    secciones = {"ccif": [], "scian": []}
+    seccion_actual: str | None = None
+
+    for pagina, linea in lineas:
+        if linea == "Anexo I":
+            seccion_actual = "ccif"
+            continue
+        if linea == "Anexo II":
+            seccion_actual = "scian"
+            continue
+        if linea == "Anexo III":
+            seccion_actual = None
+            continue
+
+        if seccion_actual is not None:
+            secciones[seccion_actual].append((pagina, linea))
+
+    return secciones
+
+
+def _reconstruir_multilinea_2013(lineas: list[tuple[int, str]]) -> list[str]:
+    """Reconstruye líneas 2013 con patrón texto + ponderador/factor + continuación.
+
+    A diferencia de 2018/2024, aquí cada fila válida termina con dos números
+    (ponderador y factor). No hacemos una pasada general de continuaciones para
+    no mezclar genéricos completos con la siguiente rama o sector.
+    """
+    resultado: list[str] = []
+    i = 0
+
+    while i < len(lineas):
+        _, linea = lineas[i]
+
+        if i + 2 < len(lineas):
+            _, l1 = lineas[i + 1]
+            _, l2 = lineas[i + 2]
+            if (
+                _parece_inicio_estructura_2013(linea)
+                and not _tiene_ponderador_y_factor_final(linea)
+                and _RE_SOLO_PONDERADOR_FACTOR.match(l1)
+                and _es_continuacion_texto(l2)
+            ):
+                resultado.append(f"{linea} {l2} {l1}")
+                i += 3
+                continue
+
+            m_l1 = _extraer_texto_y_numeros_final_2013(l1)
+            if (
+                _parece_inicio_estructura_2013(linea)
+                and not _tiene_ponderador_y_factor_final(linea)
+                and m_l1
+                and m_l1[0]
+                and m_l1[0][0].islower()
+                and _es_continuacion_texto(l2)
+            ):
+                resultado.append(f"{linea} {m_l1[0]} {l2} {m_l1[1]}")
+                i += 3
+                continue
+
+        if i + 1 < len(lineas):
+            _, l1 = lineas[i + 1]
+            if (
+                _parece_inicio_estructura_2013(linea)
+                and not _tiene_ponderador_y_factor_final(linea)
+                and _RE_SOLO_PONDERADOR_FACTOR.match(l1)
+            ):
+                resultado.append(f"{linea} {l1}")
+                i += 2
+                continue
+
+            m_l1 = _extraer_texto_y_numeros_final_2013(l1)
+            if (
+                _parece_inicio_estructura_2013(linea)
+                and not _tiene_ponderador_y_factor_final(linea)
+                and m_l1
+                and m_l1[0]
+                and m_l1[0][0].islower()
+            ):
+                resultado.append(f"{linea} {m_l1[0]} {m_l1[1]}")
+                i += 2
+                continue
+
+        resultado.append(linea)
+        i += 1
+
+    return resultado
+
+
+def _extraer_2013(ruta: Path) -> pd.DataFrame:
+    paginas = _leer_paginas(ruta)
+    secciones_raw = _separar_secciones_2013(paginas)
+    secciones = {
+        nombre: _preprocesar_2013(datos)
+        for nombre, datos in secciones_raw.items()
+    }
+
+    lineas_ccif = _reconstruir_multilinea_2013(_filtrar_ruido(secciones["ccif"]))
+    lineas_scian = _reconstruir_multilinea_2013(_filtrar_ruido(secciones["scian"]))
+
+    datos_ccif = _parsear_ccif_2013(lineas_ccif)
+    datos_scian = _parsear_scian_2013(lineas_scian)
+    return _combinar_2013(datos_ccif, datos_scian)
+
+
+def _parsear_ccif_2013(lineas: list[str]) -> list[dict]:
+    division = ""
+    grupo = ""
+    clase = ""
+    resultados: list[dict] = []
+
+    for linea in lineas:
+        if "Factor de Encadenamiento" in linea or linea.startswith("Anexo"):
+            continue
+
+        m = _RE_LINEA_2013.match(linea)
+        if not m:
+            continue
+
+        concepto = m.group(1).strip()
+        ponderador = m.group(2)
+
+        # División: "01 NOMBRE"
+        m_div = _RE_DIVISION_2013.match(linea)
+        if m_div:
+            division = m_div.group(2)
+            grupo = ""
+            clase = ""
+            continue
+
+        if concepto.lower() in {"inpc", "indice general", "índice general"}:
+            continue
+
+        # Sub-nivel (grupo o clase): "01.1" o "01.1.1"
+        m_sub = _RE_SUBNIVEL_2013.match(concepto)
+        if m_sub:
+            codigo = m_sub.group()
+            nombre = concepto[len(codigo):].strip()
+            if codigo.count(".") == 1:
+                grupo = nombre
+                clase = ""
+            elif codigo.count(".") == 2:
+                clase = nombre
+            continue
+
+        if re.match(r"^\d{1,2}\s+", concepto):
+            continue
+        if not division:
+            continue
+        if len(concepto) < 3:
+            continue
+
+        resultados.append({
+            "generico": concepto,
+            "ponderador": ponderador,
+            "CCIF division": division,
+            "CCIF grupo": grupo,
+            "CCIF clase": clase,
+        })
+
+    return resultados
+
+
+def _parsear_scian_2013(lineas: list[str]) -> list[dict]:
+    sector = ""
+    rama = ""
+    resultados: list[dict] = []
+
+    for linea in lineas:
+        linea = _normalizar_codigo_scian_2013(linea)
+        if linea.startswith("Anexo") or "Clasificación SCIAN" in linea:
+            continue
+        if linea.lower().startswith("sector econ"):
+            continue
+
+        # Rama: "Rama 1111. Nombre pond factor"
+        m_rama = _RE_RAMA_2013.match(linea)
+        if m_rama:
+            rama = f"{m_rama.group(1)} {m_rama.group(2)}"
+            continue
+
+        # Sector: "11. Nombre pond factor"
+        m_sector = _RE_SECTOR_2013.match(linea)
+        if m_sector:
+            codigo = m_sector.group(1)
+            # Evitar confundir rama (4 dígitos) como sector
+            if codigo.isdigit() and len(codigo) == 4:
+                pass
+            else:
+                sector = f"{codigo} {m_sector.group(2)}"
+                rama = ""
+                continue
+
+        # Genérico: "Nombre pond factor"
+        m = _RE_LINEA_2013.match(linea)
+        if not m:
+            continue
+
+        concepto = m.group(1).strip()
+        ponderador = m.group(2)
+
+        if concepto.lower() in {"indice general", "índice general"}:
+            continue
+        if concepto.lower().startswith("rama "):
+            continue
+        if re.match(r"^\d{2}(?:-\d{2})?\.?\s", concepto):
+            continue
+        if concepto and concepto[0].islower():
+            continue
+        if not sector or not rama:
+            continue
+        if len(concepto) < 3:
+            continue
+
+        resultados.append({
+            "generico": concepto,
+            "SCIAN sector": sector,
+            "SCIAN rama": rama,
+        })
+
+    return resultados
+
+
+def _combinar_2013(ccif: list[dict], scian: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(ccif)
+    if df.empty:
+        return pd.DataFrame()
+
+    df_scian = pd.DataFrame(scian)
+    if not df_scian.empty:
+        df["_clave_generico"] = df["generico"].map(normalizar_celda)
+        df_scian["_clave_generico"] = df_scian["generico"].map(normalizar_celda)
+        df = df.merge(
+            df_scian.drop(columns=["generico"]),
+            on="_clave_generico",
+            how="left",
+        )
+        df.drop(columns=["_clave_generico"], inplace=True)
+
+    for col in ("SCIAN sector", "SCIAN rama"):
+        if col not in df.columns:
+            df[col] = ""
+        else:
+            df[col] = df[col].fillna("")
+
+    return df
+
+
+def _tiene_ponderador_y_factor_final(linea: str) -> bool:
+    return bool(re.search(r"\d+\.\d+\s+\d+\.\d+\s*$", linea))
+
+
+def _extraer_texto_y_numeros_final_2013(linea: str) -> tuple[str, str] | None:
+    m = re.match(r"^(.+?)\s+(\d+\.\d+\s+\d+\.\d+)\s*$", linea)
+    if not m:
+        return None
+    return m.group(1).strip(), m.group(2)
+
+
+def _parece_inicio_estructura_2013(linea: str) -> bool:
+    return bool(
+        re.match(r"^(?:Rama\s+\d{4}\.?|(?:\d{2}(?:-\d{2})?|\d{2}\.\d(?:\.\d)?)\.?)\s", linea)
+    )
+
+
+def _normalizar_codigo_scian_2013(linea: str) -> str:
+    return re.sub(r"^(\d{2})-(\d)\2(\d)\3\.\.", r"\1-\2\3.", linea)
 
 
 # ---------------------------------------------------------------------------
