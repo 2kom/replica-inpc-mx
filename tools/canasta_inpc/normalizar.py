@@ -4,6 +4,7 @@ import unicodedata
 import pandas as pd
 
 _COLUMNAS_SIN_NORMALIZAR = {"ponderador", "encadenamiento", "canasta basica", "canasta consumo minimo"}
+_COLUMNAS_CONSERVAR_PREFIJO = {"SCIAN sector", "SCIAN rama"}
 
 _RE_PREFIJO_NUMERICO = re.compile(r"^\d+[\.\-\)\s]\s*")
 
@@ -53,5 +54,8 @@ def normalizar_genericos(df: pd.DataFrame) -> pd.DataFrame:
         if col in _COLUMNAS_SIN_NORMALIZAR:
             continue
         if df[col].dtype == object:
-            df[col] = df[col].fillna("").astype(str).map(normalizar_celda)
+            if col in _COLUMNAS_CONSERVAR_PREFIJO:
+                df[col] = df[col].fillna("").astype(str).map(normalizar_texto)
+            else:
+                df[col] = df[col].fillna("").astype(str).map(normalizar_celda)
     return df

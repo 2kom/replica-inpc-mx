@@ -18,7 +18,8 @@ def escribir_registro_xlsx(
     ruta_json = args.salida / f"xlsx_{args.version}_{ahora}.json"
 
     cols_clasificacion = [
-        c for c in columnas_xlsx(args.version)
+        c
+        for c in columnas_xlsx(args.version)
         if c not in ("generico", "ponderador", "encadenamiento")
     ]
 
@@ -56,13 +57,35 @@ def escribir_registro_pdf(
     ruta_json = args.salida / f"pdf_{args.version}_{ahora}.json"
 
     cols_clasificacion = [
-        c for c in df_final.columns
+        c
+        for c in df_final.columns
         if c not in ("generico", "ponderador", "encadenamiento")
         and df_final[c].astype(str).str.strip().ne("").any()
     ]
 
     from canasta_inpc.config import columnas_pdf
+
     cols_enriquecidas = columnas_pdf(args.version)
+
+    # Columnas compartidas: clasificaciones con datos en ambas fuentes
+    skip = {
+        "generico",
+        "ponderador",
+        "encadenamiento",
+        "canasta basica",
+        "canasta consumo minimo",
+    }
+    cols_xlsx_no_vacias = {
+        c
+        for c in df_xlsx.columns
+        if c not in skip and df_xlsx[c].astype(str).str.strip().ne("").any()
+    }
+    cols_pdf_no_vacias = {
+        c
+        for c in df_pdf.columns
+        if c not in skip and df_pdf[c].astype(str).str.strip().ne("").any()
+    }
+    cols_compartidas = sorted(cols_xlsx_no_vacias & cols_pdf_no_vacias)
 
     registro: dict = {
         "tipo": "pdf",
@@ -81,14 +104,34 @@ def escribir_registro_pdf(
             col: _resumen_clasificacion(df_final, col) for col in cols_clasificacion
         },
         "columnas_enriquecidas": cols_enriquecidas,
+        "columnas_compartidas": cols_compartidas,
         "enriquecimiento": _resumen_enriquecimiento(diferencias, cols_enriquecidas),
-        "sin_match_pdf": [d for d in diferencias if d.get("motivo") == "no encontrado en pdf"],
-        "ponderador_no_coincide": [d for d in diferencias if "csv" in d and "pdf" in d and "decimales" in d],
-        "diferencias_resueltas": [d for d in diferencias if "elegido" in d],
+        "sin_match_pdf": [
+            d for d in diferencias if d.get("motivo") == "no encontrado en pdf"
+        ],
+        "sin_match_xlsx": [
+            d for d in diferencias if d.get("motivo") == "en pdf pero no en xlsx"
+        ],
+        "ponderador_no_coincide": [
+            d for d in diferencias if "csv" in d and "pdf" in d and "decimales" in d
+        ],
+        "agregaciones": [
+            {
+                "generico": d["generico"],
+                "clasificacion": d["columna"],
+                "categoria": d["pdf"],
+            }
+            for d in diferencias
+            if d.get("elegido") and not d.get("csv")
+        ],
+        "diferencias_resueltas": [
+            d for d in diferencias if d.get("elegido") and d.get("csv")
+        ],
         "validacion_conteo": _validacion_conteo(df_final, cols_enriquecidas),
     }
 
     ruta_json.write_text(json.dumps(registro, ensure_ascii=False, indent=2))
+    _imprimir_resumen_pdf(registro, ruta_csv, ruta_json)
 
 
 def _detalle_genericos(df: pd.DataFrame, tiene_enc: bool) -> list[dict]:
@@ -102,12 +145,66 @@ def _detalle_genericos(df: pd.DataFrame, tiene_enc: bool) -> list[dict]:
 
 
 def _imprimir_resumen(registro: dict, ruta_csv: Path, ruta_json: Path) -> None:
-    print(f"\n  version {registro['version']}: {registro['genericos']} genericos extraidos")
+    print(
+        f"\n  version {registro['version']}: {registro['genericos']} genericos extraidos"
+    )
     enc = registro["encadenamientos"]
     if enc is not None:
         print(f"  encadenamientos: {enc}")
     for col, info in registro["clasificaciones"].items():
-        print(f"  {col}: {info['genericos_clasificados']} clasificados, {info['categorias_unicas']} categorias")
+        print(
+            f"  {col}: {info['genericos_clasificados']} clasificados, {info['categorias_unicas']} categorias"
+        )
+    print(f"\n  csv:      {ruta_csv}")
+    print(f"  registro: {ruta_json}\n")
+
+
+def _imprimir_resumen_pdf(registro: dict, ruta_csv: Path, ruta_json: Path) -> None:
+    total_agregadas = len(registro["agregaciones"])
+    print(
+        f"\n  version {registro['version']}: {registro['genericos']} genericos extraidos, {total_agregadas} categorias enriquecidas"
+    )
+    enc = registro["encadenamientos"]
+    if enc is not None:
+        print(f"  encadenamientos: {enc}")
+
+    cols_enriquecidas = set(registro["columnas_enriquecidas"])
+    cols_compartidas = set(registro["columnas_compartidas"])
+    enriquecimiento = registro["enriquecimiento"]
+
+    for col, info in registro["clasificaciones"].items():
+        base = f"  {col}: {info['genericos_clasificados']} clasificados, {info['categorias_unicas']} categorias"
+        if col in cols_enriquecidas:
+            n = enriquecimiento[col]["agregados"]
+            print(f"{base}, {n} categorias agregadas desde pdf")
+        elif col in cols_compartidas:
+            print(f"{base}, {info['genericos_clasificados']} comprobadas")
+        else:
+            print(base)
+
+    # Warnings
+    sin_pdf = registro["sin_match_pdf"]
+    if sin_pdf:
+        print(f"\n  WARNING: {len(sin_pdf)} generico(s) del xlsx sin match en pdf:")
+        for d in sin_pdf:
+            print(f"    - {d['generico']}")
+
+    sin_xlsx = registro["sin_match_xlsx"]
+    if sin_xlsx:
+        print(f"\n  WARNING: {len(sin_xlsx)} generico(s) del pdf sin match en xlsx:")
+        for d in sin_xlsx:
+            print(f"    - {d['generico']}")
+
+    pond = registro["ponderador_no_coincide"]
+    if pond:
+        print(f"\n  WARNING: {len(pond)} ponderador(es) no coinciden:")
+        for d in pond:
+            print(f"    - {d['generico']}: csv={d['csv']} pdf={d['pdf']}")
+
+    val = registro["validacion_conteo"]
+    if not val["ok"]:
+        print(f"\n  WARNING: validacion de conteo fallo ({val['faltantes']} faltantes)")
+
     print(f"\n  csv:      {ruta_csv}")
     print(f"  registro: {ruta_json}\n")
 
@@ -130,7 +227,9 @@ def _resumen_enriquecimiento(diferencias: list[dict], cols: list[str]) -> dict:
         resumen[col] = {
             "agregados": sum(1 for d in col_difs if d.get("elegido")),
             "ya_existian": sum(1 for d in col_difs if d.get("ya_existia", False)),
-            "diferencias_nombre": sum(1 for d in col_difs if d.get("csv") != d.get("pdf")),
+            "diferencias_nombre": sum(
+                1 for d in col_difs if d.get("csv") and d.get("csv") != d.get("pdf")
+            ),
         }
     return resumen
 
