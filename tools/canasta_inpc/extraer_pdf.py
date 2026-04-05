@@ -846,7 +846,9 @@ def _extraer_2024(ruta: Path) -> pd.DataFrame:
     secciones = _separar_secciones(paginas, _MARCADORES_2024)
 
     lineas_ccif = _reconstruir_multilinea(_filtrar_ruido(secciones["ccif"]))
-    lineas_scian = _reconstruir_multilinea(_filtrar_ruido(secciones["scian"]))
+    lineas_scian = _reconstruir_multilinea(
+        _preprocesar_scian_2024(_filtrar_ruido(secciones["scian"]))
+    )
 
     datos_ccif = _parsear_ccif_2024(lineas_ccif)
     datos_scian = _parsear_scian_2024(lineas_scian)
@@ -900,12 +902,12 @@ def _parsear_scian_2024(lineas: list[str]) -> list[dict]:
     for linea in lineas:
         m = _RE_SCIAN_RAMA_2024.search(linea)
         if m:
-            rama = f"{m.group(1)} {m.group(2)}"
+            rama = f"{m.group(1)} {_reparar_texto_scian_2024(m.group(2))}"
             continue
 
         m = _RE_SCIAN_SECTOR_2024.search(linea)
         if m:
-            sector = f"{m.group(1)} {m.group(2)}"
+            sector = f"{m.group(1)} {_reparar_texto_scian_2024(m.group(2))}"
             rama = ""
             continue
 
@@ -936,3 +938,46 @@ def _combinar_2024(ccif: list[dict], scian: list[dict]) -> pd.DataFrame:
             df[col] = df[col].fillna("")
 
     return df
+
+
+def _preprocesar_scian_2024(
+    lineas: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    """Limpia prefijos de sidebar que pdfplumber incrusta en el SCIAN 2024.
+
+    En 2024 aparecen fragmentos verticales antes del código real
+    ("o ilu 8111 ...", "d 291 ...", "2 cionales ..."). Se limpian antes de
+    reconstruir multi-línea para que las continuaciones vuelvan a verse como
+    texto normal.
+    """
+    resultado: list[tuple[int, str]] = []
+    for pagina, linea in lineas:
+        limpia = _limpiar_prefijo_sidebar_2024(linea)
+        if limpia:
+            resultado.append((pagina, limpia))
+    return resultado
+
+
+def _limpiar_prefijo_sidebar_2024(linea: str) -> str:
+    # Fragmentos verticales antes de un código SCIAN/generico.
+    linea = re.sub(
+        r"^(?:[A-Za-z.]+\s+){1,3}(?=(?:\d{2}(?:-\d{2})?|\d{3}|\d{4})\b)",
+        "",
+        linea,
+    )
+    # Dígito suelto antes del código real: "0 280 ...", "2 9312 ...".
+    linea = re.sub(r"^\d\s+(?=\d{3,4}\b)", "", linea)
+    # Dígito suelto antes de una continuación de texto: "2 cionales ...".
+    linea = re.sub(r"^\d\s+(?=[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])", "", linea)
+    return linea.strip()
+
+
+def _reparar_texto_scian_2024(texto: str) -> str:
+    """Corrige cortes de palabra que quedaron tras reconstruir el SCIAN 2024."""
+    reemplazos = {
+        "comesti bles": "comestibles",
+        "interna cionales": "internacionales",
+    }
+    for roto, bueno in reemplazos.items():
+        texto = texto.replace(roto, bueno)
+    return texto
