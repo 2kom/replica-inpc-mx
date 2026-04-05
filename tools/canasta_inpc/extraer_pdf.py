@@ -39,8 +39,8 @@ _RE_COG_TOPLEVEL = re.compile(r"^(\d)\.\s+(.+?)\s+([\d.]+)\s*$")
 # Genérico: "001 Botanas elaboradas con cereales 0.1628"
 _RE_COG_GENERICO = re.compile(r"^(\d{3})\s+(.+?)\s+([\d.]+)\s*$")
 
-# Ponderador al final de una línea
-_RE_PONDERADOR_FINAL = re.compile(r"\s+([\d.]+)\s*$")
+# Ponderador suelto (línea que es solo un número decimal)
+_RE_SOLO_PONDERADOR = re.compile(r"^\d+\.\d+$")
 
 # ---------------------------------------------------------------------------
 # Detección de secciones
@@ -50,6 +50,25 @@ _MARCADORES_SECCION = {
     "cog": "Objeto del gasto",
     "scian": "clasificada por SCIAN",
 }
+
+# Sidebar invertido: palabras conocidas del texto vertical del PDF
+_SIDEBAR_INVERTIDO = {
+    "ed", "oiluj", "anecniuq", "adnuges", "esab",
+    "ocigolodotem", "otnemucod", "rodimunsnoc",
+    "laciremoc", "noicubirtsid", "noisimsnart", "noicareneg",
+    "soicerp", "lanoican", "ecidni", ".igeni",
+}
+
+# Encabezados de sección y títulos de página
+_ENCABEZADOS = (
+    "Canasta del INPC clasificada",
+    "Anexo C.", "Anexo D.", "Anexo E.", "Anexo F.",
+    "C. Canasta", "D. Canasta",
+    "Concepto Ponderador",
+    "Concepto Durabilidad Ponderador",
+    "relativos a la segunda quincena",
+    "dos a la segunda quincena",
+)
 
 
 def extraer_pdf(ruta: Path, version: int) -> pd.DataFrame:
@@ -63,98 +82,193 @@ def extraer_pdf(ruta: Path, version: int) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Pipeline de preprocesamiento
+# ---------------------------------------------------------------------------
+
+
+def _leer_paginas(ruta: Path) -> list[tuple[int, str]]:
+    """Paso 1: lee el PDF y devuelve (pagina, linea) para cada línea."""
+    resultado: list[tuple[int, str]] = []
+    with pdfplumber.open(ruta) as pdf:
+        for i, page in enumerate(pdf.pages):
+            texto = page.extract_text() or ""
+            for raw in texto.split("\n"):
+                linea = " ".join(raw.split()).strip()
+                if linea:
+                    resultado.append((i, linea))
+    return resultado
+
+
+def _filtrar_ruido(lineas: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Paso 2: elimina líneas que no son datos.
+
+    Después de un marcador de fin de datos en una página, todo lo restante
+    de esa página se descarta (sidebar invertido, pie de página).
+    """
+    resultado: list[tuple[int, str]] = []
+    pagina_bloqueada: int | None = None
+
+    for p, l in lineas:
+        if p != pagina_bloqueada:
+            pagina_bloqueada = None
+
+        if pagina_bloqueada is not None:
+            continue
+
+        if l.startswith("(Contin") or l.startswith("Total general") or l.startswith("Nota:"):
+            pagina_bloqueada = p
+            continue
+
+        if _es_ruido(l):
+            continue
+
+        resultado.append((p, l))
+
+    return resultado
+
+
+def _es_ruido(linea: str) -> bool:
+    # Líneas cortas sin letras (fragmentos numéricos sueltos, puntuación)
+    if len(linea) <= 3 and not re.search(r"[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]", linea):
+        return True
+    # Headers de página
+    if linea.startswith("Documento Metodológico") or linea.startswith("Dooccuummeennttoo"):
+        return True
+    if linea.startswith("Concepto Ponderación") or linea.startswith("CCoonncceeppttoo"):
+        return True
+    if "INEGI. Índice nacional de precios al consumidor" in linea:
+        return True
+    # Encabezados de sección
+    if any(linea.startswith(e) for e in _ENCABEZADOS):
+        return True
+    # Sidebar invertido por nombre
+    if linea.lower() in _SIDEBAR_INVERTIDO:
+        return True
+    # Sidebar invertido por patrón: corto y termina en mayúscula
+    if linea[-1].isupper() and len(linea) < 15 and not linea[0].isdigit():
+        return True
+    return False
+
+
+def _separar_secciones(
+    lineas: list[tuple[int, str]],
+    marcadores: dict[str, str],
+) -> dict[str, list[tuple[int, str]]]:
+    """Paso 3: agrupa líneas por sección según marcadores de texto."""
+    secciones: dict[str, list[tuple[int, str]]] = {k: [] for k in marcadores}
+    seccion_actual: str | None = None
+
+    for pagina, linea in lineas:
+        # Detectar cambio de sección
+        nueva = None
+        for nombre, marcador in marcadores.items():
+            if marcador in linea:
+                nueva = nombre
+                break
+        if nueva:
+            seccion_actual = nueva
+            continue
+
+        if seccion_actual is not None and seccion_actual in secciones:
+            secciones[seccion_actual].append((pagina, linea))
+
+    return secciones
+
+
+def _reconstruir_multilinea(lineas: list[tuple[int, str]]) -> list[str]:
+    """Paso 4: une líneas partidas y devuelve líneas limpias sin número de página."""
+    resultado: list[str] = []
+
+    i = 0
+    while i < len(lineas):
+        _, linea = lineas[i]
+
+        # Patrón b+c: línea sin ponderador + línea solo ponderador + continuación
+        if i + 2 < len(lineas):
+            _, l1 = lineas[i + 1]
+            _, l2 = lineas[i + 2]
+            if (
+                linea[0].isdigit()
+                and not _RE_SOLO_PONDERADOR.match(linea)
+                and not _tiene_ponderador_final(linea)
+                and _RE_SOLO_PONDERADOR.match(l1)
+                and _es_continuacion_texto(l2)
+            ):
+                resultado.append(f"{linea} {l2} {l1}")
+                i += 3
+                continue
+
+        # Patrón b: línea sin ponderador + línea solo ponderador
+        if i + 1 < len(lineas):
+            _, l1 = lineas[i + 1]
+            if (
+                linea[0].isdigit()
+                and not _RE_SOLO_PONDERADOR.match(linea)
+                and not _tiene_ponderador_final(linea)
+                and _RE_SOLO_PONDERADOR.match(l1)
+            ):
+                resultado.append(f"{linea} {l1}")
+                i += 2
+                continue
+
+        resultado.append(linea)
+        i += 1
+
+    # Segunda pasada: unir continuaciones simples (patrón a)
+    final: list[str] = []
+    for linea in resultado:
+        if final and _es_continuacion_texto(linea):
+            prev = final[-1]
+            m = re.search(r"\s+([\d.]+)\s*$", prev)
+            if m:
+                nombre = prev[: m.start()]
+                ponderador = m.group(1)
+                final[-1] = f"{nombre} {linea} {ponderador}"
+            else:
+                final[-1] = f"{prev} {linea}"
+        else:
+            final.append(linea)
+
+    return final
+
+
+def _tiene_ponderador_final(linea: str) -> bool:
+    return bool(re.search(r"\d+\.\d+\s*$", linea))
+
+
+def _es_continuacion_texto(linea: str) -> bool:
+    """True si la línea parece continuación de un nombre (no empieza con dígito, no es ruido)."""
+    if not linea or len(linea) < 4:
+        return False
+    if linea[0].isdigit():
+        return False
+    if _es_ruido(linea):
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 2018
 # ---------------------------------------------------------------------------
 
 
 def _extraer_2018(ruta: Path) -> pd.DataFrame:
-    lineas_por_anexo = _clasificar_lineas(ruta)
-    datos_ccif = _parsear_ccif_2018(lineas_por_anexo["ccif"])
-    datos_cog = _parsear_cog_2018(lineas_por_anexo["cog"])
-    datos_scian = _parsear_scian_2018(lineas_por_anexo["scian"])
+    paginas = _leer_paginas(ruta)
+    secciones = _separar_secciones(paginas, _MARCADORES_SECCION)
+
+    lineas_ccif = _reconstruir_multilinea(_filtrar_ruido(secciones["ccif"]))
+    lineas_cog = _reconstruir_multilinea(_filtrar_ruido(secciones["cog"]))
+    lineas_scian = _reconstruir_multilinea(_filtrar_ruido(secciones["scian"]))
+
+    datos_ccif = _parsear_ccif_2018(lineas_ccif)
+    datos_cog = _parsear_cog_2018(lineas_cog)
+    datos_scian = _parsear_scian_2018(lineas_scian)
     return _combinar_2018(datos_ccif, datos_cog, datos_scian)
 
 
-def _clasificar_lineas(ruta: Path) -> dict[str, list[str]]:
-    """Lee el PDF y separa líneas de datos por anexo, uniendo multi-línea."""
-    raw: dict[str, list[str]] = {"ccif": [], "cog": [], "scian": []}
-    seccion: str | None = None
-
-    with pdfplumber.open(ruta) as pdf:
-        for page in pdf.pages:
-            texto = page.extract_text() or ""
-            fin_datos = False
-            for linea in texto.split("\n"):
-                linea = linea.strip()
-                if not linea:
-                    continue
-
-                # Marcar fin de datos en esta página: después de estos
-                # marcadores solo hay pie de página y sidebar invertido
-                if linea.startswith("(Contin") or linea.startswith("Total general") or linea.startswith("Nota:"):
-                    fin_datos = True
-                    continue
-
-                if fin_datos:
-                    continue
-
-                # Detectar cambio de sección
-                nueva_seccion = _detectar_seccion(linea)
-                if nueva_seccion:
-                    seccion = nueva_seccion
-                    continue
-
-                if seccion not in raw:
-                    continue
-
-                if _es_linea_datos(linea):
-                    raw[seccion].append(linea)
-                elif _es_continuacion(linea, raw[seccion]):
-                    _unir_continuacion(raw[seccion], linea)
-
-    return raw
-
-
-def _detectar_seccion(linea: str) -> str | None:
-    for seccion, marcador in _MARCADORES_SECCION.items():
-        if marcador in linea:
-            return seccion
-    return None
-
-
-def _es_linea_datos(linea: str) -> bool:
-    if len(linea) < 5:
-        return False
-    return linea[0].isdigit()
-
-
-def _es_continuacion(linea: str, buffer: list[str]) -> bool:
-    """True si la línea parece ser continuación de un nombre multi-línea."""
-    if not buffer:
-        return False
-    if len(linea) < 4:
-        return False
-    if linea[0].isdigit():
-        return False
-    # Descartar ruido: headers, footers, texto invertido del sidebar
-    if linea[0] in ".(" or linea.startswith("INEGI") or linea.startswith("SNIEG"):
-        return False
-    # Texto invertido del sidebar tiene mayúsculas al final (ecidnÍ, lanoicaN)
-    if linea[-1].isupper() and len(linea) < 15:
-        return False
-    return True
-
-
-def _unir_continuacion(buffer: list[str], continuacion: str) -> None:
-    """Une la continuación al nombre de la línea anterior, antes del ponderador."""
-    prev = buffer[-1]
-    m = _RE_PONDERADOR_FINAL.search(prev)
-    if m:
-        nombre = prev[: m.start()]
-        ponderador = m.group(1)
-        buffer[-1] = f"{nombre} {continuacion} {ponderador}"
-    else:
-        buffer[-1] = f"{prev} {continuacion}"
+# ---------------------------------------------------------------------------
+# Parsers 2018 (sin cambios respecto a la versión anterior)
+# ---------------------------------------------------------------------------
 
 
 def _parsear_ccif_2018(lineas: list[str]) -> list[dict]:
