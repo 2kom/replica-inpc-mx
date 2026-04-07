@@ -8,7 +8,6 @@ import pdfplumber
 
 from canasta_inpc.normalizar import normalizar_celda
 
-
 # ---------------------------------------------------------------------------
 # Patrones CCIF (Anexo C en 2018)
 # ---------------------------------------------------------------------------
@@ -42,9 +41,7 @@ _RE_COG_TOPLEVEL = re.compile(r"^(\d)\.\s+(.+?)\s+([\d.]+)\s*$")
 _RE_COG_GENERICO = re.compile(r"^(\d{3})\s+(.+?)\s+([\d.]+)\s*$")
 
 # Genérico sin prefijo numérico (2010): "Arroz 0.1215"
-_RE_GENERICO_SIN_PREFIJO = re.compile(
-    r"^([A-ZÁÉÍÓÚÜÑa-záéíóúüñ].*?)\s+(\d+\.\d+)\s*$"
-)
+_RE_GENERICO_SIN_PREFIJO = re.compile(r"^([A-ZÁÉÍÓÚÜÑa-záéíóúüñ].*?)\s+(\d+\.\d+)\s*$")
 
 # Ponderador suelto (línea que es solo un número decimal)
 _RE_SOLO_PONDERADOR = re.compile(r"^\d+\.\d+$")
@@ -57,7 +54,9 @@ _RE_SOLO_PONDERADOR_FACTOR = re.compile(r"^\d+\.\d+\s+\d+\.\d+$")
 _RE_CCIF_GENERICO_2024 = re.compile(
     r"\b(\d{3})\s+(.+?)\s+(No duradero|Semiduradero|Duradero|Servicio)\s+([\d.]+)\b"
 )
-_RE_CCIF_CLASE_2024 = re.compile(r"(?<!\d)(\d{2}\.\d\.\d)\s+(.+?)\s+([\d.]+)(?:\s+.+)?$")
+_RE_CCIF_CLASE_2024 = re.compile(
+    r"(?<!\d)(\d{2}\.\d\.\d)\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
+)
 _RE_CCIF_GRUPO_2024 = re.compile(r"(?<!\d)(\d{2}\.\d)\s+(.+?)\s+([\d.]+)(?:\s+.+)?$")
 _RE_CCIF_DIVISION_2024 = re.compile(
     r"(?<!\d)(0[1-9]|1[0-3])\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
@@ -72,9 +71,7 @@ _RE_SCIAN_GENERICO_2024 = re.compile(
 _RE_SCIAN_SECTOR_2024 = re.compile(
     rf"(?<!\d)({_CODIGOS_SECTOR_SCIAN})\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
 )
-_RE_SCIAN_RAMA_2024 = re.compile(
-    r"(?<!\d)(\d{4})\s+(.+?)\s+([\d.]+)(?:\s+.+)?$"
-)
+_RE_SCIAN_RAMA_2024 = re.compile(r"(?<!\d)(\d{4})\s+(.+?)\s+([\d.]+)(?:\s+.+)?$")
 
 # ---------------------------------------------------------------------------
 # Detección de secciones
@@ -87,20 +84,42 @@ _MARCADORES_SECCION = {
 
 # Sidebar invertido: palabras conocidas del texto vertical del PDF
 _SIDEBAR_INVERTIDO = {
-    "ed", "oiluj", "anecniuq", "adnuges", "esab",
-    "ocigolodotem", "otnemucod", "rodimunsnoc",
-    "laciremoc", "noicubirtsid", "noisimsnart", "noicareneg",
-    "soicerp", "lanoican", "ecidni", ".igeni",
+    "ed",
+    "oiluj",
+    "anecniuq",
+    "adnuges",
+    "esab",
+    "ocigolodotem",
+    "otnemucod",
+    "rodimunsnoc",
+    "laciremoc",
+    "noicubirtsid",
+    "noisimsnart",
+    "noicareneg",
+    "soicerp",
+    "lanoican",
+    "ecidni",
+    ".igeni",
     # 2010
-    "serodarednop", "erbmeicid", "la", "noc", "ona",
-    ".ocirotsih", ".8002", "hgine",
+    "serodarednop",
+    "erbmeicid",
+    "la",
+    "noc",
+    "ona",
+    ".ocirotsih",
+    ".8002",
+    "hgine",
 }
 
 # Encabezados de sección y títulos de página
 _ENCABEZADOS = (
     "Canasta del INPC clasificada",
-    "Anexo C.", "Anexo D.", "Anexo E.", "Anexo F.",
-    "C. Canasta", "D. Canasta",
+    "Anexo C.",
+    "Anexo D.",
+    "Anexo E.",
+    "Anexo F.",
+    "C. Canasta",
+    "D. Canasta",
     "Concepto Ponderador",
     "Concepto Ponderación",
     "Concepto Durabilidad Ponderador",
@@ -176,7 +195,9 @@ def _es_ruido(linea: str) -> bool:
     if len(linea) <= 3:
         return True
     # Headers de página
-    if linea.startswith("Documento Metodológico") or linea.startswith("Dooccuummeennttoo"):
+    if linea.startswith("Documento Metodológico") or linea.startswith(
+        "Dooccuummeennttoo"
+    ):
         return True
     if linea.startswith("Concepto Ponderación") or linea.startswith("CCoonncceeppttoo"):
         return True
@@ -275,13 +296,15 @@ def _parsear_ccif_2010(lineas: list[str]) -> list[dict]:
                 continue
             if not division:
                 continue
-            resultados.append({
-                "generico": nombre,
-                "ponderador": m.group(2),
-                "CCIF division": division,
-                "CCIF grupo": grupo,
-                "CCIF clase": clase,
-            })
+            resultados.append(
+                {
+                    "generico": nombre,
+                    "ponderador": m.group(2),
+                    "CCIF division": division,
+                    "CCIF grupo": grupo,
+                    "CCIF clase": clase,
+                }
+            )
 
     return resultados
 
@@ -365,7 +388,7 @@ def _es_continuacion_texto(linea: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _MARCADORES_2013 = {
-    "scian": "Anexo II",   # verificar antes que "Anexo I" (es substring)
+    "scian": "Anexo II",  # verificar antes que "Anexo I" (es substring)
     "ccif": "Anexo I",
 }
 
@@ -376,9 +399,7 @@ _RE_DIVISION_2013 = re.compile(r"^(\d{2})\s+(.+?)\s+[\d.]+\s+[\d.]+$")
 # Sub-nivel CCIF: "01.1" o "01.1.1"
 _RE_SUBNIVEL_2013 = re.compile(r"^\d{2}(?:\.\d)+")
 # Sector SCIAN: "11. Nombre" o "31-33. Nombre" con pond+factor
-_RE_SECTOR_2013 = re.compile(
-    r"^(\d{2}(?:-\d{2})?)\.?\s+(.+?)\s+([\d.]+)\s+([\d.]+)$"
-)
+_RE_SECTOR_2013 = re.compile(r"^(\d{2}(?:-\d{2})?)\.?\s+(.+?)\s+([\d.]+)\s+([\d.]+)$")
 # Rama SCIAN: "Rama 1111. Nombre" con pond+factor
 _RE_RAMA_2013 = re.compile(
     r"^Rama\s+(\d{4})\.?\s+(.+?)\s+([\d.]+)\s+([\d.]+)$", re.IGNORECASE
@@ -405,9 +426,7 @@ def _des_duplicar_bold(texto: str) -> str:
         limite_pares = len(palabra) - (len(palabra) % 2)
         total_pares = limite_pares // 2
         pares_ok = sum(
-            1
-            for i in range(0, limite_pares, 2)
-            if palabra[i] == palabra[i + 1]
+            1 for i in range(0, limite_pares, 2) if palabra[i] == palabra[i + 1]
         )
         if total_pares == 0 or (pares_ok / total_pares) < 0.8:
             resultado.append(palabra)
@@ -525,8 +544,7 @@ def _extraer_2013(ruta: Path) -> pd.DataFrame:
     paginas = _leer_paginas(ruta)
     secciones_raw = _separar_secciones_2013(paginas)
     secciones = {
-        nombre: _preprocesar_2013(datos)
-        for nombre, datos in secciones_raw.items()
+        nombre: _preprocesar_2013(datos) for nombre, datos in secciones_raw.items()
     }
 
     lineas_ccif = _reconstruir_multilinea_2013(_filtrar_ruido(secciones["ccif"]))
@@ -569,7 +587,7 @@ def _parsear_ccif_2013(lineas: list[str]) -> list[dict]:
         m_sub = _RE_SUBNIVEL_2013.match(concepto)
         if m_sub:
             codigo = m_sub.group()
-            nombre = concepto[len(codigo):].strip()
+            nombre = concepto[len(codigo) :].strip()
             if codigo.count(".") == 1:
                 grupo = nombre
                 clase = ""
@@ -584,13 +602,15 @@ def _parsear_ccif_2013(lineas: list[str]) -> list[dict]:
         if len(concepto) < 3:
             continue
 
-        resultados.append({
-            "generico": concepto,
-            "ponderador": ponderador,
-            "CCIF division": division,
-            "CCIF grupo": grupo,
-            "CCIF clase": clase,
-        })
+        resultados.append(
+            {
+                "generico": concepto,
+                "ponderador": ponderador,
+                "CCIF division": division,
+                "CCIF grupo": grupo,
+                "CCIF clase": clase,
+            }
+        )
 
     return resultados
 
@@ -646,11 +666,13 @@ def _parsear_scian_2013(lineas: list[str]) -> list[dict]:
         if len(concepto) < 3:
             continue
 
-        resultados.append({
-            "generico": concepto,
-            "SCIAN sector": sector,
-            "SCIAN rama": rama,
-        })
+        resultados.append(
+            {
+                "generico": concepto,
+                "SCIAN sector": sector,
+                "SCIAN rama": rama,
+            }
+        )
 
     return resultados
 
@@ -693,7 +715,9 @@ def _extraer_texto_y_numeros_final_2013(linea: str) -> tuple[str, str] | None:
 
 def _parece_inicio_estructura_2013(linea: str) -> bool:
     return bool(
-        re.match(r"^(?:Rama\s+\d{4}\.?|(?:\d{2}(?:-\d{2})?|\d{2}\.\d(?:\.\d)?)\.?)\s", linea)
+        re.match(
+            r"^(?:Rama\s+\d{4}\.?|(?:\d{2}(?:-\d{2})?|\d{2}\.\d(?:\.\d)?)\.?)\s", linea
+        )
     )
 
 
@@ -734,14 +758,16 @@ def _parsear_ccif_2018(lineas: list[str]) -> list[dict]:
     for linea in lineas:
         m = _RE_CCIF_GENERICO.match(linea)
         if m:
-            resultados.append({
-                "generico": m.group(2),
-                "ponderador": m.group(4),
-                "CCIF division": division,
-                "CCIF grupo": grupo,
-                "CCIF clase": clase,
-                "durabilidad": m.group(3),
-            })
+            resultados.append(
+                {
+                    "generico": m.group(2),
+                    "ponderador": m.group(4),
+                    "CCIF division": division,
+                    "CCIF grupo": grupo,
+                    "CCIF clase": clase,
+                    "durabilidad": m.group(3),
+                }
+            )
             continue
 
         m = _RE_CCIF_CLASE.match(linea)
@@ -771,10 +797,12 @@ def _parsear_cog_2018(lineas: list[str]) -> list[dict]:
     for linea in lineas:
         m = _RE_COG_GENERICO.match(linea)
         if m:
-            resultados.append({
-                "generico": m.group(2),
-                "COG": cog,
-            })
+            resultados.append(
+                {
+                    "generico": m.group(2),
+                    "COG": cog,
+                }
+            )
             continue
 
         m = _RE_COG_TOPLEVEL.match(linea)
@@ -803,16 +831,20 @@ def _parsear_scian_2018(lineas: list[str]) -> list[dict]:
 
         m = _RE_SCIAN_GENERICO.match(linea)
         if m:
-            resultados.append({
-                "generico": m.group(2),
-                "SCIAN sector": sector,
-                "SCIAN rama": rama,
-            })
+            resultados.append(
+                {
+                    "generico": m.group(2),
+                    "SCIAN sector": sector,
+                    "SCIAN rama": rama,
+                }
+            )
 
     return resultados
 
 
-def _combinar_2018(ccif: list[dict], cog: list[dict], scian: list[dict]) -> pd.DataFrame:
+def _combinar_2018(
+    ccif: list[dict], cog: list[dict], scian: list[dict]
+) -> pd.DataFrame:
     df = pd.DataFrame(ccif)
     if df.empty:
         return pd.DataFrame()
@@ -864,14 +896,16 @@ def _parsear_ccif_2024(lineas: list[str]) -> list[dict]:
     for linea in lineas:
         m = _RE_CCIF_GENERICO_2024.search(linea)
         if m:
-            resultados.append({
-                "generico": m.group(2),
-                "ponderador": m.group(4),
-                "CCIF division": division,
-                "CCIF grupo": grupo,
-                "CCIF clase": clase,
-                "durabilidad": m.group(3),
-            })
+            resultados.append(
+                {
+                    "generico": m.group(2),
+                    "ponderador": m.group(4),
+                    "CCIF division": division,
+                    "CCIF grupo": grupo,
+                    "CCIF clase": clase,
+                    "durabilidad": m.group(3),
+                }
+            )
             continue
 
         m = _RE_CCIF_CLASE_2024.search(linea)
@@ -913,11 +947,13 @@ def _parsear_scian_2024(lineas: list[str]) -> list[dict]:
 
         m = _RE_SCIAN_GENERICO_2024.search(linea)
         if m:
-            resultados.append({
-                "generico": m.group(2),
-                "SCIAN sector": sector,
-                "SCIAN rama": rama,
-            })
+            resultados.append(
+                {
+                    "generico": m.group(2),
+                    "SCIAN sector": sector,
+                    "SCIAN rama": rama,
+                }
+            )
 
     return resultados
 

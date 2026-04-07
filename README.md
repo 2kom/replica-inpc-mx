@@ -56,6 +56,12 @@ El flujo general de uso del proyecto es:
 
 Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 
+## Herramienta de canastas
+
+El repositorio incluye `tools/generar_canasta.py`, una herramienta para generar los archivos CSV intermedios de canasta a partir de los insumos oficiales del INEGI (xlsx y PDF).
+
+Ver [tools/uso_generar_canasta.md](tools/uso_generar_canasta.md) para instrucciones de uso.
+
 ## Licencia
 
 El codigo de este repositorio se distribuye bajo la licencia MIT. Ver [LICENSE](LICENSE).

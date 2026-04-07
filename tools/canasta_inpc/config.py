@@ -93,6 +93,7 @@ FUENTES: dict[int, dict[str, str | None]] = {
     },
 }
 
+
 @dataclass(frozen=True)
 class LayoutXlsx:
     """Posiciones de columnas y hojas para cada versión de xlsx."""

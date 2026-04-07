@@ -3,7 +3,12 @@ import unicodedata
 
 import pandas as pd
 
-_COLUMNAS_SIN_NORMALIZAR = {"ponderador", "encadenamiento", "canasta basica", "canasta consumo minimo"}
+_COLUMNAS_SIN_NORMALIZAR = {
+    "ponderador",
+    "encadenamiento",
+    "canasta basica",
+    "canasta consumo minimo",
+}
 _COLUMNAS_CONSERVAR_PREFIJO = {"SCIAN sector", "SCIAN rama"}
 
 _RE_PREFIJO_NUMERICO = re.compile(r"^\d+[\.\-\)\s]\s*")

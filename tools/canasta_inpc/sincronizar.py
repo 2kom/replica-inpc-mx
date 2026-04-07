@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -33,13 +32,10 @@ def sincronizar_scian(csv_fuente: Path, csv_destino: Path) -> None:
     destino_original = df_destino.copy()
     claves = df_destino["generico"].map(normalizar_celda)
     for col in _COLUMNAS_SCIAN:
-        df_destino[col] = claves.map(
-            lambda clave: mapa_fuente[clave][col]
-        )
+        df_destino[col] = claves.map(lambda clave: mapa_fuente[clave][col])
 
     celdas_actualizadas = sum(
-        int((destino_original[col] != df_destino[col]).sum())
-        for col in _COLUMNAS_SCIAN
+        int((destino_original[col] != df_destino[col]).sum()) for col in _COLUMNAS_SCIAN
     )
     escribir_csv(df_destino, csv_destino, version=2010)
 
@@ -59,7 +55,9 @@ def _validar_columnas(df: pd.DataFrame, ruta: Path) -> None:
     faltantes = {"generico", *_COLUMNAS_SCIAN} - set(df.columns)
     if faltantes:
         faltantes_txt = ", ".join(sorted(faltantes))
-        raise ValueError(f"El CSV no tiene las columnas requeridas ({faltantes_txt}): {ruta}")
+        raise ValueError(
+            f"El CSV no tiene las columnas requeridas ({faltantes_txt}): {ruta}"
+        )
 
 
 def _validar_scian_fuente(df_fuente: pd.DataFrame, csv_fuente: Path) -> None:
@@ -80,7 +78,9 @@ def _mapear_por_generico(df: pd.DataFrame, ruta: Path) -> dict[str, dict[str, st
     duplicadas = claves[claves.duplicated()].unique().tolist()
     if duplicadas:
         ejemplos = ", ".join(duplicadas[:5])
-        raise ValueError(f"Hay genéricos duplicados tras normalizar en {ruta}: {ejemplos}")
+        raise ValueError(
+            f"Hay genéricos duplicados tras normalizar en {ruta}: {ejemplos}"
+        )
 
     mapa: dict[str, dict[str, str]] = {}
     for _, row in df.iterrows():
@@ -109,10 +109,14 @@ def _validar_genericos(
     if solo_destino:
         ejemplos = ", ".join(mapa_destino[c]["generico"] for c in solo_destino[:5])
         detalles.append(f"solo en destino ({csv_destino}): {ejemplos}")
-    raise ValueError("Los genéricos de fuente y destino no coinciden; " + " | ".join(detalles))
+    raise ValueError(
+        "Los genéricos de fuente y destino no coinciden; " + " | ".join(detalles)
+    )
 
 
-def _confirmar_sobrescritura(csv_fuente: Path, csv_destino: Path, total_genericos: int) -> None:
+def _confirmar_sobrescritura(
+    csv_fuente: Path, csv_destino: Path, total_genericos: int
+) -> None:
     mensaje = (
         "\nConfirmación requerida\n"
         "Se copiarán las clasificaciones SCIAN sector y SCIAN rama de 2013 a 2010.\n"
