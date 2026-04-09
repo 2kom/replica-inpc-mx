@@ -24,7 +24,18 @@ class CanastaCanonica:
     Esquema del DataFrame (índice: `generico`):
         ponderador (object/str): texto decimal exacto del ponderador.
         encadenamiento (object/str/NaN): texto decimal exacto o `NaN` cuando no aplica.
-        columnas adicionales: clasificaciones y banderas auxiliares según la versión.
+        COG (object/str): clasificacion por objeto del gasto.
+        CCIF division (object/str): clasificacion de consumo por finalidades — division.
+        CCIF grupo (object/str): clasificacion de consumo por finalidades — grupo.
+        CCIF clase (object/str): clasificacion de consumo por finalidades — clase.
+        inflacion componente (object/str): componente de inflacion.
+        inflacion subcomponente (object/str): subcomponente de inflacion.
+        inflacion agrupacion (object/str): agrupacion de inflacion.
+        SCIAN sector (object/str): numero y nombre del sector, ej. "32 Industrias manufactureras".
+        SCIAN rama (object/str): codigo y nombre de la rama, ej. "3241 Fabricacion de...".
+        durabilidad (object/str): categoria de durabilidad; vacio cuando no aplica.
+        canasta basica (object/str): "X" si pertenece, "" si no.
+        canasta consumo minimo (object/str): "X" si pertenece, "" o null si no aplica.
 
     Example:
         DataFrame interno:

@@ -2,7 +2,12 @@
 
 ## Objetivo
 
-`tools/generar_canasta.py` genera un archivo CSV que es la canasta intermedia que usa este repo, esto a partir de archivos oficiales del INEGI.
+`tools/generar_canasta.py` genera un archivo CSV que es la canasta intermedia
+que usa este repo, esto a partir de archivos oficiales del INEGI. Es el paso
+previo al cálculo: su salida es el insumo que recibe `Corrida.ejecutar()`.
+
+Para obtener el xlsx y el PDF que necesita este script, ver
+[guias/obtener_ponderadores.md](../guias/obtener_ponderadores.md).
 
 La herramienta trabaja en tres modos:
 
@@ -143,7 +148,7 @@ printf 's\n' | python tools/generar_canasta.py --sincronizar \
 | `--version` | extraccion | Version soportada: `2010`, `2013`, `2018`, `2024`. |
 | `--xlsx` | extraccion | Ruta al archivo oficial de ponderadores en `xlsx`. |
 | `--pdf` | extraccion opcional | Ruta al PDF de anexos/metodologia. |
-| `-o` | extraccion | Directorio donde se escriben el CSV y el JSON. Se crea automaticamente si no existe. |
+| `-o` | extraccion | Directorio donde se escriben el CSV y el JSON. Se crea automaticamente si no existe. Ruta recomendada dentro del proyecto: `data/inputs/canastas/`. |
 | `--preferir {pdf,csv}` | `xlsx + pdf` | Resuelve automaticamente diferencias de clasificacion entre ambas fuentes. |
 | `--sincronizar` | sincronizacion | Activa el modo de copia de SCIAN 2013 -> 2010. |
 | `--csv-fuente` | sincronizacion | CSV 2013 ya generado. |
@@ -179,33 +184,6 @@ Ademas:
 - ambos deben tener las columnas requeridas;
 - el CSV fuente debe tener `SCIAN sector` y `SCIAN rama` completos en todos los genericos;
 - los dos archivos deben tener el mismo conjunto de genericos tras normalizacion.
-
-## Flujo interno por modo
-
-### Extraccion solo `xlsx`
-
-1. `extraer_xlsx.py` lee el `xlsx` segun el layout de la version.
-2. `normalizar.py` normaliza `generico` y clasificaciones de texto.
-3. `escribir.py` genera el CSV final de 15 columnas fijas.
-4. `registro.py` genera el JSON de registro tipo `xlsx`.
-
-### Extraccion `xlsx` + `pdf`
-
-1. `extraer_xlsx.py` extrae la base desde el `xlsx`.
-2. `extraer_pdf.py` extrae clasificaciones complementarias desde el `pdf`.
-3. `normalizar.py` normaliza ambas fuentes.
-4. `matching.py` cruza por `generico`, verifica `ponderador` y detecta diferencias.
-5. `resolver.py` decide que valor conservar cuando hay conflicto.
-6. `escribir.py` genera el CSV final.
-7. `registro.py` genera el JSON de registro tipo `pdf`.
-
-### Sincronizacion SCIAN
-
-1. `sincronizar.py` lee ambos CSV.
-2. Valida columnas, duplicados, completitud de SCIAN y correspondencia de genericos.
-3. Pide confirmacion.
-4. Sobrescribe `SCIAN sector` y `SCIAN rama` del destino.
-5. Reescribe el CSV destino con el esquema fijo.
 
 ## Archivos generados
 
@@ -426,6 +404,31 @@ python tools/generar_canasta.py --version 2024 --xlsx tools/test/2024.xlsx \
   --pdf tools/test/anexo_2024.pdf --preferir pdf -o salida/
 ```
 
+### Resumen de fuentes por version y columna
+
+| columna                  | 2010 | 2013 | 2018 | 2024 |
+| ------------------------ | ---- | ---- | ---- | ---- |
+| generico                 | xlsx | xlsx | xlsx | xlsx |
+| ponderador               | xlsx | xlsx | xlsx | xlsx |
+| encadenamiento           |  —   | xlsx |  —   | xlsx |
+| COG                      | xlsx | xlsx | xlsx | xlsx |
+| CCIF division            | pdf  | xlsx | xlsx | xlsx |
+| CCIF grupo               | pdf  | pdf  | pdf  | pdf  |
+| CCIF clase               | pdf  | pdf  | pdf  | pdf  |
+| inflacion componente     | xlsx | xlsx | xlsx | xlsx |
+| inflacion subcomponente  | xlsx | xlsx | xlsx | xlsx |
+| inflacion agrupacion     | xlsx | xlsx | xlsx | xlsx |
+| SCIAN sector             | sync | pdf  | pdf  | pdf  |
+| SCIAN rama               | sync | pdf  | pdf  | pdf  |
+| durabilidad              |  —   |  —   | pdf  | pdf  |
+| canasta basica           | xlsx | xlsx | xlsx | xlsx |
+| canasta consumo minimo   |  —   |  —   |  —   | xlsx |
+
+xlsx = se extrae del archivo xlsx\
+pdf  = se extrae del archivo pdf\
+sync = se copia de otra version (2013 -> 2010 via --sincronizar)\
+—    = sin fuente, columna queda vacia
+
 ## Como cruza `xlsx` y `pdf`
 
 El cruce se hace por `generico` ya normalizado. No hay fuzzy matching ni reglas manuales en este paso.
@@ -456,39 +459,6 @@ Si no coinciden:
 
 - se registra la diferencia en el JSON y en los warnings de consola;
 - no se reemplaza automaticamente el `ponderador` del `xlsx`.
-
-## Registro JSON
-
-### Registro tipo `xlsx`
-
-Se genera en extraccion solo `xlsx` y contiene, entre otros:
-
-- `tipo`
-- `xlsx`
-- `csv`
-- `version`
-- `genericos`
-- `ponderadores`
-- `encadenamientos`
-- `clasificaciones`
-- `genericos_detalle`
-
-### Registro tipo `pdf`
-
-Se genera en extraccion `xlsx + pdf` y contiene, ademas de lo anterior:
-
-- `pdf`
-- `columnas_enriquecidas`
-- `columnas_compartidas`
-- `enriquecimiento`
-- `sin_match_pdf`
-- `sin_match_xlsx`
-- `ponderador_no_coincide`
-- `agregaciones`
-- `diferencias_resueltas`
-- `validacion_conteo`
-
-`validacion_conteo` verifica que todas las columnas cuya fuente es `pdf` hayan quedado pobladas para todos los genericos esperados del CSV final. Si falla, la consola imprime warning.
 
 ## Salida por consola
 
@@ -568,27 +538,64 @@ Normalmente indica uno de estos problemas:
 - el parser encontro cambios de formato que rompen la extraccion;
 - el documento fuente no es el oficial o fue alterado.
 
-Tabla de fuentes por version y columna
+---
 
-| columna                  | 2010 | 2013 | 2018 | 2024 |
-| ------------------------ | ---- | ---- | ---- | ---- |
-| generico                 | xlsx | xlsx | xlsx | xlsx |
-| ponderador               | xlsx | xlsx | xlsx | xlsx |
-| encadenamiento           |  —   | xlsx |  —   | xlsx |
-| COG                      | xlsx | xlsx | xlsx | xlsx |
-| CCIF division            | pdf  | xlsx | xlsx | xlsx |
-| CCIF grupo               | pdf  | pdf  | pdf  | pdf  |
-| CCIF clase               | pdf  | pdf  | pdf  | pdf  |
-| inflacion componente     | xlsx | xlsx | xlsx | xlsx |
-| inflacion subcomponente  | xlsx | xlsx | xlsx | xlsx |
-| inflacion agrupacion     | xlsx | xlsx | xlsx | xlsx |
-| SCIAN sector             | sync | pdf  | pdf  | pdf  |
-| SCIAN rama               | sync | pdf  | pdf  | pdf  |
-| durabilidad              |  —   |  —   | pdf  | pdf  |
-| canasta basica           | xlsx | xlsx | xlsx | xlsx |
-| canasta consumo minimo   |  —   |  —   |  —   | xlsx |
+## Flujo interno por modo
 
-xlsx = se extrae del archivo xlsx\
-pdf  = se extrae del archivo pdf\
-sync = se copia de otra version (2013 -> 2010 via --sincronizar)\
-—    = sin fuente, columna queda vacia
+### Extraccion solo `xlsx`
+
+1. `extraer_xlsx.py` lee el `xlsx` segun el layout de la version.
+2. `normalizar.py` normaliza `generico` y clasificaciones de texto.
+3. `escribir.py` genera el CSV final de 15 columnas fijas.
+4. `registro.py` genera el JSON de registro tipo `xlsx`.
+
+### Extraccion `xlsx` + `pdf`
+
+1. `extraer_xlsx.py` extrae la base desde el `xlsx`.
+2. `extraer_pdf.py` extrae clasificaciones complementarias desde el `pdf`.
+3. `normalizar.py` normaliza ambas fuentes.
+4. `matching.py` cruza por `generico`, verifica `ponderador` y detecta diferencias.
+5. `resolver.py` decide que valor conservar cuando hay conflicto.
+6. `escribir.py` genera el CSV final.
+7. `registro.py` genera el JSON de registro tipo `pdf`.
+
+### Sincronizacion SCIAN
+
+1. `sincronizar.py` lee ambos CSV.
+2. Valida columnas, duplicados, completitud de SCIAN y correspondencia de genericos.
+3. Pide confirmacion.
+4. Sobrescribe `SCIAN sector` y `SCIAN rama` del destino.
+5. Reescribe el CSV destino con el esquema fijo.
+
+## Registro JSON
+
+### Registro tipo `xlsx`
+
+Se genera en extraccion solo `xlsx` y contiene, entre otros:
+
+- `tipo`
+- `xlsx`
+- `csv`
+- `version`
+- `genericos`
+- `ponderadores`
+- `encadenamientos`
+- `clasificaciones`
+- `genericos_detalle`
+
+### Registro tipo `pdf`
+
+Se genera en extraccion `xlsx + pdf` y contiene, ademas de lo anterior:
+
+- `pdf`
+- `columnas_enriquecidas`
+- `columnas_compartidas`
+- `enriquecimiento`
+- `sin_match_pdf`
+- `sin_match_xlsx`
+- `ponderador_no_coincide`
+- `agregaciones`
+- `diferencias_resueltas`
+- `validacion_conteo`
+
+`validacion_conteo` verifica que todas las columnas cuya fuente es `pdf` hayan quedado pobladas para todos los genericos esperados del CSV final. Si falla, la consola imprime warning.

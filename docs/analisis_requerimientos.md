@@ -277,16 +277,17 @@ Las columnas acordadas son:
 - `ponderador`
 - `encadenamiento`
 - `COG`
-- `CCIF`
-- `inflacion_1`
-- `inflacion_2`
-- `inflacion_3`
-- `SCIAN_sector`
-- `SCIAN_sector_numero`
-- `SCIAN_rama`
-- `SCIAN_rama_numero`
-- `canasta_basica`
-- `canasta_consumo_minimo`
+- `CCIF division`
+- `CCIF grupo`
+- `CCIF clase`
+- `inflacion componente`
+- `inflacion subcomponente`
+- `inflacion agrupacion`
+- `SCIAN sector`
+- `SCIAN rama`
+- `durabilidad`
+- `canasta basica`
+- `canasta consumo minimo`
 
 ### 10.4 Reglas de contenido y tipos de la canasta canonica
 
@@ -305,45 +306,47 @@ Las columnas acordadas son:
 - `COG`
   - texto
 
-- `CCIF`
+- `CCIF division`
   - texto
 
-- `inflacion_1`
+- `CCIF grupo`
   - texto
 
-- `inflacion_2`
+- `CCIF clase`
   - texto
 
-- `inflacion_3`
+- `inflacion componente`
   - texto
 
-- `SCIAN_sector`
+- `inflacion subcomponente`
   - texto
-  - debe conservar el numero y el nombre del sector en una sola columna
 
-- `SCIAN_sector_numero`
+- `inflacion agrupacion`
   - texto
-  - conserva solo el codigo del sector
 
-- `SCIAN_rama`
+- `SCIAN sector`
+  - texto
+  - conserva el numero y el nombre del sector en una sola columna
+
+- `SCIAN rama`
   - texto
   - conserva el codigo y el nombre de la rama en una sola columna
 
-- `SCIAN_rama_numero`
+- `durabilidad`
+  - texto o `null`
+  - vacio cuando no aplica a la version
+
+- `canasta basica`
   - texto
-  - conserva solo el codigo de la rama
+  - `"X"` si pertenece, `""` si no
 
-- `canasta_basica`
-  - booleano
-
-- `canasta_consumo_minimo`
-  - booleano o `null`
+- `canasta consumo minimo`
+  - texto o `null`
+  - `"X"` si pertenece, `""` o `null` si no aplica a la version
 
 ### 10.5 Criterios adicionales
 
 - `generico_original` **no** forma parte de la canasta canonica.
-- `SCIAN_sector_nombre` no se considera necesario si `SCIAN_sector` ya incluye numero y nombre.
-- `SCIAN_rama_nombre` no se considera necesario si `SCIAN_rama` ya incluye codigo y nombre.
 - el campo `generico` de la canasta canonica representa el mismo concepto que `generico_limpio` en la serie normalizada: un identificador textual ya depurado y listo para usarse en la correspondencia entre ambos insumos.
 
 ## 11. Validacion

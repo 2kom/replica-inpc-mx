@@ -54,13 +54,17 @@ El flujo general de uso del proyecto es:
 2. colocarlos en las rutas esperadas por el proyecto;
 3. ejecutar la corrida desde un notebook o script.
 
+Para obtener las series de genéricos, ver [guias/obtener_series.md](guias/obtener_series.md).
+
 Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 
 ## Herramienta de canastas
 
 El repositorio incluye `tools/generar_canasta.py`, una herramienta para generar los archivos CSV intermedios de canasta a partir de los insumos oficiales del INEGI (xlsx y PDF).
 
-Ver [tools/uso_generar_canasta.md](tools/uso_generar_canasta.md) para instrucciones de uso.
+Para obtener el xlsx y el PDF necesarios, ver [guias/obtener_ponderadores.md](guias/obtener_ponderadores.md).
+
+Ver [tools/uso_generar_canasta.md](tools/uso_generar_canasta.md) para instrucciones de uso del script.
 
 ## Licencia
 

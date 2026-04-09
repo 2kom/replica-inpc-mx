@@ -366,21 +366,22 @@ class CanastaCanonica:
 
 **Esquema del DataFrame (índice: `generico`):**
 
-| Columna                  | dtype pandas        | Notas                                                 |
-| ------------------------ | ------------------- | ----------------------------------------------------- |
-| `ponderador`             | `object` (str)      | texto decimal exacto del archivo fuente               |
-| `encadenamiento`         | `object` (str/NaN)  | texto decimal exacto; NaN cuando no aplica            |
-| `COG`                    | `pd.Categorical`    |                                                       |
-| `CCIF`                   | `pd.Categorical`    |                                                       |
-| `inflacion_1`            | `pd.Categorical`    |                                                       |
-| `inflacion_2`            | `pd.Categorical`    |                                                       |
-| `inflacion_3`            | `pd.Categorical`    |                                                       |
-| `SCIAN_sector`           | `pd.Categorical`    | número + nombre, ej. `"32 Industrias manufactureras"` |
-| `SCIAN_sector_numero`    | `pd.Categorical`    | solo el código, ej. `"32"`                            |
-| `SCIAN_rama`             | `pd.Categorical`    | código + nombre, ej. `"3241 Fabricación de..."`       |
-| `SCIAN_rama_numero`      | `pd.Categorical`    | solo el código, ej. `"3241"`                          |
-| `canasta_basica`         | `bool`              |                                                       |
-| `canasta_consumo_minimo` | `pd.BooleanDtype()` | nullable; `pd.NA` cuando no aplica a la versión       |
+| Columna                   | dtype pandas       | Notas                                                        |
+| ------------------------- | ------------------ | ------------------------------------------------------------ |
+| `ponderador`              | `object` (str)     | texto decimal exacto del archivo fuente                      |
+| `encadenamiento`          | `object` (str/NaN) | texto decimal exacto; NaN cuando no aplica                   |
+| `COG`                     | `object` (str)     |                                                              |
+| `CCIF division`           | `object` (str)     |                                                              |
+| `CCIF grupo`              | `object` (str)     |                                                              |
+| `CCIF clase`              | `object` (str)     |                                                              |
+| `inflacion componente`    | `object` (str)     |                                                              |
+| `inflacion subcomponente` | `object` (str)     |                                                              |
+| `inflacion agrupacion`    | `object` (str)     |                                                              |
+| `SCIAN sector`            | `object` (str)     | número + nombre, ej. `"32 Industrias manufactureras"`        |
+| `SCIAN rama`              | `object` (str)     | código + nombre, ej. `"3241 Fabricación de..."`              |
+| `durabilidad`             | `object` (str)     | vacío cuando no aplica a la versión                          |
+| `canasta basica`          | `object` (str)     | `"X"` si pertenece, `""` si no                               |
+| `canasta consumo minimo`  | `object` (str)     | `"X"` si pertenece, `""` o `null` si no aplica a la versión  |
 
 **Invariantes — validados al construir:**
 
