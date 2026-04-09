@@ -19,6 +19,9 @@ dependencies = [
     "python-dateutil>=2.9.0",
     "plotnine>=0.15.3",
     "pyarrow>=23.0.1",
+    "ipython>=8.38.0",
+    "jupyter",
+    "ipykernel>=7.2.0",
 ]
 
 [project.urls]
@@ -28,9 +31,6 @@ Repository = "https://github.com/2kom/replica-inpc-mx"
 dev = [
     "pytest>=8",
     "pytest-mock>=3.14",
-    "ipython>=8.38.0",
-    "jupyter",
-    "ipykernel>=7.2.0",
 ]
 tools = [
     "openpyxl>=3.1",

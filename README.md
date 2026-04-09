@@ -48,13 +48,48 @@ El usuario debe obtener los insumos directamente desde las fuentes oficiales del
 
 ## Uso esperado
 
-El flujo general de uso del proyecto es:
+### 1. Obtener insumos
 
-1. descargar los insumos oficiales desde el INEGI;
-2. colocarlos en las rutas esperadas por el proyecto;
-3. ejecutar la corrida desde un notebook o script.
+- Series de genéricos: ver [guias/obtener_series.md](guias/obtener_series.md).
+- Ponderadores (xlsx y PDF) y generar canasta: ver [guias/obtener_ponderadores.md](guias/obtener_ponderadores.md).
 
-Para obtener las series de genéricos, ver [guias/obtener_series.md](guias/obtener_series.md).
+### 2. Ejecutar desde el notebook
+
+Abrir `notebook.ipynb` y ajustar las variables de configuración:
+
+```python
+# Token del INEGI — opcional.
+# Sin token el cálculo corre igual, pero la validación queda como no_disponible.
+# Registro en: https://www.inegi.org.mx/app/api/denue/v1/tokenVerify.aspx
+TOKEN_INEGI = None
+# TOKEN_INEGI = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+CANASTA = "data/inputs/canastas/ponderadores_2018.csv"
+SERIES  = "data/inputs/series/series_2018.csv"
+VERSION = 2018
+```
+
+Ejecutar:
+
+```python
+from replica_inpc.api.corrida import Corrida
+
+corrida = Corrida(token_inegi=TOKEN_INEGI)
+resultado = corrida.ejecutar(
+    canasta=CANASTA,
+    series=SERIES,
+    version=VERSION,
+    tipo="inpc",
+    persistir=False,
+)
+```
+
+El resultado incluye:
+
+- `resultado.resumen` — estado general de la corrida
+- `resultado.reporte.como_tabla()` — INPC replicado vs INEGI por periodo
+- `resultado.resultado.como_tabla()` — índices calculados
+- `resultado.diagnostico` — faltantes detectados
 
 Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 
