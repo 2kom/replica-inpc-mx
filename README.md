@@ -53,7 +53,13 @@ El usuario debe obtener los insumos directamente desde las fuentes oficiales del
 - Series de genéricos: ver [guias/obtener_series.md](guias/obtener_series.md).
 - Ponderadores (xlsx y PDF) y generar canasta: ver [guias/obtener_ponderadores.md](guias/obtener_ponderadores.md).
 
-### 2. Ejecutar desde el notebook
+### 2.1 Instalar dependencias
+
+```bash
+pip install -e '.[dependencies]'
+```
+
+### 2.2 Ejecutar desde el notebook
 
 Abrir `notebook.ipynb` y ajustar las variables de configuración:
 
