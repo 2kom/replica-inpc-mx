@@ -818,18 +818,64 @@ VersionCanasta = Literal[2010, 2013, 2018, 2024]
 #### INDICE_POR_TIPO
 
 Mapeo de `tipo` (parámetro del usuario) al string que se usa como valor en el nivel
-`indice` del MultiIndex `(Periodo, indice)`. Centraliza la correspondencia en `tipos.py`
-para que ni los calculadores ni `validar_inpc` necesiten conocer los strings.
+`indice` del MultiIndex `(Periodo, indice)`. Aplica únicamente cuando `tipo in INDICE_POR_TIPO`
+(cálculo de un índice agregado, no de subíndices por clasificación).
 
 ```python
 INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
 ```
 
-`EjecutarCorrida` y la fachada validan `tipo` contra este dict y derivan:
+Cuando `tipo in INDICE_POR_TIPO`, `EjecutarCorrida` deriva:
 
 ```python
 indice = INDICE_POR_TIPO[tipo]
 ```
+
+Cuando `tipo in COLUMNAS_CLASIFICACION`, el `indice` de cada fila es el valor de la
+categoría directamente (ej. `"subyacente"`, `"no subyacente"`). Ver §7.2 paso 7.
+
+---
+
+#### COLUMNAS_CLASIFICACION
+
+Conjunto de nombres de columnas de `CanastaCanonica` que pueden usarse como `tipo`
+para calcular subíndices. `EjecutarCorrida` y la fachada aceptan como `tipo` válido
+cualquier valor de `INDICE_POR_TIPO` **o** cualquier valor de `COLUMNAS_CLASIFICACION`.
+
+```python
+COLUMNAS_CLASIFICACION: frozenset[str] = frozenset({
+    "COG",
+    "CCIF division",
+    "CCIF grupo",
+    "CCIF clase",
+    "inflacion componente",
+    "inflacion subcomponente",
+    "inflacion agrupacion",
+    "SCIAN sector",
+    "SCIAN rama",
+    "durabilidad",
+    "canasta basica",
+})
+```
+
+Ver §11.7 para los valores concretos de cada columna en la canasta 2018.
+
+---
+
+#### TIPOS_CON_VALIDACION
+
+Conjunto de tipos para los cuales existen series publicadas por el INEGI que permiten
+comparación directa. Controla qué esquema producen `ReporteDetalladoValidacion` y
+`ResumenValidacion` — ver §5.5 y §5.6.
+
+```python
+TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
+    {"inpc", "inflacion componente", "inflacion subcomponente"}
+)
+```
+
+Los tipos en `COLUMNAS_CLASIFICACION` pero **fuera** de `TIPOS_CON_VALIDACION` generan
+un reporte sin columnas de error ni estado de validación.
 
 ---
 
@@ -978,13 +1024,26 @@ def validar(
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 ```
 
-| Parámetro   | Tipo                            | Notas                                                    |
-| ----------- | ------------------------------- | -------------------------------------------------------- |
-| `resultado` | `ResultadoCalculo`              | INPC calculado por periodo                               |
-| `inegi`     | `dict[Periodo, float \| None]`  | Dict vacío `{}` si la fuente no estaba disponible        |
-| `canasta`   | `CanastaCanonica`               | Para contar genéricos esperados y ponderadores totales   |
-| `serie`     | `SerieNormalizada`              | Para calcular cobertura por periodo — en v1 siempre 100% |
-| `id_corrida`| `str`                           | Para etiquetar los artefactos                            |
+| Parámetro   | Tipo                            | Notas                                                                      |
+| ----------- | ------------------------------- | -------------------------------------------------------------------------- |
+| `resultado` | `ResultadoCalculo`              | Resultado calculado; puede contener múltiples índices en el MultiIndex     |
+| `inegi`     | `dict[Periodo, float \| None]`  | Dict vacío `{}` si la fuente no estaba disponible                          |
+| `canasta`   | `CanastaCanonica`               | Canasta original completa — se usa para cobertura por subgrupo             |
+| `serie`     | `SerieNormalizada`              | Serie original completa — se usa para calcular cobertura por periodo       |
+| `id_corrida`| `str`                           | Para etiquetar los artefactos                                              |
+
+**Loop sobre índices:** itera sobre todos los valores únicos del nivel `indice` del MultiIndex
+de `resultado`. Para cada índice determina a qué subgrupo de `canasta` pertenece:
+
+- Si `tipo in COLUMNAS_CLASIFICACION`: filtra `canasta.df[tipo] == indice` para obtener los
+  ponderadores y genéricos del subgrupo. `ponderador_total_esperado` refleja el peso original
+  del subgrupo en el INPC total (no re-normalizado).
+- Si `tipo in INDICE_POR_TIPO` (ej. `"inpc"`): usa la canasta completa.
+
+**Esquema condicional:** si `tipo in TIPOS_CON_VALIDACION`, el reporte incluye columnas de
+validación INEGI (`indice_inegi`, `error_absoluto`, `error_relativo`, `estado_validacion`) y
+el resumen incluye `error_absoluto_max`, `error_relativo_max`, `estado_validacion_global`.
+Para el resto de tipos estas columnas están ausentes — ver §5.5 y §5.6.
 
 **Comportamiento cuando `inegi` es vacío:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
 
@@ -1029,7 +1088,7 @@ class Corrida:
 | `canasta` | sí | — | Ruta al CSV de canasta |
 | `series` | sí | — | Ruta al CSV de series |
 | `version` | sí | — | `VersionCanasta`: `2010`, `2013`, `2018`, `2024` |
-| `tipo` | no | `"inpc"` | Tipo de índice a calcular. Lanza `ErrorConfiguracion` si no es válido. |
+| `tipo` | no | `"inpc"` | Tipo de índice a calcular. Valores válidos: claves de `INDICE_POR_TIPO` o valores de `COLUMNAS_CLASIFICACION`. Lanza `ErrorConfiguracion` si no es válido. |
 | `persistir` | no | `False` | Si `True`, guarda artefactos en `ruta_datos` y exporta CSV a `ruta_salida`. La fachada crea los directorios si no existen. |
 
 **Uso típico:**
@@ -1223,7 +1282,9 @@ class EjecutarCorrida:
 4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
-7. `indice = INDICE_POR_TIPO[tipo]`; `para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)` → `ResultadoCalculo`
+7. Cálculo — dos caminos según `tipo`:
+   - **`tipo in INDICE_POR_TIPO`:** `indice = INDICE_POR_TIPO[tipo]`; `para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)` → `ResultadoCalculo`
+   - **`tipo in COLUMNAS_CLASIFICACION`:** para cada `categoria` única no vacía en `canasta.df[tipo]` (orden alfabético): filtra `canasta.df` al subgrupo, re-normaliza sus ponderadores a 100, filtra `serie` a los genéricos del subgrupo, llama `calcular(..., indice=categoria, tipo=tipo)`. Concatena todos los `ResultadoCalculo.df` en uno solo con MultiIndex `(periodo, categoria)`. El `resultado` final contiene todos los subíndices juntos.
 8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
 9. `validar_inpc.py` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
 10. Si `persistir=True`:
