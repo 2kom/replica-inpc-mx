@@ -17,6 +17,26 @@ VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
 INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
 
+COLUMNAS_CLASIFICACION: frozenset[str] = frozenset(
+    {
+        "COG",
+        "CCIF division",
+        "CCIF grupo",
+        "CCIF clase",
+        "inflacion componente",
+        "inflacion subcomponente",
+        "inflacion agrupacion",
+        "SCIAN sector",
+        "SCIAN rama",
+        "durabilidad",
+        "canasta basica",
+    }
+)
+
+TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
+    {"inpc", "inflacion componente", "inflacion subcomponente"}
+)
+
 RANGOS_VALIDOS: dict[VersionCanasta, tuple[Periodo, Periodo | None]] = {
     2010: (Periodo(2010, 12, 2), Periodo(2013, 4, 1)),
     2013: (Periodo(2013, 4, 1), Periodo(2018, 7, 2)),

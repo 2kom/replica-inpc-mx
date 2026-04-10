@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 from replica_inpc.aplicacion.puertos.almacen_artefactos import AlmacenArtefactos
 from replica_inpc.aplicacion.puertos.escritor_resultados import EscritorResultados
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
@@ -17,9 +19,12 @@ from replica_inpc.dominio.errores import (
     ErrorValidacion,
     PeriodosInsuficientes,
 )
+from replica_inpc.dominio.modelos.canasta import CanastaCanonica
+from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
+    COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
     RANGOS_VALIDOS,
     ManifestCorrida,
@@ -57,9 +62,10 @@ class EjecutarCorrida:
         persistir: bool = False,
     ) -> ResultadoCorrida:
 
-        if tipo not in INDICE_POR_TIPO:
+        if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
             raise ErrorConfiguracion(
-                f"tipo '{tipo}' no es válido. Valores aceptados: {list(INDICE_POR_TIPO)}"
+                f"tipo '{tipo}' no es válido. Valores aceptados: "
+                f"{sorted(INDICE_POR_TIPO)} + {sorted(COLUMNAS_CLASIFICACION)}"
             )
 
         if persistir and any(
@@ -92,15 +98,37 @@ class EjecutarCorrida:
         ]
         if not cols:
             raise PeriodosInsuficientes(
-                f"No hay periodos validos para canasta {version}, valida para {inicio} - {fin}, pero se encontraron: {serie.df.columns}"
+                f"No hay periodos validos para canasta {version}, valida para {inicio} - {fin}, "
+                f"pero se encontraron: {serie.df.columns}"
             )
 
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
         serie = alinear_genericos(canasta, serie)
-        indice = INDICE_POR_TIPO[tipo]
-        resultado = para_canasta(canasta).calcular(
-            canasta, serie, id_corrida, indice, tipo
-        )
+
+        if tipo in INDICE_POR_TIPO:
+            indice = INDICE_POR_TIPO[tipo]
+            resultado = para_canasta(canasta).calcular(
+                canasta, serie, id_corrida, indice, tipo
+            )
+        else:
+            categorias = sorted(
+                v for v in canasta.df[tipo].unique() if v and not pd.isna(v)
+            )
+            dfs_resultado = []
+            for categoria in categorias:
+                mascara = canasta.df[tipo] == categoria
+                df_grupo = canasta.df[mascara].copy()
+                ponders = df_grupo["ponderador"].astype(float)
+                df_grupo["ponderador"] = (ponders / ponders.sum() * 100).astype(str)
+                canasta_grupo = CanastaCanonica(df_grupo, canasta.version)  # type: ignore[call-arg]
+                serie_grupo = SerieNormalizada(
+                    serie.df.loc[df_grupo.index], serie.mapeo
+                )
+                resultado_grupo = para_canasta(canasta_grupo).calcular(
+                    canasta_grupo, serie_grupo, id_corrida, categoria, tipo
+                )
+                dfs_resultado.append(resultado_grupo.df)
+            resultado = ResultadoCalculo(pd.concat(dfs_resultado), id_corrida)
 
         try:
             periodos_unicos = (

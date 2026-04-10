@@ -5,7 +5,7 @@ from pathlib import Path
 from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.periodos import Periodo
-from replica_inpc.dominio.tipos import INDICE_POR_TIPO, ResultadoCorrida, VersionCanasta
+from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, INDICE_POR_TIPO, ResultadoCorrida, VersionCanasta
 from replica_inpc.infraestructura.csv.escritor_resultados_csv import (
     EscritorResultadosCsv,
 )
@@ -51,9 +51,10 @@ class Corrida:
         tipo: str = "inpc",
         persistir: bool = False,
     ) -> ResultadoCorrida:
-        if tipo not in INDICE_POR_TIPO:
+        if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
             raise ErrorConfiguracion(
-                f"tipo '{tipo}' no es válido. Valores aceptados: {list(INDICE_POR_TIPO)}"
+                f"tipo '{tipo}' no es válido. Valores aceptados: "
+                f"{sorted(INDICE_POR_TIPO)} + {sorted(COLUMNAS_CLASIFICACION)}"
             )
 
         if persistir:

@@ -80,7 +80,7 @@ class ResumenValidacion:
             raise InvarianteViolado(
                 "La columna 'estado_corrida' debe contener solo los valores 'ok', 'ok_parcial' o 'fallida'."
             )
-        if (
+        if "estado_validacion_global" in df.columns and (
             not df["estado_validacion_global"]
             .isin({"ok", "ok_parcial", "diferencia_detectada", "no_disponible"})
             .all()
@@ -193,7 +193,7 @@ class ReporteDetalladoValidacion:
             raise InvarianteViolado(
                 "La columna 'estado_calculo' debe contener solo los valores 'ok', 'null_por_faltantes' o 'fallida'."
             )
-        if (
+        if "estado_validacion" in df.columns and (
             not df["estado_validacion"]
             .isin({"ok", "diferencia_detectada", "no_disponible"})
             .all()
