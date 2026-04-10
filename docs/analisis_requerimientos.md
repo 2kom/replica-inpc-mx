@@ -607,45 +607,55 @@ Si esa correspondencia no produce una base minima valida para calcular el INPC:
 
 En esta etapa del analisis de requerimientos, esta regla se expresa como una necesidad de correspondencia valida entre ambos insumos, sin fijar todavia el mecanismo tecnico especifico que se usara para implementarla.
 
-## 13. Exclusiones explicitas de la version 1
+## 13. Alcance por version y exclusiones
 
-Con el fin de fijar expectativas y evitar ambiguedades, se establece explicitamente que la `v1` **no** incluye todavia los siguientes alcances:
+Esta seccion documenta que cubre cada version publicada o prevista, y que queda fuera del alcance actual del proyecto.
+
+### 13.0 Historial de alcance por version
+
+| Version | Alcance acumulado                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------ |
+| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API      |
+| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores |
+| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad) |
+| v1.2.0  | v1.1.0 + canasta 2024 con Laspeyres encadenado                                                         |
+| v1.3.0  | v1.2.0 + canastas 2010 y 2013                                                                          |
 
 ### 13.1 Subindices
 
-La `v1` no incluye:
+~~La `v1` no incluye subindices.~~ Incorporado en **v1.1.0**.
 
-- calculo de subindices;
-- calculo de clasificaciones agregadas por encima del INPC general.
+La v1.1.0 incluye:
+
+- calculo de subindices por columna de clasificacion de la canasta;
+- comparacion contra lo publicado por el INEGI cuando el tipo lo permite (inflacion componente, inflacion subcomponente).
+
+No incluye todavia:
+
+- incidencias por subindice;
+- variaciones por subindice.
 
 ### 13.2 Incidencias y variaciones
 
-La `v1` no incluye:
+Ninguna version prevista hasta v1.3.0 incluye:
 
 - incidencias;
 - variaciones.
 
 ### 13.3 Operacion sobre canastas 2010 y 2013
 
-Aunque las canastas `2010` y `2013` se contemplan como parte del horizonte futuro del proyecto:
+Incorporado en **v1.3.0**. Las versiones anteriores operan unicamente sobre:
 
-- la `v1` no incluye operacion completa sobre esas canastas.
-
-El alcance operativo inicial de la `v1` se concentra en:
-
-- `2018`
-
-y posteriormente se extendera a:
-
-- `2024`
+- canasta 2018 (desde v1.0.0);
+- canasta 2024 (desde v1.2.0).
 
 ### 13.4 Uso directo de archivos oficiales `.xlsx` y `.pdf`
 
-La `v1` no incluye el uso directo de:
+Ninguna version prevista incluye el uso directo de:
 
 - archivos `.xlsx`;
 - archivos `.pdf`;
 
 como entradas operativas principales del sistema.
 
-Esos archivos siguen siendo fuentes oficiales de informacion, pero en esta etapa pertenecen al proceso de preparacion de insumos previo al uso principal del sistema.
+Esos archivos siguen siendo fuentes oficiales de informacion, pero pertenecen al proceso de preparacion de insumos previo al uso principal del sistema.

@@ -153,11 +153,9 @@ class ReporteDetalladoValidacion:
         | (Periodo(2018, 8, 2), INPC)| 2018 | inpc | 103.500  | 103.518 | 0.018   | 0.00017 | ok                  | NaN       | diferencia_detectada  | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
 
         Vista ancha (`como_tabla(True)`):
-        | periodo     | INPC    |
-        | ----------- | ------: |
-        | 2Q Jul 2018 | 100.000 |
-        | 1Q Ago 2018 | NaN     |
-        | 2Q Ago 2018 | 103.500 |
+        | indice | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
+        | ------ | ----------: | ----------: | ----------: |
+        | INPC   | 100.000     | NaN         | 103.500     |
 
         Abreviaciones:
         | abreviacion | descripcion                 |
@@ -233,7 +231,7 @@ class ReporteDetalladoValidacion:
 
         Args:
             ancho: Si es `False`, devuelve el DataFrame interno. Si es `True`,
-                pivota `indice_replicado` sobre el nivel `indice`.
+                pivota `indice_replicado`: `indice` como filas, periodos como columnas.
 
         Returns:
             El reporte en formato largo o ancho, según `ancho`.
@@ -242,7 +240,7 @@ class ReporteDetalladoValidacion:
         """
         if not ancho:
             return self._df
-        return self._df["indice_replicado"].unstack(level="indice")
+        return self._df["indice_replicado"].unstack(level="periodo")
 
     def _repr_html_(self) -> str:
         """Renderiza el reporte en formato largo para notebooks."""

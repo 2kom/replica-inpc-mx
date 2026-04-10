@@ -488,8 +488,8 @@ class ResultadoCalculo:
 
 **`como_tabla(ancho=False)`:** devuelve el DataFrame interno en formato largo cuando
 `ancho=False` (default — facilita `pd.concat` entre corridas). Con `ancho=True` pivota
-`indice_replicado` sobre el nivel `indice`: índice resultante = `Periodo`, columnas = valores
-de `indice` (ej. `"INPC"`). `_repr_html_()` conserva la vista larga; la vista ancha
+`indice_replicado` sobre el nivel `periodo`: filas = valores de `indice` (ej. `"INPC"`),
+columnas = periodos. `_repr_html_()` conserva la vista larga; la vista ancha
 se obtiene llamando `como_tabla(ancho=True)` explícitamente.
 
 **Esquema del DataFrame interno (índice compuesto: `(Periodo, indice)`):**
@@ -532,33 +532,33 @@ class ResumenValidacion:
 
 **Esquema del DataFrame (índice: `id_corrida`):**
 
-| Columna                      | dtype pandas    | Notas                                                               |
-| ---------------------------- | --------------- | ------------------------------------------------------------------- |
-| `version`                    | `int`           |                                                                     |
-| `tipo`                       | `object` (str)  | `'inpc'` en v1                                                      |
-| `periodo_inicio`             | `Periodo`       | primer periodo calculado                                            |
-| `periodo_fin`                | `Periodo`       | último periodo calculado                                            |
-| `total_periodos_esperados`   | `int`           |                                                                     |
-| `total_periodos_calculados`  | `int`           |                                                                     |
-| `total_periodos_con_null`    | `int`           |                                                                     |
-| `error_absoluto_max`         | `float` / `NaN` | NaN si validación no disponible                                     |
-| `error_relativo_max`         | `float` / `NaN` | NaN si validación no disponible                                     |
-| `total_faltantes_indice`     | `int`           |                                                                     |
-| `total_faltantes_ponderador` | `int`           |                                                                     |
-| `estado_validacion_global`   | `object` (str)  | `'ok'`, `'ok_parcial'`, `'diferencia_detectada'`, `'no_disponible'` |
-| `estado_corrida`             | `object` (str)  | `'ok'`, `'ok_parcial'`, `'fallida'`                                 |
+| Columna                      | dtype pandas    | Notas                                                                                                                             |
+| ---------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                    | `int`           |                                                                                                                                   |
+| `tipo`                       | `object` (str)  |                                                                                                                                   |
+| `periodo_inicio`             | `Periodo`       | primer periodo calculado                                                                                                          |
+| `periodo_fin`                | `Periodo`       | último periodo calculado                                                                                                          |
+| `total_periodos_esperados`   | `int`           |                                                                                                                                   |
+| `total_periodos_calculados`  | `int`           |                                                                                                                                   |
+| `total_periodos_con_null`    | `int`           |                                                                                                                                   |
+| `error_absoluto_max`         | `float` / `NaN` | **solo cuando `tipo` tiene validación INEGI**; ausente si no                                                                      |
+| `error_relativo_max`         | `float` / `NaN` | **solo cuando `tipo` tiene validación INEGI**; ausente si no                                                                      |
+| `total_faltantes_indice`     | `int`           |                                                                                                                                   |
+| `total_faltantes_ponderador` | `int`           |                                                                                                                                   |
+| `estado_validacion_global`   | `object` (str)  | **solo cuando `tipo` tiene validación INEGI**; ausente si no. `'ok'`, `'ok_parcial'`, `'diferencia_detectada'`, `'no_disponible'` |
+| `estado_corrida`             | `object` (str)  | `'ok'`, `'ok_parcial'`, `'fallida'`                                                                                               |
 
 **Invariantes — validados al construir:**
 
-| Invariante                        | Regla                                                                      |
-| --------------------------------- | -------------------------------------------------------------------------- |
-| Al menos una fila                 | el DataFrame no está vacío                                                 |
-| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                                    |
-| `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                               |
-| `estado_validacion_global` válido | valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}` |
-| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                  |
-| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`                   |
-| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                                          |
+| Invariante                        | Regla                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| Al menos una fila                 | el DataFrame no está vacío                                                                  |
+| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                                                     |
+| `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                                                |
+| `estado_validacion_global` válido | cuando presente: valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}` |
+| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                                   |
+| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`                                    |
+| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                                                           |
 
 ---
 
@@ -567,7 +567,8 @@ class ResumenValidacion:
 **Representación:** DataFrame-backed. Índice compuesto `(Periodo, indice)` — agrupa
 todos los índices de una corrida. `id_corrida` como atributo. `version` y `tipo` como columnas.
 
-**Nota v1:** en v1 solo existe `tipo="inpc"`, con `indice="INPC"` como único valor.
+El esquema del DataFrame varía según si el `tipo` tiene validación INEGI disponible
+(ver nota al final de esta sección).
 
 ```python
 class ReporteDetalladoValidacion:
@@ -585,17 +586,48 @@ class ReporteDetalladoValidacion:
         return self.como_tabla(ancho=False)._repr_html_()
 ```
 
-**`como_tabla(ancho=False)`:** mismo comportamiento que en `ResultadoCalculo` — largo
-por default (facilita `pd.concat`), ancho con `ancho=True` (pivota `indice_replicado`).
-`_repr_html_()` conserva la vista larga; la vista ancha se obtiene llamando
-`como_tabla(ancho=True)` explícitamente.
+**`como_tabla(ancho=False)`:** devuelve el DataFrame interno en formato largo (facilita
+`pd.concat` entre corridas). `_repr_html_()` conserva esta vista larga.
 
-**Esquema del DataFrame (índice compuesto: `(Periodo, indice)`):**
+**`como_tabla(ancho=True)` — con validación INEGI:**
+
+Pivota las columnas `{indice}_calculado`, `{indice}_inegi`, `error_absoluto`,
+`error_relativo` y `estado_validacion` sobre los periodos.
+
+```text
+| indice                  | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
+| ----------------------- | ----------: | ----------: | ----------: |
+| {indice}_calculado      | 100.000     | NaN         | 103.500     |
+| {indice}_inegi          | 100.002     | NaN         | 103.518     |
+| {indice}_error_absoluto | 0.002       | NaN         | 0.018       |
+| {indice}_error_relativo | 0.00002     | NaN         | 0.00017     |
+| {indice}_estado_valid.  | ok          | no_disp.    | dif_detect. |
+```
+
+**`como_tabla(ancho=True)` — sin validación INEGI:**
+
+Pivota las columnas `{indice}_calculado`, `{indice}_estado_calculo`,
+`{indice}_motivo_error`, `{indice}_cobertura_pct` y `{indice}_ponderador_cubierto`
+sobre los periodos.
+
+```text
+| indice                       | 2Q Jul 2018 | 1Q Ago 2018 |
+| ---------------------------- | ----------: | ----------: |
+| {indice}_calculado           | 100.000     | NaN         |
+| {indice}_estado_calculo      | ok          | null_por_f. |
+| {indice}_motivo_error        | —           | faltantes   |
+| {indice}_cobertura_pct       | 100.0       | 98.9        |
+| {indice}_ponderador_cubierto | 100.0       | 97.4        |
+```
+
+Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
+
+**Esquema del DataFrame — con validación INEGI (índice compuesto: `(Periodo, indice)`):**
 
 | Columna                      | dtype pandas      | Notas                                               |
 | ---------------------------- | ----------------- | --------------------------------------------------- |
 | `version`                    | `int`             |                                                     |
-| `tipo`                       | `object` (str)    | `'inpc'` en v1                                      |
+| `tipo`                       | `object` (str)    |                                                     |
 | `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                 |
 | `indice_inegi`               | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
 | `error_absoluto`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
@@ -610,17 +642,45 @@ por default (facilita `pd.concat`), ancho con `ancho=True` (pivota `indice_repli
 | `ponderador_total_esperado`  | `float`           |                                                     |
 | `ponderador_total_cubierto`  | `float`           |                                                     |
 
+**Esquema del DataFrame — sin validación INEGI (índice compuesto: `(Periodo, indice)`):**
+
+| Columna                      | dtype pandas      | Notas                                       |
+| ---------------------------- | ----------------- | ------------------------------------------- |
+| `version`                    | `int`             |                                             |
+| `tipo`                       | `object` (str)    |                                             |
+| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`         |
+| `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'` |
+| `motivo_error`               | `object` (str/NaN)|                                             |
+| `total_genericos_esperados`  | `int`             |                                             |
+| `total_genericos_con_indice` | `int`             |                                             |
+| `total_genericos_sin_indice` | `int`             |                                             |
+| `cobertura_genericos_pct`    | `float`           |                                             |
+| `ponderador_total_esperado`  | `float`           |                                             |
+| `ponderador_total_cubierto`  | `float`           |                                             |
+
 **Invariantes — validados al construir:**
 
-| Invariante                 | Regla                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                                |
-| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                                   |
-| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                                           |
-| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                                |
-| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                                   |
-| Consistencia validacion    | si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_absoluto`, `error_relativo` NaN     |
-| Al menos una fila          | el DataFrame no está vacío                                                                             |
+| Invariante                 | Regla                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                            |
+| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                               |
+| `estado_validacion` válido | cuando presente: valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                      |
+| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                            |
+| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                               |
+| Consistencia validacion    | cuando presente: si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_*` NaN         |
+| Al menos una fila          | el DataFrame no está vacío                                                                         |
+
+**Nota — tipos con validación INEGI disponible:**
+
+Solo los siguientes `tipo` incluyen las columnas de validación en el DataFrame:
+`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`.
+
+El resto de clasificaciones (`"COG"`, `"CCIF division"`, `"CCIF grupo"`, `"CCIF clase"`,
+`"inflacion agrupacion"`, `"SCIAN sector"`, `"SCIAN rama"`, `"durabilidad"`) no tienen
+series publicadas por el INEGI que permitan comparación directa.
+
+Estas constantes viven en `dominio/tipos.py` como `TIPOS_CON_VALIDACION` y
+`COLUMNAS_CLASIFICACION`.
 
 ---
 
@@ -733,8 +793,6 @@ de periodos se calcula normalmente.
 #### 5.8.2 LaspeyresEncadenado
 
 Pendiente de implementación. Aplica a canastas con encadenamiento (versiones 2013 y 2024).
-
-Ver metodología en `docs/requerimientos/metodologia_inegi.md §3.4`.
 
 **Archivo:** `dominio/calculo/encadenado.py` (por crear)
 
@@ -1765,9 +1823,25 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 11.7 Categorías de clasificación version-específicas
 
-**Decisión:** las columnas `CCIF`, `COG`, `inflacion_1/2/3` en `CanastaCanonica` usan `pd.Categorical` con las categorías de cada versión. No hay mapeo cross-versión en v1.
+**Decisión:** las columnas de clasificación en `CanastaCanonica` almacenan texto tal como viene del CSV intermedio. No se usan `pd.Categorical`. No hay mapeo cross-versión en v1.
 
-**Advertencia para v2:** entre versiones hay cambios de nombre de categorías (ej. `"Comunicaciones"` en 2018 → `"Información y comunicación"` en 2024). Un join directo entre canastas de distintas versiones producirá categorías no coincidentes. Cuando se implementen subíndices en v2, se requerirá un componente de mapeo explícito entre categorías de versiones.
+**Columnas con categorías en canasta 2018** (`encadenamiento` y `canasta consumo minimo` están vacías para esta versión):
+
+| Columna | N categorías | Valores |
+| ------- | -----------: | ------- |
+| `COG` | 8 | `alimentos, bebidas y tabaco` · `educacion y esparcimiento` · `muebles, aparatos y accesorios domesticos` · `otros servicios` · `ropa, calzado y accesorios` · `salud y cuidado personal` · `transporte` · `vivienda` |
+| `CCIF division` | 12 | `alimentos y bebidas no alcoholicas` · `bebidas alcoholicas y tabaco` · `bienes y servicios diversos` · `comunicaciones` · `educacion` · `muebles, articulos para el hogar y para su conservacion` · `prendas de vestir y calzado` · `recreacion y cultura` · `restaurantes y hoteles` · `salud` · `transporte` · `vivienda, agua, electricidad, gas y otros combustibles` |
+| `CCIF grupo` | 44 | (ver CSV `ponderadores_2018.csv`) |
+| `CCIF clase` | 87 | (ver CSV `ponderadores_2018.csv`) |
+| `inflacion componente` | 2 | `no subyacente` · `subyacente` |
+| `inflacion subcomponente` | 4 | `agropecuarios` · `energeticos y tarifas autorizadas por el gobierno` · `mercancias` · `servicios` |
+| `inflacion agrupacion` | 9 | `alimentos, bebidas y tabaco` · `educacion (colegiaturas)` · `energeticos` · `frutas y verduras` · `mercancias no alimenticias` · `otros servicios` · `pecuarios` · `tarifas autorizadas por el gobierno` · `vivienda` |
+| `SCIAN sector` | 18 | (ver CSV `ponderadores_2018.csv`) |
+| `SCIAN rama` | 91 | (ver CSV `ponderadores_2018.csv`) |
+| `durabilidad` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
+| `canasta basica` | 1 | `X` (indica pertenencia; ausente si no aplica) |
+
+**Advertencia para v2:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → otro nombre en 2024). Un join directo entre canastas de distintas versiones producirá categorías no coincidentes. Cuando se soporte comparación cross-versión se requerirá un mapeo explícito.
 
 ---
 

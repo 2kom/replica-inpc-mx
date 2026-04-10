@@ -90,7 +90,7 @@ class ResultadoCalculo:
 
         Args:
             ancho: Si es `False`, devuelve el DataFrame interno. Si es `True`,
-                pivota `indice_replicado` sobre el nivel `indice`.
+                pivota `indice_replicado`: `indice` como filas, periodos como columnas.
 
         Returns:
             El resultado en formato largo o ancho, según `ancho`.
@@ -99,7 +99,7 @@ class ResultadoCalculo:
         """
         if not ancho:
             return self._df
-        return self._df["indice_replicado"].unstack(level="indice")
+        return self._df["indice_replicado"].unstack(level="periodo")
 
     def _repr_html_(self) -> str:
         """Renderiza el resultado en formato largo para notebooks."""
