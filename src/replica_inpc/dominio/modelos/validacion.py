@@ -152,10 +152,14 @@ class ReporteDetalladoValidacion:
         | (Periodo(2018, 8, 1), INPC)| 2018 | inpc | NaN      | NaN     | NaN     | NaN     | null_por_faltantes  | faltantes | no_disponible         | 299     | 296     | 3       | 98.9967 | 100.0   | 98.7421 |
         | (Periodo(2018, 8, 2), INPC)| 2018 | inpc | 103.500  | 103.518 | 0.018   | 0.00017 | ok                  | NaN       | diferencia_detectada  | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
 
-        Vista ancha (`como_tabla(True)`):
-        | indice | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
-        | ------ | ----------: | ----------: | ----------: |
-        | INPC   | 100.000     | NaN         | 103.500     |
+        Vista ancha con validación INEGI (`como_tabla(True)`):
+        | indice                  | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
+        | ----------------------- | ----------: | ----------: | ----------: |
+        | INPC_calculado          | 100.000     | NaN         | 103.500     |
+        | INPC_inegi              | 100.002     | NaN         | 103.518     |
+        | INPC_error_absoluto     | 0.002       | NaN         | 0.018       |
+        | INPC_error_relativo     | 0.00002     | NaN         | 0.00017     |
+        | INPC_estado_validacion  | ok          | no_disp.    | dif_detect. |
 
         Abreviaciones:
         | abreviacion | descripcion                 |
@@ -231,7 +235,13 @@ class ReporteDetalladoValidacion:
 
         Args:
             ancho: Si es `False`, devuelve el DataFrame interno. Si es `True`,
-                pivota `indice_replicado`: `indice` como filas, periodos como columnas.
+                pivota métricas clave con periodos como columnas. Con validación
+                INEGI incluye `{indice}_calculado`, `{indice}_inegi`,
+                `{indice}_error_absoluto`, `{indice}_error_relativo` y
+                `{indice}_estado_validacion`. Sin validación incluye
+                `{indice}_calculado`, `{indice}_estado_calculo`,
+                `{indice}_motivo_error`, `{indice}_cobertura_pct` y
+                `{indice}_ponderador_cubierto`.
 
         Returns:
             El reporte en formato largo o ancho, según `ancho`.
@@ -240,7 +250,37 @@ class ReporteDetalladoValidacion:
         """
         if not ancho:
             return self._df
-        return self._df["indice_replicado"].unstack(level="periodo")
+
+        con_validacion = "estado_validacion" in self._df.columns
+        indices = self._df.index.get_level_values("indice").unique()
+        partes = []
+
+        for indice in indices:
+            df_ind = self._df.xs(indice, level="indice")
+
+            if con_validacion:
+                cols = {
+                    "indice_replicado": f"{indice}_calculado",
+                    "indice_inegi": f"{indice}_inegi",
+                    "error_absoluto": f"{indice}_error_absoluto",
+                    "error_relativo": f"{indice}_error_relativo",
+                    "estado_validacion": f"{indice}_estado_validacion",
+                }
+            else:
+                cols = {
+                    "indice_replicado": f"{indice}_calculado",
+                    "estado_calculo": f"{indice}_estado_calculo",
+                    "motivo_error": f"{indice}_motivo_error",
+                    "cobertura_genericos_pct": f"{indice}_cobertura_pct",
+                    "ponderador_total_cubierto": f"{indice}_ponderador_cubierto",
+                }
+
+            df_sel = df_ind[list(cols.keys())].rename(columns=cols)  # type: ignore[call-overload]
+            partes.append(df_sel.T)
+
+        resultado = pd.concat(partes)
+        resultado.index.name = "indice"
+        return resultado
 
     def _repr_html_(self) -> str:
         """Renderiza el reporte en formato largo para notebooks."""

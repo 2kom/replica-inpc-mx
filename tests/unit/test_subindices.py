@@ -272,19 +272,28 @@ def test_resultado_como_tabla_ancho_multiples_indices():
 
 def test_reporte_como_tabla_ancho_multiples_indices():
     """
-    ReporteDetalladoValidacion.como_tabla(True) con dos índices produce
-    un DataFrame con los índices como filas y los periodos como columnas.
+    ReporteDetalladoValidacion.como_tabla(True) sin validación INEGI produce
+    filas {indice}_<metrica> y columnas = periodos.
     """
     _, reporte, _ = validar(resultado_combinado, {}, canasta, serie, ID_CORRIDA)
 
     tabla = reporte.como_tabla(ancho=True)
 
-    assert set(tabla.index) == {"alimentos", "servicios"}
     assert set(tabla.columns) == set(periodos)
-    assert tabla.loc["alimentos", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
-    assert tabla.loc["servicios", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
-    assert tabla.loc["alimentos", Periodo(2018, 8, 1)] == pytest.approx(305 / 3)  # type: ignore[index]
-    assert tabla.loc["servicios", Periodo(2018, 8, 1)] == pytest.approx(725 / 7)  # type: ignore[index]
+    assert "alimentos_calculado" in tabla.index
+    assert "alimentos_estado_calculo" in tabla.index
+    assert "alimentos_motivo_error" in tabla.index
+    assert "alimentos_cobertura_pct" in tabla.index
+    assert "alimentos_ponderador_cubierto" in tabla.index
+    assert "servicios_calculado" in tabla.index
+    assert tabla.loc["alimentos_calculado", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["servicios_calculado", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["alimentos_calculado", Periodo(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
+        305 / 3
+    )
+    assert tabla.loc["servicios_calculado", Periodo(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
+        725 / 7
+    )
 
 
 # ---------------------------------------------------------------------------
