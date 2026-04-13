@@ -1974,6 +1974,46 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
+### 11.13 Loop de subíndices en `EjecutarCorrida`, no en el calculador
+
+**Decisión:** el loop que itera sobre categorías de un clasificador, re-normaliza ponderadores y combina resultados vive en `ejecutar_corrida.py`, no en `LaspeyresDirecto`.
+
+**Alternativa considerada:** crear una estrategia `LaspeyresDirectoClasificacion` que encapsule el loop internamente.
+
+**Razón:** el loop es orquestación — "para cada categoría, delegar a la estrategia existente y combinar". `LaspeyresDirecto` es una función pura de cálculo: dado una canasta y una serie, devuelve el índice ponderado. Hacerlo consciente de clasificadores lo acoplaría al esquema de la canasta. La re-normalización queda protegida por el invariante de `CanastaCanonica` (ponderadores deben sumar 100), así que si se pasa una canasta mal normalizada el error explota antes del cálculo. El trigger para extraer el loop sería un segundo caso de uso que lo necesite.
+
+---
+
+### 11.14 Schema condicional en `ReporteDetalladoValidacion`
+
+**Decisión:** el DataFrame interno de `ReporteDetalladoValidacion` tiene esquemas distintos según si el `tipo` tiene validación INEGI disponible. Con validación incluye `indice_inegi`, `error_absoluto`, `error_relativo` y `estado_validacion`; sin validación esas columnas están ausentes.
+
+**Alternativa considerada:** schema único siempre con todas las columnas, rellenando con `NaN` cuando el tipo no tiene validación INEGI.
+
+**Razón:** un schema único con NaN genera ambigüedad — el usuario no puede distinguir si `indice_inegi = NaN` significa "no hay dato para ese periodo" o "este tipo nunca tendrá dato INEGI". El schema condicional hace explícita la ausencia de columnas como propiedad estructural del tipo, no como dato faltante.
+
+---
+
+### 11.15 `TIPOS_CON_VALIDACION` en el dominio, no en infraestructura
+
+**Decisión:** `TIPOS_CON_VALIDACION` vive en `dominio/tipos.py`, aunque `INDICADORES_INEGI` (que mapea tipo → indicador concreto) vive en `infraestructura/inegi/fuente_validacion_api.py`.
+
+**Alternativa considerada:** derivar `TIPOS_CON_VALIDACION` dinámicamente desde `INDICADORES_INEGI` en infraestructura.
+
+**Razón:** qué tipos admiten comparación contra una fuente oficial es una propiedad del dominio — afecta el esquema de `ReporteDetalladoValidacion` y la lógica de `validar_inpc.py`, ambos en el dominio. Que el indicador concreto sea `910420` es un detalle del adaptador INEGI. Si se agrega un adaptador distinto (ej. CSV con datos oficiales), `TIPOS_CON_VALIDACION` no debería cambiar.
+
+---
+
+### 11.16 Cache de clase en `FuenteValidacionApi`
+
+**Decisión:** `_cache` en `FuenteValidacionApi` es un atributo de clase (`dict[str, dict[Periodo, float | None]]`), no de instancia.
+
+**Alternativa considerada:** cache de instancia — cada objeto `FuenteValidacionApi` mantiene su propio cache.
+
+**Razón:** la API del INEGI devuelve el histórico completo en una sola llamada — no hay paginación por rango de fechas. Un cache de instancia no evitaría llamadas redundantes entre corridas distintas que instancian objetos separados. El cache de clase garantiza que el histórico de un indicador se descarga una sola vez por sesión, sin importar cuántas instancias o corridas se ejecuten. En tests se limpia con `FuenteValidacionApi._cache.clear()`.
+
+---
+
 ## 12. Gaps conocidos y mejoras futuras
 
 Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.

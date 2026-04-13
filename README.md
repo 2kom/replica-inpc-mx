@@ -15,18 +15,18 @@ El objetivo del proyecto es replicar el **INPC general** usando:
 - indices superiores nacionales de genericos publicados por el INEGI;
 - canastas y ponderadores publicados por el INEGI.
 
-## Alcance actual (v1)
+## Alcance actual (v1.1)
 
-La v1 del proyecto permite:
+La v1.1 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canasta 2018);
+- calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
 - validar el resultado contra lo publicado por el INEGI via su API de indicadores;
 - exportar resultados de calculo y validacion.
 
 El proyecto **no** incluye todavia:
 
-- subindices;
 - incidencias ni variaciones;
 - calculo encadenado (canastas 2013 y 2024);
 - soporte operativo para canastas 2010 y 2013.
@@ -81,11 +81,22 @@ Ejecutar:
 from replica_inpc.api.corrida import Corrida
 
 corrida = Corrida(token_inegi=TOKEN_INEGI)
+
+# INPC general
 resultado = corrida.ejecutar(
     canasta=CANASTA,
     series=SERIES,
     version=VERSION,
     tipo="inpc",
+    persistir=False,
+)
+
+# Subindices por clasificador (ejemplo: inflacion componente)
+resultado = corrida.ejecutar(
+    canasta=CANASTA,
+    series=SERIES,
+    version=VERSION,
+    tipo="inflacion componente",
     persistir=False,
 )
 ```
