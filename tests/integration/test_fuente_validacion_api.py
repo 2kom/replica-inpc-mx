@@ -15,21 +15,37 @@ _P1 = Periodo(2026, 3, 1)
 _P2 = Periodo(2026, 2, 2)
 
 _RESPUESTA_NORMAL = {
-    "Series": [{
-        "OBSERVATIONS": [
-            {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "145.446", "OBS_STATUS": "3"},
-            {"TIME_PERIOD": "2026/02/02", "OBS_VALUE": "144.551", "OBS_STATUS": "3"},
-        ]
-    }]
+    "Series": [
+        {
+            "OBSERVATIONS": [
+                {
+                    "TIME_PERIOD": "2026/03/01",
+                    "OBS_VALUE": "145.446",
+                    "OBS_STATUS": "3",
+                },
+                {
+                    "TIME_PERIOD": "2026/02/02",
+                    "OBS_VALUE": "144.551",
+                    "OBS_STATUS": "3",
+                },
+            ]
+        }
+    ]
 }
 
 _RESPUESTA_CON_NULL = {
-    "Series": [{
-        "OBSERVATIONS": [
-            {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": None, "OBS_STATUS": "3"},
-            {"TIME_PERIOD": "2026/02/02", "OBS_VALUE": "144.551", "OBS_STATUS": "3"},
-        ]
-    }]
+    "Series": [
+        {
+            "OBSERVATIONS": [
+                {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": None, "OBS_STATUS": "3"},
+                {
+                    "TIME_PERIOD": "2026/02/02",
+                    "OBS_VALUE": "144.551",
+                    "OBS_STATUS": "3",
+                },
+            ]
+        }
+    ]
 }
 
 
@@ -56,8 +72,8 @@ class TestRespuestaNormal:
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([_P1, _P2])
 
-        assert resultado[_P1] == pytest.approx(145.446)
-        assert resultado[_P2] == pytest.approx(144.551)
+        assert resultado["INPC"][_P1] == pytest.approx(145.446)
+        assert resultado["INPC"][_P2] == pytest.approx(144.551)
 
     def test_periodo_no_en_api_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
@@ -65,7 +81,7 @@ class TestRespuestaNormal:
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([Periodo(2000, 1, 1)])
 
-        assert resultado[Periodo(2000, 1, 1)] is None
+        assert resultado["INPC"][Periodo(2000, 1, 1)] is None
 
     def test_obs_value_null_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_CON_NULL))
@@ -73,8 +89,8 @@ class TestRespuestaNormal:
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([_P1, _P2])
 
-        assert resultado[_P1] is None
-        assert resultado[_P2] == pytest.approx(144.551)
+        assert resultado["INPC"][_P1] is None
+        assert resultado["INPC"][_P2] == pytest.approx(144.551)
 
 
 class TestCache:
@@ -102,9 +118,7 @@ class TestCache:
 
 class TestApiNoDisponible:
     def test_timeout_lanza_fuente_no_disponible(self, mocker):
-        mocker.patch(
-            "requests.get", side_effect=requests.exceptions.Timeout("timeout")
-        )
+        mocker.patch("requests.get", side_effect=requests.exceptions.Timeout("timeout"))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         with pytest.raises(FuenteNoDisponible):
@@ -137,11 +151,17 @@ class TestRespuestaInvalida:
 
     def test_time_period_malformado_lanza_respuesta_invalida(self, mocker):
         respuesta = {
-            "Series": [{
-                "OBSERVATIONS": [
-                    {"TIME_PERIOD": "formato-malo", "OBS_VALUE": "145.0", "OBS_STATUS": "3"},
-                ]
-            }]
+            "Series": [
+                {
+                    "OBSERVATIONS": [
+                        {
+                            "TIME_PERIOD": "formato-malo",
+                            "OBS_VALUE": "145.0",
+                            "OBS_STATUS": "3",
+                        },
+                    ]
+                }
+            ]
         }
         mocker.patch("requests.get", return_value=_mock_resp(200, respuesta))
 
@@ -151,11 +171,17 @@ class TestRespuestaInvalida:
 
     def test_obs_value_malformado_lanza_respuesta_invalida(self, mocker):
         respuesta = {
-            "Series": [{
-                "OBSERVATIONS": [
-                    {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "no-es-numero", "OBS_STATUS": "3"},
-                ]
-            }]
+            "Series": [
+                {
+                    "OBSERVATIONS": [
+                        {
+                            "TIME_PERIOD": "2026/03/01",
+                            "OBS_VALUE": "no-es-numero",
+                            "OBS_STATUS": "3",
+                        },
+                    ]
+                }
+            ]
         }
         mocker.patch("requests.get", return_value=_mock_resp(200, respuesta))
 
@@ -175,8 +201,10 @@ class TestRespuestaInvalida:
 
 # --- helpers ---
 
+
 def _mock_resp(status_code: int, json_data: dict):
     from unittest.mock import MagicMock
+
     resp = MagicMock()
     resp.status_code = status_code
     resp.json.return_value = json_data

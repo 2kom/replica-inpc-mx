@@ -71,11 +71,13 @@ resultado = LaspeyresDirecto().calcular(
 
 def test_validar_inpc_estado_corrida_y_validacion_validos():
 
-    inegi: dict[Periodo, float | None] = {
-        Periodo(2018, 7, 2): 100.0,
-        Periodo(2018, 8, 1): 103.0,
-        Periodo(2018, 8, 2): 106.0,
-        Periodo(2018, 9, 1): 109.0,
+    inegi: dict[str, dict[Periodo, float | None]] = {
+        "INPC": {
+            Periodo(2018, 7, 2): 100.0,
+            Periodo(2018, 8, 1): 103.0,
+            Periodo(2018, 8, 2): 106.0,
+            Periodo(2018, 9, 1): 109.0,
+        }
     }
 
     resumen, reporte, diagnostico = validar(
@@ -99,11 +101,13 @@ def test_validar_inpc_estado_corrida_y_validacion_validos():
 
 def test_validar_inpc_diferencia_detectada():
 
-    inegi: dict[Periodo, float | None] = {
-        Periodo(2018, 7, 2): 100.0,
-        Periodo(2018, 8, 1): 103.0,
-        Periodo(2018, 8, 2): 107.0,
-        Periodo(2018, 9, 1): 111.0,
+    inegi: dict[str, dict[Periodo, float | None]] = {
+        "INPC": {
+            Periodo(2018, 7, 2): 100.0,
+            Periodo(2018, 8, 1): 103.0,
+            Periodo(2018, 8, 2): 107.0,
+            Periodo(2018, 9, 1): 111.0,
+        }
     }
 
     resumen, reporte, diagnostico = validar(
@@ -204,11 +208,13 @@ def test_validar_inpc_serie_con_nan():
 
 def test_validar_inpc_dentro_de_tolerancia():
 
-    inegi = {
-        Periodo(2018, 7, 2): 100.0,
-        Periodo(2018, 8, 1): 103.0,
-        Periodo(2018, 8, 2): None,
-        Periodo(2018, 9, 1): None,
+    inegi: dict[str, dict[Periodo, float | None]] = {
+        "INPC": {
+            Periodo(2018, 7, 2): 100.0,
+            Periodo(2018, 8, 1): 103.0,
+            Periodo(2018, 8, 2): None,
+            Periodo(2018, 9, 1): None,
+        }
     }
 
     resumen, reporte, diagnostico = validar(

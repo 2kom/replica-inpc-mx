@@ -16,6 +16,11 @@ class FuenteValidacion(Protocol):
     Ver: docs/diseño.md §7.1.3, §11.6
     """
 
-    def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]:
-        """Devuelve un valor oficial por periodo y `None` donde no hay dato."""
+    def obtener(
+        self, periodos: list[Periodo]
+    ) -> dict[str, dict[Periodo, float | None]]:
+        """Devuelve un dict keyed por nombre de índice con valores por periodo.
+
+        `None` por periodo cuando el INEGI no tiene dato para ese periodo.
+        """
         ...

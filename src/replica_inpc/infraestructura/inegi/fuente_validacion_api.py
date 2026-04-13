@@ -9,16 +9,20 @@ from replica_inpc.dominio.errores import (
 )
 from replica_inpc.dominio.periodos import Periodo
 
-INDICADORES_INEGI: dict[str, str] = {
-    "inpc": "910420",
-    # v2 — subyacente
-    # "subyacente":            "910421",
-    # "subyacente_mercancias": "910422",
-    # "subyacente_servicios":  "910423",
-    # v2 — no subyacente
-    # "no_subyacente":                 "910424",
-    # "no_subyacente_agropecuarios":   "910425",
-    # "no_subyacente_energeticos":     "910426",
+INDICADORES_INEGI: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910420",
+    },
+    "inflacion componente": {
+        "subyacente": "910421",
+        "no subyacente": "910424",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910422",
+        "servicios": "910423",
+        "agropecuarios": "910425",
+        "energeticos y tarifas autorizadas por el gobierno": "910426",
+    },
 }
 
 _URL = (
@@ -42,21 +46,26 @@ class FuenteValidacionApi:
                 f"Tipos soportados: {list(INDICADORES_INEGI)}"
             )
         self._token = token
-        self._indicador = INDICADORES_INEGI[tipo]
+        self._indicadores = INDICADORES_INEGI[tipo]
 
-    def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]:
-        """Devuelve el valor publicado por el INEGI por periodo.
+    def obtener(
+        self, periodos: list[Periodo]
+    ) -> dict[str, dict[Periodo, float | None]]:
+        """Devuelve el valor publicado por el INEGI por índice y por periodo.
 
         Usa cache de clase — la primera llamada descarga el histórico completo;
         las siguientes lo reutilizan sin hacer requests adicionales.
         """
-        if self._indicador not in self._cache:
-            self._cache[self._indicador] = self._fetch()
-        historico = self._cache[self._indicador]
-        return {p: historico.get(p) for p in periodos}
+        resultado = {}
+        for nombre, indicador in self._indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            resultado[nombre] = {p: historico.get(p) for p in periodos}
+        return resultado
 
-    def _fetch(self) -> dict[Periodo, float | None]:
-        url = _URL.format(indicador=self._indicador, token=self._token)
+    def _fetch(self, indicador: str) -> dict[Periodo, float | None]:
+        url = _URL.format(indicador=indicador, token=self._token)
         try:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()

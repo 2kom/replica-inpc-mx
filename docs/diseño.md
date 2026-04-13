@@ -33,6 +33,8 @@ El historial de cambios vive en git.
     - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
       - [VersionCanasta](#versioncanasta)
       - [INDICE\_POR\_TIPO](#indice_por_tipo)
+      - [COLUMNAS\_CLASIFICACION](#columnas_clasificacion)
+      - [TIPOS\_CON\_VALIDACION](#tipos_con_validacion)
       - [RANGOS\_VALIDOS](#rangos_validos)
       - [ManifestCorrida](#manifestcorrida)
       - [ResultadoCorrida](#resultadocorrida)
@@ -88,7 +90,7 @@ El historial de cambios vive en git.
     - [12.6 Formato de series BIE en versiones 2010 y 2013](#126-formato-de-series-bie-en-versiones-2010-y-2013)
     - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
-    - [12.9 Validación INEGI solo disponible para tipos específicos](#129-validación-inegi-solo-disponible-para-tipos-específicos)
+    - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
 
 ---
 
@@ -1017,20 +1019,20 @@ Función del dominio que construye los tres artefactos de validación a partir d
 ```python
 def validar(
     resultado: ResultadoCalculo,
-    inegi: dict[Periodo, float | None],
+    inegi: dict[str, dict[Periodo, float | None]],
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 ```
 
-| Parámetro   | Tipo                            | Notas                                                                      |
-| ----------- | ------------------------------- | -------------------------------------------------------------------------- |
-| `resultado` | `ResultadoCalculo`              | Resultado calculado; puede contener múltiples índices en el MultiIndex     |
-| `inegi`     | `dict[Periodo, float \| None]`  | Dict vacío `{}` si la fuente no estaba disponible                          |
-| `canasta`   | `CanastaCanonica`               | Canasta original completa — se usa para cobertura por subgrupo             |
-| `serie`     | `SerieNormalizada`              | Serie original completa — se usa para calcular cobertura por periodo       |
-| `id_corrida`| `str`                           | Para etiquetar los artefactos                                              |
+| Parámetro   | Tipo                                           | Notas                                                                                                       |
+| ----------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `resultado` | `ResultadoCalculo`                             | Resultado calculado; puede contener múltiples índices en el MultiIndex                                      |
+| `inegi`     | `dict[str, dict[Periodo, float \| None]]`      | Clave = nombre del índice (ej. `"INPC"`, `"subyacente"`). Dict vacío `{}` si la fuente no estaba disponible |
+| `canasta`   | `CanastaCanonica`                              | Canasta original completa — se usa para cobertura por subgrupo                                              |
+| `serie`     | `SerieNormalizada`                             | Serie original completa — se usa para calcular cobertura por periodo                                        |
+| `id_corrida`| `str`                                          | Para etiquetar los artefactos                                                                               |
 
 **Loop sobre índices:** itera sobre todos los valores únicos del nivel `indice` del MultiIndex
 de `resultado`. Para cada índice determina a qué subgrupo de `canasta` pertenece:
@@ -1045,7 +1047,9 @@ validación INEGI (`indice_inegi`, `error_absoluto`, `error_relativo`, `estado_v
 el resumen incluye `error_absoluto_max`, `error_relativo_max`, `estado_validacion_global`.
 Para el resto de tipos estas columnas están ausentes — ver §5.5 y §5.6.
 
-**Comportamiento cuando `inegi` es vacío:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
+**Lookup por índice:** para cada `indice` en el loop, la función hace `inegi.get(indice, {})` para obtener el dict de periodos de ese índice específico. Esto unifica el acceso tanto para `"inpc"` (`inegi["INPC"][periodo]`) como para subíndices (`inegi["subyacente"][periodo]`).
+
+**Comportamiento cuando `inegi` es vacío o el índice no tiene entrada:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
 
 ---
 
@@ -1107,7 +1111,7 @@ inpc_2024 = corrida.ejecutar(canasta="data/canasta_2024.csv", series="data/serie
 | --- | --- |
 | `token_inegi=None` | `_FuenteValidacionNula` |
 | `token_inegi` presente y `tipo in INDICADORES_INEGI` | `FuenteValidacionApi(token_inegi, tipo)` |
-| `token_inegi` presente y `tipo not in INDICADORES_INEGI` | `_FuenteValidacionNula` (ver gap §12.9) |
+| `token_inegi` presente y `tipo not in INDICADORES_INEGI` | `_FuenteValidacionNula` |
 
 `INDICADORES_INEGI` vive en `infraestructura/inegi/fuente_validacion_api.py`. Ver §8.6.
 
@@ -1181,8 +1185,13 @@ y marca la validación como `no_disponible`.
 
 ```python
 class FuenteValidacion(Protocol):
-    def obtener(self, periodos: list[Periodo]) -> dict[Periodo, float | None]: ...
+    def obtener(self, periodos: list[Periodo]) -> dict[str, dict[Periodo, float | None]]: ...
 ```
+
+`obtener()` devuelve un dict keyed por nombre de índice (ej. `{"INPC": {periodo: valor}}` para `"inpc"`,
+`{"subyacente": {...}, "no subyacente": {...}}` para `"inflacion componente"`).
+Devuelve `None` por periodo cuando el INEGI no tiene dato para ese periodo.
+Lanza excepción cuando la fuente no está disponible — el caso de uso la captura y pasa `{}` a `validar()`.
 
 Implementaciones:
 
@@ -1522,24 +1531,32 @@ class FuenteValidacionApi:
 
 Lanza `ErrorConfiguracion` si `tipo not in INDICADORES_INEGI`.
 
-**Mapeo tipo → indicador:**
+**Mapeo tipo → (índice → indicador):**
 
 ```python
-INDICADORES_INEGI: dict[str, str] = {
-    "inpc": "910420",
-    # v2 — subyacente
-    # "subyacente":            "910421",
-    # "subyacente_mercancias": "910422",
-    # "subyacente_servicios":  "910423",
-    # v2 — no subyacente
-    # "no_subyacente":                 "910424",
-    # "no_subyacente_agropecuarios":   "910425",
-    # "no_subyacente_energeticos":     "910426",
+INDICADORES_INEGI: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910420",
+    },
+    "inflacion componente": {
+        "subyacente":    "910421",
+        "no subyacente": "910424",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                       "910422",
+        "servicios":                                        "910423",
+        "agropecuarios":                                    "910425",
+        "energeticos y tarifas autorizadas por el gobierno":"910426",
+    },
 }
 ```
 
-El dict vive en el mismo archivo. Para agregar un subíndice en v2 basta descomentar
-la entrada correspondiente; `corrida.py` lo detecta automáticamente vía `tipo in INDICADORES_INEGI`.
+El dict vive en el mismo archivo. La clave exterior es el `tipo` que se pasa a `Corrida.ejecutar()`.
+La clave interior es el nombre exacto de la categoría en la canasta (valor de la columna de clasificación).
+`corrida.py` detecta si hay validación vía `tipo in INDICADORES_INEGI`.
+
+`obtener()` itera sobre `self._indicadores.items()`, llama a `_fetch()` por cada indicador y
+devuelve `dict[str, dict[Periodo, float | None]]` keyed por nombre de índice.
 
 **URL de la API:**
 
@@ -1945,6 +1962,8 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 **Decisión:** el dominio no recibe el puerto `FuenteValidacion` — recibe el dict ya obtenido por `ejecutar_corrida.py`. Si la fuente no estaba disponible, el caso de uso pasa `{}`. Ver contrato completo en §5.11.
 
+**Estructura de `inegi`:** `dict[str, dict[Periodo, float | None]]` — clave exterior = nombre del índice (ej. `"INPC"` para `inpc`, `"subyacente"` para `inflacion componente`). Esto unifica el acceso para índice único y para subíndices sin condicionales adicionales en `validar()`: siempre `inegi.get(indice, {}).get(periodo)`.
+
 ---
 
 ### 11.12 `id_corrida` en `ResultadoCalculo`
@@ -2044,12 +2063,11 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.9 Validación INEGI solo disponible para tipos específicos
+### 12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO
 
-**Comportamiento actual:** `ReporteDetalladoValidacion` incluye columnas `indice_inegi`, `error_absoluto` y `error_relativo` para todos los tipos de índice.
+**Solución implementada en v1.1.0:**
 
-**Problema:** el INEGI publica series de validación para `"inpc"` y los niveles de inflación (`"inflacion_1"`, `"inflacion_2"`), pero no para clasificaciones como `"COG"`, `"CCIF"` o `"SCIAN"`. Para esos tipos, las columnas de validación siempre serían `NaN`, lo que puede confundir al usuario.
-
-**Mejora propuesta:** documentar explícitamente qué tipos soportan validación INEGI. Considerar exponer una propiedad `tipos_con_validacion` en la fachada, o filtrar visualmente esas columnas en `como_tabla()` cuando no aplican.
-
-**Cuándo implementar:** cuando se implementen tipos distintos de `"inpc"` en v2.
+- `TIPOS_CON_VALIDACION` en `dominio/tipos.py` define explícitamente qué tipos soportan comparación INEGI.
+- `ReporteDetalladoValidacion` solo incluye columnas de validación (`indice_inegi`, `error_absoluto`, `error_relativo`, `estado_validacion`) cuando `tipo in TIPOS_CON_VALIDACION`. Para el resto el esquema es más compacto y no genera confusión.
+- `INDICADORES_INEGI` en `fuente_validacion_api.py` se reestructuró como `dict[str, dict[str, str]]` (tipo → índice → indicador) para soportar múltiples indicadores por tipo. `FuenteValidacion.obtener()` devuelve `dict[str, dict[Periodo, float | None]]`.
+- La firma de `validar()` cambió a `inegi: dict[str, dict[Periodo, float | None]]` — unifica el acceso para `"inpc"` y subíndices sin condicionales adicionales.

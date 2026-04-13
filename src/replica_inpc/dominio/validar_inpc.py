@@ -18,7 +18,7 @@ _TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0009, 2024
 
 def validar(
     resultado: ResultadoCalculo,
-    inegi: dict[Periodo, float | None],
+    inegi: dict[str, dict[Periodo, float | None]],
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
@@ -44,6 +44,7 @@ def validar(
             total_genericos_esperados = len(canasta.df)
 
         ponderador_total_esperado = ponderadores.sum()
+        inegi_indice = inegi.get(indice, {})
 
         for periodo in periodos:
             estado_calculo = resultado.df.loc[(periodo, indice), "estado_calculo"]
@@ -63,8 +64,8 @@ def validar(
                 error_relativo = float("nan")
                 estado_validacion = "no_disponible"
 
-                if inegi and periodo in inegi:
-                    indice_inegi = inegi[periodo]
+                if inegi_indice and periodo in inegi_indice:
+                    indice_inegi = inegi_indice[periodo]
                     if indice_inegi is not None and estado_calculo == "ok":
                         error_absoluto = abs(indice_replicado - indice_inegi)  # type: ignore[operator]
                         error_relativo = error_absoluto / abs(indice_inegi)
