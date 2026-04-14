@@ -24,5 +24,8 @@ jobs:
       - name: Linting (ruff)
         run: ruff check src/
 
+      - name: Tipos (mypy)
+        run: mypy src/ --ignore-missing-imports
+
       - name: Tests
         run: pytest -m "not requires_data"

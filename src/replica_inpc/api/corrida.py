@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
+from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
@@ -66,6 +67,7 @@ class Corrida:
             self._ruta_datos.mkdir(parents=True, exist_ok=True)
             self._ruta_salida.mkdir(parents=True, exist_ok=True)
 
+        fuente_validacion: FuenteValidacion
         if self._token_inegi and tipo in INDICADORES_INEGI:
             fuente_validacion = FuenteValidacionApi(self._token_inegi, tipo)
         else:

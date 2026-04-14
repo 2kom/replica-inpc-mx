@@ -59,7 +59,7 @@ def validar(
             ponderador_total_cubierto = ponderadores[serie_grupo.notna()].sum()
 
             if con_validacion:
-                indice_inegi = float("nan")
+                indice_inegi: float | None = float("nan")
                 error_absoluto = float("nan")
                 error_relativo = float("nan")
                 estado_validacion = "no_disponible"
@@ -125,9 +125,7 @@ def validar(
         if not periodos_null:
             continue
 
-        nivel = (
-            "estructural" if len(periodos_null) == len(serie.df.columns) else "periodo"
-        )
+        nivel = "estructural" if len(periodos_null) == len(serie.df.columns) else "periodo"
 
         for p in periodos_null:
             filas_diagnostico.append(
@@ -183,9 +181,7 @@ def validar(
     }
 
     if con_validacion:
-        estados = set(
-            df_reporte.loc[df_reporte["estado_calculo"] == "ok", "estado_validacion"]
-        )
+        estados = set(df_reporte.loc[df_reporte["estado_calculo"] == "ok", "estado_validacion"])
 
         if not estados:
             estado_validacion_global = "no_disponible"
@@ -199,14 +195,10 @@ def validar(
             estado_validacion_global = "ok"
 
         resumen_base["error_absoluto_max"] = (
-            df_reporte["error_absoluto"].max()
-            if "error_absoluto" in df_reporte
-            else float("nan")
+            df_reporte["error_absoluto"].max() if "error_absoluto" in df_reporte else float("nan")
         )
         resumen_base["error_relativo_max"] = (
-            df_reporte["error_relativo"].max()
-            if "error_relativo" in df_reporte
-            else float("nan")
+            df_reporte["error_relativo"].max() if "error_relativo" in df_reporte else float("nan")
         )
         resumen_base["estado_validacion_global"] = estado_validacion_global
 
