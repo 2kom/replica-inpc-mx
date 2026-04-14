@@ -134,6 +134,7 @@ def test_lector_series_csv_serie_vacia(tmp_path: Path):
         LectorSeriesCsv().leer(ruta)
 
 
+@pytest.mark.requires_data
 def test_lector_series_csv_real_2018_horizontal_metadata():
     ruta = DATA_DIR / "series2018_horizontal_metadata.CSV"
     resultado = LectorSeriesCsv().leer(ruta)
@@ -142,6 +143,7 @@ def test_lector_series_csv_real_2018_horizontal_metadata():
     assert len(resultado.df) == 299
 
 
+@pytest.mark.requires_data
 def test_lector_series_csv_real_2018_horizontal_nometadata():
     ruta = DATA_DIR / "series2018_horizontal_nometadata.CSV"
     resultado = LectorSeriesCsv().leer(ruta)
@@ -150,6 +152,7 @@ def test_lector_series_csv_real_2018_horizontal_nometadata():
     assert len(resultado.df) == 299
 
 
+@pytest.mark.requires_data
 def test_lector_series_csv_real_2018_vertical_metadata():
     ruta = DATA_DIR / "series2018_vertical_metadata.CSV"
     resultado = LectorSeriesCsv().leer(ruta)
@@ -158,6 +161,7 @@ def test_lector_series_csv_real_2018_vertical_metadata():
     assert len(resultado.df) == 299
 
 
+@pytest.mark.requires_data
 def test_lector_series_csv_real_2018_vertical_nometadata():
     ruta = DATA_DIR / "series2018_vertical_nometadata.CSV"
     resultado = LectorSeriesCsv().leer(ruta)

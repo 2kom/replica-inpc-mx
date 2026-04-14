@@ -92,6 +92,7 @@ def test_lector_canasta_csv_encoding_no_legible(tmp_path: Path):
         LectorCanastaCsv().leer(ruta_canasta, 2018)
 
 
+@pytest.mark.requires_data
 def test_lector_canasta_csv_real_2018():
     ruta = DATA_DIR / "ponderadores_2018.csv"
     resultado = LectorCanastaCsv().leer(ruta, 2018)
