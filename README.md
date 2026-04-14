@@ -1,5 +1,7 @@
 # replica-inpc-mx
 
+[![CI](https://github.com/2kom/replica-inpc-mx/actions/workflows/ci.yml/badge.svg)](https://github.com/2kom/replica-inpc-mx/actions/workflows/ci.yml)
+
 Replicacion independiente del INPC general de Mexico a partir de insumos publicos del INEGI.
 
 ## Aviso importante
