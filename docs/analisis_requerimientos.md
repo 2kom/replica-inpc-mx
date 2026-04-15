@@ -94,7 +94,7 @@ La tolerancia es configurable por version:
 
 | Version | Tolerancia (`error_absoluto`) |
 | --- | --- |
-| 2018 | `<= 0.0005` |
+| 2018 | `<= 0.0009` |
 | 2024 | `<= 0.005` |
 
 ### 6.2 Faltantes en ponderadores

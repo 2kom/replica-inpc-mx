@@ -17,6 +17,18 @@ El objetivo del proyecto es replicar el **INPC general** usando:
 - indices superiores nacionales de genericos publicados por el INEGI;
 - canastas y ponderadores publicados por el INEGI.
 
+## Contexto
+
+El INPC es el índice oficial de inflación de México, elaborado por el INEGI con base en los precios de una canasta representativa del consumo de los hogares. Se publica quincenalmente y tiene usos que van desde la política monetaria hasta la actualización de contratos privados.
+
+Este proyecto replica el INPC a partir de los índices de genéricos y los ponderadores que el INEGI publica, sin acceso a los datos de campo. El objetivo es verificar de forma independiente y reproducible el índice publicado.
+
+Para profundizar:
+
+- [docs/contexto_inpc.md](docs/contexto_inpc.md) — qué es el INPC, usos y conceptos clave.
+- [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
+- [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
+
 ## Alcance actual (v1.1)
 
 La v1.1 del proyecto permite:
