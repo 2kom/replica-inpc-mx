@@ -550,8 +550,9 @@ Para `v1` no se acuerdan recuperaciones parciales sobre archivos dudosos mas all
 
 Para los archivos de series del INEGI, el sistema debe:
 
-1. intentar lectura con `cp1252`;
-2. intentar un fallback controlado como `latin-1`.
+1. intentar lectura con `utf-8`;
+2. intentar lectura con `cp1252`;
+3. intentar un fallback controlado como `latin-1`.
 
 Si aun asi no se puede leer el archivo:
 
@@ -618,7 +619,8 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 | v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API      |
 | v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores |
 | v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad) |
-| v1.2.0  | v1.1.0 + canasta 2024 con Laspeyres encadenado                                                         |
+| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable    |
+| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado                                                         |
 | v1.3.0  | v1.2.0 + canastas 2010 y 2013                                                                          |
 
 ### 13.1 Subindices

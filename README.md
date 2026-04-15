@@ -29,15 +29,16 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.1)
+## Alcance actual (v1.1.1)
 
-La v1.1 del proyecto permite:
+La v1.1.1 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canasta 2018);
 - calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
 - validar el resultado contra lo publicado por el INEGI via su API de indicadores;
-- exportar resultados de calculo y validacion.
+- exportar resultados de calculo y validacion;
+- ejecutar un demo completo con datos sinteticos (ver `demo/`).
 
 El proyecto **no** incluye todavia:
 

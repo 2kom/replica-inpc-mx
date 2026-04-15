@@ -1793,7 +1793,7 @@ Cubren las variantes de archivo de series:
 
 Un CSV de canasta sintético por versión soportada en v1.
 
-**Test de humo** — usa los archivos reales de `docs/requerimientos/` para verificar
+**Test de humo** — usa los archivos reales de `data/inputs/` para verificar
 que el sistema procesa un archivo INEGI real sin errores. No verifica el resultado
 numérico en detalle.
 
@@ -2011,6 +2011,14 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 **Alternativa considerada:** cache de instancia — cada objeto `FuenteValidacionApi` mantiene su propio cache.
 
 **Razón:** la API del INEGI devuelve el histórico completo en una sola llamada — no hay paginación por rango de fechas. Un cache de instancia no evitaría llamadas redundantes entre corridas distintas que instancian objetos separados. El cache de clase garantiza que el histórico de un indicador se descarga una sola vez por sesión, sin importar cuántas instancias o corridas se ejecuten. En tests se limpia con `FuenteValidacionApi._cache.clear()`.
+
+### 11.17 UTF-8 como primer encoding en `LectorSeriesCsv`
+
+**Decisión:** el orden de encodings a intentar en `LectorSeriesCsv._leer_csv` es `["utf-8", "cp1252", "latin-1"]`.
+
+**Alternativa considerada:** mantener solo `["cp1252", "latin-1"]` — suficiente para archivos reales del INEGI.
+
+**Razón:** los archivos del demo (`demo/series_demo.csv`) se generan en UTF-8. Un archivo UTF-8 con caracteres no-ASCII leído con cp1252 produce texto corrupto sin lanzar `UnicodeDecodeError`, por lo que el fallback nunca se activaría. Agregar UTF-8 primero es seguro: los archivos cp1252 del INEGI contienen bytes no-ASCII que forman secuencias UTF-8 inválidas, lo que sí lanza `UnicodeDecodeError` y activa el fallback a cp1252. El comportamiento con archivos reales no cambia.
 
 ---
 
