@@ -66,7 +66,7 @@ class LectorSeriesCsv:
         return SerieNormalizada(df_num, mapeo)
 
     def _leer_csv(self, ruta: Path) -> pd.DataFrame:
-        for encoding in ["cp1252", "latin-1"]:
+        for encoding in ["utf-8", "cp1252", "latin-1"]:
             try:
                 df = pd.read_csv(ruta, skiprows=5, dtype=str, encoding=encoding)
                 return df
