@@ -21,7 +21,7 @@ El proyecto requiere dos archivos CSV:
 - **Series de genéricos**: índices nacionales por genérico publicados por el INEGI, en formato quincenal. Cada columna es un periodo; cada fila es un genérico. Ver [guias/obtener_series.md](../guias/obtener_series.md) para obtenerlos.
 - **Canasta con ponderadores**: tabla de genéricos con sus ponderadores y clasificaciones. Ver [guias/obtener_ponderadores.md](../guias/obtener_ponderadores.md) para generarla.
 
-## Correspondencia genérico↔serie
+## Correspondencia genérico <-> serie
 
 Los nombres de los genéricos en la canasta y en las series provienen de fuentes distintas y pueden tener diferencias tipográficas (tildes, espacios, mayúsculas). El proyecto normaliza ambos conjuntos antes de emparejarlos: elimina tildes, convierte a minúsculas y colapsa espacios múltiples.
 
@@ -43,13 +43,11 @@ Donde:
 
 ## Cálculo de subíndices
 
-Para calcular subíndices por clasificador (por ejemplo, inflación componente, CCIF, COG), el proyecto agrupa los genéricos según la categoría de clasificación y aplica Laspeyres a cada grupo por separado.
+Para calcular subíndices por clasificador (por ejemplo, inflación componente, CCIF, COG), el proyecto agrupa los genéricos según la categoría de clasificación y aplica Laspeyres a cada grupo por separado:
 
-Dentro de cada grupo, los ponderadores se re-normalizan para que sumen 100:
+$$Subíndice_h^t = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^t}{\displaystyle\sum_{k \in h} w_k}$$
 
-$$w_k^{(h)} = \frac{w_k}{\displaystyle\sum_{j \in h} w_j} \times 100$$
-
-Donde $h$ es el conjunto de genéricos que pertenecen a la categoría. Esto garantiza que el subíndice de cada categoría sea una media ponderada correcta de sus genéricos, independiente del peso relativo de esa categoría en el INPC general.
+Donde $h$ es el conjunto de genéricos que pertenecen a la categoría. Los ponderadores originales $w_k$ se usan directamente — **no se renormalizan**. El denominador $\sum_{k \in h} w_k$ es la suma de ponderadores del subgrupo (menor que 100), lo que produce una media ponderada correcta de los índices de ese subgrupo.
 
 El resultado es un índice por categoría y periodo, con la misma escala que el INPC (base = 100 en el periodo de referencia de la canasta).
 
