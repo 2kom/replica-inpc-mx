@@ -70,7 +70,7 @@ def test_laspeyres_valido():
 
     inpc_esperado = [100.0, 103.0, 106.0, 109.0]
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", tipo="inpc")
 
     valores_inpc = df_calculado.df["indice_replicado"].tolist()
     periodos_de_calculo = df_calculado.df.index.get_level_values("periodo").tolist()
@@ -81,7 +81,7 @@ def test_laspeyres_valido():
 
 def test_laspeyres_estructura_valida():
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", tipo="inpc")
 
     columnas_esperadas = ["version", "tipo", "indice_replicado", "estado_calculo", "motivo_error"]
     assert all(col in df_calculado.df.columns for col in columnas_esperadas)
@@ -95,7 +95,7 @@ def test_laspeyres_estructura_valida():
 
 def test_laspeyres_multiindex():
 
-    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", indice="INPC", tipo="inpc")
+    df_calculado = LaspeyresDirecto().calcular(canasta, serie, "", tipo="inpc")
 
     assert isinstance(df_calculado.df.index, pd.MultiIndex)
     assert df_calculado.df.index.names == ["periodo", "indice"]

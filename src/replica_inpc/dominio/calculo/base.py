@@ -23,18 +23,17 @@ class CalculadorBase(ABC):
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
         id_corrida: str,
-        indice: str,
         tipo: str,
     ) -> ResultadoCalculo:
         """Calcula el resultado del índice para una canasta y una serie dadas.
 
         Args:
-            indice: Identificador del índice calculado dentro del resultado,
-                por ejemplo `INPC`.
-            tipo: Tipo lógico del cálculo, por ejemplo `inpc`.
+            tipo: Tipo lógico del cálculo. Si está en `INDICE_POR_TIPO` calcula
+                el índice agregado; si está en `COLUMNAS_CLASIFICACION` calcula
+                un subíndice por cada categoría del clasificador.
 
         Returns:
             El resultado del cálculo con la estructura de `ResultadoCalculo`.
 
-        Ver: docs/diseño.md §5.8, §11.12
+        Ver: docs/diseño.md §5.8, §11.18
         """

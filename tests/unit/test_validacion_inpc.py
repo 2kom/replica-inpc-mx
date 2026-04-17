@@ -64,9 +64,7 @@ mapeo_serie = {
 canasta = CanastaCanonica(df_canasta, 2018)
 serie = SerieNormalizada(df_serie, mapeo_serie)
 
-resultado = LaspeyresDirecto().calcular(
-    canasta, serie, ID_CORRIDA, indice="INPC", tipo="inpc"
-)
+resultado = LaspeyresDirecto().calcular(canasta, serie, ID_CORRIDA, tipo="inpc")
 
 
 def test_validar_inpc_estado_corrida_y_validacion_validos():
@@ -80,9 +78,7 @@ def test_validar_inpc_estado_corrida_y_validacion_validos():
         }
     }
 
-    resumen, reporte, diagnostico = validar(
-        resultado, inegi, canasta, serie, ID_CORRIDA
-    )
+    resumen, reporte, diagnostico = validar(resultado, inegi, canasta, serie, ID_CORRIDA)
 
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "ok"
@@ -110,14 +106,10 @@ def test_validar_inpc_diferencia_detectada():
         }
     }
 
-    resumen, reporte, diagnostico = validar(
-        resultado, inegi, canasta, serie, ID_CORRIDA
-    )
+    resumen, reporte, diagnostico = validar(resultado, inegi, canasta, serie, ID_CORRIDA)
 
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
-    assert (
-        resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "diferencia_detectada"
-    )
+    assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "diferencia_detectada"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
     assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == Periodo(2018, 7, 2)
@@ -136,9 +128,7 @@ def test_validar_inpc_estado_corrida_fallida():
     for periodo in periodos:
         serie_null.loc["arroz", periodo] = float("nan")
     serie_fallida = SerieNormalizada(serie_null, mapeo_serie)
-    resultado_fallido = LaspeyresDirecto().calcular(
-        canasta, serie_fallida, ID_CORRIDA, indice="INPC", tipo="inpc"
-    )
+    resultado_fallido = LaspeyresDirecto().calcular(canasta, serie_fallida, ID_CORRIDA, tipo="inpc")
 
     resumen, reporte, diagnostico = validar(
         resultado_fallido, {}, canasta, serie_fallida, ID_CORRIDA
@@ -181,13 +171,9 @@ def test_validar_inpc_serie_con_nan():
     serie_con_nan = serie.df.copy()
     serie_con_nan.loc["arroz", Periodo(2018, 8, 2)] = float("nan")
     serie_nan = SerieNormalizada(serie_con_nan, mapeo_serie)
-    resultado_nan = LaspeyresDirecto().calcular(
-        canasta, serie_nan, ID_CORRIDA, indice="INPC", tipo="inpc"
-    )
+    resultado_nan = LaspeyresDirecto().calcular(canasta, serie_nan, ID_CORRIDA, tipo="inpc")
 
-    resumen, reporte, diagnostico = validar(
-        resultado_nan, {}, canasta, serie_nan, ID_CORRIDA
-    )
+    resumen, reporte, diagnostico = validar(resultado_nan, {}, canasta, serie_nan, ID_CORRIDA)
 
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok_parcial"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "no_disponible"
@@ -217,9 +203,7 @@ def test_validar_inpc_dentro_de_tolerancia():
         }
     }
 
-    resumen, reporte, diagnostico = validar(
-        resultado, inegi, canasta, serie, ID_CORRIDA
-    )
+    resumen, reporte, diagnostico = validar(resultado, inegi, canasta, serie, ID_CORRIDA)
 
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "ok_parcial"

@@ -62,24 +62,14 @@ mapeo = {"arroz": "Arroz", "frijol": "Frijol", "leche": "Leche", "huevo": "Huevo
 serie = SerieNormalizada(df_serie, mapeo)
 
 
-def _calcular_grupo(categoria: str) -> ResultadoCalculo:
-    """Simula el loop de ejecutar_corrida para una categoría."""
-    mascara = df_canasta["COG"] == categoria
-    df_grupo = df_canasta[mascara].copy()
-    ponders = df_grupo["ponderador"].astype(float)
-    df_grupo["ponderador"] = (ponders / ponders.sum() * 100).astype(str)
-    canasta_grupo = CanastaCanonica(df_grupo, 2018)
-    serie_grupo = SerieNormalizada(df_serie.loc[df_grupo.index], mapeo)
-    return LaspeyresDirecto().calcular(
-        canasta_grupo, serie_grupo, ID_CORRIDA, categoria, "COG"
-    )
+def _get_grupo(resultado: ResultadoCalculo, categoria: str) -> ResultadoCalculo:
+    mask = resultado.df.index.get_level_values("indice") == categoria
+    return ResultadoCalculo(resultado.df[mask], ID_CORRIDA)
 
 
-resultado_alimentos = _calcular_grupo("alimentos")
-resultado_servicios = _calcular_grupo("servicios")
-resultado_combinado = ResultadoCalculo(
-    pd.concat([resultado_alimentos.df, resultado_servicios.df]), ID_CORRIDA
-)
+resultado_combinado = LaspeyresDirecto().calcular(canasta, serie, ID_CORRIDA, "COG")
+resultado_alimentos = _get_grupo(resultado_combinado, "alimentos")
+resultado_servicios = _get_grupo(resultado_combinado, "servicios")
 
 
 # ---------------------------------------------------------------------------
@@ -90,31 +80,31 @@ resultado_combinado = ResultadoCalculo(
 def test_subindice_periodo_base_es_100():
     """En el período base, ambos subíndices arrancan en 100."""
     p_base = Periodo(2018, 7, 2)
-    assert resultado_alimentos.df.loc[
-        (p_base, "alimentos"), "indice_replicado"
-    ] == pytest.approx(100.0)  # type: ignore[index]
-    assert resultado_servicios.df.loc[
-        (p_base, "servicios"), "indice_replicado"
-    ] == pytest.approx(100.0)  # type: ignore[index]
+    assert resultado_alimentos.df.loc[(p_base, "alimentos"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
+        100.0
+    )
+    assert resultado_servicios.df.loc[(p_base, "servicios"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
+        100.0
+    )
 
 
-def test_subindice_calculo_con_renormalizacion():
+def test_subindice_calculo_laspeyres_por_subgrupo():
     """
-    Verifica que la re-normalización de ponderadores produce el Laspeyres correcto.
+    Verifica que Laspeyres por subgrupo usa los ponderadores originales (suma < 100).
 
-    alimentos (renorm: arroz=100/3, frijol=200/3):
-        1Q Ago 2018 = (100/3 × 101 + 200/3 × 102) / 100 = 305/3
+    alimentos (arroz=10, frijol=20, sum=30):
+        1Q Ago 2018 = (10 × 101 + 20 × 102) / 30 = 305/3
 
-    servicios (renorm: leche=300/7, huevo=400/7):
-        1Q Ago 2018 = (300/7 × 103 + 400/7 × 104) / 100 = 725/7
+    servicios (leche=30, huevo=40, sum=70):
+        1Q Ago 2018 = (30 × 103 + 40 × 104) / 70 = 725/7
     """
     p2 = Periodo(2018, 8, 1)
-    assert resultado_alimentos.df.loc[
-        (p2, "alimentos"), "indice_replicado"
-    ] == pytest.approx(305 / 3)  # type: ignore[index]
-    assert resultado_servicios.df.loc[
-        (p2, "servicios"), "indice_replicado"
-    ] == pytest.approx(725 / 7)  # type: ignore[index]
+    assert resultado_alimentos.df.loc[(p2, "alimentos"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
+        305 / 3
+    )
+    assert resultado_servicios.df.loc[(p2, "servicios"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
+        725 / 7
+    )
 
 
 def test_subindice_resultado_combinado_multiindex():
@@ -168,9 +158,7 @@ def test_validar_subindice_resumen_sin_estado_validacion_global():
 
 def test_validar_subindice_estado_corrida_ok():
     """Sin faltantes, estado_corrida='ok'. total_periodos_esperados = 2 cats × 2 periodos = 4."""
-    resumen, reporte, diagnostico = validar(
-        resultado_combinado, {}, canasta, serie, ID_CORRIDA
-    )
+    resumen, reporte, diagnostico = validar(resultado_combinado, {}, canasta, serie, ID_CORRIDA)
 
     assert resumen.df.loc[ID_CORRIDA, "estado_corrida"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
@@ -221,9 +209,7 @@ def test_validar_subindice_cobertura_parcial():
 
     res_al_nan = _calcular_grupo_con_serie("alimentos", serie_con_nan)
     res_sv_nan = _calcular_grupo_con_serie("servicios", serie_con_nan)
-    resultado_nan = ResultadoCalculo(
-        pd.concat([res_al_nan.df, res_sv_nan.df]), ID_CORRIDA
-    )
+    resultado_nan = ResultadoCalculo(pd.concat([res_al_nan.df, res_sv_nan.df]), ID_CORRIDA)
 
     _, reporte, _ = validar(resultado_nan, {}, canasta, serie_nan, ID_CORRIDA)
 
@@ -238,18 +224,10 @@ def test_validar_subindice_cobertura_parcial():
     assert fila_sv_p2["cobertura_genericos_pct"] == pytest.approx(100.0)
 
 
-def _calcular_grupo_con_serie(
-    categoria: str, serie_df: pd.DataFrame
-) -> ResultadoCalculo:
-    mascara = df_canasta["COG"] == categoria
-    df_grupo = df_canasta[mascara].copy()
-    ponders = df_grupo["ponderador"].astype(float)
-    df_grupo["ponderador"] = (ponders / ponders.sum() * 100).astype(str)
-    canasta_grupo = CanastaCanonica(df_grupo, 2018)
-    serie_grupo = SerieNormalizada(serie_df.loc[df_grupo.index], mapeo)
-    return LaspeyresDirecto().calcular(
-        canasta_grupo, serie_grupo, ID_CORRIDA, categoria, "COG"
-    )
+def _calcular_grupo_con_serie(categoria: str, serie_df: pd.DataFrame) -> ResultadoCalculo:
+    serie_custom = SerieNormalizada(serie_df, mapeo)
+    resultado = LaspeyresDirecto().calcular(canasta, serie_custom, ID_CORRIDA, "COG")
+    return _get_grupo(resultado, categoria)
 
 
 # ---------------------------------------------------------------------------
@@ -321,21 +299,7 @@ _df_canasta_ic = pd.DataFrame(
 _canasta_ic = CanastaCanonica(_df_canasta_ic, 2018)
 
 
-def _calcular_grupo_ic(categoria: str) -> ResultadoCalculo:
-    mascara = _df_canasta_ic["inflacion componente"] == categoria
-    df_grupo = _df_canasta_ic[mascara].copy()
-    ponders = df_grupo["ponderador"].astype(float)
-    df_grupo["ponderador"] = (ponders / ponders.sum() * 100).astype(str)
-    canasta_grupo = CanastaCanonica(df_grupo, 2018)
-    serie_grupo = SerieNormalizada(df_serie.loc[df_grupo.index], mapeo)
-    return LaspeyresDirecto().calcular(
-        canasta_grupo, serie_grupo, ID_CORRIDA, categoria, "inflacion componente"
-    )
-
-
-_res_sub = _calcular_grupo_ic("subyacente")
-_res_nosub = _calcular_grupo_ic("no subyacente")
-_resultado_ic = ResultadoCalculo(pd.concat([_res_sub.df, _res_nosub.df]), ID_CORRIDA)
+_resultado_ic = LaspeyresDirecto().calcular(_canasta_ic, serie, ID_CORRIDA, "inflacion componente")
 
 # subyacente   p2: (100/3 × 101 + 200/3 × 102) / 100 = 305/3
 # no subyacente p2: (300/7 × 103 + 400/7 × 104) / 100 = 725/7
@@ -401,9 +365,7 @@ def test_subindice_con_validacion_inegi_lookup_independiente_por_indice():
         # "no subyacente" ausente → no_disponible
     }
 
-    _, reporte, _ = validar(
-        _resultado_ic, inegi_parcial, _canasta_ic, serie, ID_CORRIDA
-    )
+    _, reporte, _ = validar(_resultado_ic, inegi_parcial, _canasta_ic, serie, ID_CORRIDA)
 
     p1, p2 = Periodo(2018, 7, 2), Periodo(2018, 8, 1)
     assert reporte.df.loc[(p1, "subyacente"), "estado_validacion"] == "ok"  # type: ignore[index]
