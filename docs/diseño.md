@@ -2077,6 +2077,28 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 **Razón para esta decisión:** `EjecutarCorrida` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre `Σw_j`. El invariante `Σw_j = 100` de `CanastaCanonica` se verifica antes del split y no se propaga a los subgrupos (DataFrames crudos).
 
+### 11.19 Vectorización del loop interno de `validar_inpc`
+
+**Decisión:** reemplazar los loops Python escalares de `validar_inpc.validar()` con operaciones vectorizadas de pandas.
+
+**Por qué:** profiling con SCIAN rama (91 categorías, 158 periodos, canasta 2018) mostró que `validar` consume el 96% del tiempo de la corrida (10.1s de 10.5s totales). Tres causas:
+
+1. 3× `.loc[(periodo, indice), col]` por iteración del loop `indices × periodos` → 39 592 llamadas a `__getitem__` con tupla sobre MultiIndex.
+2. `serie_col[ponderadores.index]` + 2× `notna()` por iteración → 26 390 llamadas escalares.
+3. Loop `for generico × for periodo` en el bloque de diagnóstico → 47 242 accesos escalares `pd.isna()`.
+
+**Tres cambios en la implementación:**
+
+1. `res_lookup = resultado.df[cols].to_dict("index")` pre-computado antes del loop → acceso O(1) por par `(periodo, indice)` en lugar de `.loc[(tupla)]`.
+2. `notna_df = ~serie.df.isna()` pre-computado una vez; dentro del loop por índice: `notna_df.loc[idx_grupo].sum()` y `notna_df.loc[idx_grupo].multiply(ponderadores, axis=0).sum()` calculan cobertura y ponderador cubierto para **todos los periodos a la vez** → 91 operaciones matriciales en lugar de 13 195 escalares.
+3. Diagnóstico: `serie.df.isna().stack()` seguido de filtro booleano reemplaza el doble loop Python → 1 operación vectorizada en lugar de 47 242 accesos escalares.
+
+**Comportamiento idéntico.** Estimado post-optimización: ~0.75s con datos reales (SCIAN rama, 91 categorías, 158 periodos).
+
+**Alternativa descartada:** mantener los loops Python y compensar con `numba` o `cython`. Descartada porque la causa raíz es el overhead de dispatch de pandas por acceso escalar, no el costo de la operación aritmética — la vectorización lo elimina directamente sin dependencias adicionales.
+
+---
+
 ## 12. Gaps conocidos y mejoras futuras
 
 Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.

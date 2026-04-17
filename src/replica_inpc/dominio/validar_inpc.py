@@ -33,6 +33,11 @@ def validar(
     indices = resultado.df.index.get_level_values("indice").unique()
     periodos = resultado.df.index.get_level_values("periodo").unique()
 
+    notna_df = ~serie.df.isna()
+    res_lookup = resultado.df[["estado_calculo", "indice_replicado", "motivo_error"]].to_dict(
+        "index"
+    )
+
     filas_reporte = []
     for indice in indices:
         if tipo in COLUMNAS_CLASIFICACION:
@@ -46,17 +51,20 @@ def validar(
         ponderador_total_esperado = ponderadores.sum()
         inegi_indice = inegi.get(indice, {})
 
-        for periodo in periodos:
-            estado_calculo = resultado.df.loc[(periodo, indice), "estado_calculo"]
-            indice_replicado = resultado.df.loc[(periodo, indice), "indice_replicado"]
-            motivo_error = resultado.df.loc[(periodo, indice), "motivo_error"]
+        notna_grupo = notna_df.loc[ponderadores.index]
+        con_indice_serie = notna_grupo.sum()
+        ponderador_cubierto_serie = notna_grupo.multiply(ponderadores, axis=0).sum()
 
-            serie_col = serie.df[periodo]
-            serie_grupo = serie_col[ponderadores.index]
-            con_indice = serie_grupo.notna().sum()
+        for periodo in periodos:
+            row = res_lookup[(periodo, indice)]
+            estado_calculo = row["estado_calculo"]
+            indice_replicado = row["indice_replicado"]
+            motivo_error = row["motivo_error"]
+
+            con_indice = int(con_indice_serie[periodo])
             sin_indice = total_genericos_esperados - con_indice
             cobertura_genericos_pct = con_indice / total_genericos_esperados * 100
-            ponderador_total_cubierto = ponderadores[serie_grupo.notna()].sum()
+            ponderador_total_cubierto = float(ponderador_cubierto_serie[periodo])
 
             if con_validacion:
                 indice_inegi: float | None = float("nan")
@@ -117,32 +125,32 @@ def validar(
     )
     df_reporte = pd.DataFrame(filas_reporte, index=index_reporte)
 
-    filas_diagnostico = []
-    for generico in canasta.df.index:
-        serie_generico = serie.df.loc[generico]
-        periodos_null = [p for p in serie.df.columns if pd.isna(serie_generico[p])]
+    null_mask = serie.df.isna()
+    null_counts = null_mask.sum(axis=1)
+    total_periodos = len(serie.df.columns)
+    null_stack = null_mask.stack()
+    null_stack = null_stack[null_stack]  # type: ignore[index]
 
-        if not periodos_null:
-            continue
-
-        nivel = "estructural" if len(periodos_null) == len(serie.df.columns) else "periodo"
-
-        for p in periodos_null:
-            filas_diagnostico.append(
-                {
-                    "id_corrida": id_corrida,
-                    "version": version,
-                    "tipo": tipo,
-                    "periodo": p,
-                    "generico": generico,
-                    "nivel_faltante": nivel,
-                    "tipo_faltante": "indice",
-                    "detalle": f"Sin dato de indice para generico {generico} en {p}",
-                }
-            )
-
-    if filas_diagnostico:
-        df_diagnostico = pd.DataFrame(filas_diagnostico)
+    if len(null_stack) > 0:
+        genericos_arr = null_stack.index.get_level_values(0)
+        periodos_arr = null_stack.index.get_level_values(1)
+        counts = null_counts[genericos_arr].values
+        nivel_arr = ["estructural" if c == total_periodos else "periodo" for c in counts]
+        df_diagnostico = pd.DataFrame(
+            {
+                "id_corrida": id_corrida,
+                "version": version,
+                "tipo": tipo,
+                "periodo": periodos_arr,
+                "generico": genericos_arr,
+                "nivel_faltante": nivel_arr,
+                "tipo_faltante": "indice",
+                "detalle": [
+                    f"Sin dato de indice para generico {g} en {p}"
+                    for g, p in zip(genericos_arr, periodos_arr)
+                ],
+            }
+        )
     else:
         df_diagnostico = pd.DataFrame(
             columns=[
