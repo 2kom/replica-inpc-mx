@@ -30,6 +30,7 @@ El historial de cambios vive en git.
     - [5.8 CalculadorBase](#58-calculadorbase)
       - [5.8.1 LaspeyresDirecto](#581-laspeyresdirecto)
       - [5.8.2 LaspeyresEncadenado](#582-laspeyresencadenado)
+      - [5.8.3 grupos\_por\_clasificacion](#583-grupos_por_clasificacion)
     - [5.9 tipos.py — tipos compartidos](#59-tipospy--tipos-compartidos)
       - [VersionCanasta](#versioncanasta)
       - [INDICE\_POR\_TIPO](#indice_por_tipo)
@@ -81,6 +82,12 @@ El historial de cambios vive en git.
     - [11.10 Detección de `null_por_faltantes`](#1110-detección-de-null_por_faltantes)
     - [11.11 Firma de `validar_inpc.py`](#1111-firma-de-validar_inpcpy)
     - [11.12 `id_corrida` en `ResultadoCalculo`](#1112-id_corrida-en-resultadocalculo)
+    - [11.13 Loop de subíndices en `EjecutarCorrida`, no en el calculador](#1113-loop-de-subíndices-en-ejecutarcorrida-no-en-el-calculador)
+    - [11.14 Schema condicional en `ReporteDetalladoValidacion`](#1114-schema-condicional-en-reportedetalladovalidacion)
+    - [11.15 `TIPOS_CON_VALIDACION` en el dominio, no en infraestructura](#1115-tipos_con_validacion-en-el-dominio-no-en-infraestructura)
+    - [11.16 Cache de clase en `FuenteValidacionApi`](#1116-cache-de-clase-en-fuentevalidacionapi)
+    - [11.17 UTF-8 como primer encoding en `LectorSeriesCsv`](#1117-utf-8-como-primer-encoding-en-lectorseriescsv)
+    - [11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`](#1118-dispatch-interno-en-calculadorbase-con-helper-grupos_por_clasificacion)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -189,7 +196,8 @@ replica-inpc-mx/
 │       │   │   ├── base.py
 │       │   │   ├── estrategia.py
 │       │   │   ├── laspeyres.py
-│       │   │   └── encadenado.py
+│       │   │   ├── encadenado.py
+│       │   │   └── subindices.py
 │       │   ├── correspondencia.py
 │       │   ├── validar_inpc.py
 │       │   ├── periodos.py
@@ -470,8 +478,6 @@ class Periodo:
 **Representación:** DataFrame-backed. Índice compuesto `(Periodo, indice)` — permite
 múltiples subíndices por periodo. `version` y `tipo` como columnas. `id_corrida` como atributo.
 
-**Nota v1:** en v1 solo existe `tipo="inpc"`, con `indice="INPC"` como único valor.
-
 ```python
 class ResultadoCalculo:
     def __init__(self, df: pd.DataFrame, id_corrida: str) -> None: ...
@@ -745,7 +751,6 @@ class CalculadorBase(ABC):
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
         id_corrida: str,
-        indice: str,
         tipo: str,
     ) -> ResultadoCalculo: ...
 ```
@@ -768,7 +773,7 @@ def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
 | 2010, 2018 | `LaspeyresDirecto`    | `dominio/calculo/laspeyres.py`  |
 | 2013, 2024 | `LaspeyresEncadenado` | `dominio/calculo/encadenado.py` |
 
-El caso de uso `calcular_inpc.py` no necesita saber qué estrategia existe —
+El caso de uso `ejecutar_corrida.py` no necesita saber qué estrategia existe —
 solo llama `para_canasta(canasta).calcular(canasta, serie)`.
 
 ---
@@ -776,17 +781,21 @@ solo llama `para_canasta(canasta).calcular(canasta, serie)`.
 #### 5.8.1 LaspeyresDirecto
 
 Implementa `CalculadorBase` para canastas sin encadenamiento (versiones 2010 y 2018).
+El dispatch entre INPC y subíndices ocurre internamente según `tipo`.
 
-**Fórmula:**
+**Fórmula (INPC y por subgrupo):**
 
-$$I^t = \frac{\sum_j w_j \cdot I_j^t}{100}$$
+$$I^t = \frac{\sum_j w_j \cdot I_j^t}{\sum_j w_j}$$
 
-Donde $w_j$ son los ponderadores de la canasta (suman 100) e $I_j^t$ es el índice del
-genérico $j$ en el periodo $t$.
+Donde $w_j$ son los ponderadores del grupo e $I_j^t$ es el índice del genérico $j$ en el periodo $t$. Para el INPC completo $\sum_j w_j = 100$; para un subgrupo $\sum_j w_j < 100$. La fórmula es válida en ambos casos sin renormalizar.
 
-**Comportamiento ante NaN:** si algún genérico tiene `NaN` en un periodo, ese periodo
-se marca `estado_calculo = 'null_por_faltantes'` e `indice_replicado = NaN`. El resto
-de periodos se calcula normalmente.
+**Dispatch interno:**
+
+- `tipo in INDICE_POR_TIPO`: calcula sobre la canasta completa; `indice = INDICE_POR_TIPO[tipo]`.
+- `tipo in COLUMNAS_CLASIFICACION`: delega el split a `_subindices.grupos_por_clasificacion()`
+  y aplica la fórmula por cada grupo; `indice = categoria` (clave del groupby).
+
+**Comportamiento ante NaN:** si algún genérico tiene `NaN` en un periodo, ese periodo se marca `estado_calculo = 'null_por_faltantes'` e `indice_replicado = NaN`. El resto de periodos se calcula normalmente.
 
 **Archivo:** `dominio/calculo/laspeyres.py`
 
@@ -797,6 +806,28 @@ de periodos se calcula normalmente.
 Pendiente de implementación. Aplica a canastas con encadenamiento (versiones 2013 y 2024).
 
 **Archivo:** `dominio/calculo/encadenado.py` (por crear)
+
+---
+
+#### 5.8.3 grupos_por_clasificacion
+
+Helper generador usado internamente por `LaspeyresDirecto` y `LaspeyresEncadenado`. Realiza el split de canasta y serie por categoría una sola vez; cada calculador aplica su propia fórmula sobre los pares resultantes.
+
+```python
+def grupos_por_clasificacion(
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+    tipo: str,
+) -> Iterator[tuple[str, pd.DataFrame, pd.DataFrame]]: ...
+```
+
+Yields `(categoria, df_canasta_grupo, df_serie_grupo)` para cada categoría única no vacía de `canasta.df[tipo]` (`dropna=True`). Genéricos sin categoría asignada se excluyen — no pertenecen a ningún subíndice.
+
+**Invariante:** cada subíndice es un Laspeyres independiente sobre su subconjunto de genéricos — no se deriva del INPC general. Los ponderadores del subgrupo suman < 100; la fórmula de §5.8.1 o §5.8.2 usa `Σw_j` como denominador, no 100.
+
+**Sin construcción de `CanastaCanonica` por subgrupo:** los pares `(df_canasta_grupo, df_serie_grupo)` son DataFrames crudos. El invariante `Σw_j = 100` de `CanastaCanonica` se verifica una sola vez sobre la canasta completa, antes del split.
+
+**Archivo:** `dominio/calculo/subindices.py`
 
 ---
 
@@ -827,14 +858,14 @@ Mapeo de `tipo` (parámetro del usuario) al string que se usa como valor en el n
 INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
 ```
 
-Cuando `tipo in INDICE_POR_TIPO`, `EjecutarCorrida` deriva:
+Cuando `tipo in INDICE_POR_TIPO`, `LaspeyresDirecto` deriva internamente:
 
 ```python
 indice = INDICE_POR_TIPO[tipo]
 ```
 
 Cuando `tipo in COLUMNAS_CLASIFICACION`, el `indice` de cada fila es el valor de la
-categoría directamente (ej. `"subyacente"`, `"no subyacente"`). Ver §7.2 paso 7.
+categoría directamente (ej. `"subyacente"`, `"no subyacente"`). Ver §5.8.1 y §5.8.3.
 
 ---
 
@@ -1291,9 +1322,7 @@ class EjecutarCorrida:
 4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
-7. Cálculo — dos caminos según `tipo`:
-   - **`tipo in INDICE_POR_TIPO`:** `indice = INDICE_POR_TIPO[tipo]`; `para_canasta(canasta).calcular(canasta, serie, id_corrida, indice, tipo)` → `ResultadoCalculo`
-   - **`tipo in COLUMNAS_CLASIFICACION`:** para cada `categoria` única no vacía en `canasta.df[tipo]` (orden alfabético): filtra `canasta.df` al subgrupo, re-normaliza sus ponderadores a 100, filtra `serie` a los genéricos del subgrupo, llama `calcular(..., indice=categoria, tipo=tipo)`. Concatena todos los `ResultadoCalculo.df` en uno solo con MultiIndex `(periodo, categoria)`. El `resultado` final contiene todos los subíndices juntos.
+7. Cálculo: `para_canasta(canasta).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
 8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
 9. `validar_inpc.py` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
 10. Si `persistir=True`:
@@ -1976,11 +2005,13 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 11.13 Loop de subíndices en `EjecutarCorrida`, no en el calculador
 
-**Decisión:** el loop que itera sobre categorías de un clasificador, re-normaliza ponderadores y combina resultados vive en `ejecutar_corrida.py`, no en `LaspeyresDirecto`.
+> **Decisión revertida en v1.2.0 — ver §11.18.**
 
-**Alternativa considerada:** crear una estrategia `LaspeyresDirectoClasificacion` que encapsule el loop internamente.
+**Decisión original (v1.1.0):** el loop que itera sobre categorías de un clasificador, re-normaliza ponderadores y combina resultados vive en `ejecutar_corrida.py`, no en `LaspeyresDirecto`.
 
-**Razón:** el loop es orquestación — "para cada categoría, delegar a la estrategia existente y combinar". `LaspeyresDirecto` es una función pura de cálculo: dado una canasta y una serie, devuelve el índice ponderado. Hacerlo consciente de clasificadores lo acoplaría al esquema de la canasta. La re-normalización queda protegida por el invariante de `CanastaCanonica` (ponderadores deben sumar 100), así que si se pasa una canasta mal normalizada el error explota antes del cálculo. El trigger para extraer el loop sería un segundo caso de uso que lo necesite.
+**Razón original:** el loop es orquestación, no cálculo. El trigger para extraerlo sería un segundo caso de uso que lo necesite.
+
+**Por qué se revirtió:** el trigger llegó con v1.2.0 — `LaspeyresEncadenado` necesita el mismo patrón. El dispatch se movió al interior de cada `CalculadorBase` y el split se delegó al helper `grupos_por_clasificacion` en `subindices.py`. Ver §11.18.
 
 ---
 
@@ -2012,6 +2043,8 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 **Razón:** la API del INEGI devuelve el histórico completo en una sola llamada — no hay paginación por rango de fechas. Un cache de instancia no evitaría llamadas redundantes entre corridas distintas que instancian objetos separados. El cache de clase garantiza que el histórico de un indicador se descarga una sola vez por sesión, sin importar cuántas instancias o corridas se ejecuten. En tests se limpia con `FuenteValidacionApi._cache.clear()`.
 
+---
+
 ### 11.17 UTF-8 como primer encoding en `LectorSeriesCsv`
 
 **Decisión:** el orden de encodings a intentar en `LectorSeriesCsv._leer_csv` es `["utf-8", "cp1252", "latin-1"]`.
@@ -2021,6 +2054,28 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 **Razón:** los archivos del demo (`demo/series_demo.csv`) se generan en UTF-8. Un archivo UTF-8 con caracteres no-ASCII leído con cp1252 produce texto corrupto sin lanzar `UnicodeDecodeError`, por lo que el fallback nunca se activaría. Agregar UTF-8 primero es seguro: los archivos cp1252 del INEGI contienen bytes no-ASCII que forman secuencias UTF-8 inválidas, lo que sí lanza `UnicodeDecodeError` y activa el fallback a cp1252. El comportamiento con archivos reales no cambia.
 
 ---
+
+### 11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`
+
+**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `EjecutarCorrida`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa `Σw_j` como denominador, válido tanto para la canasta completa (`Σw_j = 100`) como para subgrupos (`Σw_j < 100`). La firma de `CalculadorBase.calcular()` pierde el parámetro `indice` — se deriva internamente.
+
+**Alternativas consideradas:**
+
+1. Mantener el loop en `EjecutarCorrida` (decisión original, §11.13).
+2. Función orquestadora `calcular_por_clasificacion(tipo, canasta, serie, calculador,
+   id_corrida)` llamada por `EjecutarCorrida` (decisión intermedia, reemplazada por esta).
+3. `groupby` vectorizado completo dentro de cada calculador:
+
+   ```python
+   resultado = serie.df.multiply(ponds, axis=0).groupby(cats).sum()
+               .divide(ponds.groupby(cats).sum(), axis=0)
+   ```
+
+**Razón para rechazar la alternativa 2:** mantiene el dispatch fuera del calculador — `EjecutarCorrida` aún necesita conocer la diferencia entre INPC y subíndices, y `calcular_por_clasificacion` recibe el calculador como argumento externo. El dispatch pertenece al calculador, no al caso de uso.
+
+**Razón para rechazar el groupby completo (alternativa 3):** acopla la lógica de agregación a la fórmula Laspeyres dentro del calculador. `LaspeyresEncadenado` tendría que duplicar el groupby con su propia fórmula de encadenamiento, rompiendo el patrón donde `grupos_por_clasificacion` es el único punto de split.
+
+**Razón para esta decisión:** `EjecutarCorrida` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre `Σw_j`. El invariante `Σw_j = 100` de `CanastaCanonica` se verifica antes del split y no se propaga a los subgrupos (DataFrames crudos).
 
 ## 12. Gaps conocidos y mejoras futuras
 
