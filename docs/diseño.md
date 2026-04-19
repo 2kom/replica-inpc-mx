@@ -93,6 +93,7 @@ El historial de cambios vive en git.
       - [Primer enfoque (descartado): media ponderada con ponderadores nuevos](#primer-enfoque-descartado-media-ponderada-con-ponderadores-nuevos)
       - [Enfoque final: $f\_h$ desde el resultado de la versión anterior](#enfoque-final-f_h-desde-el-resultado-de-la-versión-anterior)
     - [11.21 Imputación de faltantes en series](#1121-imputación-de-faltantes-en-series)
+    - [11.22 `combinar` — función de combinación histórica de `ResultadoCalculo`](#1122-combinar--función-de-combinación-histórica-de-resultadocalculo)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -103,6 +104,8 @@ El historial de cambios vive en git.
     - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
+    - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados)
+    - [12.11 `ejecutar` multi-canasta (v2.0)](#1211-ejecutar-multi-canasta-v20)
 
 ---
 
@@ -504,6 +507,17 @@ class ResultadoCalculo:
 `indice_replicado` sobre el nivel `periodo`: filas = valores de `indice` (ej. `"INPC"`),
 columnas = periodos. `_repr_html_()` conserva la vista larga; la vista ancha
 se obtiene llamando `como_tabla(ancho=True)` explícitamente.
+
+**`combinar(resultados)`** — función suelta en `dominio/modelos/resultado.py`, exportada desde `replica_inpc`. Construye un `ResultadoCalculo` continuo a partir de una lista de resultados de distintas canastas:
+
+```python
+from replica_inpc import combinar
+
+inpc = combinar([r_2010.resultado, r_2013.resultado, r_2018.resultado, r_2024.resultado])
+inpc.como_tabla(ancho=True)
+```
+
+Ver §11.22 para la decisión de diseño.
 
 **Esquema del DataFrame interno (índice compuesto: `(Periodo, indice)`):**
 
@@ -2231,6 +2245,29 @@ Implementado como `df.bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la seri
 
 ---
 
+### 11.22 `combinar` — función de combinación histórica de `ResultadoCalculo`
+
+**Problema:** cada corrida cubre un solo rango de canasta. Para visualizar o analizar la serie histórica continua del INPC (ej. 2010–hoy) el usuario necesita concatenar resultados de múltiples corridas.
+
+**Decisión:** función suelta `combinar(resultados: list[ResultadoCalculo]) -> ResultadoCalculo` en `dominio/modelos/resultado.py`. Exportada desde `replica_inpc/__init__.py`.
+
+**Por qué función suelta y no método de `Corrida`:** no requiere puertos ni infraestructura — es lógica pura sobre modelos de dominio. Vive en el dominio.
+
+**Por qué no `ResultadoCorrida.combinar`:** `ResumenValidacion`, `ReporteDetalladoValidacion` y `DiagnosticoFaltantes` son por corrida individual y no tienen semántica clara al combinarse. Solo `ResultadoCalculo` (la serie de valores) tiene sentido continuo.
+
+**Algoritmo:**
+
+1. Ordenar la lista cronológicamente por `min(index.get_level_values("periodo"))` de cada resultado.
+2. Para cada par `(anterior, posterior)`: excluir del `anterior` los periodos que ya están en `posterior` — el traslape queda en el posterior.
+3. `pd.concat` de todos los dfs resultantes.
+4. `id_corrida` = UUID nuevo (el resultado combinado no pertenece a ninguna corrida individual).
+
+**Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoCalculo` — versiones válidas por fila, sin índices duplicados, consistencia ok/fallo. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
+
+**Limitación documentada:** para tipos con fricción de nombres entre canastas (ej. `CCIF division`) el resultado combinado puede tener categorías que aparecen solo en algunos periodos. No es un error — es la realidad de los cambios de canasta. Ver §12.10.
+
+---
+
 ## 12. Gaps conocidos y mejoras futuras
 
 Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla.
@@ -2328,3 +2365,50 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 - `ReporteDetalladoValidacion` solo incluye columnas de validación (`indice_inegi`, `error_absoluto`, `error_relativo`, `estado_validacion`) cuando `tipo in TIPOS_CON_VALIDACION`. Para el resto el esquema es más compacto y no genera confusión.
 - `INDICADORES_INEGI` en `fuente_validacion_api.py` se reestructuró como `dict[str, dict[str, str]]` (tipo → índice → indicador) para soportar múltiples indicadores por tipo. `FuenteValidacion.obtener()` devuelve `dict[str, dict[Periodo, float | None]]`.
 - La firma de `validar()` cambió a `inegi: dict[str, dict[Periodo, float | None]]` — unifica el acceso para `"inpc"` y subíndices sin condicionales adicionales.
+
+---
+
+### 12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados
+
+**Comportamiento actual:** cada corrida opera sobre una sola canasta. No existe mecanismo para combinar resultados de canastas distintas en una serie histórica continua por subíndice.
+
+**Problema:** al comparar o concatenar resultados de canastas 2018 y 2024 para clasificaciones distintas de INPC, los nombres de categorías difieren o desaparecen entre versiones. Medición al 2026-04-19 sobre `CCIF division`:
+
+| Clasificación         | Solo en 2018 | Solo en 2024 | Comunes |
+| --------------------- | -----------: | -----------: | ------: |
+| `CCIF division`       | 8            | 9            | 4       |
+| `CCIF grupo`          | 27           | 29           | 17      |
+| `CCIF clase`          | 62           | 69           | 25      |
+| `SCIAN sector`        | 1            | 0            | 17      |
+| `SCIAN rama`          | 9            | 6            | 82      |
+
+Ejemplos de renombres en `CCIF division`: `"comunicaciones"` → `"informacion y comunicacion"`, `"educacion"` → `"servicios educativos"`, `"restaurantes y hoteles"` → `"restaurantes y servicios de alojamiento"`. Además `"bienes y servicios diversos"` (2018) se divide en dos categorías nuevas en 2024.
+
+**Clasificaciones sin fricción** (categorías idénticas en 2018 y 2024): `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`.
+
+**Mejora propuesta:** tabla de correspondencia entre nombres de categorías de distintas canastas, que permita combinar series históricas continuas para los tipos con fricción. Requiere decisión sobre qué hacer con categorías que desaparecen (NaN en la versión que no las tiene) o que se fusionan/dividen entre canastas.
+
+**Cuándo implementar:** después de tener la combinación de corridas funcionando para los tipos sin fricción (`inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`).
+
+---
+
+### 12.11 `ejecutar` multi-canasta (v2.0)
+
+**Comportamiento actual:** `Corrida.ejecutar()` opera sobre una sola canasta y una sola serie. Para obtener una serie histórica continua, el usuario debe llamar `ejecutar` múltiples veces y combinar los `ResultadoCalculo` manualmente.
+
+**Mejora propuesta:** soporte nativo para múltiples canastas en una sola llamada:
+
+```python
+corrida.ejecutar(
+    canastas=["canasta_2018.csv", "canasta_2024.csv"],
+    series=["series_2018.csv", "series_2024.csv"],
+    versions=[2018, 2024],
+    tipo="inpc",
+) -> list[ResultadoCorrida]
+```
+
+Internamente encadena `resultado_referencia` automáticamente entre corridas consecutivas.
+
+**Por qué es v2.0:** cambia la firma pública de `ejecutar`, `ManifestCorrida` (que referencia una sola canasta/series), y la lógica de persistencia. Rompe compatibilidad con código existente.
+
+**Cuándo implementar:** cuando la combinación manual con `ResultadoCalculo.combinar()` resulte insuficiente para los casos de uso del proyecto.
