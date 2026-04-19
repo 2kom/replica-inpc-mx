@@ -33,6 +33,36 @@ from replica_inpc.dominio.tipos import (
 from replica_inpc.dominio.validar_inpc import validar
 
 
+def _rellenar_faltantes(
+    serie: SerieNormalizada,
+) -> tuple[SerieNormalizada, dict[tuple[str, Periodo], Periodo]]:
+    periodos: list[Periodo] = sorted(
+        c for c in serie.df.columns if isinstance(c, Periodo)  # type: ignore[misc]
+    )
+    df_original = serie.df[periodos]
+    df_relleno = df_original.bfill(axis=1).ffill(axis=1)
+
+    imputados: dict[tuple[str, Periodo], Periodo] = {}
+    nans = df_original.isna() & df_relleno.notna()
+    nans_stack = nans.stack()
+    for generico, periodo in nans_stack[nans_stack].index:  # type: ignore[index]
+        idx = periodos.index(periodo)
+        fuente: Periodo | None = None
+        for i in range(idx + 1, len(periodos)):
+            if not pd.isna(df_original.at[generico, periodos[i]]):
+                fuente = periodos[i]
+                break
+        if fuente is None:
+            for i in range(idx - 1, -1, -1):
+                if not pd.isna(df_original.at[generico, periodos[i]]):
+                    fuente = periodos[i]
+                    break
+        if fuente is not None:
+            imputados[(str(generico), periodo)] = fuente
+
+    return SerieNormalizada(df_relleno, serie.mapeo), imputados
+
+
 def _f_h_desde_referencia(resultado_ref: ResultadoCalculo, traslape: Periodo) -> dict[str, float]:
     df = resultado_ref.df
     mask = (df.index.get_level_values("periodo") == traslape) & (df["estado_calculo"] == "ok")
@@ -116,6 +146,7 @@ class EjecutarCorrida:
 
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
         serie = alinear_genericos(canasta, serie)
+        serie, imputados = _rellenar_faltantes(serie)
 
         f_h_por_indice: dict[str, float] = {}
         if resultado_referencia is not None:
@@ -139,7 +170,9 @@ class EjecutarCorrida:
         except ErrorValidacion:
             inegi = {}
 
-        resumen, reporte, diagnostico = validar(resultado, inegi, canasta, serie, id_corrida)
+        resumen, reporte, diagnostico = validar(
+            resultado, inegi, canasta, serie, id_corrida, imputados
+        )
 
         if persistir:
             self._repositorio.guardar(manifiesto)  # type: ignore[union-attr]

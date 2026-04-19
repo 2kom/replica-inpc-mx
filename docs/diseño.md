@@ -647,7 +647,7 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 | `error_relativo`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
 | `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`         |
 | `motivo_error`               | `object` (str/NaN)|                                                     |
-| `estado_validacion`          | `object` (str)    | `'ok'`, `'diferencia_detectada'`, `'no_disponible'` |
+| `estado_validacion`          | `object` (str)    | `'ok'`, `'diferencia_detectada'`, `'diferencia_detectada_imputado'`, `'no_disponible'` |
 | `total_genericos_esperados`  | `int`             |                                                     |
 | `total_genericos_con_indice` | `int`             |                                                     |
 | `total_genericos_sin_indice` | `int`             |                                                     |
@@ -677,7 +677,7 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 | -------------------------- | -------------------------------------------------------------------------------------------------- |
 | Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                            |
 | `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                               |
-| `estado_validacion` válido | cuando presente: valores in `{'ok', 'diferencia_detectada', 'no_disponible'}`                      |
+| `estado_validacion` válido | cuando presente: valores in `{'ok', 'diferencia_detectada', 'diferencia_detectada_imputado', 'no_disponible'}` |
 | Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                            |
 | Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                               |
 | Consistencia validacion    | cuando presente: si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_*` NaN         |
@@ -1388,10 +1388,10 @@ class EjecutarCorrida:
 4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
-6.5. `_rellenar_faltantes(serie)` → `(SerieNormalizada, set_imputados)`. Rellena NaN con el valor del periodo disponible más próximo (adelante primero, atrás si no hay). Los pares `(generico, periodo)` imputados se registran en `set_imputados` para trazabilidad — ver §11.21.
+6.5. `_rellenar_faltantes(serie)` → `(SerieNormalizada, imputados)`. Rellena NaN con el valor del periodo disponible más próximo (adelante primero, atrás si no hay). `imputados` es `dict[tuple[str, Periodo], Periodo]` que mapea `(generico, periodo)` al periodo fuente del que se tomó el valor — ver §11.21.
 7. Si `resultado_referencia` no es `None` y la canasta usa encadenamiento: `_f_h_desde_referencia(resultado_referencia, traslape)` → `f_h_por_indice`. Si la canasta no usa encadenamiento: emite `UserWarning` e ignora `resultado_referencia`. Cálculo: `para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
 8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
-9. `validar_inpc.py` recibe también `set_imputados` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes` (incluye filas `tipo_faltante = 'indice_imputado'` para cada par en `set_imputados`)
+9. `validar_inpc.py` recibe también `imputados: dict[tuple[str, Periodo], Periodo]` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes` (incluye filas `tipo_faltante = 'indice_imputado'` para cada par en `imputados`; periodos imputados que superan tolerancia reciben `estado_validacion = 'diferencia_detectada_imputado'`)
 10. Si `persistir=True`:
     - `RepositorioCorridas.guardar(manifest)` → `data/runs/<id_corrida>/`
     - `AlmacenArtefactos.guardar(...)` para `resultado`, `resumen`, `reporte`, `diagnostico` → `data/runs/<id_corrida>/`
@@ -1737,7 +1737,7 @@ En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
 | `error_relativo`              | `float`  | `null` si validación no disponible           |
 | `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`        |
 | `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`            |
-| `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `no_disponible`|
+| `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `diferencia_detectada_imputado`, `no_disponible`|
 | `total_genericos_esperados`   | `int`    |                                              |
 | `total_genericos_con_indice`  | `int`    |                                              |
 | `total_genericos_sin_indice`  | `int`    |                                              |
@@ -2223,7 +2223,7 @@ Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un peri
 
 Implementado como `df.bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la serie (columnas = periodos ordenados ascendente). `bfill` sobre `axis=1` rellena con el siguiente periodo disponible; `ffill` cubre los NaN que quedaron al final de la serie.
 
-**Implementación:** función privada `_rellenar_faltantes(serie: SerieNormalizada) -> tuple[SerieNormalizada, set[tuple[str, Periodo]]]` en `aplicacion/casos_uso/ejecutar_corrida.py`. Se ejecuta en el paso 6.5 del pipeline, después de `alinear_genericos` y antes del cálculo. El set de pares `(generico, periodo)` imputados se pasa a `validar_inpc.py` para registrarlos en `DiagnosticoFaltantes` con `tipo_faltante = 'indice_imputado'`.
+**Implementación:** función privada `_rellenar_faltantes(serie: SerieNormalizada) -> tuple[SerieNormalizada, dict[tuple[str, Periodo], Periodo]]` en `aplicacion/casos_uso/ejecutar_corrida.py`. Se ejecuta en el paso 6.5 del pipeline, después de `alinear_genericos` y antes del cálculo. El dict `(generico, periodo) → Periodo_fuente` se pasa a `validar_inpc.py` para registrar cada par en `DiagnosticoFaltantes` con `tipo_faltante = 'indice_imputado'` y `detalle = "imputado desde <Periodo_fuente>"`.
 
 **Por qué en la capa de aplicación y no en el dominio:** es una decisión de preparación de insumos antes del cálculo, no lógica del cálculo en sí. El calculador recibe una serie sin NaN y no sabe que hubo imputación.
 
@@ -2243,7 +2243,7 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 - `estado_corrida = 'ok_parcial'`: al menos un periodo es `null_por_faltantes` pero no todos.
 - `estado_corrida = 'fallida'`: todos los periodos son `null_por_faltantes`, o hay faltantes de ponderador.
-- `estado_validacion_global = 'ok_parcial'`: entre los periodos con `estado_calculo == 'ok'`, al menos uno pasó la tolerancia y al menos uno no pudo ser comparado (`no_disponible`).
+- `estado_validacion_global = 'ok_parcial'`: se activa en dos casos: (a) entre los periodos con `estado_calculo == 'ok'`, al menos uno pasó la tolerancia y al menos uno no pudo ser comparado (`no_disponible`); (b) todos los periodos son `ok` o `diferencia_detectada_imputado` — la diferencia es atribuible a imputación, no a error de cálculo.
 - `estado_validacion_global = 'ok'`: todos los periodos comparables fueron verificados y pasaron.
 
 ---

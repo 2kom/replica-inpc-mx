@@ -65,9 +65,7 @@ class ResumenValidacion:
 
     def __init__(self, df: pd.DataFrame) -> None:
         if df.empty:
-            raise InvarianteViolado(
-                "El DataFrame de resumen de validación no puede estar vacío."
-            )
+            raise InvarianteViolado("El DataFrame de resumen de validación no puede estar vacío.")
         if df.index.duplicated().any():
             raise InvarianteViolado(
                 "El DataFrame de resumen de validación no puede tener índices duplicados."
@@ -97,9 +95,7 @@ class ResumenValidacion:
                 "La columna 'total_periodos_con_null' no puede tener más valores que 'total_periodos_calculados'."
             )
         if (df["periodo_inicio"] > df["periodo_fin"]).any():
-            raise InvarianteViolado(
-                "periodo_inicio no puede ser mayor que periodo_fin."
-            )
+            raise InvarianteViolado("periodo_inicio no puede ser mayor que periodo_fin.")
 
         self._df = df
 
@@ -199,11 +195,12 @@ class ReporteDetalladoValidacion:
             )
         if "estado_validacion" in df.columns and (
             not df["estado_validacion"]
-            .isin({"ok", "diferencia_detectada", "no_disponible"})
+            .isin({"ok", "diferencia_detectada", "diferencia_detectada_imputado", "no_disponible"})
             .all()
         ):
             raise InvarianteViolado(
-                "La columna 'estado_validacion' debe contener solo los valores 'ok', 'diferencia_detectada' o 'no_disponible'."
+                "La columna 'estado_validacion' debe contener solo los valores "
+                "'ok', 'diferencia_detectada', 'diferencia_detectada_imputado' o 'no_disponible'."
             )
 
         filas_ok = df["estado_calculo"] == "ok"
@@ -343,22 +340,21 @@ class DiagnosticoFaltantes:
             raise InvarianteViolado(
                 "La columna 'nivel_faltante' debe contener solo los valores 'periodo' o 'estructural'."
             )
-        if not df["tipo_faltante"].isin({"indice", "ponderador"}).all():
+        if not df["tipo_faltante"].isin({"indice", "ponderador", "indice_imputado"}).all():
             raise InvarianteViolado(
-                "La columna 'tipo_faltante' debe contener solo los valores 'indice' o 'ponderador'."
+                "La columna 'tipo_faltante' debe contener solo los valores "
+                "'indice', 'ponderador' o 'indice_imputado'."
             )
 
-        filas_indice = df["tipo_faltante"] == "indice"
-        if df.loc[filas_indice, "periodo"].isnull().any():
+        filas_con_periodo = df["tipo_faltante"].isin({"indice", "indice_imputado"})
+        if df.loc[filas_con_periodo, "periodo"].isnull().any():
             raise InvarianteViolado(
-                "periodo no puede ser null cuando tipo_faltante es 'indice'."
+                "periodo no puede ser null cuando tipo_faltante es 'indice' o 'indice_imputado'."
             )
 
         filas_ponderador = df["tipo_faltante"] == "ponderador"
         if df.loc[filas_ponderador, "periodo"].notnull().any():
-            raise InvarianteViolado(
-                "periodo debe ser null cuando tipo_faltante es 'ponderador'."
-            )
+            raise InvarianteViolado("periodo debe ser null cuando tipo_faltante es 'ponderador'.")
 
         self._df = df
 

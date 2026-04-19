@@ -22,6 +22,7 @@ def validar(
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
+    imputados: dict[tuple[str, Periodo], Periodo] | None = None,
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 
     tipo = resultado.df["tipo"].iloc[0]
@@ -29,6 +30,7 @@ def validar(
     con_validacion = tipo in TIPOS_CON_VALIDACION
     tolerancia = _TOLERANCIAS[version]
     ponderadores_full = canasta.df["ponderador"].astype(float)
+    periodos_imputados = {p for _, p in imputados.keys()} if imputados else set()
 
     indices = resultado.df.index.get_level_values("indice").unique()
     periodos = resultado.df.index.get_level_values("periodo").unique()
@@ -80,6 +82,8 @@ def validar(
 
                         if error_absoluto <= tolerancia:
                             estado_validacion = "ok"
+                        elif periodo in periodos_imputados:
+                            estado_validacion = "diferencia_detectada_imputado"
                         else:
                             estado_validacion = "diferencia_detectada"
 
@@ -165,6 +169,24 @@ def validar(
             ]
         )
 
+    if imputados:
+        filas_imp = pd.DataFrame(
+            [
+                {
+                    "id_corrida": id_corrida,
+                    "version": version,
+                    "tipo": tipo,
+                    "periodo": periodo,
+                    "generico": generico,
+                    "nivel_faltante": "periodo",
+                    "tipo_faltante": "indice_imputado",
+                    "detalle": f"imputado desde {fuente}",
+                }
+                for (generico, periodo), fuente in imputados.items()
+            ]
+        )
+        df_diagnostico = pd.concat([df_diagnostico, filas_imp], ignore_index=True)
+
     numero_null = (resultado.df["estado_calculo"] == "null_por_faltantes").sum()
     numero_total = len(resultado.df)
 
@@ -198,6 +220,11 @@ def validar(
         elif estados == {"no_disponible"}:
             estado_validacion_global = "no_disponible"
         elif "no_disponible" in estados:
+            estado_validacion_global = "ok_parcial"
+        elif "diferencia_detectada_imputado" in estados and estados <= {
+            "ok",
+            "diferencia_detectada_imputado",
+        }:
             estado_validacion_global = "ok_parcial"
         else:
             estado_validacion_global = "ok"
