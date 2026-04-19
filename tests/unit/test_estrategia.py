@@ -1,6 +1,6 @@
 import pandas as pd
-import pytest
 
+from replica_inpc.dominio.calculo.encadenado import LaspeyresEncadenado
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -37,6 +37,7 @@ def test_para_canasta_sin_encadenamiento():
 
 def test_para_laspeyres_con_encadenamiento():
 
-    # verificar que para_canasta lance NotImplementedError al recibir una canasta con encadenamiento
-    with pytest.raises(NotImplementedError):
-        para_canasta(canasta_con_encadenamiento)
+    # verificar que para_canasta devuelva una instancia de LaspeyresEncadenado
+    tipo_canasta = para_canasta(canasta_con_encadenamiento)
+
+    assert isinstance(tipo_canasta, LaspeyresEncadenado)

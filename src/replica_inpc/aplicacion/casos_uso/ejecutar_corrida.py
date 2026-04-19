@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 from replica_inpc.aplicacion.puertos.almacen_artefactos import AlmacenArtefactos
 from replica_inpc.aplicacion.puertos.escritor_resultados import EscritorResultados
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
@@ -17,6 +19,7 @@ from replica_inpc.dominio.errores import (
     ErrorValidacion,
     PeriodosInsuficientes,
 )
+from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
@@ -28,6 +31,18 @@ from replica_inpc.dominio.tipos import (
     VersionCanasta,
 )
 from replica_inpc.dominio.validar_inpc import validar
+
+
+def _f_h_desde_referencia(resultado_ref: ResultadoCalculo, traslape: Periodo) -> dict[str, float]:
+    df = resultado_ref.df
+    mask = (df.index.get_level_values("periodo") == traslape) & (df["estado_calculo"] == "ok")
+    if not mask.any():
+        return {}
+    f_h: dict[str, float] = {}
+    for key, val in df.loc[mask, "indice_replicado"].items():
+        if val is not None and not pd.isna(val):
+            f_h[str(key[1])] = float(val) / 100  # type: ignore[index]
+    return f_h
 
 
 class EjecutarCorrida:
@@ -56,6 +71,7 @@ class EjecutarCorrida:
         version: VersionCanasta,
         tipo: str = "inpc",
         persistir: bool = False,
+        resultado_referencia: ResultadoCalculo | None = None,
     ) -> ResultadoCorrida:
 
         if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
@@ -101,7 +117,12 @@ class EjecutarCorrida:
         serie = SerieNormalizada(serie.df[cols], serie.mapeo)
         serie = alinear_genericos(canasta, serie)
 
-        resultado = para_canasta(canasta).calcular(canasta, serie, id_corrida, tipo)
+        f_h_por_indice: dict[str, float] = {}
+        if resultado_referencia is not None:
+            traslape = RANGOS_VALIDOS[version][0]
+            f_h_por_indice = _f_h_desde_referencia(resultado_referencia, traslape)
+
+        resultado = para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)
 
         try:
             periodos_unicos = resultado.df.index.get_level_values("periodo").unique().tolist()

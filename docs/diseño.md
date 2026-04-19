@@ -89,7 +89,7 @@ El historial de cambios vive en git.
     - [11.17 UTF-8 como primer encoding en `LectorSeriesCsv`](#1117-utf-8-como-primer-encoding-en-lectorseriescsv)
     - [11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`](#1118-dispatch-interno-en-calculadorbase-con-helper-grupos_por_clasificacion)
     - [11.19 Vectorización del loop interno de `validar_inpc`](#1119-vectorización-del-loop-interno-de-validar_inpc)
-    - [11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h` con ponderadores nuevos](#1120-implementación-de-laspeyresencadenado--derivación-de-f_h-con-ponderadores-nuevos)
+    - [11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h`](#1120-implementación-de-laspeyresencadenado--derivación-de-f_h)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -816,38 +816,48 @@ $$f_k = \frac{I_k^{\text{pub}}[t_{\text{traslape}}]}{100}$$
 
 Las series publicadas ya están encadenadas: $I_k^{\text{pub}} = f_k \cdot I_k^{\text{raw}}$, donde $I_k^{\text{raw}}$ tiene base $t_{\text{traslape}} = 100$. El calculador invierte ese encadenamiento por genérico, aplica Laspeyres sobre los índices crudos y re-encadena el agregado con su propio factor ponderado.
 
-**Obtención de $f_k$:** hay dos fuentes posibles, en orden de preferencia:
+**Obtención de $f_k$ (por genérico):** dos fuentes, en orden de preferencia:
 
-1. **Columna `encadenamiento` de la canasta** — cuando está poblada (ambas versiones actuales). Se convierte con `astype(float)`.
-2. **Serie en el periodo de traslape** — cuando la columna está ausente o vacía. Se obtiene como `serie.df[RANGOS_VALIDOS[version][0]] / 100`. `RANGOS_VALIDOS[version][0]` es el inicio del rango válido de la versión, que coincide con el traslape.
+1. **Columna `encadenamiento` de la canasta** — cuando está poblada (versiones 2013 y 2024). Se convierte con `astype(float)`.
+2. **Serie en el periodo de traslape** — fallback cuando la columna está ausente o vacía. Se obtiene como `serie.df[RANGOS_VALIDOS[version][0]] / 100`.
 
 **Fórmula para un agregado $h$ (INPC o subíndice):**
 
-$$I_k^{\text{raw}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k} \qquad \text{De-encadenamos}$$
+$$I_k^{\text{raw}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k} \qquad \text{De-encadenamos por genérico}$$
 
-$$I_h^{\text{raw}}[t] = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^{\text{raw}}[t]}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Laspeyres}$$
+$$I_h^{\text{raw}}[t] = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^{\text{raw}}[t]}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Laspeyres crudo}$$
 
-$$f_h = \frac{\displaystyle\sum_{k \in h} w_k \cdot f_k}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Factor de encadenamiento del indice}$$
+$$I_h^{\text{pub}}[t] = f_h \cdot I_h^{\text{raw}}[t] \qquad \text{Re-encadenamiento del agregado}$$
 
-$$I_h^{\text{pub}}[t] = f_h \cdot I_h^{\text{raw}}[t] \qquad \text{Encadenamiento del Indice}$$
+**Obtención de $f_h$ (por agregado):** dos fuentes, en orden de preferencia:
 
-Para el INPC general $\sum_{k \in h} w_k = 100$ (invariante de `CanastaCanonica`). Para subíndices, $\sum_{k \in h} w_k < 100$; el denominador correcto es siempre $\sum_{k \in h} w_k$.
+1. **Resultado de referencia** — `resultado_referencia.df.at[(traslape, indice), "indice_replicado"] / 100`. Se provee el `ResultadoCalculo` de la versión anterior (2018 para el encadenamiento 2024). Este es el $f_h$ exacto del INEGI: $f_h^{\text{INEGI}} = I_h^{(2018)}[t_{\text{traslape}}] / 100$, calculado con los 299 ponderadores de la estructura anterior.
 
-En el periodo de traslape: $I_k^{\text{raw}} \approx 100$ para todo $k$, por lo que $I_h^{\text{raw}} \approx 100$ e $I_h^{\text{pub}} \approx f_h \cdot 100$, que coincide con el publicado.
+2. **Media ponderada de $f_k$** — fallback cuando no hay referencia o el índice no está en ella:
+
+$$f_h = \frac{\displaystyle\sum_{k \in h} w_k \cdot f_k}{\displaystyle\sum_{k \in h} w_k}$$
+
+   Esta aproximación usa ponderadores **nuevos** en lugar de los viejos, y produce un error sistemático observable en datos reales (~0.53% relativo). Ver §11.20.
+
+Para el INPC general $\sum_{k \in h} w_k = 100$ (invariante de `CanastaCanonica`). Para subíndices $\sum_{k \in h} w_k < 100$; el denominador correcto es siempre $\sum_{k \in h} w_k$.
+
+En el periodo de traslape con fuente 1: $I_h^{\text{pub}}[t_{\text{traslape}}] \approx f_h \cdot 100$ exacto. Con fuente 2: $\approx$ exacto (los $f_k$ individuales son exactos; el error surge solo al agregar con ponderadores distintos).
 
 **Firma:**
 
 ```python
-def calcular(
-    self,
-    canasta: CanastaCanonica,
-    serie: SerieNormalizada,
-    id_corrida: str,
-    tipo: str,
-) -> ResultadoCalculo: ...
+class LaspeyresEncadenado(CalculadorBase):
+    def __init__(self, f_h_por_indice: dict[str, float] | None = None) -> None: ...
+    def calcular(
+        self,
+        canasta: CanastaCanonica,
+        serie: SerieNormalizada,
+        id_corrida: str,
+        tipo: str,
+    ) -> ResultadoCalculo: ...
 ```
 
-Idéntica a `LaspeyresDirecto`. El dispatch entre INPC y subíndices es interno: si `tipo in INDICE_POR_TIPO` calcula el agregado completo; si `tipo in COLUMNAS_CLASIFICACION` itera sobre `grupos_por_clasificacion` y aplica la fórmula a cada subgrupo.
+El constructor recibe `f_h_por_indice` — un diccionario `{nombre_indice: f_h}` extraído de un `resultado_referencia` en el traslape. Si es `None` o un índice no está en el dict, se usa la media ponderada (fuente 2). El dispatch entre INPC y subíndices es interno.
 
 **No-aditividad:** después del periodo de traslape, los subíndices encadenados no necesariamente suman al INPC encadenado. Cada agregado tiene su propio $f_h$. El INEGI advierte esta propiedad explícitamente. El proyecto replica cada índice de forma independiente — no intenta reconstruir el INPC a partir de subíndices.
 
@@ -2145,28 +2155,49 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h` con ponderadores nuevos
+### 11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h`
 
-**Decisión:** `f_h` se calcula como media ponderada de los `f_k` individuales usando los ponderadores de la versión nueva (`w_k` de la canasta 2024 o 2013), no los ponderadores de la estructura vieja usados por el INEGI en su encadenamiento oficial.
+#### Primer enfoque (descartado): media ponderada con ponderadores nuevos
 
-$$f_h = \frac{\sum_{k \in h} w_k \cdot f_k}{\sum_{k \in h} w_k}$$
+El diseño original computaba $f_h$ como media ponderada de los $f_k$ individuales usando los ponderadores de la canasta nueva (2024):
 
-**Por qué no se puede usar el `f_h` del INEGI directamente:** el INEGI computa $f_h = I_{h,\text{viejo}}^{t_\text{traslape}} / 100$ usando los agregados de la estructura anterior (ponderadores viejos). Esos valores no están disponibles en los insumos del proyecto para subíndices personalizados ni para todos los clasificadores. Solo están parcialmente disponibles vía API para algunos tipos (`inpc`, `inflacion componente`).
+$$f_h^{\text{nuevo}} = \frac{\sum_{k \in h} w_k^{(2024)} \cdot f_k}{\sum_{k \in h} w_k^{(2024)}}$$
 
-**Equivalencia algebraica:** $f_h = \sum_{k \in h}(w_k \cdot f_k) / \sum_{k \in h}(w_k)$ es igual al subíndice $h$ calculado con LaspeyresDirecto en el periodo de traslape dividido entre 100. Esto es demostrable porque en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que $\sum_{k \in h}(w_k \cdot f_k \cdot 100) / \sum_{k \in h}(w_k) = 100 \times f_h$.
+**Por qué falló con datos reales:** el INEGI calcula $f_h$ con los 299 ponderadores de la canasta 2018, no con los 292 de la canasta 2024. Las dos estructuras son diferentes tanto en número de genéricos como en los pesos relativos. Al validar contra los valores publicados, el error resultante fue:
 
-**Fuente de `f_k`:** preferencia en orden:
+- `error_absoluto` ≈ 0.716–0.737 puntos de índice (creciente conforme sube el INPC)
+- `error_relativo` ≈ 0.53% sistemático en todos los periodos post-traslape
+- Estado de validación: `diferencia_detectada` en todos los periodos — no pasa ninguno
 
-1. Columna `encadenamiento` de la canasta — disponible en versiones 2013 y 2024.
-2. `serie.df[RANGOS_VALIDOS[version][0]] / 100` — derivado de la serie en el traslape cuando la canasta no lo trae.
+El error es proporcional al nivel del INPC porque $f_h^{\text{nuevo}} \neq f_h^{\text{INEGI}}$ por una diferencia fija de ponderación; a medida que el INPC crece, el error absoluto crece con él. Una tolerancia absoluta (como la declarada en §6.1) no puede cubrir este error indefinidamente.
 
-**Verificación numérica (canasta 2024, INPC general):**
+#### Enfoque final: $f_h$ desde el resultado de la versión anterior
 
-- `f_h = 1.3681`
-- LaspeyresEncadenado vs LaspeyresDirecto post-traslape: divergencia `0.23–0.61` en error absoluto (tolerancia 2018 = 0.0009 → LaspeyresDirecto fallaría)
-- Tolerancia declarada para 2024 en `requerimientos.md §6.1`: `<= 0.005` — cubre la aproximación introducida por el uso de ponderadores nuevos vs viejos para `f_h`
+**Decisión:** `f_h` se obtiene del resultado de la corrida 2018 en el periodo de traslape:
 
-**No-aditividad:** cada agregado `h` tiene su propio `f_h`. Los subíndices encadenados no suman al INPC encadenado post-traslape. El proyecto replica cada índice independientemente — la no-aditividad es una propiedad esperada y documentada por el INEGI.
+$$f_h^{\text{INEGI}} = \frac{I_h^{(2018)}[t_{\text{traslape}}]}{100}$$
+
+donde $I_h^{(2018)}[t_{\text{traslape}}]$ es el índice calculado con LaspeyresDirecto sobre la canasta 2018 (299 genéricos, ponderadores viejos) en el periodo de traslape. Este valor es algebraicamente idéntico al $f_h$ que usa el INEGI.
+
+**Por qué funciona:** en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que:
+
+$$I_h^{(2018)}[t_{\text{traslape}}] = \frac{\sum_{k} w_k^{(2018)} \cdot f_k \cdot 100}{\sum_k w_k^{(2018)}} = 100 \cdot f_h^{\text{INEGI}}$$
+
+**Implementación:** `LaspeyresEncadenado` recibe `f_h_por_indice: dict[str, float] | None` en el constructor. `EjecutarCorrida.ejecutar()` recibe `resultado_referencia: ResultadoCalculo | None` y extrae el dict con la función `_f_h_desde_referencia(resultado_ref, traslape)`. `para_canasta(canasta, f_h_por_indice)` pasa el dict al constructor.
+
+**Flujo de uso:**
+
+```python
+corrida_2018 = Corrida(...).ejecutar(canasta_2018, series_2018, version=2018)
+corrida_2024 = Corrida(...).ejecutar(
+    canasta_2024, series_2024, version=2024,
+    resultado_referencia=corrida_2018.resultado,
+)
+```
+
+**Fallback:** si `resultado_referencia` es `None` o el índice no está en el dict (p. ej. subíndices con clasificadores que no existen en la corrida de referencia), se usa la media ponderada con ponderadores nuevos. Este fallback introduce el error sistemático descrito arriba y es aceptable solo cuando no se dispone del resultado 2018.
+
+**No-aditividad:** cada agregado $h$ tiene su propio $f_h$. Los subíndices encadenados no suman al INPC encadenado post-traslape. Propiedad esperada y documentada por el INEGI; el proyecto replica cada índice independientemente.
 
 ---
 

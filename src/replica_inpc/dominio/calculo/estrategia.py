@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from replica_inpc.dominio.calculo.base import CalculadorBase
+from replica_inpc.dominio.calculo.encadenado import LaspeyresEncadenado
 from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 
 
-def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
+def para_canasta(
+    canasta: CanastaCanonica,
+    f_h_por_indice: dict[str, float] | None = None,
+) -> CalculadorBase:
 
     if canasta.df["encadenamiento"].isna().all():
         return LaspeyresDirecto()
-    raise NotImplementedError(
-        "No se ha implementado una estrategia para canastas con encadenamiento"
-    )
+    return LaspeyresEncadenado(f_h_por_indice)

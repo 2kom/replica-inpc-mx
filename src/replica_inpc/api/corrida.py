@@ -5,6 +5,7 @@ from pathlib import Path
 from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
+from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.periodos import Periodo
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
@@ -56,6 +57,7 @@ class Corrida:
         version: VersionCanasta,
         tipo: str = "inpc",
         persistir: bool = False,
+        resultado_referencia: ResultadoCalculo | None = None,
     ) -> ResultadoCorrida:
         if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
             raise ErrorConfiguracion(
@@ -96,4 +98,5 @@ class Corrida:
             version=version,
             tipo=tipo,
             persistir=persistir,
+            resultado_referencia=resultado_referencia,
         )
