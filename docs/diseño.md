@@ -88,6 +88,8 @@ El historial de cambios vive en git.
     - [11.16 Cache de clase en `FuenteValidacionApi`](#1116-cache-de-clase-en-fuentevalidacionapi)
     - [11.17 UTF-8 como primer encoding en `LectorSeriesCsv`](#1117-utf-8-como-primer-encoding-en-lectorseriescsv)
     - [11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`](#1118-dispatch-interno-en-calculadorbase-con-helper-grupos_por_clasificacion)
+    - [11.19 Vectorización del loop interno de `validar_inpc`](#1119-vectorización-del-loop-interno-de-validar_inpc)
+    - [11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h` con ponderadores nuevos](#1120-implementación-de-laspeyresencadenado--derivación-de-f_h-con-ponderadores-nuevos)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -803,9 +805,53 @@ Donde $w_j$ son los ponderadores del grupo e $I_j^t$ es el índice del genérico
 
 #### 5.8.2 LaspeyresEncadenado
 
-Pendiente de implementación. Aplica a canastas con encadenamiento (versiones 2013 y 2024).
+Aplica a canastas con encadenamiento (versiones 2013 y 2024). El factor $f_k$ por genérico se define como el valor del índice publicado del genérico $k$ en el **periodo de traslape** de la versión dividido entre 100:
 
-**Archivo:** `dominio/calculo/encadenado.py` (por crear)
+$$f_k = \frac{I_k^{\text{pub}}[t_{\text{traslape}}]}{100}$$
+
+| Versión | Traslape (`t_traslape`)  |
+| ------- | ------------------------ |
+| 2013    | `Periodo(2013, 4, 1)`    |
+| 2024    | `Periodo(2024, 7, 2)`    |
+
+Las series publicadas ya están encadenadas: $I_k^{\text{pub}} = f_k \cdot I_k^{\text{raw}}$, donde $I_k^{\text{raw}}$ tiene base $t_{\text{traslape}} = 100$. El calculador invierte ese encadenamiento por genérico, aplica Laspeyres sobre los índices crudos y re-encadena el agregado con su propio factor ponderado.
+
+**Obtención de $f_k$:** hay dos fuentes posibles, en orden de preferencia:
+
+1. **Columna `encadenamiento` de la canasta** — cuando está poblada (ambas versiones actuales). Se convierte con `astype(float)`.
+2. **Serie en el periodo de traslape** — cuando la columna está ausente o vacía. Se obtiene como `serie.df[RANGOS_VALIDOS[version][0]] / 100`. `RANGOS_VALIDOS[version][0]` es el inicio del rango válido de la versión, que coincide con el traslape.
+
+**Fórmula para un agregado $h$ (INPC o subíndice):**
+
+$$I_k^{\text{raw}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k} \qquad \text{De-encadenamos}$$
+
+$$I_h^{\text{raw}}[t] = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^{\text{raw}}[t]}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Laspeyres}$$
+
+$$f_h = \frac{\displaystyle\sum_{k \in h} w_k \cdot f_k}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Factor de encadenamiento del indice}$$
+
+$$I_h^{\text{pub}}[t] = f_h \cdot I_h^{\text{raw}}[t] \qquad \text{Encadenamiento del Indice}$$
+
+Para el INPC general $\sum_{k \in h} w_k = 100$ (invariante de `CanastaCanonica`). Para subíndices, $\sum_{k \in h} w_k < 100$; el denominador correcto es siempre $\sum_{k \in h} w_k$.
+
+En el periodo de traslape: $I_k^{\text{raw}} \approx 100$ para todo $k$, por lo que $I_h^{\text{raw}} \approx 100$ e $I_h^{\text{pub}} \approx f_h \cdot 100$, que coincide con el publicado.
+
+**Firma:**
+
+```python
+def calcular(
+    self,
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+    id_corrida: str,
+    tipo: str,
+) -> ResultadoCalculo: ...
+```
+
+Idéntica a `LaspeyresDirecto`. El dispatch entre INPC y subíndices es interno: si `tipo in INDICE_POR_TIPO` calcula el agregado completo; si `tipo in COLUMNAS_CLASIFICACION` itera sobre `grupos_por_clasificacion` y aplica la fórmula a cada subgrupo.
+
+**No-aditividad:** después del periodo de traslape, los subíndices encadenados no necesariamente suman al INPC encadenado. Cada agregado tiene su propio $f_h$. El INEGI advierte esta propiedad explícitamente. El proyecto replica cada índice de forma independiente — no intenta reconstruir el INPC a partir de subíndices.
+
+**Archivo:** `dominio/calculo/encadenado.py`
 
 ---
 
@@ -823,9 +869,9 @@ def grupos_por_clasificacion(
 
 Yields `(categoria, df_canasta_grupo, df_serie_grupo)` para cada categoría única no vacía de `canasta.df[tipo]` (`dropna=True`). Genéricos sin categoría asignada se excluyen — no pertenecen a ningún subíndice.
 
-**Invariante:** cada subíndice es un Laspeyres independiente sobre su subconjunto de genéricos — no se deriva del INPC general. Los ponderadores del subgrupo suman < 100; la fórmula de §5.8.1 o §5.8.2 usa `Σw_j` como denominador, no 100.
+**Invariante:** cada subíndice es un Laspeyres independiente sobre su subconjunto de genéricos — no se deriva del INPC general. Los ponderadores del subgrupo suman < 100; la fórmula de §5.8.1 o §5.8.2 usa $\sum w_j$ como denominador, no 100.
 
-**Sin construcción de `CanastaCanonica` por subgrupo:** los pares `(df_canasta_grupo, df_serie_grupo)` son DataFrames crudos. El invariante `Σw_j = 100` de `CanastaCanonica` se verifica una sola vez sobre la canasta completa, antes del split.
+**Sin construcción de `CanastaCanonica` por subgrupo:** los pares `(df_canasta_grupo, df_serie_grupo)` son DataFrames crudos. El invariante $\sum w_j = 100$ de `CanastaCanonica` se verifica una sola vez sobre la canasta completa, antes del split.
 
 **Archivo:** `dominio/calculo/subindices.py`
 
@@ -1795,7 +1841,7 @@ y hace que los errores sean predecibles desde cualquier adaptador.
 | --------------------- | ----------- | ------------------------------------------------------------------------------- |
 | Contratos del dominio | Unit        |                                                                                 |
 | `Periodo`             | Unit        | Explícito — parseo, orden, hash, `to_timestamp()`                               |
-| Lógica de cálculo     | Unit        | Solo `LaspeyresDirecto` en v1; `LaspeyresEncadenado` se agrega con canasta 2024 |
+| Lógica de cálculo     | Unit        | `LaspeyresDirecto` y `LaspeyresEncadenado`                                      |
 | `correspondencia.py`  | Unit        |                                                                                 |
 | Adaptadores CSV       | Integration | Archivos reales                                                                 |
 | Casos de uso          | Integration | Archivos reales                                                                 |
@@ -2057,7 +2103,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`
 
-**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `EjecutarCorrida`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa `Σw_j` como denominador, válido tanto para la canasta completa (`Σw_j = 100`) como para subgrupos (`Σw_j < 100`). La firma de `CalculadorBase.calcular()` pierde el parámetro `indice` — se deriva internamente.
+**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `EjecutarCorrida`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa $\sum w_j$ como denominador, válido tanto para la canasta completa ($\sum w_j = 100$) como para subgrupos ($\sum w_j < 100$). La firma de `CalculadorBase.calcular()` pierde el parámetro `indice` — se deriva internamente.
 
 **Alternativas consideradas:**
 
@@ -2075,7 +2121,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 **Razón para rechazar el groupby completo (alternativa 3):** acopla la lógica de agregación a la fórmula Laspeyres dentro del calculador. `LaspeyresEncadenado` tendría que duplicar el groupby con su propia fórmula de encadenamiento, rompiendo el patrón donde `grupos_por_clasificacion` es el único punto de split.
 
-**Razón para esta decisión:** `EjecutarCorrida` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre `Σw_j`. El invariante `Σw_j = 100` de `CanastaCanonica` se verifica antes del split y no se propaga a los subgrupos (DataFrames crudos).
+**Razón para esta decisión:** `EjecutarCorrida` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre $\sum w_j$. El invariante $\sum w_j = 100$ de `CanastaCanonica` se verifica antes del split y no se propaga a los subgrupos (DataFrames crudos).
 
 ### 11.19 Vectorización del loop interno de `validar_inpc`
 
@@ -2096,6 +2142,31 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 **Comportamiento idéntico.** Estimado post-optimización: ~0.75s con datos reales (SCIAN rama, 91 categorías, 158 periodos).
 
 **Alternativa descartada:** mantener los loops Python y compensar con `numba` o `cython`. Descartada porque la causa raíz es el overhead de dispatch de pandas por acceso escalar, no el costo de la operación aritmética — la vectorización lo elimina directamente sin dependencias adicionales.
+
+---
+
+### 11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h` con ponderadores nuevos
+
+**Decisión:** `f_h` se calcula como media ponderada de los `f_k` individuales usando los ponderadores de la versión nueva (`w_k` de la canasta 2024 o 2013), no los ponderadores de la estructura vieja usados por el INEGI en su encadenamiento oficial.
+
+$$f_h = \frac{\sum_{k \in h} w_k \cdot f_k}{\sum_{k \in h} w_k}$$
+
+**Por qué no se puede usar el `f_h` del INEGI directamente:** el INEGI computa $f_h = I_{h,\text{viejo}}^{t_\text{traslape}} / 100$ usando los agregados de la estructura anterior (ponderadores viejos). Esos valores no están disponibles en los insumos del proyecto para subíndices personalizados ni para todos los clasificadores. Solo están parcialmente disponibles vía API para algunos tipos (`inpc`, `inflacion componente`).
+
+**Equivalencia algebraica:** $f_h = \sum_{k \in h}(w_k \cdot f_k) / \sum_{k \in h}(w_k)$ es igual al subíndice $h$ calculado con LaspeyresDirecto en el periodo de traslape dividido entre 100. Esto es demostrable porque en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que $\sum_{k \in h}(w_k \cdot f_k \cdot 100) / \sum_{k \in h}(w_k) = 100 \times f_h$.
+
+**Fuente de `f_k`:** preferencia en orden:
+
+1. Columna `encadenamiento` de la canasta — disponible en versiones 2013 y 2024.
+2. `serie.df[RANGOS_VALIDOS[version][0]] / 100` — derivado de la serie en el traslape cuando la canasta no lo trae.
+
+**Verificación numérica (canasta 2024, INPC general):**
+
+- `f_h = 1.3681`
+- LaspeyresEncadenado vs LaspeyresDirecto post-traslape: divergencia `0.23–0.61` en error absoluto (tolerancia 2018 = 0.0009 → LaspeyresDirecto fallaría)
+- Tolerancia declarada para 2024 en `requerimientos.md §6.1`: `<= 0.005` — cubre la aproximación introducida por el uso de ponderadores nuevos vs viejos para `f_h`
+
+**No-aditividad:** cada agregado `h` tiene su propio `f_h`. Los subíndices encadenados no suman al INPC encadenado post-traslape. El proyecto replica cada índice independientemente — la no-aditividad es una propiedad esperada y documentada por el INEGI.
 
 ---
 
