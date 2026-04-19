@@ -90,6 +90,9 @@ El historial de cambios vive en git.
     - [11.18 Dispatch interno en `CalculadorBase` con helper `grupos_por_clasificacion`](#1118-dispatch-interno-en-calculadorbase-con-helper-grupos_por_clasificacion)
     - [11.19 Vectorización del loop interno de `validar_inpc`](#1119-vectorización-del-loop-interno-de-validar_inpc)
     - [11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h`](#1120-implementación-de-laspeyresencadenado--derivación-de-f_h)
+      - [Primer enfoque (descartado): media ponderada con ponderadores nuevos](#primer-enfoque-descartado-media-ponderada-con-ponderadores-nuevos)
+      - [Enfoque final: $f\_h$ desde el resultado de la versión anterior](#enfoque-final-f_h-desde-el-resultado-de-la-versión-anterior)
+    - [11.21 Imputación de faltantes en series](#1121-imputación-de-faltantes-en-series)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -712,28 +715,30 @@ class DiagnosticoFaltantes:
 
 **Esquema del DataFrame (índice entero):**
 
-| Columna          | dtype pandas       | Notas                                          |
-| ---------------- | ------------------ | ---------------------------------------------- |
-| `id_corrida`     | `object` (str)     |                                                |
-| `version`        | `int`              |                                                |
-| `tipo`           | `object` (str)     | `'inpc'` en v1                                 |
-| `periodo`        | `Periodo` / `NaN`  | NaN cuando `tipo_faltante == 'ponderador'`     |
-| `generico`       | `object` (str)     |                                                |
-| `nivel_faltante` | `object` (str)     | `'periodo'`, `'estructural'`                   |
-| `tipo_faltante`  | `object` (str)     | `'indice'`, `'ponderador'`                     |
-| `detalle`        | `object` (str)     |                                                |
+| Columna          | dtype pandas       | Notas                                                  |
+| ---------------- | ------------------ | ------------------------------------------------------ |
+| `id_corrida`     | `object` (str)     |                                                        |
+| `version`        | `int`              |                                                        |
+| `tipo`           | `object` (str)     | `'inpc'` en v1                                         |
+| `periodo`        | `Periodo` / `NaN`  | NaN cuando `tipo_faltante == 'ponderador'`             |
+| `generico`       | `object` (str)     |                                                        |
+| `nivel_faltante` | `object` (str)     | `'periodo'`, `'estructural'`                           |
+| `tipo_faltante`  | `object` (str)     | `'indice'`, `'ponderador'`, `'indice_imputado'`        |
+| `detalle`        | `object` (str)     | para `'indice_imputado'`: `"imputado desde <Periodo>"` |
 
 **Invariantes — validados al construir:**
 
-| Invariante              | Regla                                              |
-| ----------------------- | -------------------------------------------------- |
-| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`            |
-| `nivel_faltante` válido | valores in `{'periodo', 'estructural'}`            |
-| `tipo_faltante` válido  | valores in `{'indice', 'ponderador'}`              |
-| Consistencia índice     | si `tipo_faltante == 'indice'` → `periodo` no NaN  |
-| Consistencia ponderador | si `tipo_faltante == 'ponderador'` → `periodo` NaN |
+| Invariante              | Regla                                                                  |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`                                |
+| `nivel_faltante` válido | valores in `{'periodo', 'estructural'}`                                |
+| `tipo_faltante` válido  | valores in `{'indice', 'ponderador', 'indice_imputado'}`               |
+| Consistencia índice     | si `tipo_faltante in {'indice', 'indice_imputado'}` → `periodo` no NaN |
+| Consistencia ponderador | si `tipo_faltante == 'ponderador'` → `periodo` NaN                     |
 
-El DataFrame puede estar vacío — cero filas indica que no se detectaron faltantes en la corrida.
+**Semántica de `'indice_imputado'`:** el genérico tenía `NaN` en ese periodo en la serie original, pero fue rellenado con el valor del periodo disponible más próximo (ver §11.21). `estado_calculo` queda `'ok'` — el cálculo sí se realizó. La fila en el diagnóstico conserva trazabilidad: el campo `detalle` indica desde qué periodo se tomó el valor.
+
+El DataFrame puede estar vacío — cero filas indica que no se detectaron faltantes ni imputaciones en la corrida.
 
 ---
 
@@ -764,10 +769,13 @@ La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
 con valores → encadenado.
 
 ```python
-def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
+def para_canasta(
+    canasta: CanastaCanonica,
+    f_h_por_indice: dict[str, float] | None = None,
+) -> CalculadorBase:
     if canasta.df["encadenamiento"].isna().all():
         return LaspeyresDirecto()
-    return LaspeyresEncadenado()
+    return LaspeyresEncadenado(f_h_por_indice)
 ```
 
 | Versión    | Implementación        | Archivo                         |
@@ -776,7 +784,8 @@ def para_canasta(canasta: CanastaCanonica) -> CalculadorBase:
 | 2013, 2024 | `LaspeyresEncadenado` | `dominio/calculo/encadenado.py` |
 
 El caso de uso `ejecutar_corrida.py` no necesita saber qué estrategia existe —
-solo llama `para_canasta(canasta).calcular(canasta, serie)`.
+extrae `f_h_por_indice` del `resultado_referencia` (si lo hay) y llama
+`para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)`.
 
 ---
 
@@ -1367,6 +1376,7 @@ class EjecutarCorrida:
         version: VersionCanasta,
         tipo: str = "inpc",
         persistir: bool = False,
+        resultado_referencia: ResultadoCalculo | None = None,
     ) -> ResultadoCorrida: ...
 ```
 
@@ -1378,9 +1388,10 @@ class EjecutarCorrida:
 4. `LectorSeries.leer(ruta_series)` → `SerieNormalizada` (todos los periodos del archivo; no depende del paso 3)
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
-7. Cálculo: `para_canasta(canasta).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
+6.5. `_rellenar_faltantes(serie)` → `(SerieNormalizada, set_imputados)`. Rellena NaN con el valor del periodo disponible más próximo (adelante primero, atrás si no hay). Los pares `(generico, periodo)` imputados se registran en `set_imputados` para trazabilidad — ver §11.21.
+7. Si `resultado_referencia` no es `None` y la canasta usa encadenamiento: `_f_h_desde_referencia(resultado_referencia, traslape)` → `f_h_por_indice`. Si la canasta no usa encadenamiento: emite `UserWarning` e ignora `resultado_referencia`. Cálculo: `para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
 8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
-9. `validar_inpc.py` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`
+9. `validar_inpc.py` recibe también `set_imputados` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes` (incluye filas `tipo_faltante = 'indice_imputado'` para cada par en `set_imputados`)
 10. Si `persistir=True`:
     - `RepositorioCorridas.guardar(manifest)` → `data/runs/<id_corrida>/`
     - `AlmacenArtefactos.guardar(...)` para `resultado`, `resumen`, `reporte`, `diagnostico` → `data/runs/<id_corrida>/`
@@ -1739,15 +1750,15 @@ En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
 Índice entero descartado (`index=False`). `Periodo` en columna `periodo` serializado
 a string.
 
-| Columna          | Tipo  | Notas                                      |
-| ---------------- | ----- | ------------------------------------------ |
-| `id_corrida`     | `str` |                                            |
-| `version`        | `int` |                                            |
-| `periodo`        | `str` | `null` si `nivel_faltante = 'estructural'` |
-| `generico`       | `str` |                                            |
-| `nivel_faltante` | `str` | `periodo`, `estructural`                   |
-| `tipo_faltante`  | `str` | `indice`, `ponderador`                     |
-| `detalle`        | `str` |                                            |
+| Columna          | Tipo  | Notas                                                |
+| ---------------- | ----- | ---------------------------------------------------- |
+| `id_corrida`     | `str` |                                                      |
+| `version`        | `int` |                                                      |
+| `periodo`        | `str` | `null` si `nivel_faltante = 'estructural'`           |
+| `generico`       | `str` |                                                      |
+| `nivel_faltante` | `str` | `periodo`, `estructural`                             |
+| `tipo_faltante`  | `str` | `indice`, `ponderador`, `indice_imputado`            |
+| `detalle`        | `str` | para `indice_imputado`: `"imputado desde <Periodo>"` |
 
 **Adaptador:**
 
@@ -2198,6 +2209,25 @@ corrida_2024 = Corrida(...).ejecutar(
 **Fallback:** si `resultado_referencia` es `None` o el índice no está en el dict (p. ej. subíndices con clasificadores que no existen en la corrida de referencia), se usa la media ponderada con ponderadores nuevos. Este fallback introduce el error sistemático descrito arriba y es aceptable solo cuando no se dispone del resultado 2018.
 
 **No-aditividad:** cada agregado $h$ tiene su propio $f_h$. Los subíndices encadenados no suman al INPC encadenado post-traslape. Propiedad esperada y documentada por el INEGI; el proyecto replica cada índice independientemente.
+
+---
+
+### 11.21 Imputación de faltantes en series
+
+Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un periodo específico, incluso cuando ese genérico tiene datos en periodos adyacentes. En datos reales (canastas 2018 y 2024) se observa exactamente un caso por versión.
+
+**Algoritmo:** para cada `NaN` en `(generico, periodo)`, buscar el periodo disponible más próximo en la serie ya filtrada a `RANGOS_VALIDOS[version]`:
+
+1. Buscar hacia adelante: `t+1, t+2, ...` hasta encontrar valor no NaN.
+2. Si no hay ninguno hacia adelante, buscar hacia atrás: `t-1, t-2, ...`
+
+Implementado como `df.bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la serie (columnas = periodos ordenados ascendente). `bfill` sobre `axis=1` rellena con el siguiente periodo disponible; `ffill` cubre los NaN que quedaron al final de la serie.
+
+**Implementación:** función privada `_rellenar_faltantes(serie: SerieNormalizada) -> tuple[SerieNormalizada, set[tuple[str, Periodo]]]` en `aplicacion/casos_uso/ejecutar_corrida.py`. Se ejecuta en el paso 6.5 del pipeline, después de `alinear_genericos` y antes del cálculo. El set de pares `(generico, periodo)` imputados se pasa a `validar_inpc.py` para registrarlos en `DiagnosticoFaltantes` con `tipo_faltante = 'indice_imputado'`.
+
+**Por qué en la capa de aplicación y no en el dominio:** es una decisión de preparación de insumos antes del cálculo, no lógica del cálculo en sí. El calculador recibe una serie sin NaN y no sabe que hubo imputación.
+
+**Limitación:** el valor fuente (el periodo desde el que se tomó el dato) solo queda en `detalle` del diagnóstico como texto. No es un campo estructurado — consultas programáticas sobre qué valor se usó requieren parsear `detalle`.
 
 ---
 

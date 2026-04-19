@@ -119,8 +119,17 @@ class EjecutarCorrida:
 
         f_h_por_indice: dict[str, float] = {}
         if resultado_referencia is not None:
-            traslape = RANGOS_VALIDOS[version][0]
-            f_h_por_indice = _f_h_desde_referencia(resultado_referencia, traslape)
+            if canasta.df["encadenamiento"].isna().all():
+                print(
+                    f"[replica_inpc] Advertencia: resultado_referencia fue proporcionado "
+                    f"pero la canasta {version} no usa encadenamiento (columna "
+                    f"'encadenamiento' vacía). El parámetro se ignora y no tiene "
+                    f"efecto en el cálculo. resultado_referencia solo aplica para "
+                    f"canastas 2013 y 2024."
+                )
+            else:
+                traslape = RANGOS_VALIDOS[version][0]
+                f_h_por_indice = _f_h_desde_referencia(resultado_referencia, traslape)
 
         resultado = para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)
 
