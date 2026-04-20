@@ -19,6 +19,8 @@ La elaboración y publicación del INPC inició en 1969 bajo responsabilidad del
 
 El cambio de año base a la segunda quincena de julio de 2018 fue la séptima actualización del INPC. Esta actualización renovó la canasta, los ponderadores, el periodo de referencia, la cobertura geográfica y el diseño de muestreo para varios genéricos.
 
+El 22 de agosto de 2024, el INEGI publicó la octava actualización. Renovó la canasta y los ponderadores (ENIGH Estacional 2022) manteniendo el periodo base nacional en segunda quincena de julio de 2018 = 100. A partir de la primera quincena de agosto de 2024, la serie incorpora los nuevos ponderadores mediante la metodología de **índices encadenados**, lo que permite actualizaciones más frecuentes sin cambiar la base publicada.
+
 | Periodo base | Ciudades / áreas | Genéricos | Fuente de ponderadores |
 | --- | ---: | ---: | --- |
 | 1968 | 7 | 172 | EIGF 1963 |
@@ -29,6 +31,9 @@ El cambio de año base a la segunda quincena de julio de 2018 fue la séptima ac
 | 2a quincena de diciembre de 2010 | 46 | 283 | ENIGH 2008 |
 | 2a quincena de diciembre de 2010, ponderadores actualizados | 46 | 283 | ENIGH 2010 |
 | **2a quincena de julio de 2018** | **55** | **299** | **ENGASTO 2012-2013 y ENIGH 2014** |
+| 2a quincena de julio de 2018 (canasta 2024)¹ | 55 | 292 | ENIGH Estacional 2022 |
+
+¹ El periodo base publicado se mantiene en segunda quincena de julio de 2018 = 100. La nueva canasta entra en vigor desde la primera quincena de agosto de 2024 mediante encadenamiento.
 
 ## Propósito y usos
 
@@ -63,34 +68,37 @@ La fuente principal de información para la canasta y los ponderadores fue la En
 
 ### Canasta
 
-La canasta base 2018 está integrada por 299 genéricos. Un genérico es un conjunto de bienes o servicios con características similares y con ponderación propia dentro del índice.
+La canasta base 2018 está integrada por **299 genéricos** y 120,454 especificaciones. Un genérico es un conjunto de bienes o servicios con características similares y con ponderación propia dentro del índice.
 
 La canasta se construyó a partir de conceptos de gasto de los hogares y se ajustó para excluir gastos que no forman parte del consumo considerado para el INPC, como impuestos, transferencias, pagos de deuda, gastos no significativos o conceptos de difícil medición.
 
-La base 2018 considera 120,454 especificaciones, es decir, productos o servicios concretos con descripción detallada de variedad, marca, modelo, presentación, unidad de medida y punto de venta.
+La canasta 2024 actualizó este universo a **292 genéricos** y 123,485 especificaciones (~341 mil cotizaciones mensuales), a partir de los patrones de gasto de la ENIGH Estacional 2022 y la actualización de la CCIF 2018.
 
 ### Clasificaciones
 
-La clasificación principal de la canasta base 2018 es la Clasificación del Consumo Individual por Finalidades (CCIF), compatible con la COICOP de la ONU. Para el INPC se utilizan las primeras 12 divisiones:
+La clasificación principal es la Clasificación del Consumo Individual por Finalidades (CCIF), compatible con la COICOP de la ONU. Las divisiones difieren entre versiones:
 
-1. Alimentos y bebidas no alcohólicas.
-2. Bebidas alcohólicas y tabaco.
-3. Prendas de vestir y calzado.
-4. Vivienda, agua, electricidad, gas y otros combustibles.
-5. Muebles, artículos para el hogar y conservación del hogar.
-6. Salud.
-7. Transporte.
-8. Comunicaciones.
-9. Recreación y cultura.
-10. Educación.
-11. Restaurantes y hoteles.
-12. Bienes y servicios diversos.
+| # | Base 2018 | Base 2024 |
+| ---: | --- | --- |
+| 1 | Alimentos y bebidas no alcohólicas | Alimentos y bebidas no alcohólicas |
+| 2 | Bebidas alcohólicas y tabaco | Bebidas alcohólicas y tabaco |
+| 3 | Prendas de vestir y calzado | Ropa y calzado |
+| 4 | Vivienda, agua, electricidad, gas y otros combustibles | Vivienda, agua, electricidad y gas |
+| 5 | Muebles, artículos para el hogar y conservación del hogar | Mobiliario, equipo doméstico y mantenimiento rutinario del hogar |
+| 6 | Salud | Salud |
+| 7 | Transporte | Transporte |
+| 8 | Comunicaciones | Información y comunicación |
+| 9 | Recreación y cultura | Recreación, deporte y cultura |
+| 10 | Educación | Servicios educativos |
+| 11 | Restaurantes y hoteles | Restaurantes y servicios de alojamiento |
+| 12 | Bienes y servicios diversos | Seguros y servicios financieros |
+| 13 | — | Cuidado personal, protección social y bienes diversos |
 
 Además de la CCIF, el INPC se presenta con otras clasificaciones:
 
-- **Objeto del gasto (COG)**: ocho grupos tradicionales, como alimentos, vivienda, transporte, educación y otros servicios.
+- **Objeto del gasto (COG)**: ocho grupos definidos en el Código Fiscal de la Federación.
 - **Componentes de la inflación**: subyacente y no subyacente.
-- **SCIAN 2018**: clasificación por actividad económica productora.
+- **SCIAN**: clasificación por actividad económica productora. Base 2018 usa SCIAN 2018; base 2024 usa SCIAN 2023 (17 sectores y 88 ramas).
 - **Durabilidad**: durables, no durables, semidurables y servicios.
 
 ### Periodicidad
@@ -104,10 +112,11 @@ El INPC se elabora y difunde de forma quincenal y mensual.
 - **Especificación**: producto o servicio concreto cotizado con máximo detalle, por ejemplo marca, presentación, unidad de medida y punto de venta.
 - **Cotización**: recopilación del precio de una especificación en un punto de venta, internet, registro administrativo u otra fuente.
 - **Ponderación**: participación del gasto de un bien o servicio dentro del gasto total de la canasta. La suma de las ponderaciones es igual a 1 (o 100%).
-- **Periodo base o de referencia**: momento en que el índice se iguala a 100. En la base 2018 es la segunda quincena de julio de 2018.
+- **Periodo base o de referencia**: momento en que el índice se iguala a 100. Para la serie publicada es la segunda quincena de julio de 2018, tanto para la canasta 2018 como para la canasta 2024.
 - **Relativo de precios**: comparación del precio de una especificación entre dos periodos.
 - **Índice elemental**: índice de precios calculado para un genérico en un área geográfica.
 - **Índice superior**: índice agregado por encima del nivel elemental, obtenido al combinar índices elementales con ponderadores de gasto.
+- **Índice encadenado**: índice que vincula una nueva estructura de canasta y ponderadores con la serie previa para conservar continuidad histórica. Usado a partir de la canasta 2024.
 - **Inflación subyacente**: componente que excluye genéricos con alta volatilidad o precios administrados, como agropecuarios, energéticos y tarifas autorizadas por el gobierno.
 - **Inflación no subyacente**: componente integrado por agropecuarios, energéticos y tarifas autorizadas por el gobierno.
 
@@ -129,9 +138,10 @@ El INPC es una medida representativa del consumo promedio de los hogares, no el 
 
 ## Fuentes
 
-El contenido de este documento está basado en el manual metodológico oficial del INEGI:
+El contenido de este documento está basado en los manuales metodológicos oficiales del INEGI:
 
 - INEGI. *Índice Nacional de Precios al Consumidor. Documento metodológico. Base segunda quincena de julio de 2018.* Disponible en: <https://www.inegi.org.mx/programas/inpc/2018/>
+- INEGI. *Índice Nacional de Precios al Consumidor. Base segunda quincena de julio de 2018=100. Documento metodológico.* Disponible en: <https://www.inegi.org.mx/programas/inpc/2018a/>
 
 ## Documentación relacionada
 

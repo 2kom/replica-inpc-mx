@@ -614,14 +614,14 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 
 ### 13.0 Historial de alcance por version
 
-| Version | Alcance acumulado                                                                                      |
-| ------- | ------------------------------------------------------------------------------------------------------ |
-| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API      |
-| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores |
-| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad) |
-| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable    |
-| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado                                                         |
-| v1.3.0  | v1.2.0 + canastas 2010 y 2013                                                                          |
+| Version | Alcance acumulado                                                                                                                            |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API                                            |
+| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores                                       |
+| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad)                                       |
+| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable                                          |
+| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado + imputación bfill/ffill de faltantes en series + `combinar` para series históricas continuas |
+| v1.3.0  | v1.2.0 + canastas 2010 y 2013                                                                                                                |
 
 ### 13.1 Subindices
 

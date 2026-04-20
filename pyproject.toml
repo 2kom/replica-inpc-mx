@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "replica-inpc-mx"
-version = "1.1.1"
+version = "1.2.0"
 description = "Replicación del INPC general de México a partir de series y canastas publicadas por el INEGI"
 requires-python = ">=3.10"
 license = "MIT"

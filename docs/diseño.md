@@ -651,23 +651,23 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 
 **Esquema del DataFrame — con validación INEGI (índice compuesto: `(Periodo, indice)`):**
 
-| Columna                      | dtype pandas      | Notas                                               |
-| ---------------------------- | ----------------- | --------------------------------------------------- |
-| `version`                    | `int`             |                                                     |
-| `tipo`                       | `object` (str)    |                                                     |
-| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                 |
-| `indice_inegi`               | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
-| `error_absoluto`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
-| `error_relativo`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`   |
-| `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`         |
-| `motivo_error`               | `object` (str/NaN)|                                                     |
+| Columna                      | dtype pandas      | Notas                                                                                  |
+| ---------------------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| `version`                    | `int`             |                                                                                        |
+| `tipo`                       | `object` (str)    |                                                                                        |
+| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                                                    |
+| `indice_inegi`               | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
+| `error_absoluto`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
+| `error_relativo`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
+| `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`                                            |
+| `motivo_error`               | `object` (str/NaN)|                                                                                        |
 | `estado_validacion`          | `object` (str)    | `'ok'`, `'diferencia_detectada'`, `'diferencia_detectada_imputado'`, `'no_disponible'` |
-| `total_genericos_esperados`  | `int`             |                                                     |
-| `total_genericos_con_indice` | `int`             |                                                     |
-| `total_genericos_sin_indice` | `int`             |                                                     |
-| `cobertura_genericos_pct`    | `float`           |                                                     |
-| `ponderador_total_esperado`  | `float`           |                                                     |
-| `ponderador_total_cubierto`  | `float`           |                                                     |
+| `total_genericos_esperados`  | `int`             |                                                                                        |
+| `total_genericos_con_indice` | `int`             |                                                                                        |
+| `total_genericos_sin_indice` | `int`             |                                                                                        |
+| `cobertura_genericos_pct`    | `float`           |                                                                                        |
+| `ponderador_total_esperado`  | `float`           |                                                                                        |
+| `ponderador_total_cubierto`  | `float`           |                                                                                        |
 
 **Esquema del DataFrame — sin validación INEGI (índice compuesto: `(Periodo, indice)`):**
 
@@ -687,15 +687,15 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 
 **Invariantes — validados al construir:**
 
-| Invariante                 | Regla                                                                                              |
-| -------------------------- | -------------------------------------------------------------------------------------------------- |
-| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                            |
-| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                               |
+| Invariante                 | Regla                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                                        |
+| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                                           |
 | `estado_validacion` válido | cuando presente: valores in `{'ok', 'diferencia_detectada', 'diferencia_detectada_imputado', 'no_disponible'}` |
-| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                            |
-| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                               |
-| Consistencia validacion    | cuando presente: si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_*` NaN         |
-| Al menos una fila          | el DataFrame no está vacío                                                                         |
+| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                                        |
+| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                                           |
+| Consistencia validacion    | cuando presente: si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_*` NaN                     |
+| Al menos una fila          | el DataFrame no está vacío                                                                                     |
 
 **Nota — tipos con validación INEGI disponible:**
 
@@ -1184,6 +1184,7 @@ class Corrida:
         version: VersionCanasta,
         tipo: str = "inpc",
         persistir: bool = False,
+        resultado_referencia: ResultadoCalculo | None = None,
     ) -> ResultadoCorrida: ...
 ```
 
@@ -1204,13 +1205,19 @@ class Corrida:
 | `version` | sí | — | `VersionCanasta`: `2010`, `2013`, `2018`, `2024` |
 | `tipo` | no | `"inpc"` | Tipo de índice a calcular. Valores válidos: claves de `INDICE_POR_TIPO` o valores de `COLUMNAS_CLASIFICACION`. Lanza `ErrorConfiguracion` si no es válido. |
 | `persistir` | no | `False` | Si `True`, guarda artefactos en `ruta_datos` y exporta CSV a `ruta_salida`. La fachada crea los directorios si no existen. |
+| `resultado_referencia` | no | `None` | `ResultadoCalculo` de la corrida anterior (ej. 2018) para obtener `f_h` exacto del INEGI en el periodo de traslape. Solo aplica a canastas encadenadas (2013, 2024). Si la canasta no usa encadenamiento, se emite `UserWarning` y se ignora. Ver §11.20. |
 
 **Uso típico:**
 
 ```python
 corrida = Corrida(token_inegi="mi_token")
-inpc_2018 = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
-inpc_2024 = corrida.ejecutar(canasta="data/canasta_2024.csv", series="data/series_2024.csv", version=2024)
+r_2018 = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
+r_2024 = corrida.ejecutar(
+    canasta="data/canasta_2024.csv",
+    series="data/series_2024.csv",
+    version=2024,
+    resultado_referencia=r_2018.resultado,  # f_h exacto — ver §11.20
+)
 ```
 
 **Selección de fuente de validación:**
@@ -1740,24 +1747,24 @@ mayor legibilidad en v1. El serializador aplica este mapeo:
 
 En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
 
-| Columna                       | Tipo     | Notas                                        |
-| ----------------------------- | -------- | -------------------------------------------- |
-| `periodo`                     | `str`    | Ej. `"1Q Ene 2018"`                          |
-| `subindice`                   | `str`    | Ej. `"INPC general"`                         |
-| `version`                     | `int`    |                                              |
-| `inpc_replicado`              | `float`  | `null` si `estado_calculo != 'ok'`           |
-| `inpc_inegi`                  | `float`  | `null` si validación no disponible           |
-| `error_absoluto`              | `float`  | `null` si validación no disponible           |
-| `error_relativo`              | `float`  | `null` si validación no disponible           |
-| `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`        |
-| `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`            |
+| Columna                       | Tipo     | Notas                                                                         |
+| ----------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `periodo`                     | `str`    | Ej. `"1Q Ene 2018"`                                                           |
+| `subindice`                   | `str`    | Ej. `"INPC general"`                                                          |
+| `version`                     | `int`    |                                                                               |
+| `inpc_replicado`              | `float`  | `null` si `estado_calculo != 'ok'`                                            |
+| `inpc_inegi`                  | `float`  | `null` si validación no disponible                                            |
+| `error_absoluto`              | `float`  | `null` si validación no disponible                                            |
+| `error_relativo`              | `float`  | `null` si validación no disponible                                            |
+| `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`                                         |
+| `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`                                             |
 | `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `diferencia_detectada_imputado`, `no_disponible`|
-| `total_genericos_esperados`   | `int`    |                                              |
-| `total_genericos_con_indice`  | `int`    |                                              |
-| `total_genericos_sin_indice`  | `int`    |                                              |
-| `cobertura_genericos_pct`     | `float`  |                                              |
-| `ponderador_total_esperado`   | `float`  |                                              |
-| `ponderador_total_cubierto`   | `float`  |                                              |
+| `total_genericos_esperados`   | `int`    |                                                                               |
+| `total_genericos_con_indice`  | `int`    |                                                                               |
+| `total_genericos_sin_indice`  | `int`    |                                                                               |
+| `cobertura_genericos_pct`     | `float`  |                                                                               |
+| `ponderador_total_esperado`   | `float`  |                                                                               |
+| `ponderador_total_cubierto`   | `float`  |                                                                               |
 
 #### diagnostico_<id_corrida>.csv
 
@@ -1939,6 +1946,10 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 - Corrida con faltante en ponderador → falla inmediata
 - Corrida con API no disponible → continúa, validación `no_disponible`
 - Corrida con respuesta inválida de API → continúa, validación `no_disponible`
+- Corrida encadenada (canasta 2024) con `resultado_referencia` → `f_h` exacto, error_absoluto ≤ 0.0009
+- Corrida encadenada sin `resultado_referencia` → fallback media ponderada, error sistemático ~0.72
+- Series con NaN → imputación bfill/ffill, trazabilidad en `DiagnosticoFaltantes`
+- `combinar` de dos corridas → serie continua sin duplicados, UUID nuevo
 - Invariantes de todos los contratos del dominio
 - `Periodo`: parseo, orden, hash, `to_timestamp()`
 - Las 4 variantes de archivo de series (con/sin metadatos × horizontal/vertical)

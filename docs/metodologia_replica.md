@@ -51,6 +51,42 @@ Donde $h$ es el conjunto de genéricos que pertenecen a la categoría. Los ponde
 
 El resultado es un índice por categoría y periodo, con la misma escala que el INPC (base = 100 en el periodo de referencia de la canasta).
 
+## Cálculo del INPC encadenado (canasta 2024)
+
+Para la canasta 2024, el proyecto aplica Laspeyres encadenado. Los índices de genéricos publicados están en base 2Q jul. 2018 = 100, pero los ponderadores 2024 corresponden al 2Q jul. 2024. El proyecto normaliza cada serie al traslape antes de agregar:
+
+$$INPC_t = f_h \cdot \frac{\displaystyle\sum_{k=1}^{292} w_k \cdot \dfrac{I_k^t}{f_k}}{\displaystyle\sum_{k=1}^{292} w_k}$$
+
+Donde:
+
+- $I_k^t$: índice nacional del genérico $k$ en el periodo $t$, publicado por el INEGI en base 2Q jul. 2018.
+- $f_k$: factor de encadenamiento del genérico $k$, tomado de la columna `encadenamiento` de la canasta 2024. Equivale a $I_k^{2Q\,\text{Jul}\,2024} / 100$.
+- $w_k$: ponderador del genérico $k$ (canasta 2024, ENIGH Estacional 2022).
+- $f_h$: factor de encadenamiento del índice superior $h$ en el traslape.
+
+Esta fórmula es algebraicamente equivalente al procedimiento oficial del INEGI (pasos θ → normalizar → Laspeyres → escalar por $f_h$). Ver `docs/metodologia_inegi.md` para el detalle.
+
+**Cómo se obtiene $f_h$:** el valor correcto es el INPC calculado con la canasta 2018 en el periodo de traslape, dividido entre 100. El proyecto lo extrae del `resultado_referencia` que el usuario pasa al ejecutar la corrida 2024:
+
+```python
+resultado_2024 = corrida.ejecutar(
+    ..., version=2024, resultado_referencia=resultado_2018.resultado
+)
+```
+
+Sin `resultado_referencia`, el proyecto usa como fallback $f_h = \sum_k w_k f_k / \sum_k w_k$ (media ponderada de los factores individuales con ponderadores 2024). Este fallback introduce un error sistemático de ~0.72 puntos de índice porque los ponderadores 2018 y 2024 difieren. Ver §11.20 de `docs/diseño.md`.
+
+**No aditividad:** los subíndices encadenados calculados por el proyecto no son aditivos al INPC encadenado después del traslape. Cada índice superior se encadena de forma independiente, igual que en la metodología oficial.
+
+**Serie histórica continua:** para obtener una serie continua que abarque los tramos 2018 y 2024:
+
+```python
+from replica_inpc import combinar
+resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultado])
+```
+
+`combinar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Funciona directamente para `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad` y `canasta basica`. Para clasificadores CCIF y SCIAN los nombres de categorías difieren entre canastas — ver `docs/diseño.md` §12.10.
+
 ## Validación
 
 Al terminar el cálculo, el proyecto consulta la API de indicadores del INEGI para obtener los valores oficiales publicados y los compara con los valores replicados.
@@ -73,7 +109,6 @@ Este proyecto no replica:
 - **La Etapa 1 del INEGI**: el cálculo de índices elementales desde cotizaciones individuales. Los índices por genérico se toman directamente de las series publicadas.
 - **Los índices por área geográfica**: el proyecto trabaja con los índices nacionales por genérico, no con los índices desagregados por ciudad o región.
 - **El tratamiento de faltantes del INEGI**: cuando el INEGI detecta un precio faltante aplica procedimientos de imputación propios. Este proyecto marca el periodo como `null_por_faltantes` si algún genérico no tiene dato.
-- **Índices encadenados**: el cálculo encadenado para las canastas 2013 y 2024 no está implementado en la versión actual.
 
 ## Documentación relacionada
 

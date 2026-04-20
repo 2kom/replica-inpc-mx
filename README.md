@@ -29,13 +29,15 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.1.1)
+## Alcance actual (v1.2.0)
 
-La v1.1.1 del proyecto permite:
+La v1.2.0 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
-- calcular el INPC general mediante Laspeyres directo (canasta 2018);
+- calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
 - calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
+- imputar periodos faltantes en series via bfill/ffill con trazabilidad completa;
+- combinar resultados de distintas corridas en un unico `ResultadoCalculo` cronologico;
 - validar el resultado contra lo publicado por el INEGI via su API de indicadores;
 - exportar resultados de calculo y validacion;
 - ejecutar un demo completo con datos sinteticos (ver `demo/`).
@@ -43,8 +45,11 @@ La v1.1.1 del proyecto permite:
 El proyecto **no** incluye todavia:
 
 - incidencias ni variaciones;
-- calculo encadenado (canastas 2013 y 2024);
-- soporte operativo para canastas 2010 y 2013.
+- soporte operativo para canastas 2010 y 2013;
+- tabla de correspondencia CCIF/SCIAN entre canastas (gap 12.10): `combinar` funciona para `inpc`,
+  `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad` y
+  `canasta basica`, pero no para clasificadores CCIF division/grupo/clase ni SCIAN sector/rama donde
+  los nombres difieren entre la canasta 2018 y la 2024.
 
 ## Politica de insumos
 
@@ -84,33 +89,59 @@ Abrir `notebook.ipynb` y ajustar las variables de configuración:
 # Registro en: https://www.inegi.org.mx/app/api/denue/v1/tokenVerify.aspx
 TOKEN_INEGI = None
 # TOKEN_INEGI = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-CANASTA = "data/inputs/canastas/ponderadores_2018.csv"
-SERIES  = "data/inputs/series/series_2018.csv"
-VERSION = 2018
 ```
 
-Ejecutar:
+**Canasta 2018 (Laspeyres directo):**
 
 ```python
 from replica_inpc.api.corrida import Corrida
 
 corrida = Corrida(token_inegi=TOKEN_INEGI)
 
-# INPC general
-resultado = corrida.ejecutar(
-    canasta=CANASTA,
-    series=SERIES,
-    version=VERSION,
+resultado_2018 = corrida.ejecutar(
+    canasta="data/inputs/canastas/ponderadores_2018.csv",
+    series="data/inputs/series/series_2018.csv",
+    version=2018,
     tipo="inpc",
     persistir=False,
 )
+```
 
-# Subindices por clasificador (ejemplo: inflacion componente)
+**Canasta 2024 (Laspeyres encadenado):**
+
+```python
+# resultado_referencia es la corrida 2018; provee f_h exacto del INEGI para el periodo de traslape.
+resultado_2024 = corrida.ejecutar(
+    canasta="data/inputs/canastas/ponderadores_2024.csv",
+    series="data/inputs/series/series_2024.csv",
+    version=2024,
+    tipo="inpc",
+    resultado_referencia=resultado_2018.resultado,
+    persistir=False,
+)
+```
+
+**Combinar corridas en serie temporal continua:**
+
+```python
+from replica_inpc import combinar
+
+resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultado])
+```
+
+> **Nota:** `combinar` funciona directamente para `tipo="inpc"`, `"inflacion componente"`,
+> `"inflacion subcomponente"`, `"inflacion agrupacion"`, `"COG"`, `"durabilidad"` y `"canasta basica"`.
+> Para `CCIF division/grupo/clase` y `SCIAN sector/rama` los nombres de categorías difieren entre
+> canastas 2018 y 2024 — el resultado combinado tendrá categorías que aparecen solo en algunos
+> periodos (ver gap 12.10 en `docs/diseño.md`).
+
+**Subindices por clasificador:**
+
+```python
 resultado = corrida.ejecutar(
-    canasta=CANASTA,
-    series=SERIES,
-    version=VERSION,
+    canasta="data/inputs/canastas/ponderadores_2018.csv",
+    series="data/inputs/series/series_2018.csv",
+    version=2018,
     tipo="inflacion componente",
     persistir=False,
 )
@@ -121,7 +152,7 @@ El resultado incluye:
 - `resultado.resumen` — estado general de la corrida
 - `resultado.reporte.como_tabla()` — INPC replicado vs INEGI por periodo
 - `resultado.resultado.como_tabla()` — índices calculados
-- `resultado.diagnostico` — faltantes detectados
+- `resultado.diagnostico` — faltantes detectados e imputados
 
 Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 
