@@ -94,6 +94,7 @@ El historial de cambios vive en git.
       - [Enfoque final: $f\_h$ desde el resultado de la versión anterior](#enfoque-final-f_h-desde-el-resultado-de-la-versión-anterior)
     - [11.21 Imputación de faltantes en series](#1121-imputación-de-faltantes-en-series)
     - [11.22 `combinar` — función de combinación histórica de `ResultadoCalculo`](#1122-combinar--función-de-combinación-histórica-de-resultadocalculo)
+    - [11.23 `RENOMBRES_INDICES` y normalización cross-versión en `combinar`](#1123-renombres_indices-y-normalización-cross-versión-en-combinar)
   - [12. Gaps conocidos y mejoras futuras](#12-gaps-conocidos-y-mejoras-futuras)
     - [12.1 `estado_validacion_global` no distingue cobertura parcial ✓ RESUELTO](#121-estado_validacion_global-no-distingue-cobertura-parcial--resuelto)
     - [12.2 Validación por niveles en `LectorCanastaCsv`](#122-validación-por-niveles-en-lectorcanastacsv)
@@ -104,7 +105,7 @@ El historial de cambios vive en git.
     - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
-    - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados)
+    - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO (CCIF division)](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto-ccif-division)
     - [12.11 `ejecutar` multi-canasta (v2.0)](#1211-ejecutar-multi-canasta-v20)
 
 ---
@@ -508,13 +509,17 @@ class ResultadoCalculo:
 columnas = periodos. `_repr_html_()` conserva la vista larga; la vista ancha
 se obtiene llamando `como_tabla(ancho=True)` explícitamente.
 
-**`combinar(resultados)`** — función suelta en `dominio/modelos/resultado.py`, exportada desde `replica_inpc`. Construye un `ResultadoCalculo` continuo a partir de una lista de resultados de distintas canastas:
+**`combinar(resultados, version_canonica=None)`** — función suelta en `dominio/modelos/resultado.py`, exportada desde `replica_inpc`. Construye un `ResultadoCalculo` continuo a partir de una lista de resultados de distintas canastas. Normaliza automáticamente los nombres de categorías entre versiones para los tipos con correspondencia definida (ver §11.23):
 
 ```python
 from replica_inpc import combinar
 
 inpc = combinar([r_2010.resultado, r_2013.resultado, r_2018.resultado, r_2024.resultado])
 inpc.como_tabla(ancho=True)
+
+# Para tipos con fricción de nombres (ej. CCIF division):
+ccif = combinar([r_2018.resultado, r_2024.resultado])           # usa nombres 2024 (default)
+ccif = combinar([r_2018.resultado, r_2024.resultado], version_canonica=2018)  # usa nombres 2018
 ```
 
 Ver §11.22 para la decisión de diseño.
@@ -2022,7 +2027,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ### 11.7 Categorías de clasificación version-específicas
 
-**Decisión:** las columnas de clasificación en `CanastaCanonica` almacenan texto tal como viene del CSV intermedio. No se usan `pd.Categorical`. No hay mapeo cross-versión en v1.
+**Decisión:** las columnas de clasificación en `CanastaCanonica` almacenan texto tal como viene del CSV intermedio. No se usan `pd.Categorical`. El mapeo cross-versión de nombres no vive en `CanastaCanonica` sino en `RENOMBRES_INDICES` en `correspondencia_canastas.py` — se aplica al combinar resultados, no al leer la canasta (ver §11.23).
 
 **Columnas con categorías en canasta 2018** (`encadenamiento` y `canasta consumo minimo` están vacías para esta versión):
 
@@ -2040,7 +2045,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 | `durabilidad` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
 | `canasta basica` | 1 | `X` (indica pertenencia; ausente si no aplica) |
 
-**Advertencia para v2:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → otro nombre en 2024). Un join directo entre canastas de distintas versiones producirá categorías no coincidentes. Cuando se soporte comparación cross-versión se requerirá un mapeo explícito.
+**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `combinar` normaliza automáticamente los nombres para `CCIF division` al concatenar resultados de distintas canastas. Para `CCIF grupo`, `CCIF clase`, `SCIAN sector` y `SCIAN rama` la normalización está pendiente (ver §12.10). Un join directo sobre el df sin pasar por `combinar` seguirá produciendo categorías no coincidentes.
 
 ---
 
@@ -2275,7 +2280,57 @@ Implementado como `df.bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la seri
 
 **Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoCalculo` — versiones válidas por fila, sin índices duplicados, consistencia ok/fallo. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
 
-**Limitación documentada:** para tipos con fricción de nombres entre canastas (ej. `CCIF division`) el resultado combinado puede tener categorías que aparecen solo en algunos periodos. No es un error — es la realidad de los cambios de canasta. Ver §12.10.
+**`version_canonica`:** `combinar` acepta `version_canonica: VersionCanasta | None = None`. Si `None`, usa la versión más reciente de los resultados pasados. Si se especifica, renombra los índices de todas las demás versiones hacia los nombres de esa versión. Ver §11.23 para la tabla de correspondencia y el algoritmo.
+
+---
+
+### 11.23 `RENOMBRES_INDICES` y normalización cross-versión en `combinar`
+
+**Problema:** al combinar `ResultadoCalculo` de canastas distintas, el nivel `indice` del MultiIndex contiene el nombre de la categoría tal como lo generó cada corrida. Para `CCIF division`, los nombres cambiaron entre 2018 y 2024 (ej. `"comunicaciones"` → `"informacion y comunicacion"`). Sin normalización, `combinar` produce dos filas separadas para lo que conceptualmente es la misma serie.
+
+**Decisión:** constante `RENOMBRES_INDICES` en nuevo módulo `dominio/correspondencia_canastas.py`. Función privada `_normalizar_indices` en `resultado.py`. `combinar` la invoca antes de concatenar.
+
+**Estructura de `RENOMBRES_INDICES`:**
+
+```python
+RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]]
+# tipo → version_origen → {nombre_viejo: nombre_canonico_2024}
+```
+
+**Tabla de correspondencia CCIF division (2018 → 2024):**
+
+| 2018 | 2024 (canónico) |
+| ---- | --------------- |
+| `bienes y servicios diversos` | `cuidado personal, proteccion social y bienes diversos` |
+| `comunicaciones` | `informacion y comunicacion` |
+| `educacion` | `servicios educativos` |
+| `muebles, articulos para el hogar y para su conservacion` | `mobiliario, equipo domestico y mantenimiento rutinario del hogar` |
+| `prendas de vestir y calzado` | `ropa y calzado` |
+| `recreacion y cultura` | `recreacion, deporte y cultura` |
+| `restaurantes y hoteles` | `restaurantes y servicios de alojamiento` |
+| `vivienda, agua, electricidad, gas y otros combustibles` | `vivienda, agua, electricidad y gas` |
+
+Sin cambio (4): `alimentos y bebidas no alcoholicas`, `bebidas alcoholicas y tabaco`, `salud`, `transporte`.
+
+Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 2018; aparece a partir del primer periodo de la canasta 2024. `bienes y servicios diversos` se mapea a `cuidado personal...` (categoría más cercana del split); `seguros...` queda sin historia previa.
+
+**Algoritmo de `_normalizar_indices(df, version_canonica)`:**
+
+Para cada `tipo` único en el df:
+
+1. Si `tipo` no está en `RENOMBRES_INDICES`: skip.
+2. Obtener `version_origen = df.loc[df["tipo"] == tipo, "version"].iloc[0]`.
+3. Si `version_origen == version_canonica`: skip.
+4. Si `version_origen < version_canonica` (forward): `mapa = RENOMBRES_INDICES[tipo].get(version_origen, {})`.
+5. Si `version_origen > version_canonica` (backward): `mapa = {v: k for k, v in RENOMBRES_INDICES[tipo].get(version_canonica, {}).items()}`.
+6. Aplicar al nivel `indice`: `index.get_level_values("indice").map(lambda x: mapa.get(x, x))`.
+7. Reconstruir el MultiIndex con `pd.MultiIndex.from_arrays`.
+
+**Decisión — categorías sin mapeo:** se dejan con su nombre original. Aparecen solo en los periodos de la canasta donde existen — comportamiento natural, no es un error.
+
+**Decisión — `version_canonica` en `combinar`:** si `None`, `vc = max(version)` de todos los resultados pasados. Si especificado, se convierte a `int` internamente para evitar dependencia circular con `tipos.py` (`tipos.py` importa `ResultadoCalculo`; usar `TYPE_CHECKING` para la anotación `VersionCanasta | None`).
+
+**Pendiente:** agregar entradas a `RENOMBRES_INDICES` para `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama` cuando se requiera combinar esos tipos entre canastas 2018 y 2024 (ver §12.10).
 
 ---
 
@@ -2379,27 +2434,28 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados
+### 12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO (CCIF division)
 
-**Comportamiento actual:** cada corrida opera sobre una sola canasta. No existe mecanismo para combinar resultados de canastas distintas en una serie histórica continua por subíndice.
+**Solución implementada:**
 
-**Problema:** al comparar o concatenar resultados de canastas 2018 y 2024 para clasificaciones distintas de INPC, los nombres de categorías difieren o desaparecen entre versiones. Medición al 2026-04-19 sobre `CCIF division`:
+- Nuevo `dominio/correspondencia_canastas.py` con `RENOMBRES_INDICES` — 8 renombres para `CCIF division` (2018 → 2024).
+- `combinar` aplica normalización automática vía `_normalizar_indices` antes de concatenar.
+- `version_canonica: VersionCanasta | None = None` en `combinar` — `None` usa la versión más reciente.
+- Ver §11.23 para algoritmo completo y tabla de correspondencia.
+
+**Medición original del problema (2026-04-19):**
 
 | Clasificación         | Solo en 2018 | Solo en 2024 | Comunes |
 | --------------------- | -----------: | -----------: | ------: |
-| `CCIF division`       | 8            | 9            | 4       |
+| `CCIF division`       | 8            | 1            | 4       |
 | `CCIF grupo`          | 27           | 29           | 17      |
 | `CCIF clase`          | 62           | 69           | 25      |
 | `SCIAN sector`        | 1            | 0            | 17      |
 | `SCIAN rama`          | 9            | 6            | 82      |
 
-Ejemplos de renombres en `CCIF division`: `"comunicaciones"` → `"informacion y comunicacion"`, `"educacion"` → `"servicios educativos"`, `"restaurantes y hoteles"` → `"restaurantes y servicios de alojamiento"`. Además `"bienes y servicios diversos"` (2018) se divide en dos categorías nuevas en 2024.
+**Clasificaciones sin fricción** (sin cambios entre 2018 y 2024): `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`.
 
-**Clasificaciones sin fricción** (categorías idénticas en 2018 y 2024): `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`.
-
-**Mejora propuesta:** tabla de correspondencia entre nombres de categorías de distintas canastas, que permita combinar series históricas continuas para los tipos con fricción. Requiere decisión sobre qué hacer con categorías que desaparecen (NaN en la versión que no las tiene) o que se fusionan/dividen entre canastas.
-
-**Cuándo implementar:** después de tener la combinación de corridas funcionando para los tipos sin fricción (`inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`).
+**Pendiente:** `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama` — requieren análisis de renombres análogo y agregar entradas a `RENOMBRES_INDICES`. Trigger: cuando se necesite combinar resultados de esos tipos entre canastas.
 
 ---
 

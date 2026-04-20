@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
+
+if TYPE_CHECKING:
+    from replica_inpc.dominio.tipos import VersionCanasta
 
 
 class ResultadoCalculo:
@@ -53,9 +58,7 @@ class ResultadoCalculo:
         if not df["version"].isin({2010, 2013, 2018, 2024}).all():
             raise InvarianteViolado("version contiene valores inválidos.")
         if df.index.duplicated().any():
-            raise InvarianteViolado(
-                "El DataFrame de resultados no puede tener índices duplicados."
-            )
+            raise InvarianteViolado("El DataFrame de resultados no puede tener índices duplicados.")
         if not df["estado_calculo"].isin({"ok", "null_por_faltantes", "fallida"}).all():
             raise InvarianteViolado("estado_calculo contiene valores invalidos.")
 
@@ -108,7 +111,35 @@ class ResultadoCalculo:
         return self.como_tabla(ancho=False)._repr_html_()  # type: ignore[operator]
 
 
-def combinar(resultados: list[ResultadoCalculo]) -> ResultadoCalculo:
+def _normalizar_indices(df: pd.DataFrame, version_canonica: int) -> pd.DataFrame:
+    renombres: dict[str, str] = {}
+    for tipo in df["tipo"].unique():
+        if tipo not in RENOMBRES_INDICES:
+            continue
+        version_origen = int(df.loc[df["tipo"] == tipo, "version"].iloc[0])  # type: ignore[union-attr]
+        if version_origen == version_canonica:
+            continue
+        if version_origen < version_canonica:
+            mapa = RENOMBRES_INDICES[tipo].get(version_origen, {})
+        else:
+            mapa_forward = RENOMBRES_INDICES[tipo].get(version_canonica, {})
+            mapa = {v: k for k, v in mapa_forward.items()}
+        renombres.update(mapa)
+    if not renombres:
+        return df
+    df_nuevo = df.copy()
+    new_indice = df_nuevo.index.get_level_values("indice").map(lambda x: renombres.get(x, x))
+    new_periodo = df_nuevo.index.get_level_values("periodo")
+    df_nuevo.index = pd.MultiIndex.from_arrays(
+        [new_periodo, new_indice], names=["periodo", "indice"]
+    )
+    return df_nuevo
+
+
+def combinar(
+    resultados: list[ResultadoCalculo],
+    version_canonica: VersionCanasta | None = None,
+) -> ResultadoCalculo:
     """Combina múltiples ResultadoCalculo de distintas canastas en una serie histórica continua.
 
     Los resultados se ordenan cronológicamente. En cada par contiguo, el periodo de traslape
@@ -132,13 +163,19 @@ def combinar(resultados: list[ResultadoCalculo]) -> ResultadoCalculo:
         key=lambda r: r.df.index.get_level_values("periodo").min(),
     )
 
+    vc: int
+    if version_canonica is None:
+        vc = max(int(v) for r in ordenados for v in r.df["version"].unique())
+    else:
+        vc = int(version_canonica)
+
     periodos_posteriores: set[object] = set()
     dfs = []
     for r in reversed(ordenados):
         periodos_propios = set(r.df.index.get_level_values("periodo"))
         periodos_a_incluir = periodos_propios - periodos_posteriores
         df_filtrado = r.df[r.df.index.get_level_values("periodo").isin(periodos_a_incluir)]
-        dfs.append(df_filtrado)
+        dfs.append(_normalizar_indices(df_filtrado, vc))
         periodos_posteriores |= periodos_propios
 
     df_combinado = pd.concat(reversed(dfs))

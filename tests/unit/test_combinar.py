@@ -27,6 +27,25 @@ def _resultado(periodos: list[Periodo], version: int, id_corrida: str = "abc") -
     return ResultadoCalculo(df, id_corrida)
 
 
+def _resultado_ccif(
+    periodos: list[Periodo], version: int, categoria: str, id_corrida: str = "abc"
+) -> ResultadoCalculo:
+    idx = pd.MultiIndex.from_tuples(
+        [(p, categoria) for p in periodos], names=["periodo", "indice"]
+    )
+    df = pd.DataFrame(
+        {
+            "version": version,
+            "tipo": "CCIF division",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        index=idx,
+    )
+    return ResultadoCalculo(df, id_corrida)
+
+
 # --- mínimo de elementos ---
 
 
@@ -79,6 +98,50 @@ def test_id_corrida_es_nuevo():
     r_2024 = _resultado([p3, p4], 2024, "id_2024")
     resultado = combinar([r_2018, r_2024])
     assert resultado.id_corrida not in {"id_2018", "id_2024"}
+
+
+# --- normalización CCIF division ---
+
+
+def test_combinar_ccif_forward_rename_por_defecto():
+    r_2018 = _resultado_ccif([p1, p2, p3], 2018, "comunicaciones")
+    r_2024 = _resultado_ccif([p3, p4], 2024, "informacion y comunicacion")
+    resultado = combinar([r_2018, r_2024])
+    indices = set(resultado.df.index.get_level_values("indice"))
+    assert indices == {"informacion y comunicacion"}
+
+
+def test_combinar_ccif_backward_rename_version_canonica_2018():
+    r_2018 = _resultado_ccif([p1, p2, p3], 2018, "comunicaciones")
+    r_2024 = _resultado_ccif([p3, p4], 2024, "informacion y comunicacion")
+    resultado = combinar([r_2018, r_2024], version_canonica=2018)
+    indices = set(resultado.df.index.get_level_values("indice"))
+    assert indices == {"comunicaciones"}
+
+
+def test_combinar_ccif_categoria_sin_mapeo_pasa_sin_modificar():
+    r_2018 = _resultado_ccif([p1, p2, p3], 2018, "salud")
+    r_2024 = _resultado_ccif([p3, p4], 2024, "salud")
+    resultado = combinar([r_2018, r_2024])
+    indices = set(resultado.df.index.get_level_values("indice"))
+    assert indices == {"salud"}
+
+
+def test_combinar_ccif_categoria_nueva_en_2024_aparece_sin_historia():
+    r_2018 = _resultado_ccif([p1, p2], 2018, "salud")
+    r_2024 = _resultado_ccif([p3, p4], 2024, "seguros y servicios financieros")
+    resultado = combinar([r_2018, r_2024])
+    indices = set(resultado.df.index.get_level_values("indice"))
+    assert "salud" in indices
+    assert "seguros y servicios financieros" in indices
+
+
+def test_combinar_inpc_no_afectado_por_normalizacion():
+    r_2018 = _resultado([p1, p2, p3], 2018)
+    r_2024 = _resultado([p3, p4], 2024)
+    resultado = combinar([r_2018, r_2024])
+    indices = set(resultado.df.index.get_level_values("indice"))
+    assert indices == {"INPC"}
 
 
 # --- tres corridas ---
