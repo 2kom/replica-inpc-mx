@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
@@ -104,3 +106,42 @@ class ResultadoCalculo:
     def _repr_html_(self) -> str:
         """Renderiza el resultado en formato largo para notebooks."""
         return self.como_tabla(ancho=False)._repr_html_()  # type: ignore[operator]
+
+
+def combinar(resultados: list[ResultadoCalculo]) -> ResultadoCalculo:
+    """Combina múltiples ResultadoCalculo de distintas canastas en una serie histórica continua.
+
+    Los resultados se ordenan cronológicamente. En cada par contiguo, el periodo de traslape
+    queda en el posterior. Ver docs/diseño.md §11.22.
+
+    Args:
+        resultados: Lista de ResultadoCalculo de distintas versiones de canasta.
+            Mínimo 2 elementos.
+
+    Returns:
+        ResultadoCalculo con todos los periodos concatenados y sin duplicados.
+
+    Raises:
+        InvarianteViolado: Si la lista tiene menos de 2 elementos.
+    """
+    if len(resultados) < 2:
+        raise InvarianteViolado("combinar requiere al menos 2 ResultadoCalculo.")
+
+    ordenados = sorted(
+        resultados,
+        key=lambda r: r.df.index.get_level_values("periodo").min(),
+    )
+
+    periodos_posteriores: set[object] = set()
+    dfs = []
+    for r in reversed(ordenados):
+        periodos_propios = set(r.df.index.get_level_values("periodo"))
+        periodos_a_incluir = periodos_propios - periodos_posteriores
+        df_filtrado = r.df[r.df.index.get_level_values("periodo").isin(periodos_a_incluir)]
+        dfs.append(df_filtrado)
+        periodos_posteriores |= periodos_propios
+
+    df_combinado = pd.concat(reversed(dfs))
+    df_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
+
+    return ResultadoCalculo(df_combinado, str(uuid.uuid4()))
