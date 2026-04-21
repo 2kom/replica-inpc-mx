@@ -85,7 +85,7 @@ from replica_inpc import combinar
 resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultado])
 ```
 
-`combinar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Funciona directamente para `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad` y `canasta basica`. Para clasificadores CCIF y SCIAN los nombres de categorías difieren entre canastas — ver `docs/diseño.md` §12.10.
+`combinar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 definidos en `RENOMBRES_INDICES`. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen — ver `docs/diseño.md` §12.10.
 
 ## Validación
 

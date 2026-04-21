@@ -29,7 +29,7 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.0)
+## Alcance actual (v1.2.1)
 
 La v1.2.0 del proyecto permite:
 
@@ -46,10 +46,9 @@ El proyecto **no** incluye todavia:
 
 - incidencias ni variaciones;
 - soporte operativo para canastas 2010 y 2013;
-- tabla de correspondencia CCIF/SCIAN entre canastas (gap 12.10): `combinar` funciona para `inpc`,
-  `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad` y
-  `canasta basica`, pero no para clasificadores CCIF division/grupo/clase ni SCIAN sector/rama donde
-  los nombres difieren entre la canasta 2018 y la 2024.
+- mapeo de splits, fusiones, categorias nuevas o eliminadas entre canastas: las categorias que
+  desaparecen, aparecen o se parten entre versiones aparecen solo en los periodos donde existen,
+  sin continuidad historica.
 
 ## Politica de insumos
 
@@ -126,14 +125,22 @@ resultado_2024 = corrida.ejecutar(
 ```python
 from replica_inpc import combinar
 
+# Por defecto usa los nombres de la canasta mas reciente (2024 en este caso).
 resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultado])
+
+# version_canonica=2018 normaliza todos los nombres hacia los de la canasta 2018.
+resultado_completo = combinar(
+    [resultado_2018.resultado, resultado_2024.resultado],
+    version_canonica=2018,
+)
 ```
 
-> **Nota:** `combinar` funciona directamente para `tipo="inpc"`, `"inflacion componente"`,
-> `"inflacion subcomponente"`, `"inflacion agrupacion"`, `"COG"`, `"durabilidad"` y `"canasta basica"`.
-> Para `CCIF division/grupo/clase` y `SCIAN sector/rama` los nombres de categorías difieren entre
-> canastas 2018 y 2024 — el resultado combinado tendrá categorías que aparecen solo en algunos
-> periodos (ver gap 12.10 en `docs/diseño.md`).
+> **Nota:** `combinar` normaliza automáticamente los renombres 1:1 de `RENOMBRES_INDICES`
+> para clasificadores con cambios de nombre entre canastas (`CCIF division`, `CCIF grupo`,
+> `CCIF clase`, `SCIAN rama`). Los renombres están validados contra los CSVs de ponderadores;
+> `CCIF clase` adicionalmente contra COICOP 2018 (UN Statistics Division). Las categorías
+> nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen
+> (ver §12.10 en `docs/diseño.md`).
 
 **Subindices por clasificador:**
 

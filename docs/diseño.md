@@ -105,7 +105,7 @@ El historial de cambios vive en git.
     - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
-    - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO (CCIF division)](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto-ccif-division)
+    - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto)
     - [12.11 `ejecutar` multi-canasta (v2.0)](#1211-ejecutar-multi-canasta-v20)
 
 ---
@@ -2045,7 +2045,7 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 | `durabilidad` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
 | `canasta basica` | 1 | `X` (indica pertenencia; ausente si no aplica) |
 
-**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `combinar` normaliza automáticamente los nombres para `CCIF division` al concatenar resultados de distintas canastas. Para `CCIF grupo`, `CCIF clase`, `SCIAN sector` y `SCIAN rama` la normalización está pendiente (ver §12.10). Un join directo sobre el df sin pasar por `combinar` seguirá produciendo categorías no coincidentes.
+**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `combinar` normaliza automáticamente los nombres para `CCIF division`, `SCIAN rama` y, de forma preliminar, para renombres 1:1 de `CCIF grupo` y `CCIF clase` al concatenar resultados de distintas canastas. `SCIAN sector` no tiene renombres 1:1 confirmados. Los splits, fusiones, categorías nuevas y categorías eliminadas no se mapean. Un join directo sobre el df sin pasar por `combinar` seguirá produciendo categorías no coincidentes.
 
 ---
 
@@ -2330,7 +2330,111 @@ Para cada `tipo` único en el df:
 
 **Decisión — `version_canonica` en `combinar`:** si `None`, `vc = max(version)` de todos los resultados pasados. Si especificado, se convierte a `int` internamente para evitar dependencia circular con `tipos.py` (`tipos.py` importa `ResultadoCalculo`; usar `TYPE_CHECKING` para la anotación `VersionCanasta | None`).
 
-**Pendiente:** agregar entradas a `RENOMBRES_INDICES` para `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama` cuando se requiera combinar esos tipos entre canastas 2018 y 2024 (ver §12.10).
+**CCIF grupo — versión preliminar:** se agregaron 19 renombres 1:1 (2018 → 2024). La selección se hizo cruzando los valores reales de `ponderadores_2018.csv` y `ponderadores_2024.csv`: una categoría 2018 se acepta sólo si sus genéricos comunes caen en una única categoría 2024 y esa categoría 2024 no recibe genéricos comunes de otra categoría 2018. Los splits, fusiones, categorías nuevas y categorías eliminadas se dejan sin mapeo.
+
+**Renombres `CCIF grupo` (2018 → 2024):**
+
+| 2018 | 2024 (canónico) |
+| ---- | --------------- |
+| `agua y otros servicios referentes a la vivienda` | `suministro de agua y servicios diversos relacionados con la vivienda` |
+| `articulos de cristal, vajillas y utensilios para el hogar` | `cristaleria, vajillas y utensilios para el hogar` |
+| `articulos para el hogar` | `electrodomesticos` |
+| `bienes y servicios para la conservacion ordinaria del hogar` | `bienes y servicios para el mantenimiento rutinario del hogar` |
+| `educacion no atribuible a algun nivel` | `educacion no definida por nivel` |
+| `educacion terciaria` | `educacion terciaria (universitaria)` |
+| `funcionamiento de equipo de transporte personal` | `funcionamiento del equipo de transporte personal` |
+| `herramientas y equipo para el hogar y el jardin` | `herramienta y equipo para casa y jardin` |
+| `mantenimiento y reparacion de la vivienda` | `mantenimiento, reparacion y seguridad de la vivienda` |
+| `muebles y accesorios, alfombras y otros materiales para pisos` | `muebles, mobiliario y alfombras sueltas` |
+| `paquetes turisticos` | `paquetes de vacaciones` |
+| `prendas de vestir` | `ropa` |
+| `productos textiles para el hogar` | `textiles para el hogar` |
+| `productos, artefactos y equipos medicos` | `medicamentos y productos sanitarios` |
+| `renta de vivienda` | `alquileres reales de vivienda` |
+| `servicios de hospital` | `servicios de atencion para pacientes hospitalizados` |
+| `servicios de suministro de comidas` | `servicios de alimentos y bebidas` |
+| `servicios de transporte` | `servicios de transporte de pasajeros` |
+| `vivienda propia` | `alquileres imputados para vivienda` |
+
+**Excluidos explícitamente para `CCIF grupo`:** `equipo audiovisual, fotografico y de procesamiento de informacion`, `equipo telefonico y de facsimile`, `otros articulos y equipo para recreacion, jardineria y animales domesticos`, `otros productos duraderos importantes para recreacion y cultura`, `servicios de recreacion y culturales`, `servicios para pacientes externos`, `servicios postales`, `servicios telefonicos y de facsimile`.
+
+**CCIF clase:** se agregaron 52 renombres 1:1 (2018 → 2024). Con esta normalización, las clases comunes pasan de 25 a 77; quedan 10 clases 2018 sin mapear y 17 clases 2024 sin historia directa. La selección usa el mismo criterio que `CCIF grupo`: reciprocidad estricta sobre genéricos comunes en los CSVs de ponderadores. Los 2 renombres adicionales (`diarios y periodicos` y `instrumentos musicales y equipos duraderos...`) fueron confirmados contra COICOP 2018 (UN Statistics Division): corresponden a los cambios oficiales de código 09.5.2→09.7.2 y 09.2.2→09.5.1 respectivamente.
+
+**Renombres `CCIF clase` (2018 → 2024):**
+
+| 2018 | 2024 (canónico) |
+| ---- | --------------- |
+| `animales domesticos y productos relacionados` | `mascotas y productos relacionados` |
+| `artefactos y equipos terapeuticos` | `productos de apoyo` |
+| `articulos de cristal, vajillas y utensilios para el hogar` | `cristaleria, vajillas y utensilios para el hogar` |
+| `articulos de papeleria y dibujo` | `material de papeleria y dibujo` |
+| `articulos electricos pequeños para el hogar` | `electrodomesticos pequeños` |
+| `articulos grandes para el hogar, electricos o no` | `grandes electrodomesticos, electricos o no` |
+| `bienes no duraderos para el hogar` | `articulos domesticos no duraderos` |
+| `carnes` | `animales vivos, carne y otras partes comestibles de animales terrestres` |
+| `diarios y periodicos` | `periodicos y publicaciones periodicas` |
+| `educacion no atribuible a algun nivel` | `educacion no definida por nivel` |
+| `educacion terciaria` | `educacion terciaria (universitaria)` |
+| `equipo de deportes, campamento y recreacion al aire libre` | `equipo para deportes, campismo y recreacion al aire libre` |
+| `equipo fotografico y cinematografico e instrumentos opticos` | `equipos e instrumentos opticos fotograficos y cinematograficos` |
+| `equipo para el procesamiento de informacion` | `equipo de procesamiento de informacion` |
+| `equipo para la recepcion, grabacion y reproduccion de sonidos e imagenes` | `equipo para la recepcion, grabacion y reproduccion de sonido y video` |
+| `equipo telefonico y de facsimile` | `equipo de telefonia movil` |
+| `frutas` | `frutas y frutos secos` |
+| `herramientas pequeñas y accesorios diversos` | `herramientas no motorizadas y accesorios diversos` |
+| `instrumentos musicales y equipos duraderos importantes para recreacion en interiores` | `instrumentos musicales` |
+| `jardines, plantas y flores` | `productos de jardineria, plantas y flores` |
+| `joyeria, relojes de pared y relojes de pulsera` | `joyas y relojes` |
+| `juegos, juguetes y aficiones` | `juguetes, juegos y pasatiempos` |
+| `leche, quesos y huevos` | `leche, otros productos lacteos y huevos` |
+| `legumbres y hortalizas` | `hortalizas, tuberculos, platanos de coccion y legumbres` |
+| `licores` | `bebidas destiladas y licores` |
+| `limpieza, reparacion y alquiler de prendas de vestir` | `limpieza, reparacion, confeccion y alquiler de ropa` |
+| `mantenimiento y reparacion para equipo de transporte personal` | `mantenimiento y reparacion de equipo de transporte personal` |
+| `materiales para la conservacion y reparacion de la vivienda` | `materiales para el mantenimiento y reparacion de la vivienda` |
+| `muebles y accesorios` | `muebles, mobiliario y alfombras sueltas` |
+| `otros productos alimenticios` | `alimentos preparados y otros productos alimenticios` |
+| `otros productos medicos` | `productos medicos` |
+| `otros servicios relativos al transporte personal` | `otros servicios relacionados con equipos de transporte personal` |
+| `pan y cereales` | `cereales y productos a base de cereales` |
+| `paquetes turisticos` | `paquetes de vacaciones` |
+| `pescados y mariscos` | `pescados y otros mariscos` |
+| `piezas de repuesto y accesorios para equipo de transporte personal` | `partes y accesorios para equipo de transporte personal` |
+| `productos farmaceuticos` | `medicamentos` |
+| `productos textiles para el hogar` | `textiles para el hogar` |
+| `renta de vivienda` | `alquileres reales pagados por los inquilinos de la residencia principal` |
+| `restaurantes, cafes y establecimientos similares` | `restaurantes, cafes y similares` |
+| `salones de peluqueria de cuidado personal` | `salones de peluqueria y establecimientos de aseo personal` |
+| `seguros` | `seguros relacionado con el transporte` |
+| `servicios de hospital` | `servicios curativos y de rehabilitacion para pacientes hospitalizados` |
+| `servicios de recreacion y deportivos` | `servicios recreativos y deportivos` |
+| `servicios dentales` | `servicios dentales para pacientes ambulatorios` |
+| `servicios medicos` | `servicios de atencion preventiva` |
+| `servicios paramedicos` | `servicios de diagnostico por imagenes y servicios de laboratorio medico` |
+| `transporte de pasajeros por aire` | `transporte de pasajeros por via aerea` |
+| `vehiculos a motor` | `automoviles` |
+| `veterinaria y otros servicios para animales domesticos` | `veterinarios y otros servicios para mascotas` |
+| `vivienda propia` | `alquileres imputados de propietarios-ocupantes para residencia principal` |
+| `zapatos y otros calzados` | `calzado y otros tipos de calzado` |
+
+**Excluidos explícitamente para `CCIF clase`:** `agua mineral, refrescos y jugos`, `alfombras y otros revestimientos para pisos`, `azucar, mermeladas, miel, chocolates y dulces`, `cafe, te y cacao`, `herramientas y equipos principales`, `medios para grabacion`, `reparacion y alquiler de calzado`, `servicios culturales`, `servicios postales`, `servicios telefonicos y de facsimile`.
+
+**SCIAN sector — sin mapeo:** no hay renombres 1:1 entre 2018 y 2024. La única categoría presente solo en 2018 es `49 transportes, correos y almacenamiento`, causada por el genérico `paqueteria`; en 2024 no existe ese genérico ni rama `4921`. Aunque el sector cercano en 2024 es `48 transportes, correos y almacenamiento`, se trata como categoría eliminada, no como renombre 1:1 confirmado.
+
+**SCIAN rama:** se agregaron 4 renombres 1:1 (2018 → 2024). La selección usa el mismo criterio de reciprocidad estricta sobre genéricos comunes en los CSVs de ponderadores. Con esta normalización, las ramas comunes pasan de 82 a 86; quedan 5 ramas 2018 sin mapear y 2 ramas 2024 sin historia directa.
+
+**Renombres `SCIAN rama` (2018 → 2024):**
+
+| 2018 | 2024 (canónico) |
+| ---- | --------------- |
+| `3111 elaboracion de alimentos para animales` | `3111 elaboracion de alimentos balanceados para animales` |
+| `3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales` | `3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles` |
+| `3253 fabricacion de fertilizantes, pesticidas y otros agroquimicos` | `3253 fabricacion de fertilizantes, plaguicidas y otros agroquimicos` |
+| `5111 edicion de periodicos, revistas, libros y similares, y edicion de estas publicaciones integrada con la impresion` | `5131 edicion de periodicos, revistas, libros, directorios y otros materiales` |
+
+**Excluidos explícitamente para `SCIAN rama`:** `3346 fabricacion y reproduccion de medios magneticos y opticos`, `4921 servicios de mensajeria y paqueteria foranea`, `7111 compañias y grupos de espectaculos artisticos y culturales`, `7224 centros nocturnos, bares, cantinas y similares`, `8114 reparacion y mantenimiento de articulos para el hogar y personales`, `7113 promotores de espectaculos artisticos, culturales, deportivos y similares`, `7121 museos, sitios historicos, zoologicos y similares`.
+
+**Validación COICOP 2018:** todos los renombres de `CCIF grupo` y `CCIF clase` fueron verificados contra los CSVs de ponderadores (reciprocidad estricta de genéricos) y contra COICOP 2018 (UN Statistics Division, publicación pre-copy-edit 2018-12-26). Los cambios de nombre son oficiales de la revisión COICOP 2018, no renombres locales del INEGI.
 
 ---
 
@@ -2434,11 +2538,12 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO (CCIF division)
+### 12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO
 
 **Solución implementada:**
 
-- Nuevo `dominio/correspondencia_canastas.py` con `RENOMBRES_INDICES` — 8 renombres para `CCIF division` (2018 → 2024).
+- Nuevo `dominio/correspondencia_canastas.py` con `RENOMBRES_INDICES` — 8 renombres para `CCIF division`, 19 renombres para `CCIF grupo`, 52 renombres para `CCIF clase` y 4 renombres para `SCIAN rama` (2018 → 2024). Todos validados contra COICOP 2018.
+- `SCIAN sector` no requiere mapeo: `49 transportes, correos y almacenamiento` aparece solo en 2018 por `paqueteria`, genérico eliminado en 2024.
 - `combinar` aplica normalización automática vía `_normalizar_indices` antes de concatenar.
 - `version_canonica: VersionCanasta | None = None` en `combinar` — `None` usa la versión más reciente.
 - Ver §11.23 para algoritmo completo y tabla de correspondencia.
@@ -2455,7 +2560,9 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 **Clasificaciones sin fricción** (sin cambios entre 2018 y 2024): `inpc`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `COG`, `durabilidad`, `canasta basica`.
 
-**Pendiente:** `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama` — requieren análisis de renombres análogo y agregar entradas a `RENOMBRES_INDICES`. Trigger: cuando se necesite combinar resultados de esos tipos entre canastas.
+**Resultado tras normalización SCIAN:** `SCIAN sector` queda sin renombres aplicables; `SCIAN rama` pasa de 82 a 86 ramas comunes. Quedan sin mapear ramas eliminadas/nuevas o cambios que no cumplen reciprocidad 1:1.
+
+**Pendiente:** `CCIF grupo` y `CCIF clase` deben considerarse preliminares: sólo incluyen renombres 1:1 observados en la canasta INPC; no incluyen splits, fusiones, categorías nuevas ni categorías eliminadas.
 
 ---
 
