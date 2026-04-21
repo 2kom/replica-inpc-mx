@@ -41,6 +41,11 @@ El historial de cambios vive en git.
       - [ResultadoCorrida](#resultadocorrida)
     - [5.10 correspondencia.py](#510-correspondenciapy)
     - [5.11 validar\_inpc.py](#511-validar_inpcpy)
+    - [5.12 variaciones.py — `ResultadoVariacion` y funciones de variación](#512-variacionespy--resultadovariacion-y-funciones-de-variación)
+      - [Regla drop/keep (todas las funciones)](#regla-dropkeep-todas-las-funciones)
+      - [`ResultadoVariacion`](#resultadovariacion)
+      - [Funciones públicas](#funciones-públicas)
+      - [Helper privado `_restar_quincenas`](#helper-privado-_restar_quincenas)
   - [6. Fachada — api/corrida.py](#6-fachada--apicorridapy)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
@@ -1165,6 +1170,211 @@ Para el resto de tipos estas columnas están ausentes — ver §5.5 y §5.6.
 **Lookup por índice:** para cada `indice` en el loop, la función hace `inegi.get(indice, {})` para obtener el dict de periodos de ese índice específico. Esto unifica el acceso tanto para `"inpc"` (`inegi["INPC"][periodo]`) como para subíndices (`inegi["subyacente"][periodo]`).
 
 **Comportamiento cuando `inegi` es vacío o el índice no tiene entrada:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
+
+---
+
+### 5.12 variaciones.py — `ResultadoVariacion` y funciones de variación
+
+Módulo de análisis post-cálculo. Dado un `ResultadoCalculo` (de `corrida.ejecutar()` o de `combinar()`), calcula variaciones periódicas, acumuladas anuales, o desde una fecha base arbitraria.
+
+Dos archivos:
+
+- `dominio/modelos/variacion.py` — clase `ResultadoVariacion`
+- `dominio/variaciones.py` — funciones públicas + helper privado
+
+Exposición pública vía `replica_inpc/__init__.py` (mismo patrón que `combinar`):
+
+```python
+from replica_inpc import variacion_periodica, variacion_desde, variacion_acumulada_anual
+```
+
+---
+
+#### Regla drop/keep (todas las funciones)
+
+Después de calcular `variacion = I[t] / I[base] - 1`:
+
+| `indice_replicado[t]` en input | variacion | Acción |
+| ------------------------------ | --------- | ------ |
+| NOT NaN | NaN (base ausente o base falló) | **DROP** — fila excluida del output |
+| NaN | NaN | **KEEP** — índice existía pero su cálculo falló ese periodo |
+| NOT NaN | NOT NaN | **KEEP** — variación válida |
+
+El output está ordenado por `(periodo, indice)`.
+
+---
+
+#### `ResultadoVariacion`
+
+```python
+class ResultadoVariacion:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        tipo: str,
+        descripcion: str,
+        indices_parciales: dict[str, Periodo] | None = None,
+    ) -> None: ...
+
+    @property
+    def tipo(self) -> str: ...               # clasificación: "inpc", "CCIF division", etc.
+    @property
+    def descripcion(self) -> str: ...        # "anual", "acumulada_anual", "desde 2Q Ene 2023 hasta 2Q Dic 2024"
+    @property
+    def df(self) -> pd.DataFrame: ...
+    @property
+    def indices_parciales(self) -> dict[str, Periodo]: ...
+    # Índices cuya base fue ajustada (inicio posterior a `desde`).
+    # key = nombre del índice, value = periodo base real usado.
+    # Vacío para variacion_periodica y variacion_acumulada_anual.
+    # Vacío para variacion_desde cuando incluir_parciales=False.
+
+    def como_tabla(self, ancho: bool = False, pct: bool = True) -> pd.DataFrame: ...
+    def _repr_html_(self) -> str: ...
+```
+
+**Esquema del DataFrame interno (índice: `periodo`, `indice`):**
+
+| Columna     | dtype pandas | Notas                                        |
+| ----------- | ------------ | -------------------------------------------- |
+| `variacion` | `float64`    | `I[t] / I[base] - 1`; ver regla drop/keep    |
+
+**`como_tabla(ancho, pct)`:**
+
+- `ancho=False, pct=True` (default): df largo con `variacion * 100`
+- `ancho=False, pct=False`: df largo con `variacion` en decimales
+- `ancho=True`: pivota — `indice` como filas, `periodo` como columnas; aplica `pct` a los valores
+
+**`_repr_html_`:** muestra encabezado `tipo — descripcion`, seguido de `como_tabla(ancho=False, pct=True)`. Si `indices_parciales` no está vacío, agrega nota con los índices afectados y su periodo base real.
+
+**Invariantes — validados al construir:**
+
+| Invariante             | Regla                                          |
+| ---------------------- | ---------------------------------------------- |
+| df no vacío            | `df` no puede estar vacío                      |
+| índice correcto        | MultiIndex con niveles `["periodo", "indice"]` |
+| columna `variacion`    | debe existir en `df`                           |
+| `tipo` no vacío        | string no vacío                                |
+| `descripcion` no vacío | string no vacío                                |
+
+---
+
+#### Funciones públicas
+
+**`variacion_periodica(resultado, frecuencia)`**
+
+```python
+def variacion_periodica(
+    resultado: ResultadoCalculo,
+    frecuencia: Literal[
+        "quincenal", "mensual", "bimestral", "trimestral",
+        "cuatrimestral", "semestral", "anual"
+    ],
+) -> ResultadoVariacion:
+```
+
+Para cada `(periodo t, indice)` calcula `I[t] / I[t - lag] - 1`, donde `lag` es:
+
+| frecuencia       | lag (quincenas) |
+| ---------------- | --------------- |
+| `quincenal`      | 1               |
+| `mensual`        | 2               |
+| `bimestral`      | 4               |
+| `trimestral`     | 6               |
+| `cuatrimestral`  | 8               |
+| `semestral`      | 12              |
+| `anual`          | 24              |
+
+`variacion_periodica(..., "anual")` es equivalente a la inflación interanual.
+
+Se aplica la regla drop/keep. Los primeros `lag` quincenas de cada índice quedan sin base → DROPeadas.
+
+Raises `InvarianteViolado` si:
+
+- `resultado.df["tipo"]` no es homogéneo
+- Ningún periodo tiene base disponible (datos insuficientes para la frecuencia solicitada): `"Sin periodos con base para frecuencia '{frecuencia}'. Se requieren ≥{lag} quincenas de datos."`
+
+`indices_parciales` = `{}` (no aplica).
+
+`descripcion` = valor de `frecuencia`.
+
+---
+
+**`variacion_desde(resultado, desde, hasta=None, incluir_parciales=False)`**
+
+```python
+def variacion_desde(
+    resultado: ResultadoCalculo,
+    desde: Periodo,
+    hasta: Periodo | None = None,
+    incluir_parciales: bool = False,
+) -> ResultadoVariacion:
+```
+
+Calcula la variación acumulada desde `desde` (o desde el primer periodo válido del índice, si `incluir_parciales=True`) hasta `hasta`.
+
+`hasta=None` → se usa el último periodo disponible en `resultado`.
+
+**`incluir_parciales=False` (default):**
+
+Solo incluye índices que tienen `indice_replicado` válido (NOT NaN) en `desde`. Para cada `(t, indice)` con `desde <= t <= hasta` calcula `I[t] / I[desde, indice] - 1`. Se aplica regla drop/keep. `indices_parciales` = `{}`.
+
+**`incluir_parciales=True`:**
+
+Incluye también índices sin dato válido en `desde`. Para esos índices, la base es el primer periodo en `[desde, hasta]` con `indice_replicado` NOT NaN. Se aplica regla drop/keep. `indices_parciales` contiene los índices con base ajustada y su periodo base real.
+
+Si `desde` es anterior a todos los datos del resultado, todos los índices son parciales y se computan desde su primer periodo válido disponible.
+
+Raises `InvarianteViolado` si:
+
+- `resultado.df["tipo"]` no es homogéneo
+- `hasta < desde`: `"'hasta' debe ser posterior a 'desde'"`
+- Ningún índice tiene dato en el rango (output vacío): `"Ningún índice tiene dato en el rango [{desde}, {hasta}]. Usa incluir_parciales=True."` (solo si `incluir_parciales=False`) o `"Sin datos en el rango desde {desde} hasta {hasta}."` (si `incluir_parciales=True`)
+
+`descripcion` = `f"desde {desde} hasta {hasta_efectivo}"`.
+
+---
+
+**`variacion_acumulada_anual(resultado)`**
+
+```python
+def variacion_acumulada_anual(
+    resultado: ResultadoCalculo,
+) -> ResultadoVariacion:
+```
+
+Para cada `(periodo t, indice)` calcula `I[t] / I[Periodo(t.año - 1, 12, 2), indice] - 1`.
+La base cambia por año: periodos de 2024 usan `2Q Dic 2023`, periodos de 2023 usan `2Q Dic 2022`, etc.
+
+Se aplica la regla drop/keep. El primer año de datos de cada índice queda sin base → DROPeado.
+
+Raises `InvarianteViolado` si:
+
+- `resultado.df["tipo"]` no es homogéneo
+- Ningún periodo tiene base anual disponible: `"Sin periodos con base anual disponible. Se requiere ≥1 año de datos."`
+
+`indices_parciales` = `{}` (no aplica).
+
+`descripcion` = `"acumulada_anual"`.
+
+---
+
+#### Helper privado `_restar_quincenas`
+
+```python
+def _restar_quincenas(periodo: Periodo, n: int) -> Periodo:
+    # Convierte a ordinal quincenal, resta n, reconstruye.
+    ordinal = periodo.año * 24 + (periodo.mes - 1) * 2 + (periodo.quincena - 1)
+    ordinal -= n
+    año = ordinal // 24
+    mes = (ordinal % 24) // 2 + 1
+    quincena = (ordinal % 24) % 2 + 1
+    return Periodo(año, mes, quincena)
+```
+
+Usado internamente solo por `variacion_periodica` (cálculo lag-based).
+
+`variacion_desde` y `variacion_acumulada_anual` buscan el periodo base directamente en el índice del df — no usan este helper. Para series mensuales futuras: `_restar_quincenas` necesita adaptación para `variacion_periodica`; `variacion_acumulada_anual` también necesita adaptación independiente en el cómputo de `Periodo(t.año - 1, 12, 2)`; `variacion_desde` no requiere cambios.
 
 ---
 
