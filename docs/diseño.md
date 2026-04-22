@@ -205,7 +205,8 @@ replica-inpc-mx/
 │       │   │   ├── canasta.py
 │       │   │   ├── serie.py
 │       │   │   ├── resultado.py
-│       │   │   └── validacion.py
+│       │   │   ├── validacion.py
+│       │   │   └── variacion.py
 │       │   ├── calculo/
 │       │   │   ├── base.py
 │       │   │   ├── estrategia.py
@@ -214,6 +215,7 @@ replica-inpc-mx/
 │       │   │   └── subindices.py
 │       │   ├── correspondencia.py
 │       │   ├── validar_inpc.py
+│       │   ├── variaciones.py
 │       │   ├── periodos.py
 │       │   ├── tipos.py
 │       │   └── errores.py
