@@ -112,7 +112,11 @@ def variacion_desde(
                 )
                 raise InvarianteViolado(
                     f"No hay datos en '{base_periodo}' (base de '{desde_p}'). "
-                    + (f"'desde' mínimo válido: '{min_desde}'." if min_desde else "Sin periodos con base disponible.")
+                    + (
+                        f"'desde' mínimo válido: '{min_desde}'."
+                        if min_desde
+                        else "Sin periodos con base disponible."
+                    )
                 )
             raise InvarianteViolado(
                 f"Ningún índice tiene dato en el rango [{desde_p}, {hasta_efectivo}]. Usa incluir_parciales=True."
@@ -147,33 +151,37 @@ def variacion_desde(
 
     else:
         if df_rango.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(
+                f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}."
+            )
 
         valid_en_rango = df_rango[df_rango["indice_replicado"].notna()]
         if valid_en_rango.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(
+                f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}."
+            )
+
+        try:
+            slice_base = df.xs(base_periodo, level="periodo")["indice_replicado"]
+            indices_en_base = set(slice_base[slice_base.notna()].index)
+        except KeyError:
+            indices_en_base = set()
 
         first_valid_por_indice: pd.Series = (
             valid_en_rango.reset_index().groupby("indice")["periodo"].min()
         )
-        base_por_indice: pd.Series = first_valid_por_indice.map(
-            lambda t: _restar_quincenas(t, 1)
+
+        # No-parciales: base = base_periodo; parciales: base = t0 (primer válido en rango)
+        base_por_indice: pd.Series = pd.Series(
+            {
+                indice: (base_periodo if indice in indices_en_base else t0)
+                for indice, t0 in first_valid_por_indice.items()
+            }
         )
 
         base_tuples = list(zip(base_por_indice.values, base_por_indice.index))
         base_mi = pd.MultiIndex.from_tuples(base_tuples, names=["periodo", "indice"])
         base_vals = valores.reindex(base_mi).droplevel("periodo")
-
-        if base_vals.isna().all():
-            periodos_set = set(periodos_todos)
-            min_desde = next(
-                (p for p in sorted(periodos_set) if _restar_quincenas(p, 1) in periodos_set),
-                None,
-            )
-            raise InvarianteViolado(
-                f"No hay datos en '{base_periodo}' (base de '{desde_p}'). "
-                + (f"'desde' mínimo válido: '{min_desde}'." if min_desde else "Sin periodos con base disponible.")
-            )
 
         indice_lvl = df_rango.index.get_level_values("indice")
         base_val_per_row = pd.Series(
@@ -187,7 +195,9 @@ def variacion_desde(
         df_var = _drop_keep(df_var, valores_t)
 
         if df_var.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(
+                f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}."
+            )
 
         indices_parciales = {
             str(indice): periodo

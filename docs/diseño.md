@@ -1327,7 +1327,12 @@ Solo incluye índices con `indice_replicado` válido (NOT NaN) en `base_periodo`
 
 **`incluir_parciales=True`:**
 
-Incluye también índices sin dato en `base_periodo`. Para esos índices, la base efectiva es `_restar_quincenas(t0, 1)` donde `t0` es el primer periodo en `[desde, hasta]` con `indice_replicado` NOT NaN. Se aplica regla drop/keep. `indices_parciales` contiene los índices con base ajustada y su `base_periodo` real.
+Incluye también índices sin dato en `base_periodo`. Para cada índice se distinguen dos casos:
+
+- **No-parcial** (tiene dato válido en `base_periodo`): misma lógica que `incluir_parciales=False`; base = `base_periodo`. No aparece en `indices_parciales`.
+- **Parcial** (sin dato válido en `base_periodo`): base = `t0`, el primer periodo en `[desde, hasta]` con `indice_replicado` NOT NaN. Variación en `t0` = 0; periodos siguientes acumulan desde `t0`. Aparece en `indices_parciales` con valor `t0`.
+
+Se aplica regla drop/keep. `indices_parciales` contiene solo los índices parciales y su `t0`.
 
 Raises `InvarianteViolado` si:
 
