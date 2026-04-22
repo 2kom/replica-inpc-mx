@@ -1307,30 +1307,33 @@ Raises `InvarianteViolado` si:
 ```python
 def variacion_desde(
     resultado: ResultadoCalculo,
-    desde: Periodo,
-    hasta: Periodo | None = None,
+    desde: str,
+    hasta: str | None = None,
     incluir_parciales: bool = False,
 ) -> ResultadoVariacion:
 ```
 
-Calcula la variación acumulada desde `desde` (o desde el primer periodo válido del índice, si `incluir_parciales=True`) hasta `hasta`.
+`desde` y `hasta` son strings en formato `"1Q Mes AAAA"` (ej. `"2Q Ene 2024"`); se parsean internamente con `Periodo.desde_str()`.
+
+Calcula la variación acumulada desde `desde` hasta `hasta`.
+
+`base_periodo = _restar_quincenas(desde_p, 1)` — la quincena anterior a `desde`; es el denominador de todos los cálculos. Así, la variación en el primer periodo del output es `I[desde] / I[base_periodo] - 1`.
 
 `hasta=None` → se usa el último periodo disponible en `resultado`.
 
 **`incluir_parciales=False` (default):**
 
-Solo incluye índices que tienen `indice_replicado` válido (NOT NaN) en `desde`. Para cada `(t, indice)` con `desde <= t <= hasta` calcula `I[t] / I[desde, indice] - 1`. Se aplica regla drop/keep. `indices_parciales` = `{}`.
+Solo incluye índices con `indice_replicado` válido (NOT NaN) en `base_periodo`. Para cada `(t, indice)` con `desde <= t <= hasta` calcula `I[t] / I[base_periodo, indice] - 1`. Se aplica regla drop/keep. `indices_parciales` = `{}`.
 
 **`incluir_parciales=True`:**
 
-Incluye también índices sin dato válido en `desde`. Para esos índices, la base es el primer periodo en `[desde, hasta]` con `indice_replicado` NOT NaN. Se aplica regla drop/keep. `indices_parciales` contiene los índices con base ajustada y su periodo base real.
-
-Si `desde` es anterior a todos los datos del resultado, todos los índices son parciales y se computan desde su primer periodo válido disponible.
+Incluye también índices sin dato en `base_periodo`. Para esos índices, la base efectiva es `_restar_quincenas(t0, 1)` donde `t0` es el primer periodo en `[desde, hasta]` con `indice_replicado` NOT NaN. Se aplica regla drop/keep. `indices_parciales` contiene los índices con base ajustada y su `base_periodo` real.
 
 Raises `InvarianteViolado` si:
 
 - `resultado.df["tipo"]` no es homogéneo
 - `hasta < desde`: `"'hasta' debe ser posterior a 'desde'"`
+- `base_periodo` no existe en el df (ej. `desde` es el primer periodo de datos): `"No hay datos en '{base_periodo}' (base de '{desde_p}'). 'desde' mínimo válido: '{min_desde}'."`
 - Ningún índice tiene dato en el rango (output vacío): `"Ningún índice tiene dato en el rango [{desde}, {hasta}]. Usa incluir_parciales=True."` (solo si `incluir_parciales=False`) o `"Sin datos en el rango desde {desde} hasta {hasta}."` (si `incluir_parciales=True`)
 
 `descripcion` = `f"desde {desde} hasta {hasta_efectivo}"`.

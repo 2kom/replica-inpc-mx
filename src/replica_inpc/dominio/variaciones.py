@@ -75,33 +75,47 @@ def variacion_periodica(
 
 def variacion_desde(
     resultado: ResultadoCalculo,
-    desde: Periodo,
-    hasta: Periodo | None = None,
+    desde: str,
+    hasta: str | None = None,
     incluir_parciales: bool = False,
 ) -> ResultadoVariacion:
     df = resultado.df
     tipo = _tipo_unico(df)
 
-    periodos_todos = df.index.get_level_values("periodo")
-    hasta_efectivo = hasta if hasta is not None else max(periodos_todos)
+    desde_p = Periodo.desde_str(desde)
+    hasta_p = Periodo.desde_str(hasta) if hasta is not None else None
 
-    if hasta_efectivo < desde:
+    periodos_todos = df.index.get_level_values("periodo")
+    hasta_efectivo = hasta_p if hasta_p is not None else max(periodos_todos)
+
+    if hasta_efectivo < desde_p:
         raise InvarianteViolado("'hasta' debe ser posterior a 'desde'")
 
-    mask_rango = (periodos_todos >= desde) & (periodos_todos <= hasta_efectivo)
+    base_periodo = _restar_quincenas(desde_p, 1)
+    mask_rango = (periodos_todos >= desde_p) & (periodos_todos <= hasta_efectivo)
     df_rango = df[mask_rango]
     valores = df["indice_replicado"]
 
     if not incluir_parciales:
         try:
-            slice_desde = df.xs(desde, level="periodo")["indice_replicado"]
-            indices_validos = set(slice_desde[slice_desde.notna()].index)
+            slice_base = df.xs(base_periodo, level="periodo")["indice_replicado"]
+            indices_validos = set(slice_base[slice_base.notna()].index)
         except KeyError:
             indices_validos = set()
 
         if not indices_validos:
+            periodos_set = set(periodos_todos)
+            if base_periodo not in periodos_set:
+                min_desde = next(
+                    (p for p in sorted(periodos_set) if _restar_quincenas(p, 1) in periodos_set),
+                    None,
+                )
+                raise InvarianteViolado(
+                    f"No hay datos en '{base_periodo}' (base de '{desde_p}'). "
+                    + (f"'desde' mínimo válido: '{min_desde}'." if min_desde else "Sin periodos con base disponible.")
+                )
             raise InvarianteViolado(
-                f"Ningún índice tiene dato en el rango [{desde}, {hasta_efectivo}]. Usa incluir_parciales=True."
+                f"Ningún índice tiene dato en el rango [{desde_p}, {hasta_efectivo}]. Usa incluir_parciales=True."
             )
 
         indice_lvl = df_rango.index.get_level_values("indice")
@@ -110,7 +124,7 @@ def variacion_desde(
         valores_t = df_filtrado["indice_replicado"]
         indice_lvl_f = df_filtrado.index.get_level_values("indice")
         base_idx = pd.MultiIndex.from_arrays(
-            [[desde] * len(df_filtrado), indice_lvl_f],
+            [[base_periodo] * len(df_filtrado), indice_lvl_f],
             names=["periodo", "indice"],
         )
         base_valores = valores.reindex(base_idx)
@@ -122,28 +136,44 @@ def variacion_desde(
 
         if df_var.empty:
             raise InvarianteViolado(
-                f"Ningún índice tiene dato en el rango [{desde}, {hasta_efectivo}]. Usa incluir_parciales=True."
+                f"Ningún índice tiene dato en el rango [{desde_p}, {hasta_efectivo}]. Usa incluir_parciales=True."
             )
 
         return ResultadoVariacion(
             df_var.sort_index(),
             tipo=tipo,
-            descripcion=f"desde {desde} hasta {hasta_efectivo}",
+            descripcion=f"desde {desde_p} hasta {hasta_efectivo}",
         )
 
     else:
         if df_rango.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
 
         valid_en_rango = df_rango[df_rango["indice_replicado"].notna()]
         if valid_en_rango.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
 
-        base_por_indice: pd.Series = valid_en_rango.reset_index().groupby("indice")["periodo"].min()
+        first_valid_por_indice: pd.Series = (
+            valid_en_rango.reset_index().groupby("indice")["periodo"].min()
+        )
+        base_por_indice: pd.Series = first_valid_por_indice.map(
+            lambda t: _restar_quincenas(t, 1)
+        )
 
         base_tuples = list(zip(base_por_indice.values, base_por_indice.index))
         base_mi = pd.MultiIndex.from_tuples(base_tuples, names=["periodo", "indice"])
         base_vals = valores.reindex(base_mi).droplevel("periodo")
+
+        if base_vals.isna().all():
+            periodos_set = set(periodos_todos)
+            min_desde = next(
+                (p for p in sorted(periodos_set) if _restar_quincenas(p, 1) in periodos_set),
+                None,
+            )
+            raise InvarianteViolado(
+                f"No hay datos en '{base_periodo}' (base de '{desde_p}'). "
+                + (f"'desde' mínimo válido: '{min_desde}'." if min_desde else "Sin periodos con base disponible.")
+            )
 
         indice_lvl = df_rango.index.get_level_values("indice")
         base_val_per_row = pd.Series(
@@ -157,16 +187,18 @@ def variacion_desde(
         df_var = _drop_keep(df_var, valores_t)
 
         if df_var.empty:
-            raise InvarianteViolado(f"Sin datos en el rango desde {desde} hasta {hasta_efectivo}.")
+            raise InvarianteViolado(f"Sin datos en el rango desde {desde_p} hasta {hasta_efectivo}.")
 
         indices_parciales = {
-            str(indice): periodo for indice, periodo in base_por_indice.items() if periodo != desde
+            str(indice): periodo
+            for indice, periodo in base_por_indice.items()
+            if periodo != base_periodo
         }
 
         return ResultadoVariacion(
             df_var.sort_index(),
             tipo=tipo,
-            descripcion=f"desde {desde} hasta {hasta_efectivo}",
+            descripcion=f"desde {desde_p} hasta {hasta_efectivo}",
             indices_parciales=indices_parciales if indices_parciales else None,
         )
 
