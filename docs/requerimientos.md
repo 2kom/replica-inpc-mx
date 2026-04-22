@@ -614,14 +614,16 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 
 ### 13.0 Historial de alcance por version
 
-| Version | Alcance acumulado                                                                                                                            |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API                                            |
-| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores                                       |
-| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad)                                       |
-| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable                                          |
-| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado + imputación bfill/ffill de faltantes en series + `combinar` para series históricas continuas |
-| v1.3.0  | v1.2.0 + canastas 2010 y 2013                                                                                                                |
+| Version | Alcance acumulado                                                                                                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API                                                |
+| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores                                           |
+| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad)                                           |
+| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable                                              |
+| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado + imputación bfill/ffill de faltantes en series + `combinar` para series históricas continuas     |
+| v1.2.1  | v1.2.0 + tabla de renombres 1:1 entre canastas (`RENOMBRES_INDICES`) + normalización cross-versión en `combinar`                                 |
+| v1.2.2  | v1.2.1 + variaciones periódicas, acumuladas anuales y desde periodo base (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`) |
+| v1.3.0  | v1.2.2 + canastas 2010 y 2013                                                                                                                    |
 
 ### 13.1 Subindices
 
@@ -635,14 +637,15 @@ La v1.1.0 incluye:
 No incluye todavia:
 
 - incidencias por subindice;
-- variaciones por subindice.
+- ~~variaciones por subindice.~~ Incorporado en **v1.2.2**.
 
 ### 13.2 Incidencias y variaciones
 
+~~Ninguna version prevista hasta v1.3.0 incluye variaciones.~~ Incorporado en **v1.2.2** (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`).
+
 Ninguna version prevista hasta v1.3.0 incluye:
 
-- incidencias;
-- variaciones.
+- incidencias.
 
 ### 13.3 Operacion sobre canastas 2010 y 2013
 

@@ -29,9 +29,9 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.1)
+## Alcance actual (v1.2.2)
 
-La v1.2.0 del proyecto permite:
+La v1.2.2 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
@@ -39,12 +39,13 @@ La v1.2.0 del proyecto permite:
 - imputar periodos faltantes en series via bfill/ffill con trazabilidad completa;
 - combinar resultados de distintas corridas en un unico `ResultadoCalculo` cronologico;
 - validar el resultado contra lo publicado por el INEGI via su API de indicadores;
+- calcular variaciones periodicas, acumuladas anuales y desde un periodo base;
 - exportar resultados de calculo y validacion;
 - ejecutar un demo completo con datos sinteticos (ver `demo/`).
 
 El proyecto **no** incluye todavia:
 
-- incidencias ni variaciones;
+- incidencias;
 - soporte operativo para canastas 2010 y 2013;
 - mapeo de splits, fusiones, categorias nuevas o eliminadas entre canastas: las categorias que
   desaparecen, aparecen o se parten entre versiones aparecen solo en los periodos donde existen,
@@ -141,6 +142,26 @@ resultado_completo = combinar(
 > `CCIF clase` adicionalmente contra COICOP 2018 (UN Statistics Division). Las categorías
 > nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen
 > (ver §12.10 en `docs/diseño.md`).
+
+**Calcular variaciones:**
+
+```python
+from replica_inpc import variacion_periodica, variacion_desde, variacion_acumulada_anual
+
+# Variacion mensual (quincena t vs quincena t-2)
+rv_mensual = variacion_periodica(resultado_completo, "mensual")
+
+# Variacion acumulada desde un periodo base
+rv_desde = variacion_desde(resultado_completo, "1Q Ene 2024")
+
+# Con indice hasta explicito
+rv_desde = variacion_desde(resultado_completo, "1Q Ene 2024", hasta="2Q Jun 2024")
+
+# Variacion acumulada anual (quincena t vs 2Q Dic del año anterior)
+rv_anual = variacion_acumulada_anual(resultado_completo)
+```
+
+El resultado `rv.df` tiene MultiIndex `(Periodo, indice)` y columna `variacion` (fraccion, no porcentaje).
 
 **Subindices por clasificador:**
 

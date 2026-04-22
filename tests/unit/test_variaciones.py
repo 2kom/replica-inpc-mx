@@ -111,7 +111,7 @@ def test_periodica_mensual_basico():
     r = _mk_resultado({"INPC": [(_P0, 100.0), (_P1, 101.0), (_P2, 103.0)]})
     rv = variacion_periodica(r, "mensual")
     assert list(rv.df.index.get_level_values("periodo")) == [_P2]
-    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.03
+    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.03  # type: ignore[index]
     assert rv.tipo == "inpc"
     assert rv.descripcion == "mensual"
     assert rv.indices_parciales == {}
@@ -135,8 +135,8 @@ def test_periodica_drop_keep():
     assert _P1 in periodos
     assert _P2 in periodos
     assert _P3 not in periodos
-    assert pd.isna(rv.df.loc[(_P1, "INPC"), "variacion"])
-    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.03
+    assert pd.isna(rv.df.loc[(_P1, "INPC"), "variacion"])  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.03  # type: ignore[index]
 
 
 def test_periodica_tipo_no_homogeneo():
@@ -173,8 +173,8 @@ def test_desde_basico():
     assert (_P0, "INPC") not in rv.df.index
     assert (_P1, "INPC") in rv.df.index
     assert (_P2, "INPC") in rv.df.index
-    assert pytest.approx(rv.df.loc[(_P1, "INPC"), "variacion"]) == 0.02
-    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.04
+    assert pytest.approx(rv.df.loc[(_P1, "INPC"), "variacion"]) == 0.02  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_P2, "INPC"), "variacion"]) == 0.04  # type: ignore[index]
     assert rv.descripcion == f"desde {_P1} hasta {_P2}"
     assert rv.indices_parciales == {}
 
@@ -229,8 +229,8 @@ def test_desde_con_parciales_incluye_cat_b():
     rv = variacion_desde(r, "1Q Ago 2018", incluir_parciales=True)
     assert "INPC" in rv.df.index.get_level_values("indice")
     assert "CAT_B" in rv.df.index.get_level_values("indice")
-    assert pytest.approx(rv.df.loc[(_P2, "CAT_B"), "variacion"]) == 0.0
-    assert pytest.approx(rv.df.loc[(_P3, "CAT_B"), "variacion"]) == pytest.approx(202 / 200 - 1)
+    assert pytest.approx(rv.df.loc[(_P2, "CAT_B"), "variacion"]) == 0.0  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_P3, "CAT_B"), "variacion"]) == pytest.approx(202 / 200 - 1)  # type: ignore[index]
     assert "CAT_B" in rv.indices_parciales
     assert rv.indices_parciales["CAT_B"] == _P2
 
@@ -240,7 +240,7 @@ def test_desde_con_parciales_no_parcial_usa_base_periodo():
     r = _mk_resultado({"INPC": [(_P0, 100.0), (_P1, 102.0), (_P2, 104.0)]})
     rv = variacion_desde(r, "1Q Ago 2018", incluir_parciales=True)
     assert "INPC" not in rv.indices_parciales
-    assert pytest.approx(rv.df.loc[(_P1, "INPC"), "variacion"]) == 0.02
+    assert pytest.approx(rv.df.loc[(_P1, "INPC"), "variacion"]) == 0.02  # type: ignore[index]
 
 
 # -- variacion_acumulada_anual -------------------------------------------------
@@ -259,8 +259,8 @@ def test_acumulada_anual_basico():
     )
     rv = variacion_acumulada_anual(r)
     assert (_P_DIC18, "INPC") not in rv.df.index
-    assert pytest.approx(rv.df.loc[(_P_ENE19_1, "INPC"), "variacion"]) == 0.01
-    assert pytest.approx(rv.df.loc[(_P_ENE19_2, "INPC"), "variacion"]) == 0.02
+    assert pytest.approx(rv.df.loc[(_P_ENE19_1, "INPC"), "variacion"]) == 0.01  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_P_ENE19_2, "INPC"), "variacion"]) == 0.02  # type: ignore[index]
     assert rv.descripcion == "acumulada_anual"
     assert rv.indices_parciales == {}
 
