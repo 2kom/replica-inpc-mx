@@ -4,7 +4,7 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoInterpretable
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.variaciones import (
     variacion_acumulada_anual,
     variacion_desde,
@@ -15,7 +15,7 @@ from replica_inpc.dominio.variaciones import (
 
 
 def _mk_resultado(
-    data: dict[str, list[tuple[Periodo, float | None]]],
+    data: dict[str, list[tuple[PeriodoQuincenal, float | None]]],
     tipo: str = "inpc",
     version: int = 2018,
     id_corrida: str = "test",
@@ -38,7 +38,7 @@ def _mk_resultado(
     return ResultadoCalculo(df, id_corrida)
 
 
-def _mk_df_var(*pares: tuple[Periodo, str, float]) -> pd.DataFrame:
+def _mk_df_var(*pares: tuple[PeriodoQuincenal, str, float]) -> pd.DataFrame:
     idx = pd.MultiIndex.from_tuples([(p, i) for p, i, _ in pares], names=["periodo", "indice"])
     return pd.DataFrame({"variacion": [v for _, _, v in pares]}, index=idx)
 
@@ -51,13 +51,13 @@ def _mk_df_var(*pares: tuple[Periodo, str, float]) -> pd.DataFrame:
 #   _restar_quincenas(P0, 2) = 2Q Jun 2018  — no existe
 #   _restar_quincenas(P3, 2) = P1           — existe con NaN en test_drop_keep
 
-_P0 = Periodo(2018, 7, 2)  # "2Q Jul 2018"
-_P1 = Periodo(2018, 8, 1)  # "1Q Ago 2018"
-_P2 = Periodo(2018, 8, 2)  # "2Q Ago 2018"
-_P3 = Periodo(2018, 9, 1)  # "1Q Sep 2018"
-_P_DIC18 = Periodo(2018, 12, 2)  # "2Q Dic 2018"
-_P_ENE19_1 = Periodo(2019, 1, 1)  # "1Q Ene 2019"
-_P_ENE19_2 = Periodo(2019, 1, 2)  # "2Q Ene 2019"
+_P0 = PeriodoQuincenal(2018, 7, 2)  # "2Q Jul 2018"
+_P1 = PeriodoQuincenal(2018, 8, 1)  # "1Q Ago 2018"
+_P2 = PeriodoQuincenal(2018, 8, 2)  # "2Q Ago 2018"
+_P3 = PeriodoQuincenal(2018, 9, 1)  # "1Q Sep 2018"
+_P_DIC18 = PeriodoQuincenal(2018, 12, 2)  # "2Q Dic 2018"
+_P_ENE19_1 = PeriodoQuincenal(2019, 1, 1)  # "1Q Ene 2019"
+_P_ENE19_2 = PeriodoQuincenal(2019, 1, 2)  # "2Q Ene 2019"
 
 
 # -- ResultadoVariacion invariantes --------------------------------------------

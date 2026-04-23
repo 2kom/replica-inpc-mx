@@ -21,7 +21,7 @@ from replica_inpc.dominio.errores import (
 )
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
@@ -35,19 +35,21 @@ from replica_inpc.dominio.validar_inpc import validar
 
 def _rellenar_faltantes(
     serie: SerieNormalizada,
-) -> tuple[SerieNormalizada, dict[tuple[str, Periodo], Periodo]]:
-    periodos: list[Periodo] = sorted(
-        c for c in serie.df.columns if isinstance(c, Periodo)  # type: ignore[misc]
+) -> tuple[SerieNormalizada, dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal]]:
+    periodos: list[PeriodoQuincenal] = sorted(
+        c
+        for c in serie.df.columns
+        if isinstance(c, PeriodoQuincenal)  # type: ignore[misc]
     )
     df_original = serie.df[periodos]
     df_relleno = df_original.bfill(axis=1).ffill(axis=1)
 
-    imputados: dict[tuple[str, Periodo], Periodo] = {}
+    imputados: dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal] = {}
     nans = df_original.isna() & df_relleno.notna()
     nans_stack = nans.stack()
     for generico, periodo in nans_stack[nans_stack].index:  # type: ignore[index]
         idx = periodos.index(periodo)
-        fuente: Periodo | None = None
+        fuente: PeriodoQuincenal | None = None
         for i in range(idx + 1, len(periodos)):
             if not pd.isna(df_original.at[generico, periodos[i]]):
                 fuente = periodos[i]
@@ -63,7 +65,9 @@ def _rellenar_faltantes(
     return SerieNormalizada(df_relleno, serie.mapeo), imputados
 
 
-def _f_h_desde_referencia(resultado_ref: ResultadoCalculo, traslape: Periodo) -> dict[str, float]:
+def _f_h_desde_referencia(
+    resultado_ref: ResultadoCalculo, traslape: PeriodoQuincenal
+) -> dict[str, float]:
     df = resultado_ref.df
     mask = (df.index.get_level_values("periodo") == traslape) & (df["estado_calculo"] == "ok")
     if not mask.any():
@@ -136,7 +140,7 @@ class EjecutarCorrida:
         cols = [
             p
             for p in serie.df.columns
-            if isinstance(p, Periodo) and p >= inicio and (fin is None or p <= fin)
+            if isinstance(p, PeriodoQuincenal) and p >= inicio and (fin is None or p <= fin)
         ]
         if not cols:
             raise PeriodosInsuficientes(

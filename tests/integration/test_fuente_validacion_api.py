@@ -8,11 +8,11 @@ from replica_inpc.dominio.errores import (
     FuenteNoDisponible,
     RespuestaInvalida,
 )
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValidacionApi
 
-_P1 = Periodo(2026, 3, 1)
-_P2 = Periodo(2026, 2, 2)
+_P1 = PeriodoQuincenal(2026, 3, 1)
+_P2 = PeriodoQuincenal(2026, 2, 2)
 
 _RESPUESTA_NORMAL = {
     "Series": [
@@ -79,9 +79,9 @@ class TestRespuestaNormal:
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
-        resultado = fuente.obtener([Periodo(2000, 1, 1)])
+        resultado = fuente.obtener([PeriodoQuincenal(2000, 1, 1)])
 
-        assert resultado["INPC"][Periodo(2000, 1, 1)] is None
+        assert resultado["INPC"][PeriodoQuincenal(2000, 1, 1)] is None
 
     def test_obs_value_null_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_CON_NULL))
@@ -95,9 +95,7 @@ class TestRespuestaNormal:
 
 class TestCache:
     def test_segunda_llamada_no_hace_request(self, mocker):
-        mock_get = mocker.patch(
-            "requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL)
-        )
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         fuente.obtener([_P1])
@@ -106,9 +104,7 @@ class TestCache:
         assert mock_get.call_count == 1
 
     def test_cache_compartido_entre_instancias(self, mocker):
-        mock_get = mocker.patch(
-            "requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL)
-        )
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
 
         FuenteValidacionApi(token="token", tipo="inpc").obtener([_P1])
         FuenteValidacionApi(token="token", tipo="inpc").obtener([_P1])

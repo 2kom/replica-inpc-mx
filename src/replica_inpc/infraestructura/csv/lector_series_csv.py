@@ -14,7 +14,7 @@ from replica_inpc.dominio.errores import (
     SerieVacia,
 )
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.infraestructura.csv._utils import _normalizar
 
 _PATRON_PERIODO = re.compile(r"^[12]Q \w+ \d{4}$")
@@ -39,9 +39,7 @@ class LectorSeriesCsv:
                 "No se pudo detectar orientacion de la serie, se esperaba encontrar 'Serie' y 'Cifra' como columnas o filas"
             )
 
-        mascara = data.index.to_series().apply(
-            lambda t: bool(_PATRON_GENERICO.search(str(t)))
-        )
+        mascara = data.index.to_series().apply(lambda t: bool(_PATRON_GENERICO.search(str(t))))
         data = data.loc[mascara]
         if data.empty:
             raise SerieVacia(
@@ -57,7 +55,7 @@ class LectorSeriesCsv:
             genericos_originales.append(nombre)
             genericos_limpios.append(_normalizar(nombre))
 
-        periodos = [Periodo.desde_str(c) for c in data.columns]
+        periodos = [PeriodoQuincenal.desde_str(c) for c in data.columns]
 
         df_num = data.apply(pd.to_numeric, errors="coerce")
         df_num.index = pd.Index(genericos_limpios, name="generico_limpio")
@@ -75,26 +73,18 @@ class LectorSeriesCsv:
             except pd.errors.EmptyDataError:
                 raise ArchivoVacio(f"El archivo está vacío: {ruta}")
             except pd.errors.ParserError:
-                raise ArchivoCorrupto(
-                    f"El archivo está corrupto o no es un CSV válido: {ruta}"
-                )
+                raise ArchivoCorrupto(f"El archivo está corrupto o no es un CSV válido: {ruta}")
             except UnicodeDecodeError:
                 continue
 
-        raise EncodingNoLegible(
-            f"No se pudo leer el archivo debido al encoding: {ruta}"
-        )
+        raise EncodingNoLegible(f"No se pudo leer el archivo debido al encoding: {ruta}")
 
     def _horizontal(self, df: pd.DataFrame) -> pd.DataFrame:
-        columnas_validas = [
-            col for col in df.columns if _PATRON_PERIODO.match(str(col))
-        ]
+        columnas_validas = [col for col in df.columns if _PATRON_PERIODO.match(str(col))]
         return df.set_index("Título")[columnas_validas]
 
     def _vertical(self, df: pd.DataFrame) -> pd.DataFrame:
-        filas_validas = df[
-            df.iloc[:, 0].apply(lambda x: bool(_PATRON_PERIODO.match(str(x))))
-        ]
+        filas_validas = df[df.iloc[:, 0].apply(lambda x: bool(_PATRON_PERIODO.match(str(x))))]
         filas_validas = filas_validas.set_index("Título").T
 
         return filas_validas

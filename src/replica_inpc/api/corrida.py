@@ -6,7 +6,7 @@ from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
@@ -33,7 +33,9 @@ from replica_inpc.infraestructura.inegi.fuente_validacion_api import (
 class _FuenteValidacionNula:
     """Fuente nula — se usa cuando no hay token INEGI. Siempre señala no_disponible."""
 
-    def obtener(self, periodos: list[Periodo]) -> dict[str, dict[Periodo, float | None]]:  # noqa: ARG002
+    def obtener(
+        self, periodos: list[PeriodoQuincenal]
+    ) -> dict[str, dict[PeriodoQuincenal, float | None]]:  # noqa: ARG002
         raise FuenteNoDisponible("No se configuró token_inegi.")
 
 

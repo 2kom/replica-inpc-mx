@@ -7,7 +7,7 @@ from replica_inpc.dominio.errores import (
     FuenteNoDisponible,
     RespuestaInvalida,
 )
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 INDICADORES_INEGI: dict[str, dict[str, str]] = {
     "inpc": {
@@ -37,7 +37,7 @@ class FuenteValidacionApi:
     Ver: docs/diseño.md §8.6
     """
 
-    _cache: dict[str, dict[Periodo, float | None]] = {}
+    _cache: dict[str, dict[PeriodoQuincenal, float | None]] = {}
 
     def __init__(self, token: str, tipo: str) -> None:
         if tipo not in INDICADORES_INEGI:
@@ -49,8 +49,8 @@ class FuenteValidacionApi:
         self._indicadores = INDICADORES_INEGI[tipo]
 
     def obtener(
-        self, periodos: list[Periodo]
-    ) -> dict[str, dict[Periodo, float | None]]:
+        self, periodos: list[PeriodoQuincenal]
+    ) -> dict[str, dict[PeriodoQuincenal, float | None]]:
         """Devuelve el valor publicado por el INEGI por índice y por periodo.
 
         Usa cache de clase — la primera llamada descarga el histórico completo;
@@ -64,15 +64,13 @@ class FuenteValidacionApi:
             resultado[nombre] = {p: historico.get(p) for p in periodos}
         return resultado
 
-    def _fetch(self, indicador: str) -> dict[Periodo, float | None]:
+    def _fetch(self, indicador: str) -> dict[PeriodoQuincenal, float | None]:
         url = _URL.format(indicador=indicador, token=self._token)
         try:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
-            raise FuenteNoDisponible(
-                f"No se pudo conectar a la API del INEGI: {exc}"
-            ) from exc
+            raise FuenteNoDisponible(f"No se pudo conectar a la API del INEGI: {exc}") from exc
 
         try:
             data = resp.json()
@@ -81,15 +79,13 @@ class FuenteValidacionApi:
                 raise RespuestaInvalida("La API devolvió 'Series' vacío.")
             observations = series[0]["OBSERVATIONS"]
         except (KeyError, IndexError, ValueError) as exc:
-            raise RespuestaInvalida(
-                f"Respuesta del INEGI con formato inesperado: {exc}"
-            ) from exc
+            raise RespuestaInvalida(f"Respuesta del INEGI con formato inesperado: {exc}") from exc
 
-        resultado: dict[Periodo, float | None] = {}
+        resultado: dict[PeriodoQuincenal, float | None] = {}
         for obs in observations:
             try:
                 partes = obs["TIME_PERIOD"].split("/")
-                periodo = Periodo(int(partes[0]), int(partes[1]), int(partes[2]))
+                periodo = PeriodoQuincenal(int(partes[0]), int(partes[1]), int(partes[2]))
                 raw = obs["OBS_VALUE"]
                 valor = None if raw is None else float(raw)
                 resultado[periodo] = valor

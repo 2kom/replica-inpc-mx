@@ -5,15 +5,17 @@ from replica_inpc import combinar
 from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
-p1 = Periodo(2018, 7, 2)
-p2 = Periodo(2018, 8, 1)
-p3 = Periodo(2024, 7, 2)  # traslape
-p4 = Periodo(2024, 8, 1)
+p1 = PeriodoQuincenal(2018, 7, 2)
+p2 = PeriodoQuincenal(2018, 8, 1)
+p3 = PeriodoQuincenal(2024, 7, 2)  # traslape
+p4 = PeriodoQuincenal(2024, 8, 1)
 
 
-def _resultado(periodos: list[Periodo], version: int, id_corrida: str = "abc") -> ResultadoCalculo:
+def _resultado(
+    periodos: list[PeriodoQuincenal], version: int, id_corrida: str = "abc"
+) -> ResultadoCalculo:
     idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     df = pd.DataFrame(
         {
@@ -29,15 +31,13 @@ def _resultado(periodos: list[Periodo], version: int, id_corrida: str = "abc") -
 
 
 def _resultado_ccif(
-    periodos: list[Periodo],
+    periodos: list[PeriodoQuincenal],
     version: int,
     categoria: str,
     id_corrida: str = "abc",
     tipo: str = "CCIF division",
 ) -> ResultadoCalculo:
-    idx = pd.MultiIndex.from_tuples(
-        [(p, categoria) for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, categoria) for p in periodos], names=["periodo", "indice"])
     df = pd.DataFrame(
         {
             "version": version,
@@ -207,7 +207,7 @@ def test_inpc_no_afectado_por_normalizacion():
 
 
 def test_combinar_tres_corridas():
-    p0 = Periodo(2013, 4, 1)
+    p0 = PeriodoQuincenal(2013, 4, 1)
     r_2013 = _resultado([p0, p1], 2013)
     r_2018 = _resultado([p1, p2, p3], 2018)
     r_2024 = _resultado([p3, p4], 2024)

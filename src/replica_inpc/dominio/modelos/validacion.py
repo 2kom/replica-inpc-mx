@@ -23,8 +23,8 @@ class ResumenValidacion:
     Esquema del DataFrame (índice: `id_corrida`):
         version (int): versión de la canasta usada en la corrida.
         tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
-        periodo_inicio (Periodo): primer periodo calculado.
-        periodo_fin (Periodo): último periodo calculado.
+        periodo_inicio (PeriodoQuincenal): primer periodo calculado.
+        periodo_fin (PeriodoQuincenal): último periodo calculado.
         total_periodos_esperados (int): periodos esperados en el rango.
         total_periodos_calculados (int): periodos efectivamente calculados.
         total_periodos_con_null (int): periodos con resultado nulo por faltantes.
@@ -144,9 +144,9 @@ class ReporteDetalladoValidacion:
         Vista larga (`como_tabla(False)`):
         | (periodo, indice)          | ver  | tipo | inpc_rep | inegi   | err_abs | err_rel | est_calc            | mot_err   | est_val               | gen_esp | gen_con | gen_sin | cob_pct | pon_esp | pon_cub |
         | -------------------------- | ---: | ---- | -------: | ------: | ------: | ------: | ------------------- | --------- | --------------------- | ------: | ------: | ------: | ------: | ------: | ------: |
-        | (Periodo(2018, 7, 2), INPC)| 2018 | inpc | 100.000  | 100.002 | 0.002   | 0.00002 | ok                  | NaN       | ok                    | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
-        | (Periodo(2018, 8, 1), INPC)| 2018 | inpc | NaN      | NaN     | NaN     | NaN     | null_por_faltantes  | faltantes | no_disponible         | 299     | 296     | 3       | 98.9967 | 100.0   | 98.7421 |
-        | (Periodo(2018, 8, 2), INPC)| 2018 | inpc | 103.500  | 103.518 | 0.018   | 0.00017 | ok                  | NaN       | diferencia_detectada  | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
+        | (PeriodoQuincenal(2018, 7, 2), INPC)| 2018 | inpc | 100.000  | 100.002 | 0.002   | 0.00002 | ok                  | NaN       | ok                    | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
+        | (PeriodoQuincenal(2018, 8, 1), INPC)| 2018 | inpc | NaN      | NaN     | NaN     | NaN     | null_por_faltantes  | faltantes | no_disponible         | 299     | 296     | 3       | 98.9967 | 100.0   | 98.7421 |
+        | (PeriodoQuincenal(2018, 8, 2), INPC)| 2018 | inpc | 103.500  | 103.518 | 0.018   | 0.00017 | ok                  | NaN       | diferencia_detectada  | 299     | 299     | 0       | 100.0   | 100.0   | 100.0   |
 
         Vista ancha con validación INEGI (`como_tabla(True)`):
         | indice                  | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
@@ -301,7 +301,7 @@ class DiagnosticoFaltantes:
         id_corrida (str): identificador de la corrida.
         version (int): versión de la canasta usada en la corrida.
         tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
-        periodo (Periodo/NaN): periodo afectado; `NaN` para faltantes de ponderador.
+        periodo (PeriodoQuincenal/NaN): periodo afectado; `NaN` para faltantes de ponderador.
         generico (str): genérico afectado por el faltante.
         nivel_faltante (str): `periodo` o `estructural`.
         tipo_faltante (str): `indice` o `ponderador`.

@@ -10,7 +10,7 @@ from replica_inpc.dominio.modelos.validacion import (
     ReporteDetalladoValidacion,
     ResumenValidacion,
 )
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, TIPOS_CON_VALIDACION
 
 _TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0009, 2024: 0.0009}
@@ -18,11 +18,11 @@ _TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0009, 2024
 
 def validar(
     resultado: ResultadoCalculo,
-    inegi: dict[str, dict[Periodo, float | None]],
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]],
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
-    imputados: dict[tuple[str, Periodo], Periodo] | None = None,
+    imputados: dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal] | None = None,
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 
     tipo = resultado.df["tipo"].iloc[0]

@@ -6,11 +6,11 @@ from replica_inpc.dominio.modelos.validacion import (
     DiagnosticoFaltantes,
     ReporteDetalladoValidacion,
 )
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.infraestructura.csv.escritor_resultados_csv import EscritorResultadosCsv
 
-P1 = Periodo(2018, 1, 1)
-P2 = Periodo(2018, 1, 2)
+P1 = PeriodoQuincenal(2018, 1, 1)
+P2 = PeriodoQuincenal(2018, 1, 2)
 ID = "abc-123"
 
 
@@ -76,13 +76,22 @@ def _diagnostico_estructural() -> DiagnosticoFaltantes:
 
 def _diagnostico_vacio() -> DiagnosticoFaltantes:
     df = pd.DataFrame(
-        columns=["id_corrida", "version", "tipo", "periodo", "generico",
-                 "nivel_faltante", "tipo_faltante", "detalle"]
+        columns=[
+            "id_corrida",
+            "version",
+            "tipo",
+            "periodo",
+            "generico",
+            "nivel_faltante",
+            "tipo_faltante",
+            "detalle",
+        ]
     )
     return DiagnosticoFaltantes(df)
 
 
 # --- reporte ---
+
 
 def test_reporte_multiindex_aplanado(tmp_path: Path):
     ruta = tmp_path / "reporte.csv"
@@ -111,6 +120,7 @@ def test_reporte_crea_archivo(tmp_path: Path):
 
 
 # --- diagnostico ---
+
 
 def test_diagnostico_periodo_serializado(tmp_path: Path):
     ruta = tmp_path / "diagnostico.csv"

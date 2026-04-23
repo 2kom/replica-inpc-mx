@@ -11,7 +11,7 @@ from replica_inpc.dominio.modelos.validacion import (
     ReporteDetalladoValidacion,
     ResumenValidacion,
 )
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
@@ -37,11 +37,11 @@ TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
     {"inpc", "inflacion componente", "inflacion subcomponente"}
 )
 
-RANGOS_VALIDOS: dict[VersionCanasta, tuple[Periodo, Periodo | None]] = {
-    2010: (Periodo(2010, 12, 2), Periodo(2013, 4, 1)),
-    2013: (Periodo(2013, 4, 1), Periodo(2018, 7, 2)),
-    2018: (Periodo(2018, 7, 2), Periodo(2024, 7, 2)),
-    2024: (Periodo(2024, 7, 2), None),
+RANGOS_VALIDOS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {
+    2010: (PeriodoQuincenal(2010, 12, 2), PeriodoQuincenal(2013, 4, 1)),
+    2013: (PeriodoQuincenal(2013, 4, 1), PeriodoQuincenal(2018, 7, 2)),
+    2018: (PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2024, 7, 2)),
+    2024: (PeriodoQuincenal(2024, 7, 2), None),
 }
 
 

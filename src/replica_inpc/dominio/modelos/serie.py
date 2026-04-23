@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 
 class SerieNormalizada:
@@ -11,18 +11,18 @@ class SerieNormalizada:
 
     Args:
         df: DataFrame en formato ancho con `generico_limpio` como índice,
-            columnas `Periodo` y valores numéricos no negativos o `NaN`.
+            columnas `PeriodoQuincenal` y valores numéricos no negativos o `NaN`.
         mapeo: Correspondencia de trazabilidad `generico_limpio ->
             generico_original`. Si se omite, se usa un diccionario vacío.
 
     Raises:
         InvarianteViolado: Si el índice contiene duplicados o cadenas vacías,
-            si no hay columnas, si alguna columna no es `Periodo` o si el
+            si no hay columnas, si alguna columna no es `PeriodoQuincenal` o si el
             DataFrame contiene valores negativos.
 
     Esquema del DataFrame:
         Índice (str): `generico_limpio`.
-        Columnas (Periodo): una columna por quincena.
+        Columnas (PeriodoQuincenal): una columna por quincena.
         Valores (float64/NaN): índice del genérico en cada periodo.
 
     Example:
@@ -48,24 +48,18 @@ class SerieNormalizada:
 
     def __init__(self, df: pd.DataFrame, mapeo: dict[str, str] | None = None) -> None:
         if df.index.duplicated().any():
-            raise InvarianteViolado(
-                "El índice del DataFrame no puede contener valores duplicados."
-            )
+            raise InvarianteViolado("El índice del DataFrame no puede contener valores duplicados.")
         if (df.index == "").any():
-            raise InvarianteViolado(
-                "El índice del DataFrame no puede contener cadenas vacías."
-            )
+            raise InvarianteViolado("El índice del DataFrame no puede contener cadenas vacías.")
         if len(df.columns) == 0:
             raise InvarianteViolado("El DataFrame debe tener al menos una columna.")
-        if not all(isinstance(col, Periodo) for col in df.columns):
+        if not all(isinstance(col, PeriodoQuincenal) for col in df.columns):
             raise InvarianteViolado(
-                "Las columnas del DataFrame deben ser del tipo Periodo."
+                "Las columnas del DataFrame deben ser del tipo PeriodoQuincenal."
             )
 
         if (df < 0).any().any():
-            raise InvarianteViolado(
-                "Los valores del DataFrame no pueden ser negativos."
-            )
+            raise InvarianteViolado("Los valores del DataFrame no pueden ser negativos.")
 
         self._df = df
         self._mapeo = mapeo or {}

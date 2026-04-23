@@ -18,12 +18,12 @@ from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.validar_inpc import validar
 
 ID_CORRIDA = str(uuid.uuid4())
 
-periodos = [Periodo(2018, 7, 2), Periodo(2018, 8, 1)]
+periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
 
 """
 Canasta con dos categorías COG:
@@ -79,7 +79,7 @@ resultado_servicios = _get_grupo(resultado_combinado, "servicios")
 
 def test_subindice_periodo_base_es_100():
     """En el período base, ambos subíndices arrancan en 100."""
-    p_base = Periodo(2018, 7, 2)
+    p_base = PeriodoQuincenal(2018, 7, 2)
     assert resultado_alimentos.df.loc[(p_base, "alimentos"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
         100.0
     )
@@ -98,7 +98,7 @@ def test_subindice_calculo_laspeyres_por_subgrupo():
     servicios (leche=30, huevo=40, sum=70):
         1Q Ago 2018 = (30 × 103 + 40 × 104) / 70 = 725/7
     """
-    p2 = Periodo(2018, 8, 1)
+    p2 = PeriodoQuincenal(2018, 8, 1)
     assert resultado_alimentos.df.loc[(p2, "alimentos"), "indice_replicado"] == pytest.approx(  # type: ignore[index]
         305 / 3
     )
@@ -180,7 +180,7 @@ def test_validar_subindice_cobertura_por_grupo():
     """
     _, reporte, _ = validar(resultado_combinado, {}, canasta, serie, ID_CORRIDA)
 
-    p_base = Periodo(2018, 7, 2)
+    p_base = PeriodoQuincenal(2018, 7, 2)
 
     fila_al = reporte.df.loc[(p_base, "alimentos")]  # type: ignore[index]
     assert fila_al["total_genericos_esperados"] == 2
@@ -203,7 +203,7 @@ def test_validar_subindice_cobertura_parcial():
     'servicios' no se ve afectado.
     """
     serie_con_nan = df_serie.copy()
-    serie_con_nan.loc["arroz", Periodo(2018, 8, 1)] = float("nan")
+    serie_con_nan.loc["arroz", PeriodoQuincenal(2018, 8, 1)] = float("nan")
 
     serie_nan = SerieNormalizada(serie_con_nan, mapeo)
 
@@ -213,7 +213,7 @@ def test_validar_subindice_cobertura_parcial():
 
     _, reporte, _ = validar(resultado_nan, {}, canasta, serie_nan, ID_CORRIDA)
 
-    p2 = Periodo(2018, 8, 1)
+    p2 = PeriodoQuincenal(2018, 8, 1)
     fila_al_p2 = reporte.df.loc[(p2, "alimentos")]  # type: ignore[index]
     assert fila_al_p2["total_genericos_con_indice"] == 1
     assert fila_al_p2["cobertura_genericos_pct"] == pytest.approx(50.0)
@@ -244,8 +244,8 @@ def test_resultado_como_tabla_ancho_multiples_indices():
 
     assert set(tabla.index) == {"alimentos", "servicios"}
     assert set(tabla.columns) == set(periodos)
-    assert tabla.loc["alimentos", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
-    assert tabla.loc["servicios", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["alimentos", PeriodoQuincenal(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["servicios", PeriodoQuincenal(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
 
 
 def test_reporte_como_tabla_ancho_multiples_indices():
@@ -264,12 +264,12 @@ def test_reporte_como_tabla_ancho_multiples_indices():
     assert "alimentos_cobertura_pct" in tabla.index
     assert "alimentos_ponderador_cubierto" in tabla.index
     assert "servicios_calculado" in tabla.index
-    assert tabla.loc["alimentos_calculado", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
-    assert tabla.loc["servicios_calculado", Periodo(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
-    assert tabla.loc["alimentos_calculado", Periodo(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
+    assert tabla.loc["alimentos_calculado", PeriodoQuincenal(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["servicios_calculado", PeriodoQuincenal(2018, 7, 2)] == pytest.approx(100.0)  # type: ignore[index]
+    assert tabla.loc["alimentos_calculado", PeriodoQuincenal(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
         305 / 3
     )
-    assert tabla.loc["servicios_calculado", Periodo(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
+    assert tabla.loc["servicios_calculado", PeriodoQuincenal(2018, 8, 1)] == pytest.approx(  # type: ignore[index]
         725 / 7
     )
 
@@ -303,14 +303,14 @@ _resultado_ic = LaspeyresDirecto().calcular(_canasta_ic, serie, ID_CORRIDA, "inf
 
 # subyacente   p2: (100/3 × 101 + 200/3 × 102) / 100 = 305/3
 # no subyacente p2: (300/7 × 103 + 400/7 × 104) / 100 = 725/7
-_inegi_ic: dict[str, dict[Periodo, float | None]] = {
+_inegi_ic: dict[str, dict[PeriodoQuincenal, float | None]] = {
     "subyacente": {
-        Periodo(2018, 7, 2): 100.0,
-        Periodo(2018, 8, 1): 305 / 3,
+        PeriodoQuincenal(2018, 7, 2): 100.0,
+        PeriodoQuincenal(2018, 8, 1): 305 / 3,
     },
     "no subyacente": {
-        Periodo(2018, 7, 2): 100.0,
-        Periodo(2018, 8, 1): 725 / 7,
+        PeriodoQuincenal(2018, 7, 2): 100.0,
+        PeriodoQuincenal(2018, 8, 1): 725 / 7,
     },
 }
 
@@ -357,17 +357,17 @@ def test_subindice_con_validacion_inegi_lookup_independiente_por_indice():
     los datos de 'no subyacente' y viceversa. Con solo un subíndice en inegi,
     el otro queda 'no_disponible'.
     """
-    inegi_parcial: dict[str, dict[Periodo, float | None]] = {
+    inegi_parcial: dict[str, dict[PeriodoQuincenal, float | None]] = {
         "subyacente": {
-            Periodo(2018, 7, 2): 100.0,
-            Periodo(2018, 8, 1): 305 / 3,
+            PeriodoQuincenal(2018, 7, 2): 100.0,
+            PeriodoQuincenal(2018, 8, 1): 305 / 3,
         },
         # "no subyacente" ausente → no_disponible
     }
 
     _, reporte, _ = validar(_resultado_ic, inegi_parcial, _canasta_ic, serie, ID_CORRIDA)
 
-    p1, p2 = Periodo(2018, 7, 2), Periodo(2018, 8, 1)
+    p1, p2 = PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)
     assert reporte.df.loc[(p1, "subyacente"), "estado_validacion"] == "ok"  # type: ignore[index]
     assert reporte.df.loc[(p2, "subyacente"), "estado_validacion"] == "ok"  # type: ignore[index]
     assert reporte.df.loc[(p1, "no subyacente"), "estado_validacion"] == "no_disponible"  # type: ignore[index]

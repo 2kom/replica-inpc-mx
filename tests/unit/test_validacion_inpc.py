@@ -8,7 +8,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.modelos.validacion import ResumenValidacion
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.validar_inpc import validar
 
 ID_CORRIDA = str(uuid.uuid4())
@@ -38,10 +38,10 @@ leche    | 100         | 103         | 106         | 109
 huevo    | 100         | 104         | 108         | 112
 """
 periodos = [
-    Periodo(2018, 7, 2),
-    Periodo(2018, 8, 1),
-    Periodo(2018, 8, 2),
-    Periodo(2018, 9, 1),
+    PeriodoQuincenal(2018, 7, 2),
+    PeriodoQuincenal(2018, 8, 1),
+    PeriodoQuincenal(2018, 8, 2),
+    PeriodoQuincenal(2018, 9, 1),
 ]
 df_serie = pd.DataFrame(
     {
@@ -69,12 +69,12 @@ resultado = LaspeyresDirecto().calcular(canasta, serie, ID_CORRIDA, tipo="inpc")
 
 def test_validar_inpc_estado_corrida_y_validacion_validos():
 
-    inegi: dict[str, dict[Periodo, float | None]] = {
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]] = {
         "INPC": {
-            Periodo(2018, 7, 2): 100.0,
-            Periodo(2018, 8, 1): 103.0,
-            Periodo(2018, 8, 2): 106.0,
-            Periodo(2018, 9, 1): 109.0,
+            PeriodoQuincenal(2018, 7, 2): 100.0,
+            PeriodoQuincenal(2018, 8, 1): 103.0,
+            PeriodoQuincenal(2018, 8, 2): 106.0,
+            PeriodoQuincenal(2018, 9, 1): 109.0,
         }
     }
 
@@ -84,8 +84,8 @@ def test_validar_inpc_estado_corrida_y_validacion_validos():
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "ok"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
-    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == Periodo(2018, 7, 2)
-    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == Periodo(2018, 9, 1)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == PeriodoQuincenal(2018, 7, 2)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == PeriodoQuincenal(2018, 9, 1)
 
     assert (reporte.df["estado_validacion"] == "ok").all()
     assert (reporte.df["estado_calculo"] == "ok").all()
@@ -97,12 +97,12 @@ def test_validar_inpc_estado_corrida_y_validacion_validos():
 
 def test_validar_inpc_diferencia_detectada():
 
-    inegi: dict[str, dict[Periodo, float | None]] = {
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]] = {
         "INPC": {
-            Periodo(2018, 7, 2): 100.0,
-            Periodo(2018, 8, 1): 103.0,
-            Periodo(2018, 8, 2): 107.0,
-            Periodo(2018, 9, 1): 111.0,
+            PeriodoQuincenal(2018, 7, 2): 100.0,
+            PeriodoQuincenal(2018, 8, 1): 103.0,
+            PeriodoQuincenal(2018, 8, 2): 107.0,
+            PeriodoQuincenal(2018, 9, 1): 111.0,
         }
     }
 
@@ -112,8 +112,8 @@ def test_validar_inpc_diferencia_detectada():
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "diferencia_detectada"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
-    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == Periodo(2018, 7, 2)
-    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == Periodo(2018, 9, 1)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == PeriodoQuincenal(2018, 7, 2)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == PeriodoQuincenal(2018, 9, 1)
 
     assert (reporte.df["estado_validacion"] == "diferencia_detectada").sum() == 2
     assert (reporte.df["estado_calculo"] == "ok").all()
@@ -156,8 +156,8 @@ def test_validar_inpc_inegi_no_disponible():
     assert resumen.df.loc[ID_CORRIDA, "estado_validacion_global"] == "no_disponible"
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_calculados"] == 4
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
-    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == Periodo(2018, 7, 2)
-    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == Periodo(2018, 9, 1)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_inicio"] == PeriodoQuincenal(2018, 7, 2)
+    assert resumen.df.loc[ID_CORRIDA, "periodo_fin"] == PeriodoQuincenal(2018, 9, 1)
 
     assert len(reporte.df) == 4
     assert (reporte.df["estado_validacion"] == "no_disponible").all()
@@ -169,7 +169,7 @@ def test_validar_inpc_inegi_no_disponible():
 def test_validar_inpc_serie_con_nan():
 
     serie_con_nan = serie.df.copy()
-    serie_con_nan.loc["arroz", Periodo(2018, 8, 2)] = float("nan")
+    serie_con_nan.loc["arroz", PeriodoQuincenal(2018, 8, 2)] = float("nan")
     serie_nan = SerieNormalizada(serie_con_nan, mapeo_serie)
     resultado_nan = LaspeyresDirecto().calcular(canasta, serie_nan, ID_CORRIDA, tipo="inpc")
 
@@ -186,7 +186,7 @@ def test_validar_inpc_serie_con_nan():
     assert (reporte.df["estado_calculo"] == "ok").sum() == 3
 
     assert len(diagnostico.df) == 1
-    assert diagnostico.df.iloc[0]["periodo"] == Periodo(2018, 8, 2)
+    assert diagnostico.df.iloc[0]["periodo"] == PeriodoQuincenal(2018, 8, 2)
     assert diagnostico.df.iloc[0]["generico"] == "arroz"
     assert diagnostico.df.iloc[0]["nivel_faltante"] == "periodo"
     assert diagnostico.df.iloc[0]["tipo_faltante"] == "indice"
@@ -194,12 +194,12 @@ def test_validar_inpc_serie_con_nan():
 
 def test_validar_inpc_dentro_de_tolerancia():
 
-    inegi: dict[str, dict[Periodo, float | None]] = {
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]] = {
         "INPC": {
-            Periodo(2018, 7, 2): 100.0,
-            Periodo(2018, 8, 1): 103.0,
-            Periodo(2018, 8, 2): None,
-            Periodo(2018, 9, 1): None,
+            PeriodoQuincenal(2018, 7, 2): 100.0,
+            PeriodoQuincenal(2018, 8, 1): 103.0,
+            PeriodoQuincenal(2018, 8, 2): None,
+            PeriodoQuincenal(2018, 9, 1): None,
         }
     }
 
@@ -211,25 +211,25 @@ def test_validar_inpc_dentro_de_tolerancia():
     assert resumen.df.loc[ID_CORRIDA, "total_periodos_con_null"] == 0
 
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 7, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
         == "ok"
     )
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "error_absoluto"] == 0.0  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 7, 2), "INPC"), "error_absoluto"] == 0.0  # type: ignore[index]
     )
     assert (
-        reporte.df.loc[(Periodo(2018, 7, 2), "INPC"), "indice_inegi"] == 100.0  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 7, 2), "INPC"), "indice_inegi"] == 100.0  # type: ignore[index]
     )
 
     assert (
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 8, 2), "INPC"), "estado_validacion"]  # type: ignore[index]
         == "no_disponible"
     )
     assert pd.isna(
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "error_absoluto"]  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 8, 2), "INPC"), "error_absoluto"]  # type: ignore[index]
     )
     assert pd.isna(
-        reporte.df.loc[(Periodo(2018, 8, 2), "INPC"), "indice_inegi"]  # type: ignore[index]
+        reporte.df.loc[(PeriodoQuincenal(2018, 8, 2), "INPC"), "indice_inegi"]  # type: ignore[index]
     )
 
     assert (reporte.df["estado_validacion"] == "no_disponible").sum() == 2
@@ -242,8 +242,8 @@ def test_resumen_validacion_invariante_periodo_inicio_mayor_que_fin():
         {
             "version": 2018,
             "tipo": "inpc",
-            "periodo_inicio": Periodo(2018, 9, 1),
-            "periodo_fin": Periodo(2018, 7, 2),
+            "periodo_inicio": PeriodoQuincenal(2018, 9, 1),
+            "periodo_fin": PeriodoQuincenal(2018, 7, 2),
             "total_periodos_esperados": 4,
             "total_periodos_calculados": 4,
             "total_periodos_con_null": 0,

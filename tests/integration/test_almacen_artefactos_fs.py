@@ -4,11 +4,11 @@ import pandas as pd
 import pytest
 
 from replica_inpc.dominio.errores import ArtefactoNoEncontrado
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.infraestructura.filesystem.almacen_artefactos_fs import AlmacenArtefactosFs
 
-P1 = Periodo(2018, 1, 1)
-P2 = Periodo(2018, 1, 2)
+P1 = PeriodoQuincenal(2018, 1, 1)
+P2 = PeriodoQuincenal(2018, 1, 2)
 ID = "abc-123"
 
 
@@ -18,10 +18,17 @@ def _almacen(tmp_path: Path) -> AlmacenArtefactosFs:
 
 # --- resultado ---
 
+
 def test_round_trip_resultado(tmp_path: Path):
     idx = pd.MultiIndex.from_tuples([(P1, "INPC"), (P2, "INPC")], names=["periodo", "indice"])
     df = pd.DataFrame(
-        {"version": 2018, "tipo": "inpc", "indice_replicado": [100.1, 100.2], "estado_calculo": "ok", "motivo_error": None},
+        {
+            "version": 2018,
+            "tipo": "inpc",
+            "indice_replicado": [100.1, 100.2],
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
         index=idx,
     )
     almacen = _almacen(tmp_path)
@@ -33,13 +40,19 @@ def test_round_trip_resultado(tmp_path: Path):
 
 # --- reporte (MultiIndex) ---
 
+
 def test_round_trip_reporte_preserva_multiindex(tmp_path: Path):
     idx = pd.MultiIndex.from_tuples(
         [(P1, "INPC"), (P2, "INPC")],
         names=["periodo", "indice"],
     )
     df = pd.DataFrame(
-        {"version": 2018, "tipo": "inpc", "indice_replicado": [100.1, 100.2], "estado_validacion": "no_disponible"},
+        {
+            "version": 2018,
+            "tipo": "inpc",
+            "indice_replicado": [100.1, 100.2],
+            "estado_validacion": "no_disponible",
+        },
         index=idx,
     )
     almacen = _almacen(tmp_path)
@@ -54,6 +67,7 @@ def test_round_trip_reporte_preserva_multiindex(tmp_path: Path):
 
 # --- resumen ---
 
+
 def test_round_trip_resumen(tmp_path: Path):
     df = pd.DataFrame(
         {"version": 2018, "total_periodos_esperados": 2, "estado_corrida": "ok"},
@@ -67,7 +81,8 @@ def test_round_trip_resumen(tmp_path: Path):
     assert recuperado.iloc[0]["version"] == 2018
 
 
-# --- diagnostico (Periodo en columna) ---
+# --- diagnostico (PeriodoQuincenal en columna) ---
+
 
 def test_round_trip_diagnostico_con_periodo_en_columna(tmp_path: Path):
     df = pd.DataFrame(
@@ -109,6 +124,7 @@ def test_round_trip_diagnostico_con_periodo_null(tmp_path: Path):
 
 
 # --- errores ---
+
 
 def test_obtener_artefacto_no_encontrado(tmp_path: Path):
     almacen = _almacen(tmp_path)

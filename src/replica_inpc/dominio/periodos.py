@@ -25,7 +25,7 @@ _MESES_INV: dict[int, str] = {v: k for k, v in _MESES.items()}
 
 
 @functools.total_ordering
-class Periodo:
+class PeriodoQuincenal:
     """Representa un periodo quincenal del dominio.
 
     Un periodo se modela como el triplete `(año, mes, quincena)`. Su orden
@@ -57,7 +57,7 @@ class Periodo:
         self.quincena = quincena
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Periodo):
+        if not isinstance(other, PeriodoQuincenal):
             return NotImplemented
         return (self.año, self.mes, self.quincena) == (
             other.año,
@@ -65,8 +65,8 @@ class Periodo:
             other.quincena,
         )
 
-    def __lt__(self, other: Periodo) -> bool:
-        if not isinstance(other, Periodo):
+    def __lt__(self, other: PeriodoQuincenal) -> bool:
+        if not isinstance(other, PeriodoQuincenal):
             return NotImplemented
         return (self.año, self.mes, self.quincena) < (
             other.año,
@@ -81,11 +81,11 @@ class Periodo:
         return f"{self.quincena}Q {_MESES_INV[self.mes]} {self.año}"
 
     def __repr__(self) -> str:
-        return f"Periodo({self.año}, {self.mes}, {self.quincena})"
+        return f"PeriodoQuincenal({self.año}, {self.mes}, {self.quincena})"
 
     @classmethod
-    def desde_str(cls, periodo_str: str) -> Periodo:
-        """Construye un `Periodo` desde su representación textual canónica.
+    def desde_str(cls, periodo_str: str) -> PeriodoQuincenal:
+        """Construye un `PeriodoQuincenal` desde su representación textual canónica.
 
         Args:
             periodo_str: Texto en formato `"1Q Mes AAAA"`, por ejemplo

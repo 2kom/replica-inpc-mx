@@ -28,7 +28,7 @@ def _obtener_f_k(
         traslape = RANGOS_VALIDOS[version][0]
         if traslape not in df_serie.columns:
             raise ErrorCalculo(
-                f"Periodo de traslape {traslape} no está en la serie "
+                f"PeriodoQuincenal de traslape {traslape} no está en la serie "
                 "y falta encadenamiento en canasta"
             )
         f_k_serie: pd.Series = df_serie[traslape] / 100

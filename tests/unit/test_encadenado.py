@@ -5,10 +5,10 @@ from replica_inpc.dominio.calculo.encadenado import LaspeyresEncadenado
 from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
-traslape = Periodo(2024, 7, 2)
-post_traslape = Periodo(2024, 8, 1)
+traslape = PeriodoQuincenal(2024, 7, 2)
+post_traslape = PeriodoQuincenal(2024, 8, 1)
 
 _df_canasta = pd.DataFrame(
     {

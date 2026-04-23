@@ -7,12 +7,12 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.modelos.validacion import DiagnosticoFaltantes
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.validar_inpc import validar
 
-p1 = Periodo(2024, 7, 2)
-p2 = Periodo(2024, 8, 1)
-p3 = Periodo(2024, 8, 2)
+p1 = PeriodoQuincenal(2024, 7, 2)
+p2 = PeriodoQuincenal(2024, 8, 1)
+p3 = PeriodoQuincenal(2024, 8, 2)
 
 _mapeo = {"arroz": "Arroz", "frijol": "Frijol", "leche": "Leche"}
 
@@ -130,7 +130,7 @@ def test_diferencia_detectada_imputado_cuando_periodo_imputado_supera_tolerancia
     serie = SerieNormalizada(df_serie, {"arroz": "Arroz", "frijol": "Frijol"})
 
     resultado = LaspeyresDirecto().calcular(canasta, serie, "id", tipo="inpc")
-    inegi: dict[str, dict[Periodo, float | None]] = {"INPC": {p1: 99.0, p2: 101.5}}
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]] = {"INPC": {p1: 99.0, p2: 101.5}}
 
     imputados = {("arroz", p1): p2}
     _, reporte, _ = validar(resultado, inegi, canasta, serie, "id", imputados)
@@ -150,7 +150,7 @@ def test_diferencia_detectada_sin_imputacion_cuando_periodo_no_imputado():
     serie = SerieNormalizada(df_serie, {"arroz": "Arroz", "frijol": "Frijol"})
 
     resultado = LaspeyresDirecto().calcular(canasta, serie, "id", tipo="inpc")
-    inegi: dict[str, dict[Periodo, float | None]] = {"INPC": {p1: 99.0, p2: 101.5}}
+    inegi: dict[str, dict[PeriodoQuincenal, float | None]] = {"INPC": {p1: 99.0, p2: 101.5}}
 
     _, reporte, _ = validar(resultado, inegi, canasta, serie, "id")
 

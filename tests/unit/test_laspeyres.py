@@ -3,7 +3,7 @@ import pandas as pd
 from replica_inpc.dominio.calculo.laspeyres import LaspeyresDirecto
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 """
 La canasta queda como:
@@ -30,10 +30,10 @@ leche    | 100         | 103         | 106         | 109
 huevo    | 100         | 104         | 108         | 112
 """
 periodos = [
-    Periodo(2018, 7, 2),
-    Periodo(2018, 8, 1),
-    Periodo(2018, 8, 2),
-    Periodo(2018, 9, 1),
+    PeriodoQuincenal(2018, 7, 2),
+    PeriodoQuincenal(2018, 8, 1),
+    PeriodoQuincenal(2018, 8, 2),
+    PeriodoQuincenal(2018, 9, 1),
 ]
 df_serie = pd.DataFrame(
     {

@@ -7,7 +7,7 @@ import pandas as pd
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import Periodo
+from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 _LAG: dict[str, int] = {
     "quincenal": 1,
@@ -20,13 +20,13 @@ _LAG: dict[str, int] = {
 }
 
 
-def _restar_quincenas(periodo: Periodo, n: int) -> Periodo:
+def _restar_quincenas(periodo: PeriodoQuincenal, n: int) -> PeriodoQuincenal:
     ordinal = periodo.año * 24 + (periodo.mes - 1) * 2 + (periodo.quincena - 1)
     ordinal -= n
     año = ordinal // 24
     mes = (ordinal % 24) // 2 + 1
     quincena = (ordinal % 24) % 2 + 1
-    return Periodo(año, mes, quincena)
+    return PeriodoQuincenal(año, mes, quincena)
 
 
 def _tipo_unico(df: pd.DataFrame) -> str:
@@ -82,8 +82,8 @@ def variacion_desde(
     df = resultado.df
     tipo = _tipo_unico(df)
 
-    desde_p = Periodo.desde_str(desde)
-    hasta_p = Periodo.desde_str(hasta) if hasta is not None else None
+    desde_p = PeriodoQuincenal.desde_str(desde)
+    hasta_p = PeriodoQuincenal.desde_str(hasta) if hasta is not None else None
 
     periodos_todos = df.index.get_level_values("periodo")
     hasta_efectivo = hasta_p if hasta_p is not None else max(periodos_todos)
@@ -223,7 +223,7 @@ def variacion_acumulada_anual(
     indices = df.index.get_level_values("indice")
     valores = df["indice_replicado"]
 
-    base_periodos = [Periodo(p.año - 1, 12, 2) for p in periodos]
+    base_periodos = [PeriodoQuincenal(p.año - 1, 12, 2) for p in periodos]
     base_idx = pd.MultiIndex.from_arrays([base_periodos, indices], names=["periodo", "indice"])
     base_valores = valores.reindex(base_idx)
     base_valores.index = df.index
