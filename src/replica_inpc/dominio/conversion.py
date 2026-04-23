@@ -30,80 +30,75 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     if not all(isinstance(p, PeriodoQuincenal) for p in periodos):
         raise InvarianteViolado("a_mensual requiere un ResultadoCalculo quincenal")
 
-    df_work = df.copy()
-    df_work["_año"] = [p.año for p in periodos]
-    df_work["_mes"] = [p.mes for p in periodos]
-    df_work["_quincena"] = [p.quincena for p in periodos]
-    df_work["_indice"] = df.index.get_level_values("indice")
+    df_flat = df.copy()
+    df_flat["_año"] = [p.año for p in periodos]
+    df_flat["_mes"] = [p.mes for p in periodos]
+    df_flat["_quincena"] = [p.quincena for p in periodos]
+    df_flat["_indice"] = df.index.get_level_values("indice")
+    df_flat = df_flat.reset_index(drop=True).set_index(["_año", "_mes", "_indice"])
 
-    filas: list[dict] = []
-    for (año, mes, indice), grupo in df_work.groupby(["_año", "_mes", "_indice"], sort=False):
-        q_rows = {int(row["_quincena"]): row for _, row in grupo.iterrows()}
-        q1 = q_rows.get(1)
-        q2 = q_rows.get(2)
+    q1 = df_flat[df_flat["_quincena"] == 1]
+    q2 = df_flat[df_flat["_quincena"] == 2]
 
-        ref = q2 if q2 is not None else q1
-        assert ref is not None  # groupby siempre produce al menos un row por grupo
-        base = {
-            "periodo": PeriodoMensual(int(año), int(mes)),  # type: ignore[arg-type]
-            "indice": indice,
-            "version": ref["version"],
-            "tipo": ref["tipo"],
-        }
+    all_groups = q1.index.union(q2.index)
+    q1_r = q1.reindex(all_groups)
+    q2_r = q2.reindex(all_groups)
 
-        if any(row["estado_calculo"] == "fallida" for row in q_rows.values()):
-            motivo = next(
-                row["motivo_error"] for row in q_rows.values() if row["estado_calculo"] == "fallida"
-            )
-            filas.append(
-                {
-                    **base,
-                    "indice_replicado": None,
-                    "estado_calculo": "fallida",
-                    "motivo_error": motivo,
-                }
-            )
-            continue
+    # Metadata: preferir q2, fallback q1
+    version = q2_r["version"].fillna(q1_r["version"])
+    tipo = q2_r["tipo"].fillna(q1_r["tipo"])
 
-        v1 = q1["indice_replicado"] if q1 is not None else None
-        v2 = q2["indice_replicado"] if q2 is not None else None
-        v1_ok = v1 is not None and pd.notna(v1)
-        v2_ok = v2 is not None and pd.notna(v2)
+    # Valores e indicadores de disponibilidad
+    v1 = q1_r["indice_replicado"]
+    v2 = q2_r["indice_replicado"]
+    v1_ok = v1.notna()
+    v2_ok = v2.notna()
+    both_ok = v1_ok & v2_ok
+    one_ok = v1_ok ^ v2_ok
 
-        if v1_ok and v2_ok:
-            assert v1 is not None and v2 is not None
-            filas.append(
-                {
-                    **base,
-                    "indice_replicado": (v1 + v2) / 2,
-                    "estado_calculo": "ok",
-                    "motivo_error": None,
-                }
-            )
-        elif v1_ok or v2_ok:
-            filas.append(
-                {
-                    **base,
-                    "indice_replicado": v1 if v1_ok else v2,
-                    "estado_calculo": "semi_ok",
-                    "motivo_error": None,
-                }
-            )
-        else:
-            filas.append(
-                {
-                    **base,
-                    "indice_replicado": None,
-                    "estado_calculo": "null_por_faltantes",
-                    "motivo_error": ref["motivo_error"],
-                }
-            )
+    # Estado
+    fallida_q1 = (q1_r["estado_calculo"] == "fallida").fillna(False)
+    fallida_q2 = (q2_r["estado_calculo"] == "fallida").fillna(False)
+    any_fallida = fallida_q1 | fallida_q2
+    null_mask = ~any_fallida & ~both_ok & ~one_ok
 
-    df_result = pd.DataFrame(filas)
-    df_result.index = pd.MultiIndex.from_arrays(
-        [df_result.pop("periodo"), df_result.pop("indice")],
-        names=["periodo", "indice"],
+    estado_calculo = pd.Series("null_por_faltantes", index=all_groups, dtype=object)
+    estado_calculo[any_fallida] = "fallida"
+    estado_calculo[~any_fallida & both_ok] = "ok"
+    estado_calculo[~any_fallida & one_ok] = "semi_ok"
+
+    # Valor promediado
+    val_avg = (v1 + v2) / 2
+    val_one = v1.fillna(v2)
+    indice_replicado = pd.Series(float("nan"), index=all_groups)
+    indice_replicado[~any_fallida & both_ok] = val_avg[~any_fallida & both_ok]
+    indice_replicado[~any_fallida & one_ok] = val_one[~any_fallida & one_ok]
+
+    # Motivo error
+    motivo_q1 = q1_r["motivo_error"]
+    motivo_q2 = q2_r["motivo_error"]
+    motivo_fallida_s = motivo_q1.where(fallida_q1, motivo_q2)
+    motivo_faltante_s = motivo_q2.where(motivo_q2.notna(), motivo_q1)
+    motivo_error = pd.Series(None, index=all_groups, dtype=object)
+    motivo_error[any_fallida] = motivo_fallida_s[any_fallida]
+    motivo_error[null_mask] = motivo_faltante_s[null_mask]
+
+    # Construir índice de PeriodoMensual
+    años = all_groups.get_level_values("_año")
+    meses = all_groups.get_level_values("_mes")
+    indices = all_groups.get_level_values("_indice")
+    periodos_mensuales = [PeriodoMensual(int(a), int(m)) for a, m in zip(años, meses)]
+
+    df_result = pd.DataFrame(
+        {
+            "version": version.values,
+            "tipo": tipo.values,
+            "indice_replicado": indice_replicado.values,
+            "estado_calculo": estado_calculo.values,
+            "motivo_error": motivo_error.values,
+        },
+        index=pd.MultiIndex.from_arrays([periodos_mensuales, indices], names=["periodo", "indice"]),
     )
-    df_result.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
+    df_result.sort_index(level="periodo", sort_remaining=False, inplace=True)
     return ResultadoCalculo(df_result, resultado.id_corrida)

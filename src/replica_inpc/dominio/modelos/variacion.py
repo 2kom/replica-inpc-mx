@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 
 class ResultadoVariacion:
@@ -12,7 +12,7 @@ class ResultadoVariacion:
         df: pd.DataFrame,
         tipo: str,
         descripcion: str,
-        indices_parciales: dict[str, PeriodoQuincenal] | None = None,
+        indices_parciales: dict[str, PeriodoQuincenal | PeriodoMensual] | None = None,
     ) -> None:
         if df.empty:
             raise InvarianteViolado("El DataFrame de ResultadoVariacion no puede estar vacío.")
@@ -45,7 +45,7 @@ class ResultadoVariacion:
         return self._df
 
     @property
-    def indices_parciales(self) -> dict[str, PeriodoQuincenal]:
+    def indices_parciales(self) -> dict[str, PeriodoQuincenal | PeriodoMensual]:
         return self._indices_parciales
 
     def como_tabla(self, ancho: bool = False, pct: bool = True) -> pd.DataFrame:

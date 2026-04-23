@@ -4,7 +4,7 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoInterpretable
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.variaciones import (
     variacion_acumulada_anual,
     variacion_desde,
@@ -15,7 +15,7 @@ from replica_inpc.dominio.variaciones import (
 
 
 def _mk_resultado(
-    data: dict[str, list[tuple[PeriodoQuincenal, float | None]]],
+    data: dict[str, list[tuple[PeriodoQuincenal | PeriodoMensual, float | None]]],
     tipo: str = "inpc",
     version: int = 2018,
     id_corrida: str = "test",
@@ -288,3 +288,131 @@ def test_acumulada_anual_tipo_no_homogeneo():
     )
     with pytest.raises(InvarianteViolado):
         variacion_acumulada_anual(ResultadoCalculo(df, "test"))
+
+
+# -- helpers mensuales ---------------------------------------------------------
+
+_M0 = PeriodoMensual(2018, 7)  # "Jul 2018"
+_M1 = PeriodoMensual(2018, 8)  # "Ago 2018"
+_M2 = PeriodoMensual(2018, 9)  # "Sep 2018"
+_M3 = PeriodoMensual(2018, 10)  # "Oct 2018"
+_M_DIC18 = PeriodoMensual(2018, 12)
+_M_ENE19 = PeriodoMensual(2019, 1)
+_M_DIC19 = PeriodoMensual(2019, 12)
+_M_ENE20 = PeriodoMensual(2020, 1)
+
+
+# -- variacion_periodica mensual -----------------------------------------------
+
+
+def test_periodica_mensual_con_datos_mensuales():
+    # lag=1 mes: M1 base=M0 → 102/100-1=0.02; M0 sin base → DROP
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 102.0), (_M2, 105.0)]})
+    rv = variacion_periodica(r, "mensual")
+    periodos = list(rv.df.index.get_level_values("periodo"))
+    assert _M0 not in periodos
+    assert _M1 in periodos
+    assert _M2 in periodos
+    assert pytest.approx(rv.df.loc[(_M1, "INPC"), "variacion"]) == 0.02  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_M2, "INPC"), "variacion"]) == pytest.approx(105 / 102 - 1)  # type: ignore[index]
+    assert rv.descripcion == "mensual"
+
+
+def test_periodica_anual_con_datos_mensuales():
+    # lag=12 meses: ENE20 base=ENE19
+    r = _mk_resultado({"INPC": [(_M_ENE19, 100.0), (_M_DIC19, 110.0), (_M_ENE20, 103.0)]})
+    rv = variacion_periodica(r, "anual")
+    assert (_M_ENE19, "INPC") not in rv.df.index
+    assert (_M_ENE20, "INPC") in rv.df.index
+    assert pytest.approx(rv.df.loc[(_M_ENE20, "INPC"), "variacion"]) == 0.03  # type: ignore[index]
+
+
+def test_periodica_quincenal_en_mensual_redirige():
+    # "quincenal" con datos mensuales → print + usa "mensual" (lag=1)
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 102.0)]})
+    rv = variacion_periodica(r, "quincenal")
+    assert rv.descripcion == "mensual"
+    assert (_M1, "INPC") in rv.df.index
+
+
+def test_periodica_gap_b_mensual():
+    r = _mk_resultado({"INPC": [(_M0, 100.0)]})
+    with pytest.raises(InvarianteViolado, match="Se requieren"):
+        variacion_periodica(r, "mensual")
+
+
+# -- variacion_desde mensual ---------------------------------------------------
+
+
+def test_desde_mensual_basico():
+    # desde="Ago 2018" → base=M0; rango [M1, M2]
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 102.0), (_M2, 105.0)]})
+    rv = variacion_desde(r, "Ago 2018")
+    assert (_M0, "INPC") not in rv.df.index
+    assert (_M1, "INPC") in rv.df.index
+    assert (_M2, "INPC") in rv.df.index
+    assert pytest.approx(rv.df.loc[(_M1, "INPC"), "variacion"]) == 0.02  # type: ignore[index]
+    assert pytest.approx(rv.df.loc[(_M2, "INPC"), "variacion"]) == 0.05  # type: ignore[index]
+    assert rv.descripcion == f"desde {_M1} hasta {_M2}"
+
+
+def test_desde_quincenal_en_resultado_mensual_falla():
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 102.0)]})
+    with pytest.raises(InvarianteViolado, match="mensual"):
+        variacion_desde(r, "1Q Ago 2018")
+
+
+def test_desde_mensual_en_resultado_quincenal_falla():
+    r = _mk_resultado({"INPC": [(_P0, 100.0), (_P1, 102.0)]})
+    with pytest.raises(InvarianteViolado, match="quincenal"):
+        variacion_desde(r, "Ago 2018")
+
+
+def test_desde_mensual_base_no_existe_error_descriptivo():
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 102.0)]})
+    with pytest.raises(InvarianteViolado, match="mínimo válido"):
+        variacion_desde(r, "Jul 2018")
+
+
+def test_desde_mensual_con_parciales():
+    r = _mk_resultado(
+        {
+            "INPC": [(_M0, 100.0), (_M1, 102.0), (_M2, 105.0)],
+            "CAT_B": [(_M2, 200.0), (_M3, 202.0)],
+        }
+    )
+    rv = variacion_desde(r, "Ago 2018", incluir_parciales=True)
+    assert "INPC" in rv.df.index.get_level_values("indice")
+    assert "CAT_B" in rv.df.index.get_level_values("indice")
+    assert pytest.approx(rv.df.loc[(_M2, "CAT_B"), "variacion"]) == 0.0  # type: ignore[index]
+    assert "CAT_B" in rv.indices_parciales
+    assert rv.indices_parciales["CAT_B"] == _M2
+
+
+# -- variacion_acumulada_anual mensual -----------------------------------------
+
+
+def test_acumulada_anual_mensual_basico():
+    # ENE19 base=DIC18; DIC18 DROP (base=DIC17 no existe)
+    r = _mk_resultado({"INPC": [(_M_DIC18, 100.0), (_M_ENE19, 103.0), (_M_ENE20, 106.0)]})
+    rv = variacion_acumulada_anual(r)
+    assert (_M_DIC18, "INPC") not in rv.df.index
+    assert (_M_ENE19, "INPC") in rv.df.index
+    assert pytest.approx(rv.df.loc[(_M_ENE19, "INPC"), "variacion"]) == 0.03  # type: ignore[index]
+    assert rv.descripcion == "acumulada_anual"
+
+
+def test_acumulada_anual_mensual_gap_b():
+    r = _mk_resultado({"INPC": [(_M0, 100.0), (_M1, 101.0)]})
+    with pytest.raises(InvarianteViolado, match="base anual"):
+        variacion_acumulada_anual(r)
+
+
+# -- _restar_quincenas guarda --------------------------------------------------
+
+
+def test_restar_quincenas_rechaza_mensual():
+    from replica_inpc.dominio.variaciones import _restar_quincenas
+
+    with pytest.raises(InvarianteViolado):
+        _restar_quincenas(_M0, 1)  # type: ignore[arg-type]
