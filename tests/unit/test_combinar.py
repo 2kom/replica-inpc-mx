@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from replica_inpc import combinar
+from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
@@ -218,3 +219,10 @@ def test_combinar_tres_corridas():
     assert periodos == sorted(periodos)
     assert resultado.df.loc[(p1, "INPC"), "version"] == 2018  # type: ignore[index]
     assert resultado.df.loc[(p3, "INPC"), "version"] == 2024  # type: ignore[index]
+
+
+def test_combinar_mensual_emite_warning():
+    r1 = a_mensual(_resultado([p1, p2], 2018))
+    r2 = a_mensual(_resultado([p3, p4], 2024))
+    with pytest.warns(UserWarning, match="mensuales"):
+        combinar([r1, r2])
