@@ -87,6 +87,54 @@ resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultad
 
 `combinar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 definidos en `RENOMBRES_INDICES`. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen — ver `docs/diseño.md` §12.10.
 
+## Cálculo de variaciones
+
+Con un `ResultadoCalculo` disponible, el proyecto ofrece tres funciones para calcular variaciones:
+
+$$\text{variación}_{a:t} = \frac{I_t}{I_a} - 1$$
+
+El resultado se expresa como fracción (no porcentaje). Para obtener el porcentaje, multiplicar por 100.
+
+### variacion_periodica
+
+Calcula la variación de cada índice respecto a un lag fijo de quincenas:
+
+```python
+rv = variacion_periodica(resultado, "mensual")   # lag = 2 quincenas
+rv = variacion_periodica(resultado, "anual")     # lag = 24 quincenas
+```
+
+Frecuencias soportadas: `quincenal` (1), `mensual` (2), `bimestral` (4), `trimestral` (6), `cuatrimestral` (8), `semestral` (12), `anual` (24).
+
+**Regla drop/keep:** si el índice base $I_a$ es NaN (quincena sin dato), la variación no puede calcularse y la fila se elimina. Si el índice corriente $I_t$ es NaN pero existe su base, la fila se conserva con variación NaN — para no ocultar periodos sin dato.
+
+### variacion_desde
+
+Calcula la variación acumulada desde un periodo base hasta cada quincena del rango:
+
+```python
+rv = variacion_desde(resultado, "1Q Ene 2024")
+rv = variacion_desde(resultado, "1Q Ene 2024", hasta="2Q Jun 2024")
+```
+
+La base es la quincena **inmediatamente anterior** a `desde`. Para un índice con dato en esa quincena base, la variación en `desde` refleja el cambio respecto al cierre del periodo anterior.
+
+Para índices que no tienen dato en la quincena base (índices parciales), el parámetro `incluir_parciales=True` los incluye usando como base su primer dato disponible dentro del rango, con variación 0 en ese primer periodo.
+
+### variacion_acumulada_anual
+
+Calcula la variación de cada quincena respecto a la 2Q diciembre del año anterior:
+
+```python
+rv = variacion_acumulada_anual(resultado)
+```
+
+Equivale a `variacion_desde` con `desde = "1Q Ene <año>"` pero usando como base fija `2Q Dic <año-1>` para todas las quincenas del año. Los periodos del primer año disponible se eliminan porque no existe su base anual.
+
+### Advertencia para resultados encadenados (canasta 2024)
+
+Por la no aditividad del encadenamiento, la variación del INPC general encadenado no coincide con la suma ponderada de las variaciones de sus subíndices. Calcular variaciones directamente sobre el `ResultadoCalculo` de la corrida (o sobre el resultado combinado) produce el valor correcto. No reconstuir el INPC desde componentes para luego calcular variación.
+
 ## Validación
 
 Al terminar el cálculo, el proyecto consulta la API de indicadores del INEGI para obtener los valores oficiales publicados y los compara con los valores replicados.

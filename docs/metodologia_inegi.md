@@ -94,9 +94,20 @@ El INPC nacional es la media aritmética ponderada de los índices nacionales de
 
 $$INPC = \sum_{k=1}^{299} \omega_k \, I_k, \qquad \sum_{k=1}^{299} \omega_k = 1$$
 
-La variación porcentual entre dos periodos se interpreta como inflación:
+### Variaciones e inflación (base 2018)
 
-$$\text{Inflación}_{a:t} = \left(\frac{INPC_t}{INPC_a} - 1\right) \times 100$$
+La variación del índice entre dos periodos se calcula como:
+
+$$\text{Variación}_{a:t} = \left(\frac{INPC_t}{INPC_a} - 1\right) \times 100$$
+
+Casos de uso:
+
+- **Inflación quincenal**: `a` es la quincena inmediata anterior, `t` la quincena actual.
+- **Inflación mensual**: `a` es el mes inmediato anterior, `t` el mes actual.
+- **Inflación anual**: `a` es el mismo mes del año anterior, `t` el mes actual.
+- **Inflación acumulada**: `a` es el periodo inicial, `t` el periodo final.
+
+La fórmula aplica al INPC general o a cualquier índice superior (subíndice, componente, genérico), siempre que ambos valores estén en la misma base y correspondan a la misma serie.
 
 ## Base 2024
 
@@ -157,6 +168,16 @@ Aplicando el procedimiento: $I_{\text{Sub},E22}^{\text{Ago}} = 0.74893 \times 13
 #### No aditividad
 
 El encadenamiento rompe la aditividad: después del traslape, los subíndices encadenados publicados no se reconstruyen exactamente como sumas ponderadas de sus componentes publicados. Esta propiedad es documentada por el INEGI como consecuencia esperada del método. La pérdida es evidente en el ejemplo anterior: $0.7718 \times 134.112 + 0.2282 \times 135.521 = 134.434 \neq 134.471$.
+
+### Variaciones e inflación (base 2024)
+
+La fórmula es idéntica a la base 2018:
+
+$$\text{Variación}_{a:t} = \left(\frac{I_t}{I_a} - 1\right) \times 100$$
+
+Con los mismos cuatro casos de uso: quincenal, mensual, anual, acumulada.
+
+**Restricción por no aditividad:** para periodos posteriores al traslape (2Q jul. 2024), la variación debe calcularse sobre la serie encadenada publicada del índice. No es válido reconstruir primero el INPC como suma ponderada de subíndices publicados y después calcular la variación, porque la no aditividad introduce error. Se debe usar directamente el índice general encadenado.
 
 ## Fuentes
 
