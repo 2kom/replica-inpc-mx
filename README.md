@@ -143,13 +143,27 @@ resultado_completo = combinar(
 > nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen
 > (ver §12.10 en `docs/diseño.md`).
 
+**Obtener resultado mensual:**
+
+```python
+from replica_inpc import a_mensual
+
+# Convierte ResultadoCalculo quincenal a mensual (promedio simple de 1Q y 2Q).
+# Las series de entrada siempre deben ser quincenales; los datos mensuales
+# se derivan del cálculo quincenal, no se cargan directamente.
+resultado_mensual = a_mensual(resultado_completo)
+```
+
 **Calcular variaciones:**
 
 ```python
 from replica_inpc import variacion_periodica, variacion_desde, variacion_acumulada_anual
 
-# Variacion mensual (quincena t vs quincena t-2)
+# Variacion mensual sobre resultado quincenal (quincena t vs quincena t-2)
 rv_mensual = variacion_periodica(resultado_completo, "mensual")
+
+# Variacion mensual sobre resultado mensual (mes t vs mes t-1)
+rv_mensual_m = variacion_periodica(resultado_mensual, "mensual")
 
 # Variacion acumulada desde un periodo base
 rv_desde = variacion_desde(resultado_completo, "1Q Ene 2024")

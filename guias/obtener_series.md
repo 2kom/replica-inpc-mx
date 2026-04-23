@@ -7,6 +7,11 @@ Las series de genéricos son los índices publicados por el INEGI para cada
 genérico de la canasta, quincena por quincena. Son uno de los dos insumos
 que necesita el sistema para calcular el INPC.
 
+> **Requisito estricto: las series deben ser quincenales.**
+> El sistema solo acepta series en formato quincenal (`1Q Mes AAAA` / `2Q Mes AAAA`).
+> Los resultados mensuales se obtienen después del cálculo mediante `a_mensual()`,
+> no cargando series mensuales directamente. Cargar series mensuales producirá un error.
+
 Para la canasta 2018 y la canasta 2024 se necesitan series distintas, descargadas
 desde programas distintos del INEGI. Esta guía cubre ambos casos.
 

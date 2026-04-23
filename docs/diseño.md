@@ -22,7 +22,11 @@ El historial de cambios vive en git.
   - [5. Contratos del dominio](#5-contratos-del-dominio)
     - [5.1 CanastaCanonica](#51-canastacanonica)
     - [5.2 SerieNormalizada](#52-serienormalizada)
-    - [5.3 Periodo](#53-periodo)
+    - [5.3 PeriodoQuincenal y PeriodoMensual](#53-periodoquincenal-y-periodomensual)
+      - [PeriodoQuincenal](#periodoquincenal)
+      - [PeriodoMensual](#periodomensual)
+      - [Factory `periodo_desde_str`](#factory-periodo_desde_str)
+      - [Convención `to_timestamp()`](#convención-to_timestamp)
     - [5.4 ResultadoCalculo](#54-resultadocalculo)
     - [5.5 ResumenValidacion](#55-resumenvalidacion)
     - [5.6 ReporteDetalladoValidacion](#56-reportedetalladovalidacion)
@@ -45,7 +49,8 @@ El historial de cambios vive en git.
       - [Regla drop/keep (todas las funciones)](#regla-dropkeep-todas-las-funciones)
       - [`ResultadoVariacion`](#resultadovariacion)
       - [Funciones públicas](#funciones-públicas)
-      - [Helper privado `_restar_quincenas`](#helper-privado-_restar_quincenas)
+      - [Helpers privados](#helpers-privados)
+    - [5.13 a\_mensual — conversión quincenal → mensual](#513-a_mensual--conversión-quincenal--mensual)
   - [6. Fachada — api/corrida.py](#6-fachada--apicorridapy)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
@@ -111,7 +116,8 @@ El historial de cambios vive en git.
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
     - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto)
-    - [12.11 `ejecutar` multi-canasta (v2.0)](#1211-ejecutar-multi-canasta-v20)
+    - [12.11 Salida mensual directa desde `ejecutar_corrida` (v1.x)](#1211-salida-mensual-directa-desde-ejecutar_corrida-v1x)
+    - [12.12 `ejecutar` multi-canasta (v2.0)](#1212-ejecutar-multi-canasta-v20)
 
 ---
 
@@ -466,26 +472,88 @@ class SerieNormalizada:
 
 ---
 
-### 5.3 Periodo
+### 5.3 PeriodoQuincenal y PeriodoMensual
 
-**Representación:** value object en `dominio/periodos.py`. Almacena `año`, `mes` y
-`quincena`. Sortable, hashable, convertible a `pd.Timestamp` para graficación.
+Dos value objects en `dominio/periodos.py`. Ambos son sortables, hashables y convertibles a `pd.Timestamp`. Se usan como claves en el MultiIndex de `ResultadoCalculo`, como columnas de `SerieNormalizada` y como argumentos en funciones de variación.
+
+#### PeriodoQuincenal
+
+Representa un periodo quincenal — formato nativo de publicación del INEGI. Renombrado desde `Periodo` en v1.2.3.
 
 ```python
-class Periodo:
+class PeriodoQuincenal:
     def __init__(self, año: int, mes: int, quincena: int) -> None: ...
+    # quincena ∈ {1, 2}; lanza ValueError si quincena no es 1 ni 2
 
     @classmethod
-    def desde_str(cls, texto: str) -> "Periodo": ...  # "1Q Ene 2018"
+    def desde_str(cls, texto: str) -> "PeriodoQuincenal": ...  # "1Q Ene 2018"
 
-    def to_timestamp(self) -> pd.Timestamp: ...  # 1Q → día 1, 2Q → día 16
+    def to_timestamp(self) -> pd.Timestamp: ...  # 1Q → día 15, 2Q → último día del mes
+
+    @property
+    def es_mensual(self) -> bool: ...  # siempre False
 
     def __str__(self) -> str: ...       # "1Q Ene 2018"
-    def __repr__(self) -> str: ...
+    def __repr__(self) -> str: ...      # "PeriodoQuincenal(2018, 1, 1)"
     def __eq__(self, other) -> bool: ...
     def __hash__(self) -> int: ...
     def __lt__(self, other) -> bool: ...
 ```
+
+Ordering natural: `(año, mes, quincena)`.
+
+#### PeriodoMensual
+
+Representa un periodo mensual. Producido por `a_mensual()` o por la API INEGI (indicador 910392). Nunca es input de `ejecutar_corrida()` ni de `LectorSeriesCsv`.
+
+```python
+class PeriodoMensual:
+    def __init__(self, año: int, mes: int) -> None: ...
+
+    @classmethod
+    def desde_str(cls, texto: str) -> "PeriodoMensual": ...  # "Ene 2018"
+
+    def to_timestamp(self) -> pd.Timestamp: ...  # último día del mes
+
+    @property
+    def es_mensual(self) -> bool: ...  # siempre True
+
+    def __str__(self) -> str: ...       # "Ene 2018"
+    def __repr__(self) -> str: ...      # "PeriodoMensual(2018, 1)"
+    def __eq__(self, other) -> bool: ...
+    def __hash__(self) -> int: ...
+    def __lt__(self, other) -> bool: ...
+```
+
+Ordering natural: `(año, mes)`. Comparación cross-type (`PeriodoQuincenal` vs `PeriodoMensual`) → `NotImplemented` → `TypeError` en runtime. Correcto: un `ResultadoCalculo` nunca mezcla tipos (ver §5.4).
+
+#### Factory `periodo_desde_str`
+
+```python
+def periodo_desde_str(texto: str) -> PeriodoQuincenal | PeriodoMensual:
+    ...
+```
+
+Detecta el formato automáticamente: si el texto comienza con `"[12]Q "` → `PeriodoQuincenal`; de lo contrario → `PeriodoMensual`. Ejemplos:
+
+```python
+periodo_desde_str("1Q Ene 2024")  # → PeriodoQuincenal(2024, 1, 1)
+periodo_desde_str("Ene 2024")     # → PeriodoMensual(2024, 1)
+```
+
+Exportada desde `replica_inpc`. Usada internamente por `variacion_desde` para parsear `desde` y `hasta`.
+
+#### Convención `to_timestamp()`
+
+| Tipo | Regla | Ejemplo |
+| ---- | ----- | ------- |
+| `PeriodoQuincenal(año, mes, 1)` | día 15 del mes | `1Q Ene 2024` → 15 Ene 2024 |
+| `PeriodoQuincenal(año, mes, 2)` | último día del mes | `2Q Ene 2024` → 31 Ene 2024 |
+| `PeriodoMensual(año, mes)` | último día del mes | `Ene 2024` → 31 Ene 2024 |
+
+Regla unificada: "último día del periodo". Que `2Q` y mensual del mismo mes coincidan no es problema — un `ResultadoCalculo` es siempre homogéneo y nunca se grafican juntos.
+
+**Breaking change v1.2.3:** hasta v1.2.2 la convención era `1Q → día 1, 2Q → día 16`.
 
 ---
 
@@ -531,25 +599,28 @@ ccif = combinar([r_2018.resultado, r_2024.resultado], version_canonica=2018)  # 
 
 Ver §11.22 para la decisión de diseño.
 
-**Esquema del DataFrame interno (índice compuesto: `(Periodo, indice)`):**
+**Esquema del DataFrame interno (índice compuesto: `(PeriodoQuincenal | PeriodoMensual, indice)`):**
 
-| Columna              | dtype pandas      | Notas                                          |
-| -------------------- | ----------------- | ---------------------------------------------- |
-| `version`            | `int`             |                                                |
-| `tipo`               | `object` (str)    | `'inpc'` en v1                                 |
-| `indice_replicado`   | `float64` / `NaN` | NaN cuando `estado_calculo != 'ok'`            |
-| `estado_calculo`     | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`    |
-| `motivo_error`       | `object` (str/NaN)| NaN cuando `estado_calculo == 'ok'`            |
+| Columna              | dtype pandas      | Notas                                                              |
+| -------------------- | ----------------- | ------------------------------------------------------------------ |
+| `version`            | `int`             |                                                                    |
+| `tipo`               | `object` (str)    | `'inpc'` en v1                                                     |
+| `indice_replicado`   | `float64` / `NaN` | NaN cuando `estado_calculo` es `'null_por_faltantes'` o `'fallida'`|
+| `estado_calculo`     | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`, `'semi_ok'`           |
+| `motivo_error`       | `object` (str/NaN)| NaN cuando `estado_calculo` es `'ok'` o `'semi_ok'`                |
+
+**Semántica de `'semi_ok'`:** el mes fue calculado con solo una quincena disponible (la otra es NaN). `indice_replicado` tiene valor (el de la quincena disponible); `motivo_error` = NaN. No es un fallo — es una advertencia de calidad. Producido exclusivamente por `a_mensual()` (ver §5.13).
 
 **Invariantes — validados al construir:**
 
-| Invariante              | Regla                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| Versión válida          | `version` in `{2010, 2013, 2018, 2024}`                                            |
-| Al menos una fila       | el DataFrame no está vacío                                                         |
-| `estado_calculo` válido | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                               |
-| Consistencia ok         | si `estado_calculo == 'ok'` → `indice_replicado` no NaN y `motivo_error` NaN       |
-| Consistencia fallo      | si `estado_calculo != 'ok'` → `indice_replicado` NaN y `motivo_error` con valor    |
+| Invariante                | Regla                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Versión válida            | `version` in `{2010, 2013, 2018, 2024}`                                                                      |
+| Al menos una fila         | el DataFrame no está vacío                                                                                   |
+| `estado_calculo` válido   | valores in `{'ok', 'null_por_faltantes', 'fallida', 'semi_ok'}`                                              |
+| Consistencia ok/semi_ok   | si `estado_calculo in {'ok', 'semi_ok'}` → `indice_replicado` no NaN y `motivo_error` NaN                    |
+| Consistencia fallo        | si `estado_calculo in {'null_por_faltantes', 'fallida'}` → `indice_replicado` NaN y `motivo_error` con valor |
+| Homogeneidad de periodos  | todos los periodos del índice son del mismo tipo: todos `PeriodoQuincenal` o todos `PeriodoMensual`          |
 
 ---
 
@@ -1275,30 +1346,45 @@ def variacion_periodica(
 ) -> ResultadoVariacion:
 ```
 
-Para cada `(periodo t, indice)` calcula `I[t] / I[t - lag] - 1`, donde `lag` es:
+Detecta automáticamente si el resultado es quincenal o mensual y aplica el lag correspondiente.
 
-| frecuencia       | lag (quincenas) |
-| ---------------- | --------------- |
-| `quincenal`      | 1               |
-| `mensual`        | 2               |
-| `bimestral`      | 4               |
-| `trimestral`     | 6               |
-| `cuatrimestral`  | 8               |
-| `semestral`      | 12              |
-| `anual`          | 24              |
+**Datos quincenales** — lag en quincenas (`_LAG_QUINCENAL`):
 
-`variacion_periodica(..., "anual")` es equivalente a la inflación interanual.
+| frecuencia      | lag |
+| --------------- | --- |
+| `quincenal`     | 1   |
+| `mensual`       | 2   |
+| `bimestral`     | 4   |
+| `trimestral`    | 6   |
+| `cuatrimestral` | 8   |
+| `semestral`     | 12  |
+| `anual`         | 24  |
 
-Se aplica la regla drop/keep. Los primeros `lag` quincenas de cada índice quedan sin base → DROPeadas.
+**Datos mensuales** — lag en meses (`_LAG_MENSUAL`):
+
+| frecuencia      | lag |
+| --------------- | --- |
+| `mensual`       | 1   |
+| `bimestral`     | 2   |
+| `trimestral`    | 3   |
+| `cuatrimestral` | 4   |
+| `semestral`     | 6   |
+| `anual`         | 12  |
+
+Si `frecuencia = "quincenal"` con datos mensuales → `UserWarning("frecuencia 'quincenal' no aplica a datos mensuales. Se usará 'mensual'.")` y continúa con `"mensual"`.
+
+`variacion_periodica(..., "anual")` es equivalente a la inflación interanual en ambos casos.
+
+Se aplica la regla drop/keep. Los primeros `lag` periodos de cada índice quedan sin base → DROPeados.
 
 Raises `InvarianteViolado` si:
 
 - `resultado.df["tipo"]` no es homogéneo
-- Ningún periodo tiene base disponible (datos insuficientes para la frecuencia solicitada): `"Sin periodos con base para frecuencia '{frecuencia}'. Se requieren ≥{lag} quincenas de datos."`
+- Ningún periodo tiene base disponible: `"Sin periodos con base para frecuencia '{frecuencia}'. Se requieren ≥{lag} periodos de datos."`
 
 `indices_parciales` = `{}` (no aplica).
 
-`descripcion` = valor de `frecuencia`.
+`descripcion` = valor de `frecuencia` (posiblemente corregido a `"mensual"` si hubo warning).
 
 ---
 
@@ -1313,11 +1399,13 @@ def variacion_desde(
 ) -> ResultadoVariacion:
 ```
 
-`desde` y `hasta` son strings en formato `"1Q Mes AAAA"` (ej. `"2Q Ene 2024"`); se parsean internamente con `Periodo.desde_str()`.
+`desde` y `hasta` son strings detectados automáticamente con `periodo_desde_str()`: `"1Q Mes AAAA"` → `PeriodoQuincenal`; `"Mes AAAA"` → `PeriodoMensual`.
 
 Calcula la variación acumulada desde `desde` hasta `hasta`.
 
-`base_periodo = _restar_quincenas(desde_p, 1)` — la quincena anterior a `desde`; es el denominador de todos los cálculos. Así, la variación en el primer periodo del output es `I[desde] / I[base_periodo] - 1`.
+`base_periodo` = periodo inmediato anterior a `desde`: usa `_restar_quincenas(desde_p, 1)` para quincenal o `_restar_meses(desde_p, 1)` para mensual. Es el denominador de todos los cálculos. La variación en el primer periodo del output es `I[desde] / I[base_periodo] - 1`.
+
+Raises `InvarianteViolado` si el tipo de `desde`/`hasta` no coincide con el tipo de periodos del resultado (`"no se pueden mezclar tipos de periodo"`).
 
 `hasta=None` → se usa el último periodo disponible en `resultado`.
 
@@ -1353,8 +1441,12 @@ def variacion_acumulada_anual(
 ) -> ResultadoVariacion:
 ```
 
-Para cada `(periodo t, indice)` calcula `I[t] / I[Periodo(t.año - 1, 12, 2), indice] - 1`.
-La base cambia por año: periodos de 2024 usan `2Q Dic 2023`, periodos de 2023 usan `2Q Dic 2022`, etc.
+Para cada `(periodo t, indice)` calcula `I[t] / I[base_anual(t), indice] - 1`, donde:
+
+- Datos quincenales: `base_anual(t) = PeriodoQuincenal(t.año - 1, 12, 2)` — `2Q Dic` del año anterior.
+- Datos mensuales: `base_anual(t) = PeriodoMensual(t.año - 1, 12)` — `Dic` mensual del año anterior.
+
+La base cambia por año: periodos de 2024 usan Dic 2023 (en su formato correspondiente).
 
 Se aplica la regla drop/keep. El primer año de datos de cada índice queda sin base → DROPeado.
 
@@ -1369,22 +1461,84 @@ Raises `InvarianteViolado` si:
 
 ---
 
-#### Helper privado `_restar_quincenas`
+#### Helpers privados
+
+**`_restar_quincenas(periodo: PeriodoQuincenal, n: int) -> PeriodoQuincenal`**
 
 ```python
-def _restar_quincenas(periodo: Periodo, n: int) -> Periodo:
-    # Convierte a ordinal quincenal, resta n, reconstruye.
+def _restar_quincenas(periodo: PeriodoQuincenal, n: int) -> PeriodoQuincenal:
+    if periodo.es_mensual:
+        raise InvarianteViolado("_restar_quincenas no aplica a PeriodoMensual")
     ordinal = periodo.año * 24 + (periodo.mes - 1) * 2 + (periodo.quincena - 1)
     ordinal -= n
     año = ordinal // 24
     mes = (ordinal % 24) // 2 + 1
     quincena = (ordinal % 24) % 2 + 1
-    return Periodo(año, mes, quincena)
+    return PeriodoQuincenal(año, mes, quincena)
 ```
 
-Usado internamente solo por `variacion_periodica` (cálculo lag-based).
+Usado por `variacion_periodica` (quincenal) y `variacion_desde` (quincenal).
 
-`variacion_desde` y `variacion_acumulada_anual` buscan el periodo base directamente en el índice del df — no usan este helper. Para series mensuales futuras: `_restar_quincenas` necesita adaptación para `variacion_periodica`; `variacion_acumulada_anual` también necesita adaptación independiente en el cómputo de `Periodo(t.año - 1, 12, 2)`; `variacion_desde` no requiere cambios.
+**`_restar_meses(periodo: PeriodoMensual, n: int) -> PeriodoMensual`**
+
+```python
+def _restar_meses(periodo: PeriodoMensual, n: int) -> PeriodoMensual:
+    ordinal = periodo.año * 12 + (periodo.mes - 1)
+    ordinal -= n
+    año = ordinal // 12
+    mes = ordinal % 12 + 1
+    return PeriodoMensual(año, mes)
+```
+
+Usado por `variacion_periodica` (mensual) y `variacion_desde` (mensual).
+
+---
+
+### 5.13 a_mensual — conversión quincenal → mensual
+
+**Archivo:** `dominio/conversion.py`. Exportada desde `replica_inpc`.
+
+```python
+def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
+```
+
+Convierte un `ResultadoCalculo` con periodos quincenales a periodos mensuales mediante promedio simple de las dos quincenas de cada mes.
+
+**Restricción:** `resultado` debe ser quincenal (todos `PeriodoQuincenal`). Si ya es mensual → `InvarianteViolado("a_mensual requiere un ResultadoCalculo quincenal")`.
+
+**Cálculo por `(mes, indice)`:**
+
+Para cada mes `(año, mes)` agrupa las filas `1Q` y `2Q` del mismo índice:
+
+| 1Q | 2Q | `indice_replicado` mensual | `estado_calculo` |
+| --- | --- | --- | --- |
+| valor | valor | `(1Q + 2Q) / 2` | `'ok'` |
+| valor | NaN | valor de 1Q | `'semi_ok'` |
+| NaN | valor | valor de 2Q | `'semi_ok'` |
+| NaN | NaN | NaN | `'null_por_faltantes'` |
+| cualquiera | `'fallida'` | NaN | `'fallida'` |
+
+`motivo_error` = NaN para `'ok'` y `'semi_ok'`; hereda el motivo de la quincena fallida/faltante para los demás casos.
+
+**`version`:** hereda la de la quincena más reciente (`2Q` si existe, `1Q` si no).
+
+**`id_corrida`:** mismo que el resultado fuente.
+
+**Mes frontera (ej. Jul 2024 en resultado combinado 2018+2024):**
+
+El resultado de `combinar([r2018, r2024])` tiene `1Q Jul 2024` con `version=2018` y `2Q Jul 2024` con `version=2024`. `a_mensual` los promedia normalmente → `PeriodoMensual(2024, 7)` con `version=2024` (`'ok'`). Es el comportamiento correcto.
+
+**Workflow recomendado:**
+
+```python
+# Correcto — encadenamiento se resuelve en quincenal:
+resultado_mensual = a_mensual(combinar([r2018.resultado, r2024.resultado]))
+
+# Incorrecto — UserWarning; mes frontera pierde una quincena:
+resultado_mensual = combinar([a_mensual(r2018.resultado), a_mensual(r2024.resultado)])
+```
+
+**Verificación empírica:** el INPC mensual de INEGI (indicador 910392) es el promedio simple de los quincenales. `a_mensual(combinar([r2018, r2024]))` difiere del INEGI mensual oficial en máximo 0.0000046 relativo (tolerancia: 0.0009). Ver §8.6.
 
 ---
 
@@ -1924,8 +2078,29 @@ El token no es validado por la API (cualquier string funciona).
 
 Las observaciones vienen en orden cronológico descendente. `OBS_STATUS` siempre es `"3"` — no se filtra.
 
-**Mapeo `TIME_PERIOD` → `Periodo`:** `"YYYY/MM/QQ"` → `Periodo(int(YYYY), int(MM), int(QQ))`.
-Verificado: `"2018/07/02"` devuelve `100.0` (periodo base canasta 2018).
+**Mapeo `TIME_PERIOD` → periodo:**
+
+| Formato | Partes | Tipo | Construcción |
+| ------- | ------ | ---- | ------------ |
+| `"YYYY/MM/QQ"` | 3 | quincenal | `PeriodoQuincenal(YYYY, MM, QQ)` |
+| `"YYYY/MM"` | 2 | mensual | `PeriodoMensual(YYYY, MM)` |
+
+Verificado: `"2018/07/02"` (quincenal) devuelve `100.0` (base canasta 2018). `"2026/03"` (mensual, indicador 910392) devuelve `145.544`.
+
+**Indicadores disponibles (`INDICADORES_INEGI`):**
+
+```python
+INDICADORES_INEGI: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910420",        # quincenal — TIME_PERIOD: "YYYY/MM/QQ"
+        "INPC mensual": "910392", # mensual   — TIME_PERIOD: "YYYY/MM"
+    },
+    "inflacion componente": { ... },
+    "inflacion subcomponente": { ... },
+}
+```
+
+`_fetch()` detecta el formato de `TIME_PERIOD` por conteo de partes (`split("/")`): 3 partes → `PeriodoQuincenal`, 2 partes → `PeriodoMensual`.
 
 **`OBS_VALUE`:** string con decimales (`"145.44600000000000000000"`). Se convierte con `float()`.
 Si es `null` (JSON `None`), se devuelve `None` para ese periodo sin interrumpir el parseo.
@@ -2786,7 +2961,23 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.11 `ejecutar` multi-canasta (v2.0)
+### 12.11 Salida mensual directa desde `ejecutar_corrida` (v1.x)
+
+**Situación actual:** para obtener resultados mensuales el usuario debe llamar explícitamente `a_mensual(resultado)` después de `ejecutar_corrida`. No existe un parámetro `formato_salida="mensual"` en `Corrida.ejecutar()`.
+
+**Mejora propuesta:** parámetro opcional en `ejecutar()` que devuelva directamente el resultado mensual:
+
+```python
+corrida.ejecutar(..., formato_salida="mensual")  # devuelve ResultadoCalculo mensual
+```
+
+**Por qué no se implementa ahora:** requeriría encadenamiento mensual independiente (calcular `f_k` y `f_h` con datos mensuales), lo que produce resultados que divergen ~0.147 pp en variación mensual respecto al INPC mensual oficial del INEGI. El único camino correcto verificado empíricamente es `a_mensual(resultado_quincenal)` (diferencia máxima relativa: 0.0000046 — ver §5.13).
+
+**Cuándo implementar:** si se obtienen series de precios mensuales independientes del INEGI (no derivadas de quincenales) que permitan un Laspeyres mensual directo con error dentro de tolerancia (< 0.0009).
+
+---
+
+### 12.12 `ejecutar` multi-canasta (v2.0)
 
 **Comportamiento actual:** `Corrida.ejecutar()` opera sobre una sola canasta y una sola serie. Para obtener una serie histórica continua, el usuario debe llamar `ejecutar` múltiples veces y combinar los `ResultadoCalculo` manualmente.
 
