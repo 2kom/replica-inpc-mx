@@ -8,6 +8,9 @@ import pandas as pd
 from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 
+_ESTADOS_VALIDOS = {"ok", "semi_ok", "null_por_faltantes", "fallida"}
+_ESTADOS_CON_VALOR = {"ok", "semi_ok"}
+
 if TYPE_CHECKING:
     from replica_inpc.dominio.tipos import VersionCanasta
 
@@ -22,19 +25,18 @@ class ResultadoCalculo:
         id_corrida: Identificador de la corrida que produjo este resultado.
 
     Raises:
-        InvarianteViolado: Si el DataFrame está vacío, si la `version` contiene
-            valores inválidos, si el índice tiene duplicados, si
-            `estado_calculo` usa valores fuera del catálogo permitido, si
-            `indice_replicado` es nulo cuando `estado_calculo == "ok"` o si
-            `indice_replicado` no es nulo o `motivo_error` es nulo cuando
-            `estado_calculo != "ok"`.
+        InvarianteViolado: Si el DataFrame está vacío, si los periodos del índice
+            no son todos del mismo tipo (`PeriodoQuincenal` o `PeriodoMensual`),
+            si `version` contiene valores inválidos, si el índice tiene duplicados,
+            si `estado_calculo` usa valores fuera del catálogo permitido, o si
+            `indice_replicado`/`motivo_error` violan las reglas de consistencia.
 
     Esquema del DataFrame interno (índice: `periodo`, `indice`):
         version (int): versión de la canasta usada en el cálculo.
         tipo (str): tipo lógico del cálculo; en v1, `"inpc"`.
-        indice_replicado (float/NaN): valor calculado del índice.
-        estado_calculo (str): `ok`, `null_por_faltantes` o `fallida`.
-        motivo_error (str/NaN): motivo del fallo cuando `estado_calculo != "ok"`.
+        indice_replicado (float/NaN): valor calculado; NaN cuando estado != ok/semi_ok.
+        estado_calculo (str): `ok`, `semi_ok`, `null_por_faltantes` o `fallida`.
+        motivo_error (str/NaN): motivo del fallo cuando `estado_calculo` no es `ok` ni `semi_ok`.
 
     Example:
         DataFrame interno (`df`):
@@ -55,27 +57,36 @@ class ResultadoCalculo:
 
         if df.empty:
             raise InvarianteViolado("El DataFrame de resultados no puede estar vacío.")
+
+        tipos_periodo = {type(p) for p in df.index.get_level_values("periodo")}
+        if len(tipos_periodo) > 1:
+            raise InvarianteViolado(
+                "Todos los periodos del resultado deben ser del mismo tipo "
+                "(todos PeriodoQuincenal o todos PeriodoMensual)."
+            )
+
         if not df["version"].isin({2010, 2013, 2018, 2024}).all():
             raise InvarianteViolado("version contiene valores inválidos.")
         if df.index.duplicated().any():
             raise InvarianteViolado("El DataFrame de resultados no puede tener índices duplicados.")
-        if not df["estado_calculo"].isin({"ok", "null_por_faltantes", "fallida"}).all():
+
+        if not df["estado_calculo"].isin(_ESTADOS_VALIDOS).all():
             raise InvarianteViolado("estado_calculo contiene valores invalidos.")
 
-        filas_ok = df["estado_calculo"] == "ok"
-        if df.loc[filas_ok, "indice_replicado"].isnull().any():
+        filas_con_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
+        if df.loc[filas_con_valor, "indice_replicado"].isnull().any():
             raise InvarianteViolado(
-                "indice_replicado no puede ser null cuando estado_calculo es 'ok'."
+                "indice_replicado no puede ser null cuando estado_calculo es 'ok' o 'semi_ok'."
             )
 
-        filas_fallo = df["estado_calculo"] != "ok"
-        if df.loc[filas_fallo, "indice_replicado"].notnull().any():
+        filas_sin_valor = ~filas_con_valor
+        if df.loc[filas_sin_valor, "indice_replicado"].notnull().any():
             raise InvarianteViolado(
-                "indice_replicado debe ser null cuando estado_calculo no es 'ok'."
+                "indice_replicado debe ser null cuando estado_calculo no es 'ok' ni 'semi_ok'."
             )
-        if df.loc[filas_fallo, "motivo_error"].isnull().any():
+        if df.loc[filas_sin_valor, "motivo_error"].isnull().any():
             raise InvarianteViolado(
-                "motivo_error no puede ser null cuando estado_calculo no es 'ok'."
+                "motivo_error no puede ser null cuando estado_calculo no es 'ok' ni 'semi_ok'."
             )
 
         self._df = df
