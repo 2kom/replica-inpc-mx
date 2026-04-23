@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-import warnings
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -172,12 +171,10 @@ def combinar(
 
     primer_periodo = resultados[0].df.index.get_level_values("periodo")[0]
     if not hasattr(primer_periodo, "quincena"):
-        warnings.warn(
-            "combinar recibio ResultadoCalculo mensuales. "
+        print(
+            "[replica_inpc] Advertencia: combinar recibio ResultadoCalculo mensuales. "
             "El mes frontera puede perder una quincena. "
-            "Usa a_mensual(combinar([r1, r2])) en su lugar.",
-            UserWarning,
-            stacklevel=2,
+            "Usa a_mensual(combinar([r1, r2])) en su lugar."
         )
 
     ordenados = sorted(

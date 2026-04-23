@@ -221,8 +221,8 @@ def test_combinar_tres_corridas():
     assert resultado.df.loc[(p3, "INPC"), "version"] == 2024  # type: ignore[index]
 
 
-def test_combinar_mensual_emite_warning():
+def test_combinar_mensual_imprime_advertencia(capsys):
     r1 = a_mensual(_resultado([p1, p2], 2018))
     r2 = a_mensual(_resultado([p3, p4], 2024))
-    with pytest.warns(UserWarning, match="mensuales"):
-        combinar([r1, r2])
+    combinar([r1, r2])
+    assert "mensuales" in capsys.readouterr().out
