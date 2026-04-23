@@ -1,5 +1,5 @@
-import pytest
 import pandas as pd
+import pytest
 
 from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.errores import InvarianteViolado
@@ -12,17 +12,23 @@ _Q3 = PeriodoQuincenal(2024, 2, 1)
 _Q4 = PeriodoQuincenal(2024, 2, 2)
 
 
-def _resultado(*periodos_estados: tuple, version: int = 2024, id_corrida: str = "abc") -> ResultadoCalculo:
+def _resultado(
+    *periodos_estados: tuple, version: int = 2024, id_corrida: str = "abc"
+) -> ResultadoCalculo:
     """Crea un ResultadoCalculo quincenal. periodos_estados = (periodo, estado, valor, motivo)."""
     filas = []
     for periodo, estado, valor, motivo in periodos_estados:
-        filas.append({
-            "periodo": periodo, "indice": "INPC",
-            "version": version, "tipo": "inpc",
-            "indice_replicado": valor,
-            "estado_calculo": estado,
-            "motivo_error": motivo,
-        })
+        filas.append(
+            {
+                "periodo": periodo,
+                "indice": "INPC",
+                "version": version,
+                "tipo": "inpc",
+                "indice_replicado": valor,
+                "estado_calculo": estado,
+                "motivo_error": motivo,
+            }
+        )
     df = pd.DataFrame(filas)
     df.index = pd.MultiIndex.from_arrays(
         [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
@@ -38,18 +44,12 @@ def test_ambas_quincenas_ok():
     assert isinstance(rm.df.index.get_level_values("periodo")[0], PeriodoMensual)
 
 
-def test_solo_1q_semi_ok():
-    r = _resultado((_Q1, "ok", 100.0, None))
+@pytest.mark.parametrize("periodo,valor", [(_Q1, 100.0), (_Q2, 102.0)])
+def test_semi_ok_quincena_unica(periodo, valor):
+    r = _resultado((periodo, "ok", valor, None))
     rm = a_mensual(r)
     assert rm.df["estado_calculo"].iloc[0] == "semi_ok"
-    assert rm.df["indice_replicado"].iloc[0] == pytest.approx(100.0)
-
-
-def test_solo_2q_semi_ok():
-    r = _resultado((_Q2, "ok", 102.0, None))
-    rm = a_mensual(r)
-    assert rm.df["estado_calculo"].iloc[0] == "semi_ok"
-    assert rm.df["indice_replicado"].iloc[0] == pytest.approx(102.0)
+    assert rm.df["indice_replicado"].iloc[0] == pytest.approx(valor)
 
 
 def test_ambas_nan_null_por_faltantes():
@@ -108,8 +108,13 @@ def test_input_mensual_invalido():
         [(PeriodoMensual(2024, 1), "INPC")], names=["periodo", "indice"]
     )
     df = pd.DataFrame(
-        {"version": 2024, "tipo": "inpc", "indice_replicado": 100.0,
-         "estado_calculo": "ok", "motivo_error": None},
+        {
+            "version": 2024,
+            "tipo": "inpc",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
         index=idx,
     )
     r = ResultadoCalculo(df, "abc")

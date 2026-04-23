@@ -9,7 +9,12 @@ _pq = PeriodoQuincenal(2024, 7, 2)
 _pm = PeriodoMensual(2024, 7)
 
 
-def _df_base(periodo, estado: str = "ok", indice_replicado: float | None = 100.0, motivo_error: str | None = None):
+def _df_base(
+    periodo,
+    estado: str = "ok",
+    indice_replicado: float | None = 100.0,
+    motivo_error: str | None = None,
+):
     idx = pd.MultiIndex.from_tuples([(periodo, "INPC")], names=["periodo", "indice"])
     return pd.DataFrame(
         {
@@ -23,13 +28,9 @@ def _df_base(periodo, estado: str = "ok", indice_replicado: float | None = 100.0
     )
 
 
-def test_construccion_quincenal_valida():
-    r = ResultadoCalculo(_df_base(_pq), "abc")
-    assert r.id_corrida == "abc"
-
-
-def test_construccion_mensual_valida():
-    r = ResultadoCalculo(_df_base(_pm), "abc")
+@pytest.mark.parametrize("periodo", [_pq, _pm])
+def test_construccion_valida(periodo):
+    r = ResultadoCalculo(_df_base(periodo), "abc")
     assert r.id_corrida == "abc"
 
 
@@ -46,9 +47,7 @@ def test_semi_ok_sin_valor_invalido():
 
 
 def test_tipo_homogeneo_mezcla_invalida():
-    idx = pd.MultiIndex.from_tuples(
-        [(_pq, "INPC"), (_pm, "INPC")], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(_pq, "INPC"), (_pm, "INPC")], names=["periodo", "indice"])
     df = pd.DataFrame(
         {
             "version": 2024,

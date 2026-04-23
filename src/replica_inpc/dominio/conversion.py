@@ -37,31 +37,32 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     df_work["_indice"] = df.index.get_level_values("indice")
 
     filas: list[dict] = []
-    for (año, mes, indice), grupo in df_work.groupby(
-        ["_año", "_mes", "_indice"], sort=False
-    ):
+    for (año, mes, indice), grupo in df_work.groupby(["_año", "_mes", "_indice"], sort=False):
         q_rows = {int(row["_quincena"]): row for _, row in grupo.iterrows()}
         q1 = q_rows.get(1)
         q2 = q_rows.get(2)
 
         ref = q2 if q2 is not None else q1
-        version = ref["version"]
-        tipo = ref["tipo"]
-        periodo_mensual = PeriodoMensual(int(año), int(mes))
+        assert ref is not None  # groupby siempre produce al menos un row por grupo
+        base = {
+            "periodo": PeriodoMensual(int(año), int(mes)),  # type: ignore[arg-type]
+            "indice": indice,
+            "version": ref["version"],
+            "tipo": ref["tipo"],
+        }
 
         if any(row["estado_calculo"] == "fallida" for row in q_rows.values()):
             motivo = next(
-                row["motivo_error"]
-                for row in q_rows.values()
-                if row["estado_calculo"] == "fallida"
+                row["motivo_error"] for row in q_rows.values() if row["estado_calculo"] == "fallida"
             )
-            filas.append({
-                "periodo": periodo_mensual, "indice": indice,
-                "version": version, "tipo": tipo,
-                "indice_replicado": None,
-                "estado_calculo": "fallida",
-                "motivo_error": motivo,
-            })
+            filas.append(
+                {
+                    **base,
+                    "indice_replicado": None,
+                    "estado_calculo": "fallida",
+                    "motivo_error": motivo,
+                }
+            )
             continue
 
         v1 = q1["indice_replicado"] if q1 is not None else None
@@ -70,29 +71,33 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
         v2_ok = v2 is not None and pd.notna(v2)
 
         if v1_ok and v2_ok:
-            filas.append({
-                "periodo": periodo_mensual, "indice": indice,
-                "version": version, "tipo": tipo,
-                "indice_replicado": (v1 + v2) / 2,
-                "estado_calculo": "ok",
-                "motivo_error": None,
-            })
+            assert v1 is not None and v2 is not None
+            filas.append(
+                {
+                    **base,
+                    "indice_replicado": (v1 + v2) / 2,
+                    "estado_calculo": "ok",
+                    "motivo_error": None,
+                }
+            )
         elif v1_ok or v2_ok:
-            filas.append({
-                "periodo": periodo_mensual, "indice": indice,
-                "version": version, "tipo": tipo,
-                "indice_replicado": v1 if v1_ok else v2,
-                "estado_calculo": "semi_ok",
-                "motivo_error": None,
-            })
+            filas.append(
+                {
+                    **base,
+                    "indice_replicado": v1 if v1_ok else v2,
+                    "estado_calculo": "semi_ok",
+                    "motivo_error": None,
+                }
+            )
         else:
-            filas.append({
-                "periodo": periodo_mensual, "indice": indice,
-                "version": version, "tipo": tipo,
-                "indice_replicado": None,
-                "estado_calculo": "null_por_faltantes",
-                "motivo_error": ref["motivo_error"],
-            })
+            filas.append(
+                {
+                    **base,
+                    "indice_replicado": None,
+                    "estado_calculo": "null_por_faltantes",
+                    "motivo_error": ref["motivo_error"],
+                }
+            )
 
     df_result = pd.DataFrame(filas)
     df_result.index = pd.MultiIndex.from_arrays(

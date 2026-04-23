@@ -14,21 +14,32 @@ def test_construccion_valida():
 
 
 def test_quincena_invalida():
-    # test de construccion con quincena invalida
     with pytest.raises(ValueError):
         PeriodoQuincenal(2018, 1, 3)
 
 
-def test_mes_invalido():
-    # test de construccion con mes invalido
+@pytest.mark.parametrize(
+    "cls,args",
+    [
+        (PeriodoQuincenal, (2018, 13, 1)),
+        (PeriodoMensual, (2024, 13)),
+    ],
+)
+def test_mes_invalido(cls, args):
     with pytest.raises(ValueError):
-        PeriodoQuincenal(2018, 13, 1)
+        cls(*args)
 
 
-def test_año_invalido():
-    # test de construccion con año invalido
+@pytest.mark.parametrize(
+    "cls,args",
+    [
+        (PeriodoQuincenal, (-2018, 1, 1)),
+        (PeriodoMensual, (-1, 1)),
+    ],
+)
+def test_año_invalido(cls, args):
     with pytest.raises(ValueError):
-        PeriodoQuincenal(-2018, 1, 1)
+        cls(*args)
 
 
 def test_desde_str_valido():
@@ -39,10 +50,16 @@ def test_desde_str_valido():
     assert p.quincena == 1
 
 
-def test_str_invalido():
-    # test de construccion desde string con formato invalido
+@pytest.mark.parametrize(
+    "fn",
+    [
+        lambda: PeriodoQuincenal.desde_str("formato incorrecto"),
+        lambda: PeriodoMensual.desde_str("formato incorrecto x"),
+    ],
+)
+def test_desde_str_invalido(fn):
     with pytest.raises(PeriodoNoInterpretable):
-        PeriodoQuincenal.desde_str("formato incorrecto")
+        fn()
 
 
 def test_orden():
@@ -77,16 +94,6 @@ def test_mensual_construccion_valida():
     p = PeriodoMensual(2024, 7)
     assert p.año == 2024
     assert p.mes == 7
-
-
-def test_mensual_mes_invalido():
-    with pytest.raises(ValueError):
-        PeriodoMensual(2024, 13)
-
-
-def test_mensual_año_invalido():
-    with pytest.raises(ValueError):
-        PeriodoMensual(-1, 1)
 
 
 def test_mensual_str():
@@ -130,11 +137,6 @@ def test_mensual_desde_str():
     p = PeriodoMensual.desde_str("Jul 2024")
     assert p.año == 2024
     assert p.mes == 7
-
-
-def test_mensual_desde_str_invalido():
-    with pytest.raises(PeriodoNoInterpretable):
-        PeriodoMensual.desde_str("formato incorrecto")
 
 
 # --- periodo_desde_str ---
