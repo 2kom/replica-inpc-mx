@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -249,7 +251,7 @@ def validar(
 
 def validar_mensual(
     resultado: ResultadoCalculo,
-    inegi: dict[str, dict[PeriodoMensual, float | None]],
+    inegi: Mapping[str, Mapping[PeriodoMensual, float | None]],
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
     """Valida un ResultadoCalculo mensual contra índices mensuales del INEGI.
 

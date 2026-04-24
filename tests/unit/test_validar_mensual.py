@@ -50,17 +50,17 @@ class TestBasico:
     def test_estado_ok_dentro_tolerancia(self):
         r = _resultado([_PM1], ["ok"])
         _, reporte, _ = validar_mensual(r, _inegi([_PM1], [103.5]))
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
 
     def test_estado_ok_fuera_tolerancia(self):
         r = _resultado([_PM1], ["ok"])
         _, reporte, _ = validar_mensual(r, _inegi([_PM1], [104.0]))
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "diferencia_detectada"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "diferencia_detectada"  # type: ignore[index]
 
     def test_inegi_vacio_no_disponible(self):
         r = _resultado([_PM1], ["ok"])
         _, reporte, _ = validar_mensual(r, {})
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "no_disponible"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "no_disponible"  # type: ignore[index]
 
     def test_diagnostico_siempre_vacio(self):
         r = _resultado([_PM1, _PM2], ["ok", "ok"])
@@ -72,17 +72,17 @@ class TestSemiOk:
     def test_semi_ok_se_valida_igual_que_ok(self):
         r = _resultado([_PM1], ["semi_ok"])
         _, reporte, _ = validar_mensual(r, _inegi([_PM1], [103.5]))
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
 
     def test_semi_ok_fuera_tolerancia(self):
         r = _resultado([_PM1], ["semi_ok"])
         _, reporte, _ = validar_mensual(r, _inegi([_PM1], [104.5]))
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "diferencia_detectada"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "diferencia_detectada"  # type: ignore[index]
 
     def test_null_por_faltantes_no_se_valida(self):
         r = _resultado([_PM1], ["null_por_faltantes"])
         _, reporte, _ = validar_mensual(r, _inegi([_PM1], [103.5]))
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "no_disponible"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "no_disponible"  # type: ignore[index]
 
 
 class TestVersionCombinada:
@@ -106,8 +106,8 @@ class TestVersionCombinada:
         )
         inegi = {"INPC": {_PM1: 103.5008, _PM3: 148.0008}}
         _, reporte, _ = validar_mensual(r, inegi)
-        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"
-        assert reporte.df.loc[(_PM3, "INPC"), "estado_validacion"] == "ok"
+        assert reporte.df.loc[(_PM1, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
+        assert reporte.df.loc[(_PM3, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
 
 
 class TestResumen:
@@ -136,8 +136,8 @@ class TestResumen:
     def test_cobertura_nan_en_reporte(self):
         r = _resultado([_PM1], ["ok"])
         _, reporte, _ = validar_mensual(r, {})
-        assert pd.isna(reporte.df.loc[(_PM1, "INPC"), "cobertura_genericos_pct"])
-        assert pd.isna(reporte.df.loc[(_PM1, "INPC"), "total_genericos_esperados"])
+        assert pd.isna(reporte.df.loc[(_PM1, "INPC"), "cobertura_genericos_pct"])  # type: ignore[index]
+        assert pd.isna(reporte.df.loc[(_PM1, "INPC"), "total_genericos_esperados"])  # type: ignore[index]
 
     def test_id_corrida_en_resumen(self):
         r = _resultado([_PM1], ["ok"])

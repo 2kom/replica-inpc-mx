@@ -54,6 +54,7 @@ El historial de cambios vive en git.
       - [Helpers privados](#helpers-privados)
     - [5.13 a\_mensual — conversión quincenal → mensual](#513-a_mensual--conversión-quincenal--mensual)
   - [6. Fachada — api/corrida.py](#6-fachada--apicorridapy)
+  - [6.2 Fachada de validación — api/validacion.py](#62-fachada-de-validación--apivalidacionpy)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
       - [7.1.1 LectorCanasta](#711-lectorcanasta)
@@ -121,6 +122,7 @@ El historial de cambios vive en git.
     - [12.11 Salida mensual directa desde `ejecutar_corrida` (v1.x)](#1211-salida-mensual-directa-desde-ejecutar_corrida-v1x)
     - [12.12 `ejecutar` multi-canasta (v2.0)](#1212-ejecutar-multi-canasta-v20)
     - [12.13 Validación de variaciones contra series INEGI (v1.2.4)](#1213-validación-de-variaciones-contra-series-inegi-v124)
+    - [12.14 Rediseño de API de validación: `ResultadoCalculo`, `ResultadoValidacion` y wrappers con token (v2.0)](#1214-rediseño-de-api-de-validación-resultadocalculo-resultadovalidacion-y-wrappers-con-token-v20)
 
 ---
 
@@ -645,9 +647,9 @@ class ResumenValidacion:
 
 **Esquema del DataFrame (índice: `id_corrida`):**
 
-| Columna                      | dtype pandas         | Notas                                                                                                                        |
-| ---------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `version`                    | `int` o `str`        | `int` para corrida simple; `str` tipo `"2018+2024"` para resultado combinado (`validar_mensual` sobre `combinar`)            |
+| Columna                      | dtype pandas    | Notas                                                                                                                             |
+| ---------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                    | `int` o `str`   | `int` para corrida simple; `str` tipo `"2018+2024"` para resultado combinado (`validar_mensual` sobre `combinar`)                 |
 | `tipo`                       | `object` (str)  |                                                                                                                                   |
 | `periodo_inicio`             | `Periodo`       | primer periodo calculado                                                                                                          |
 | `periodo_fin`                | `Periodo`       | último periodo calculado                                                                                                          |
@@ -663,15 +665,15 @@ class ResumenValidacion:
 
 **Invariantes — validados al construir:**
 
-| Invariante                        | Regla                                                                                       |
-| --------------------------------- | ------------------------------------------------------------------------------------------- |
-| Al menos una fila                 | el DataFrame no está vacío                                                                  |
+| Invariante                        | Regla                                                                                                                               |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Al menos una fila                 | el DataFrame no está vacío                                                                                                          |
 | Versión válida                    | cada `version`: `int in {2010, 2013, 2018, 2024}` ó `str` donde cada componente `+`-separado sea versión válida (ej. `"2018+2024"`) |
-| `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                                                |
-| `estado_validacion_global` válido | cuando presente: valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}` |
-| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                                   |
-| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`                                    |
-| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                                                           |
+| `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                                                                                        |
+| `estado_validacion_global` válido | cuando presente: valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}`                                         |
+| Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                                                                           |
+| Periodos null                     | `total_periodos_con_null` <= `total_periodos_calculados`                                                                            |
+| Rango de periodos                 | `periodo_inicio` <= `periodo_fin`                                                                                                   |
 
 ---
 
@@ -1678,6 +1680,90 @@ Clase interna. Se usa cuando `token_inegi=None`. Lanza `FuenteNoDisponible` en
 | `ErrorConfiguracion` | `tipo` no válido, o `persistir=True` con configuración incompleta |
 | `ErrorImportacion` | Archivo no encontrado, vacío, corrupto o mal formado |
 | `ErrorCalculo` | Correspondencia insuficiente o ponderador faltante |
+
+---
+
+## 6.2 Fachada de validación — api/validacion.py
+
+Funciones públicas de validación independientes de `Corrida`. Viven en `api/validacion.py`
+y se exportan desde `replica_inpc`. Usan `FuenteValidacionApi` internamente — el usuario
+solo pasa el `ResultadoCalculo` y el token.
+
+```python
+def validar_mensual(
+    resultado: ResultadoCalculo,
+    token: str,
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]: ...
+
+def validar_quincenal(
+    resultado: ResultadoCalculo,
+    token: str,
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]: ...
+```
+
+**`validar_mensual`:**
+
+1. Si `resultado` es quincenal (índice contiene `PeriodoQuincenal`) → llama `a_mensual(resultado)` internamente.
+2. Detecta `tipo` desde `resultado.df["tipo"].iloc[0]`.
+3. Obtiene periodos del índice del resultado mensual.
+4. Construye `FuenteValidacionApi(token, tipo)` y llama `.obtener(periodos)`.
+5. Delega a `validar_mensual` del dominio (`dominio/validar_inpc.py`).
+6. Retorna la tupla resultante.
+
+**`validar_quincenal`:**
+
+1. Si `resultado` es mensual (índice contiene `PeriodoMensual`) → lanza `ErrorConfiguracion`.
+2. Detecta `tipo` desde `resultado.df["tipo"].iloc[0]`.
+3. Obtiene periodos del índice quincenal.
+4. Construye `FuenteValidacionApi(token, tipo)` y llama `.obtener(periodos)`.
+5. Delega a `validar` del dominio (`dominio/validar_inpc.py`), pasando `canasta` y `serie` como `None` — **pendiente:** actualmente `validar` requiere `canasta` y `serie`; ver nota abajo.
+6. Retorna la tupla resultante.
+
+> **Nota `validar_quincenal`:** la función de dominio `validar()` actualmente requiere
+> `CanastaCanonica` y `SerieNormalizada` para calcular cobertura de genéricos y ponderadores.
+> `validar_quincenal` en la capa api no tiene acceso a esos objetos. Dos opciones:
+>
+> a) Pasar `canasta` y `serie` como parámetros opcionales de `validar_quincenal` (más completo).
+> b) Extraer la lógica de validación pura (sin cobertura) a una función separada del dominio, análoga a `validar_mensual` que ya opera sin canasta/serie.
+>
+> **Decisión adoptada:** opción (b) — `validar_quincenal` en la capa api delega a una nueva
+> función `validar_quincenal_resultado` en el dominio que, al igual que `validar_mensual`,
+> no requiere canasta ni serie y deja las columnas de cobertura en `NaN`.
+> La función existente `validar()` se mantiene intacta para el pipeline interno de `EjecutarCorrida`.
+
+**Uso típico en notebook:**
+
+```python
+from replica_inpc import combinar, a_mensual, validar_mensual, validar_quincenal
+
+# mensual — acepta quincenal o mensual directamente
+resumen, reporte, _ = validar_mensual(
+    combinar([inpc_2018.resultado, inpc_2024.resultado]),
+    token=TOKEN,
+)
+
+# quincenal
+resumen_q, reporte_q, diag_q = validar_quincenal(
+    combinar([inpc_2018.resultado, inpc_2024.resultado]),
+    token=TOKEN,
+)
+```
+
+**Errores que pueden lanzar:**
+
+| Error | Causa |
+| --- | --- |
+| `ErrorConfiguracion` | `tipo` no tiene indicador INEGI disponible, o `validar_quincenal` recibe resultado mensual |
+| `ErrorConexion` | Fallo de red al consultar la API del INEGI |
+
+**Exportaciones desde `replica_inpc`:**
+
+```python
+from replica_inpc import validar_mensual, validar_quincenal
+```
+
+> **v2.0:** estas funciones retornarán `ResultadoValidacion` en lugar de la tupla actual.
+> Ver gap §12.14.
 
 ---
 
@@ -3086,3 +3172,68 @@ Total: 7 índices × 4 tipos de variación × 2 frecuencias = 56 indicadores.
 **Nueva sección §8.7** en `docs/diseño.md` con los mapeos completos de indicadores.
 
 **Por qué no se implementa ahora:** requiere verificación empírica de que las variaciones calculadas internamente (`variacion_periodica`, etc.) coinciden con las series publicadas por el INEGI dentro de la tolerancia de 3 decimales, antes de definir los mapeos.
+
+---
+
+### 12.14 Rediseño de API de validación: `ResultadoCalculo`, `ResultadoValidacion` y wrappers con token (v2.0)
+
+**Situación actual:** `ResultadoCorrida` mezcla información de cálculo (siempre disponible, sin red) con información de validación (requiere API INEGI, opcional). Las funciones de dominio `validar` y `validar_mensual` requieren que el usuario construya manualmente `FuenteValidacionApi` y llame a `.obtener()` antes de poder validar.
+
+**Problema:** hay tipos de índice que INEGI no publica (subíndices CCIF de mayor granularidad), por lo que la validación no siempre es posible. Además, mezclar calculo y validación en un solo objeto dificulta los casos de uso donde solo se quiere calcular sin validar.
+
+**Mejora propuesta — dos clases:**
+
+``` text
+ResultadoCalculo:
+  manifiesto      # ManifestCorrida — metadatos de la corrida
+  resultado (df)  # índices calculados, estado_calculo, motivo_error
+  reporte         # cobertura de genéricos y ponderadores (sin columnas INEGI)
+  diagnostico     # DiagnosticoFaltantes — genéricos ausentes en series CSV
+  resumen         # estado_corrida, total_nulls, periodo_inicio/fin, version
+
+ResultadoValidacion:
+  calculo         # referencia al ResultadoCalculo validado
+  reporte         # extiende el reporte de calculo con: indice_inegi,
+                  #   error_absoluto, error_relativo, estado_validacion
+  diagnostico     # DiagnosticoValidacion — periodos que no pudieron verificarse
+                  #   porque INEGI no publicó datos para esas fechas
+                  #   (ej: inflación quincenal interanual disponible solo desde 1Q Ago 2024)
+  resumen         # estado_validacion_global, total_diferencias_detectadas,
+                  #   total_no_disponibles
+```
+
+**`DiagnosticoValidacion`** es distinto a `DiagnosticoFaltantes`: no captura genéricos ausentes en series, sino **cobertura temporal de la API INEGI** — qué periodos del resultado calculado no pudieron verificarse y por qué (fuera del rango histórico publicado, indicador no disponible para ese tipo, etc.).
+
+**Mejora propuesta — wrappers públicos con token (implementar antes de v2.0):**
+
+```python
+# Valida índices mensuales (INPC, subyacente, no subyacente, etc.)
+# Si resultado es quincenal, llama a_mensual() internamente.
+validar_mensual(resultado: ResultadoCalculo, token: str) -> ResultadoValidacion
+
+# Valida índices quincenales. Lanza error si resultado es mensual.
+validar_quincenal(resultado: ResultadoCalculo, token: str) -> ResultadoValidacion
+```
+
+Ambas funciones:
+
+- Detectan `tipo` desde `resultado.df["tipo"]`
+- Construyen `FuenteValidacionApi(token, tipo)` internamente
+- Obtienen periodos del resultado y llaman `.obtener()`
+- Delegan a la función de dominio correspondiente
+- Retornan `ResultadoValidacion` (v2.0) o la tupla actual (antes de v2.0)
+
+**Flujo objetivo en notebook:**
+
+```python
+calculo = combinar([inpc_2018.resultado, inpc_2024.resultado])
+validacion = validar_mensual(calculo, TOKEN)
+
+validacion.resumen.df
+validacion.reporte.df
+validacion.diagnostico.df   # periodos no verificados por ausencia en API
+```
+
+**Por qué parte es v2.0:** `ResultadoCalculo` y `ResultadoValidacion` como clases nuevas rompen la API pública actual (`ResultadoCorrida`). Los wrappers `validar_mensual` y `validar_quincenal` con token se implementan antes en la capa `api/` retornando la tupla actual, y se migran a `ResultadoValidacion` en v2.0.
+
+**Cuándo implementar wrappers:** v1.2.3 / v1.2.4. **Cuándo implementar clases nuevas:** v2.0, junto con gap 12.12 (multi-canasta).
