@@ -36,7 +36,7 @@ def validar_mensual(
     periodos_lista = list(resultado.df.index.get_level_values("periodo").unique())
     fuente = FuenteValidacionApi(token=token, tipo=tipo)
     inegi = fuente.obtener(periodos_lista)
-    return _validar_mensual(resultado, inegi)
+    return _validar_mensual(resultado, inegi)  # type: ignore[arg-type]
 
 
 def validar_quincenal(
@@ -59,4 +59,4 @@ def validar_quincenal(
     periodos_lista = list(resultado.df.index.get_level_values("periodo").unique())
     fuente = FuenteValidacionApi(token=token, tipo=tipo)
     inegi = fuente.obtener(periodos_lista)
-    return _validar_quincenal_resultado(resultado, inegi)
+    return _validar_quincenal_resultado(resultado, inegi)  # type: ignore[arg-type]

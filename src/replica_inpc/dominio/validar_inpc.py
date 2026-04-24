@@ -400,7 +400,7 @@ def validar_mensual(
     No requiere canasta ni serie — columnas de cobertura quedan en NaN.
     DiagnosticoFaltantes siempre vacío. Ver docs/diseño.md §5.11.
     """
-    return _validar_sin_canasta(resultado, inegi)
+    return _validar_sin_canasta(resultado, inegi)  # type: ignore[arg-type]
 
 
 def validar_quincenal_resultado(
@@ -412,4 +412,4 @@ def validar_quincenal_resultado(
     Columnas de cobertura quedan en NaN. DiagnosticoFaltantes siempre vacío.
     Ver docs/diseño.md §6.2.
     """
-    return _validar_sin_canasta(resultado, inegi)
+    return _validar_sin_canasta(resultado, inegi)  # type: ignore[arg-type]
