@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -37,9 +38,7 @@ def _rellenar_faltantes(
     serie: SerieNormalizada,
 ) -> tuple[SerieNormalizada, dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal]]:
     periodos: list[PeriodoQuincenal] = sorted(
-        c
-        for c in serie.df.columns
-        if isinstance(c, PeriodoQuincenal)  # type: ignore[misc]
+        cast(PeriodoQuincenal, c) for c in serie.df.columns if isinstance(c, PeriodoQuincenal)
     )
     df_original = serie.df[periodos]
     df_relleno = df_original.bfill(axis=1).ffill(axis=1)
