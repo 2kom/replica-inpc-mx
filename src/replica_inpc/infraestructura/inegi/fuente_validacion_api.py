@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import requests
+import requests  # type: ignore
 
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
     FuenteNoDisponible,
     RespuestaInvalida,
 )
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
-INDICADORES_INEGI: dict[str, dict[str, str]] = {
+_INDICADORES_QUINCENALES: dict[str, dict[str, str]] = {
     "inpc": {
         "INPC": "910420",
     },
@@ -25,10 +25,28 @@ INDICADORES_INEGI: dict[str, dict[str, str]] = {
     },
 }
 
+_INDICADORES_MENSUALES: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910392",
+    },
+    "inflacion componente": {
+        "subyacente": "910393",
+        "no subyacente": "910396",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910394",
+        "servicios": "910395",
+        "agropecuarios": "910397",
+        "energeticos y tarifas autorizadas por el gobierno": "910398",
+    },
+}
+
 _URL = (
     "https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml"
     "/INDICATOR/{indicador}/es/00/false/BIE-BISE/2.0/{token}?type=json"
 )
+
+_Periodo = PeriodoQuincenal | PeriodoMensual
 
 
 class FuenteValidacionApi:
@@ -37,34 +55,45 @@ class FuenteValidacionApi:
     Ver: docs/diseño.md §8.6
     """
 
-    _cache: dict[str, dict[PeriodoQuincenal, float | None]] = {}
+    _cache: dict[str, dict[_Periodo, float | None]] = {}
 
     def __init__(self, token: str, tipo: str) -> None:
-        if tipo not in INDICADORES_INEGI:
+        if tipo not in _INDICADORES_QUINCENALES:
             raise ErrorConfiguracion(
                 f"tipo '{tipo}' no tiene indicador INEGI disponible. "
-                f"Tipos soportados: {list(INDICADORES_INEGI)}"
+                f"Tipos soportados: {list(_INDICADORES_QUINCENALES)}"
             )
         self._token = token
-        self._indicadores = INDICADORES_INEGI[tipo]
+        self._tipo = tipo
 
-    def obtener(
-        self, periodos: list[PeriodoQuincenal]
-    ) -> dict[str, dict[PeriodoQuincenal, float | None]]:
+    def obtener(self, periodos: list[_Periodo]) -> dict[str, dict[_Periodo, float | None]]:
         """Devuelve el valor publicado por el INEGI por índice y por periodo.
 
-        Usa cache de clase — la primera llamada descarga el histórico completo;
-        las siguientes lo reutilizan sin hacer requests adicionales.
+        Detecta automáticamente si los periodos son mensuales o quincenales y
+        usa el indicador correspondiente. Usa cache de clase — la primera llamada
+        descarga el histórico completo; las siguientes lo reutilizan sin hacer
+        requests adicionales.
         """
-        resultado = {}
-        for nombre, indicador in self._indicadores.items():
+        es_mensual = periodos and isinstance(periodos[0], PeriodoMensual)
+        if es_mensual and self._tipo not in _INDICADORES_MENSUALES:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicador mensual INEGI disponible. "
+                f"Tipos con indicador mensual: {list(_INDICADORES_MENSUALES)}"
+            )
+        indicadores = (
+            _INDICADORES_MENSUALES[self._tipo]
+            if es_mensual
+            else _INDICADORES_QUINCENALES[self._tipo]
+        )
+        resultado: dict[str, dict[_Periodo, float | None]] = {}
+        for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)
             historico = self._cache[indicador]
             resultado[nombre] = {p: historico.get(p) for p in periodos}
         return resultado
 
-    def _fetch(self, indicador: str) -> dict[PeriodoQuincenal, float | None]:
+    def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:
         url = _URL.format(indicador=indicador, token=self._token)
         try:
             resp = requests.get(url, timeout=10)
@@ -81,11 +110,18 @@ class FuenteValidacionApi:
         except (KeyError, IndexError, ValueError) as exc:
             raise RespuestaInvalida(f"Respuesta del INEGI con formato inesperado: {exc}") from exc
 
-        resultado: dict[PeriodoQuincenal, float | None] = {}
+        resultado: dict[_Periodo, float | None] = {}
         for obs in observations:
             try:
                 partes = obs["TIME_PERIOD"].split("/")
-                periodo = PeriodoQuincenal(int(partes[0]), int(partes[1]), int(partes[2]))
+                if len(partes) == 3:
+                    periodo: _Periodo = PeriodoQuincenal(
+                        int(partes[0]), int(partes[1]), int(partes[2])
+                    )
+                elif len(partes) == 2:
+                    periodo = PeriodoMensual(int(partes[0]), int(partes[1]))
+                else:
+                    raise ValueError(f"TIME_PERIOD con {len(partes)} partes")
                 raw = obs["OBS_VALUE"]
                 valor = None if raw is None else float(raw)
                 resultado[periodo] = valor

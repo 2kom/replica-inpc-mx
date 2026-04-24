@@ -3,6 +3,7 @@ from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.modelos.resultado import combinar
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal, periodo_desde_str
 from replica_inpc.dominio.tipos import ResultadoCorrida, VersionCanasta
+from replica_inpc.dominio.validar_inpc import validar_mensual
 from replica_inpc.dominio.variaciones import (
     variacion_acumulada_anual,
     variacion_desde,
@@ -18,6 +19,7 @@ __all__ = [
     "a_mensual",
     "combinar",
     "periodo_desde_str",
+    "validar_mensual",
     "variacion_acumulada_anual",
     "variacion_desde",
     "variacion_periodica",

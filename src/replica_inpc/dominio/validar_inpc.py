@@ -10,15 +10,16 @@ from replica_inpc.dominio.modelos.validacion import (
     ReporteDetalladoValidacion,
     ResumenValidacion,
 )
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, TIPOS_CON_VALIDACION
 
 _TOLERANCIAS: dict[int, float] = {2010: 0.0005, 2013: 0.0005, 2018: 0.0009, 2024: 0.0009}
+_NAN = float("nan")
 
 
 def validar(
     resultado: ResultadoCalculo,
-    inegi: dict[str, dict[PeriodoQuincenal, float | None]],
+    inegi: dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]],
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
@@ -238,6 +239,154 @@ def validar(
         resumen_base["estado_validacion_global"] = estado_validacion_global
 
     df_resumen = pd.DataFrame(resumen_base, index=[id_corrida])
+
+    return (
+        ResumenValidacion(df_resumen),
+        ReporteDetalladoValidacion(df_reporte, id_corrida),
+        DiagnosticoFaltantes(df_diagnostico),
+    )
+
+
+def validar_mensual(
+    resultado: ResultadoCalculo,
+    inegi: dict[str, dict[PeriodoMensual, float | None]],
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+    """Valida un ResultadoCalculo mensual contra índices mensuales del INEGI.
+
+    No requiere canasta ni serie — las columnas de cobertura de genéricos quedan
+    en NaN. DiagnosticoFaltantes siempre vacío. Tolerancia aplicada por fila
+    según la version de cada periodo. Ver docs/diseño.md §5.11.
+    """
+    id_corrida = resultado.id_corrida
+    tipo = resultado.df["tipo"].iloc[0]
+    con_validacion = tipo in TIPOS_CON_VALIDACION
+
+    indices = resultado.df.index.get_level_values("indice").unique()
+    periodos = resultado.df.index.get_level_values("periodo").unique()
+
+    versiones_unicas = sorted(int(v) for v in resultado.df["version"].unique())
+    version_resumen: int | str = (
+        versiones_unicas[0]
+        if len(versiones_unicas) == 1
+        else "+".join(str(v) for v in versiones_unicas)
+    )
+
+    res_lookup = resultado.df[
+        ["estado_calculo", "indice_replicado", "motivo_error", "version"]
+    ].to_dict("index")
+
+    filas_reporte = []
+    for indice in indices:
+        inegi_indice = inegi.get(indice, {})
+        for periodo in periodos:
+            row = res_lookup[(periodo, indice)]
+            estado_calculo = row["estado_calculo"]
+            indice_replicado = row["indice_replicado"]
+            motivo_error = row["motivo_error"]
+            tolerancia = _TOLERANCIAS[int(row["version"])]
+
+            fila: dict = {
+                "version": int(row["version"]),
+                "tipo": tipo,
+                "indice_replicado": indice_replicado,
+                "estado_calculo": estado_calculo,
+                "motivo_error": motivo_error,
+                "total_genericos_esperados": _NAN,
+                "total_genericos_con_indice": _NAN,
+                "total_genericos_sin_indice": _NAN,
+                "cobertura_genericos_pct": _NAN,
+                "ponderador_total_esperado": _NAN,
+                "ponderador_total_cubierto": _NAN,
+            }
+
+            if con_validacion:
+                indice_inegi: float | None = _NAN
+                error_absoluto = _NAN
+                error_relativo = _NAN
+                estado_validacion = "no_disponible"
+
+                if inegi_indice and periodo in inegi_indice:
+                    indice_inegi = inegi_indice[periodo]
+                    if indice_inegi is not None and estado_calculo in {"ok", "semi_ok"}:
+                        error_absoluto = abs(indice_replicado - indice_inegi)  # type: ignore[operator]
+                        error_relativo = error_absoluto / abs(indice_inegi)
+                        estado_validacion = (
+                            "ok" if error_absoluto <= tolerancia else "diferencia_detectada"
+                        )
+
+                fila.update(
+                    {
+                        "indice_inegi": indice_inegi,
+                        "error_absoluto": error_absoluto,
+                        "error_relativo": error_relativo,
+                        "estado_validacion": estado_validacion,
+                    }
+                )
+
+            filas_reporte.append(fila)
+
+    index_reporte = pd.MultiIndex.from_tuples(
+        [(p, ind) for ind in indices for p in periodos],
+        names=["periodo", "indice"],
+    )
+    df_reporte = pd.DataFrame(filas_reporte, index=index_reporte)
+
+    numero_null = (resultado.df["estado_calculo"] == "null_por_faltantes").sum()
+    numero_total = len(resultado.df)
+
+    if numero_null == 0:
+        estado_corrida = "ok"
+    elif numero_null == numero_total:
+        estado_corrida = "fallida"
+    else:
+        estado_corrida = "ok_parcial"
+
+    resumen_base: dict = {
+        "version": version_resumen,
+        "tipo": tipo,
+        "periodo_inicio": min(periodos),
+        "periodo_fin": max(periodos),
+        "total_periodos_esperados": numero_total,
+        "total_periodos_calculados": numero_total,
+        "total_periodos_con_null": int(numero_null),
+        "total_faltantes_indice": 0,
+        "total_faltantes_ponderador": 0,
+        "estado_corrida": estado_corrida,
+    }
+
+    if con_validacion:
+        mask_calculados = df_reporte["estado_calculo"].isin({"ok", "semi_ok"})
+        estados_val = set(df_reporte.loc[mask_calculados, "estado_validacion"])
+
+        if not estados_val:
+            estado_validacion_global = "no_disponible"
+        elif "diferencia_detectada" in estados_val:
+            estado_validacion_global = "diferencia_detectada"
+        elif estados_val == {"no_disponible"}:
+            estado_validacion_global = "no_disponible"
+        elif "no_disponible" in estados_val:
+            estado_validacion_global = "ok_parcial"
+        else:
+            estado_validacion_global = "ok"
+
+        resumen_base["error_absoluto_max"] = df_reporte["error_absoluto"].max()
+        resumen_base["error_relativo_max"] = df_reporte["error_relativo"].max()
+        resumen_base["estado_validacion_global"] = estado_validacion_global
+
+    df_resumen = pd.DataFrame(resumen_base, index=[id_corrida])
+
+    df_diagnostico = pd.DataFrame(
+        columns=[
+            "id_corrida",
+            "version",
+            "tipo",
+            "periodo",
+            "generico",
+            "nivel_faltante",
+            "tipo_faltante",
+            "detalle",
+        ]
+    )
 
     return (
         ResumenValidacion(df_resumen),

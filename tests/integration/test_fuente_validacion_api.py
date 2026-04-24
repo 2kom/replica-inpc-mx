@@ -1,48 +1,60 @@
 from __future__ import annotations
 
 import pytest
-import requests
+import requests  # type: ignore
 
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
     FuenteNoDisponible,
     RespuestaInvalida,
 )
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValidacionApi
 
 _P1 = PeriodoQuincenal(2026, 3, 1)
 _P2 = PeriodoQuincenal(2026, 2, 2)
+_PM1 = PeriodoMensual(2026, 3)
+_PM2 = PeriodoMensual(2026, 2)
 
-_RESPUESTA_NORMAL = {
+_RESPUESTA_QUINCENAL = {
     "Series": [
         {
             "OBSERVATIONS": [
-                {
-                    "TIME_PERIOD": "2026/03/01",
-                    "OBS_VALUE": "145.446",
-                    "OBS_STATUS": "3",
-                },
-                {
-                    "TIME_PERIOD": "2026/02/02",
-                    "OBS_VALUE": "144.551",
-                    "OBS_STATUS": "3",
-                },
+                {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "145.446", "OBS_STATUS": "3"},
+                {"TIME_PERIOD": "2026/02/02", "OBS_VALUE": "144.551", "OBS_STATUS": "3"},
             ]
         }
     ]
 }
 
-_RESPUESTA_CON_NULL = {
+_RESPUESTA_QUINCENAL_CON_NULL = {
     "Series": [
         {
             "OBSERVATIONS": [
                 {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": None, "OBS_STATUS": "3"},
-                {
-                    "TIME_PERIOD": "2026/02/02",
-                    "OBS_VALUE": "144.551",
-                    "OBS_STATUS": "3",
-                },
+                {"TIME_PERIOD": "2026/02/02", "OBS_VALUE": "144.551", "OBS_STATUS": "3"},
+            ]
+        }
+    ]
+}
+
+_RESPUESTA_MENSUAL = {
+    "Series": [
+        {
+            "OBSERVATIONS": [
+                {"TIME_PERIOD": "2026/03", "OBS_VALUE": "145.200", "OBS_STATUS": "3"},
+                {"TIME_PERIOD": "2026/02", "OBS_VALUE": "144.300", "OBS_STATUS": "3"},
+            ]
+        }
+    ]
+}
+
+_RESPUESTA_MENSUAL_CON_NULL = {
+    "Series": [
+        {
+            "OBSERVATIONS": [
+                {"TIME_PERIOD": "2026/03", "OBS_VALUE": None, "OBS_STATUS": "3"},
+                {"TIME_PERIOD": "2026/02", "OBS_VALUE": "144.300", "OBS_STATUS": "3"},
             ]
         }
     ]
@@ -65,9 +77,9 @@ class TestInicializacion:
         FuenteValidacionApi(token="cualquier-token", tipo="inpc")
 
 
-class TestRespuestaNormal:
+class TestRespuestaQuincenal:
     def test_devuelve_valores_para_periodos_pedidos(self, mocker):
-        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([_P1, _P2])
@@ -76,7 +88,7 @@ class TestRespuestaNormal:
         assert resultado["INPC"][_P2] == pytest.approx(144.551)
 
     def test_periodo_no_en_api_devuelve_none(self, mocker):
-        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([PeriodoQuincenal(2000, 1, 1)])
@@ -84,7 +96,7 @@ class TestRespuestaNormal:
         assert resultado["INPC"][PeriodoQuincenal(2000, 1, 1)] is None
 
     def test_obs_value_null_devuelve_none(self, mocker):
-        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_CON_NULL))
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL_CON_NULL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         resultado = fuente.obtener([_P1, _P2])
@@ -93,9 +105,70 @@ class TestRespuestaNormal:
         assert resultado["INPC"][_P2] == pytest.approx(144.551)
 
 
+class TestRespuestaMensual:
+    def test_devuelve_valores_para_periodos_mensuales(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener([_PM1, _PM2])
+
+        assert resultado["INPC"][_PM1] == pytest.approx(145.200)
+        assert resultado["INPC"][_PM2] == pytest.approx(144.300)
+
+    def test_periodo_mensual_no_en_api_devuelve_none(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener([PeriodoMensual(2000, 1)])
+
+        assert resultado["INPC"][PeriodoMensual(2000, 1)] is None
+
+    def test_obs_value_null_mensual_devuelve_none(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL_CON_NULL))
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener([_PM1, _PM2])
+
+        assert resultado["INPC"][_PM1] is None
+        assert resultado["INPC"][_PM2] == pytest.approx(144.300)
+
+    def test_inflacion_subcomponente_mensual_devuelve_claves_correctas(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        resultado = fuente.obtener([_PM1])
+        assert "mercancias" in resultado
+
+
+class TestDeteccionAutomatica:
+    def test_periodos_quincenales_usan_indicador_quincenal(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
+        FuenteValidacionApi(token="token", tipo="inpc").obtener([_P1])
+        url = mock_get.call_args[0][0]
+        assert "910420" in url
+
+    def test_periodos_mensuales_usan_indicador_mensual(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        FuenteValidacionApi(token="token", tipo="inpc").obtener([_PM1])
+        url = mock_get.call_args[0][0]
+        assert "910392" in url
+
+    def test_cache_mensual_y_quincenal_son_independientes(self, mocker):
+        mock_get = mocker.patch("requests.get")
+        mock_get.side_effect = [
+            _mock_resp(200, _RESPUESTA_QUINCENAL),
+            _mock_resp(200, _RESPUESTA_MENSUAL),
+        ]
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente.obtener([_P1])
+        fuente.obtener([_PM1])
+
+        assert mock_get.call_count == 2
+
+
 class TestCache:
-    def test_segunda_llamada_no_hace_request(self, mocker):
-        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
+    def test_segunda_llamada_quincenal_no_hace_request(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="inpc")
         fuente.obtener([_P1])
@@ -103,8 +176,17 @@ class TestCache:
 
         assert mock_get.call_count == 1
 
+    def test_segunda_llamada_mensual_no_hace_request(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente.obtener([_PM1])
+        fuente.obtener([_PM2])
+
+        assert mock_get.call_count == 1
+
     def test_cache_compartido_entre_instancias(self, mocker):
-        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_NORMAL))
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
         FuenteValidacionApi(token="token", tipo="inpc").obtener([_P1])
         FuenteValidacionApi(token="token", tipo="inpc").obtener([_P1])
@@ -150,11 +232,7 @@ class TestRespuestaInvalida:
             "Series": [
                 {
                     "OBSERVATIONS": [
-                        {
-                            "TIME_PERIOD": "formato-malo",
-                            "OBS_VALUE": "145.0",
-                            "OBS_STATUS": "3",
-                        },
+                        {"TIME_PERIOD": "formato-malo", "OBS_VALUE": "145.0", "OBS_STATUS": "3"},
                     ]
                 }
             ]

@@ -4,6 +4,20 @@ import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
 
+_VERSIONES_VALIDAS = {2010, 2013, 2018, 2024}
+
+
+def _version_valida(v: object) -> bool:
+    if isinstance(v, str):
+        try:
+            return all(int(p) in _VERSIONES_VALIDAS for p in v.split("+") if p)
+        except ValueError:
+            return False
+    try:
+        return int(v) in _VERSIONES_VALIDAS  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        return False
+
 
 class ResumenValidacion:
     """Representa el resumen agregado de una corrida y su validación.
@@ -70,9 +84,10 @@ class ResumenValidacion:
             raise InvarianteViolado(
                 "El DataFrame de resumen de validación no puede tener índices duplicados."
             )
-        if not df["version"].isin({2010, 2013, 2018, 2024}).all():
+        if not df["version"].apply(_version_valida).all():
             raise InvarianteViolado(
-                "La columna 'version' debe contener solo los valores 2010, 2013, 2018 o 2024."
+                "La columna 'version' debe contener valores en {2010, 2013, 2018, 2024} "
+                "o strings compuestos tipo '2018+2024'."
             )
         if not df["estado_corrida"].isin({"ok", "ok_parcial", "fallida"}).all():
             raise InvarianteViolado(
@@ -189,9 +204,10 @@ class ReporteDetalladoValidacion:
             raise InvarianteViolado(
                 "La columna 'version' debe contener solo los valores 2010, 2013, 2018 o 2024."
             )
-        if not df["estado_calculo"].isin({"ok", "null_por_faltantes", "fallida"}).all():
+        if not df["estado_calculo"].isin({"ok", "semi_ok", "null_por_faltantes", "fallida"}).all():
             raise InvarianteViolado(
-                "La columna 'estado_calculo' debe contener solo los valores 'ok', 'null_por_faltantes' o 'fallida'."
+                "La columna 'estado_calculo' debe contener solo los valores "
+                "'ok', 'semi_ok', 'null_por_faltantes' o 'fallida'."
             )
         if "estado_validacion" in df.columns and (
             not df["estado_validacion"]
@@ -203,16 +219,16 @@ class ReporteDetalladoValidacion:
                 "'ok', 'diferencia_detectada', 'diferencia_detectada_imputado' o 'no_disponible'."
             )
 
-        filas_ok = df["estado_calculo"] == "ok"
+        filas_ok = df["estado_calculo"].isin({"ok", "semi_ok"})
         if df.loc[filas_ok, "indice_replicado"].isnull().any():
             raise InvarianteViolado(
-                "indice_replicado no puede ser null cuando estado_calculo es 'ok'."
+                "indice_replicado no puede ser null cuando estado_calculo es 'ok' o 'semi_ok'."
             )
 
-        filas_fallo = df["estado_calculo"] != "ok"
+        filas_fallo = ~filas_ok
         if df.loc[filas_fallo, "indice_replicado"].notnull().any():
             raise InvarianteViolado(
-                "indice_replicado debe ser null cuando estado_calculo no es 'ok'."
+                "indice_replicado debe ser null cuando estado_calculo no es 'ok' ni 'semi_ok'."
             )
 
         self._df = df

@@ -6,7 +6,7 @@ from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
@@ -25,7 +25,7 @@ from replica_inpc.infraestructura.filesystem.repositorio_corridas_fs import (
     RepositorioCorridasFs,
 )
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import (
-    INDICADORES_INEGI,
+    _INDICADORES_QUINCENALES,
     FuenteValidacionApi,
 )
 
@@ -34,8 +34,8 @@ class _FuenteValidacionNula:
     """Fuente nula — se usa cuando no hay token INEGI. Siempre señala no_disponible."""
 
     def obtener(
-        self, periodos: list[PeriodoQuincenal]
-    ) -> dict[str, dict[PeriodoQuincenal, float | None]]:  # noqa: ARG002
+        self, periodos: list[PeriodoQuincenal | PeriodoMensual]
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]:  # noqa: ARG002
         raise FuenteNoDisponible("No se configuró token_inegi.")
 
 
@@ -72,7 +72,7 @@ class Corrida:
             self._ruta_salida.mkdir(parents=True, exist_ok=True)
 
         fuente_validacion: FuenteValidacion
-        if self._token_inegi and tipo in INDICADORES_INEGI:
+        if self._token_inegi and tipo in _INDICADORES_QUINCENALES:
             fuente_validacion = FuenteValidacionApi(self._token_inegi, tipo)
         else:
             fuente_validacion = _FuenteValidacionNula()

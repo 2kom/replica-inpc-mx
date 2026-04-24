@@ -45,6 +45,8 @@ El historial de cambios vive en git.
       - [ResultadoCorrida](#resultadocorrida)
     - [5.10 correspondencia.py](#510-correspondenciapy)
     - [5.11 validar\_inpc.py](#511-validar_inpcpy)
+      - [`validar` — resultado quincenal](#validar--resultado-quincenal)
+      - [`validar_mensual` — resultado mensual (sin cobertura de genéricos)](#validar_mensual--resultado-mensual-sin-cobertura-de-genéricos)
     - [5.12 variaciones.py — `ResultadoVariacion` y funciones de variación](#512-variacionespy--resultadovariacion-y-funciones-de-variación)
       - [Regla drop/keep (todas las funciones)](#regla-dropkeep-todas-las-funciones)
       - [`ResultadoVariacion`](#resultadovariacion)
@@ -118,6 +120,7 @@ El historial de cambios vive en git.
     - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto)
     - [12.11 Salida mensual directa desde `ejecutar_corrida` (v1.x)](#1211-salida-mensual-directa-desde-ejecutar_corrida-v1x)
     - [12.12 `ejecutar` multi-canasta (v2.0)](#1212-ejecutar-multi-canasta-v20)
+    - [12.13 Validación de variaciones contra series INEGI (v1.2.4)](#1213-validación-de-variaciones-contra-series-inegi-v124)
 
 ---
 
@@ -642,9 +645,9 @@ class ResumenValidacion:
 
 **Esquema del DataFrame (índice: `id_corrida`):**
 
-| Columna                      | dtype pandas    | Notas                                                                                                                             |
-| ---------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                    | `int`           |                                                                                                                                   |
+| Columna                      | dtype pandas         | Notas                                                                                                                        |
+| ---------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `version`                    | `int` o `str`        | `int` para corrida simple; `str` tipo `"2018+2024"` para resultado combinado (`validar_mensual` sobre `combinar`)            |
 | `tipo`                       | `object` (str)  |                                                                                                                                   |
 | `periodo_inicio`             | `Periodo`       | primer periodo calculado                                                                                                          |
 | `periodo_fin`                | `Periodo`       | último periodo calculado                                                                                                          |
@@ -663,7 +666,7 @@ class ResumenValidacion:
 | Invariante                        | Regla                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------- |
 | Al menos una fila                 | el DataFrame no está vacío                                                                  |
-| Versión válida                    | `version` in `{2010, 2013, 2018, 2024}`                                                     |
+| Versión válida                    | cada `version`: `int in {2010, 2013, 2018, 2024}` ó `str` donde cada componente `+`-separado sea versión válida (ej. `"2018+2024"`) |
 | `estado_corrida` válido           | valores in `{'ok', 'ok_parcial', 'fallida'}`                                                |
 | `estado_validacion_global` válido | cuando presente: valores in `{'ok', 'ok_parcial', 'diferencia_detectada', 'no_disponible'}` |
 | Periodos calculados               | `total_periodos_calculados` <= `total_periodos_esperados`                                   |
@@ -738,11 +741,11 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 | ---------------------------- | ----------------- | -------------------------------------------------------------------------------------- |
 | `version`                    | `int`             |                                                                                        |
 | `tipo`                       | `object` (str)    |                                                                                        |
-| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`                                                    |
+| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo not in {'ok', 'semi_ok'}`                                   |
 | `indice_inegi`               | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
 | `error_absoluto`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
 | `error_relativo`             | `float` / `NaN`   | NaN cuando `estado_validacion == 'no_disponible'`                                      |
-| `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'`                                            |
+| `estado_calculo`             | `object` (str)    | `'ok'`, `'semi_ok'`, `'null_por_faltantes'`, `'fallida'`                               |
 | `motivo_error`               | `object` (str/NaN)|                                                                                        |
 | `estado_validacion`          | `object` (str)    | `'ok'`, `'diferencia_detectada'`, `'diferencia_detectada_imputado'`, `'no_disponible'` |
 | `total_genericos_esperados`  | `int`             |                                                                                        |
@@ -754,29 +757,29 @@ Para ver todas las columnas del DataFrame interno, usar `.como_tabla(False)`.
 
 **Esquema del DataFrame — sin validación INEGI (índice compuesto: `(Periodo, indice)`):**
 
-| Columna                      | dtype pandas      | Notas                                       |
-| ---------------------------- | ----------------- | ------------------------------------------- |
-| `version`                    | `int`             |                                             |
-| `tipo`                       | `object` (str)    |                                             |
-| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo != 'ok'`         |
-| `estado_calculo`             | `object` (str)    | `'ok'`, `'null_por_faltantes'`, `'fallida'` |
-| `motivo_error`               | `object` (str/NaN)|                                             |
-| `total_genericos_esperados`  | `int`             |                                             |
-| `total_genericos_con_indice` | `int`             |                                             |
-| `total_genericos_sin_indice` | `int`             |                                             |
-| `cobertura_genericos_pct`    | `float`           |                                             |
-| `ponderador_total_esperado`  | `float`           |                                             |
-| `ponderador_total_cubierto`  | `float`           |                                             |
+| Columna                      | dtype pandas      | Notas                                                    |
+| ---------------------------- | ----------------- | -------------------------------------------------------- |
+| `version`                    | `int`             |                                                          |
+| `tipo`                       | `object` (str)    |                                                          |
+| `indice_replicado`           | `float` / `NaN`   | NaN cuando `estado_calculo not in {'ok', 'semi_ok'}`     |
+| `estado_calculo`             | `object` (str)    | `'ok'`, `'semi_ok'`, `'null_por_faltantes'`, `'fallida'` |
+| `motivo_error`               | `object` (str/NaN)|                                                          |
+| `total_genericos_esperados`  | `int`             |                                                          |
+| `total_genericos_con_indice` | `int`             |                                                          |
+| `total_genericos_sin_indice` | `int`             |                                                          |
+| `cobertura_genericos_pct`    | `float`           |                                                          |
+| `ponderador_total_esperado`  | `float`           |                                                          |
+| `ponderador_total_cubierto`  | `float`           |                                                          |
 
 **Invariantes — validados al construir:**
 
 | Invariante                 | Regla                                                                                                          |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Versión válida             | `version` in `{2010, 2013, 2018, 2024}`                                                                        |
-| `estado_calculo` válido    | valores in `{'ok', 'null_por_faltantes', 'fallida'}`                                                           |
+| `estado_calculo` válido    | valores in `{'ok', 'semi_ok', 'null_por_faltantes', 'fallida'}`                                                |
 | `estado_validacion` válido | cuando presente: valores in `{'ok', 'diferencia_detectada', 'diferencia_detectada_imputado', 'no_disponible'}` |
-| Consistencia ok            | si `estado_calculo == 'ok'` → `indice_replicado` no NaN                                                        |
-| Consistencia fallo         | si `estado_calculo != 'ok'` → `indice_replicado` NaN                                                           |
+| Consistencia ok/semi_ok    | si `estado_calculo in {'ok', 'semi_ok'}` → `indice_replicado` no NaN                                           |
+| Consistencia fallo         | si `estado_calculo not in {'ok', 'semi_ok'}` → `indice_replicado` NaN                                          |
 | Consistencia validacion    | cuando presente: si `estado_validacion == 'no_disponible'` → `indice_inegi`, `error_*` NaN                     |
 | Al menos una fila          | el DataFrame no está vacío                                                                                     |
 
@@ -1209,23 +1212,27 @@ en la serie.
 
 Función del dominio que construye los tres artefactos de validación a partir del resultado del cálculo y los datos del INEGI ya obtenidos por el caso de uso.
 
+#### `validar` — resultado quincenal
+
 ```python
 def validar(
     resultado: ResultadoCalculo,
-    inegi: dict[str, dict[Periodo, float | None]],
+    inegi: dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]],
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
     id_corrida: str,
+    imputados: dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal] | None = None,
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
 ```
 
-| Parámetro   | Tipo                                           | Notas                                                                                                       |
-| ----------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `resultado` | `ResultadoCalculo`                             | Resultado calculado; puede contener múltiples índices en el MultiIndex                                      |
-| `inegi`     | `dict[str, dict[Periodo, float \| None]]`      | Clave = nombre del índice (ej. `"INPC"`, `"subyacente"`). Dict vacío `{}` si la fuente no estaba disponible |
-| `canasta`   | `CanastaCanonica`                              | Canasta original completa — se usa para cobertura por subgrupo                                              |
-| `serie`     | `SerieNormalizada`                             | Serie original completa — se usa para calcular cobertura por periodo                                        |
-| `id_corrida`| `str`                                          | Para etiquetar los artefactos                                                                               |
+| Parámetro    | Tipo                                                                 | Notas                                                                                                       |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `resultado`  | `ResultadoCalculo`                                                   | Resultado calculado; puede contener múltiples índices en el MultiIndex                                      |
+| `inegi`      | `dict[str, dict[PeriodoQuincenal \| PeriodoMensual, float \| None]]` | Clave = nombre del índice. Dict vacío `{}` si la fuente no estaba disponible                                |
+| `canasta`    | `CanastaCanonica`                                                    | Canasta original completa — se usa para cobertura por subgrupo                                              |
+| `serie`      | `SerieNormalizada`                                                   | Serie original completa — se usa para calcular cobertura por periodo                                        |
+| `id_corrida` | `str`                                                                | Para etiquetar los artefactos                                                                               |
+| `imputados`  | `dict[tuple[str, PeriodoQuincenal], PeriodoQuincenal] \| None`       | Periodos imputados por `_rellenar_faltantes`; opcional                                                      |
 
 **Loop sobre índices:** itera sobre todos los valores únicos del nivel `indice` del MultiIndex
 de `resultado`. Para cada índice determina a qué subgrupo de `canasta` pertenece:
@@ -1243,6 +1250,54 @@ Para el resto de tipos estas columnas están ausentes — ver §5.5 y §5.6.
 **Lookup por índice:** para cada `indice` en el loop, la función hace `inegi.get(indice, {})` para obtener el dict de periodos de ese índice específico. Esto unifica el acceso tanto para `"inpc"` (`inegi["INPC"][periodo]`) como para subíndices (`inegi["subyacente"][periodo]`).
 
 **Comportamiento cuando `inegi` es vacío o el índice no tiene entrada:** todos los periodos reciben `estado_validacion = 'no_disponible'` y los campos de error quedan en `NaN`. `estado_validacion_global` en `ResumenValidacion` = `'no_disponible'`.
+
+---
+
+#### `validar_mensual` — resultado mensual (sin cobertura de genéricos)
+
+Función complementaria para validar un `ResultadoCalculo` con `PeriodoMensual` contra índices mensuales publicados por el INEGI. No requiere `canasta` ni `serie` — no calcula cobertura de genéricos (esa información ya está en el reporte quincenal de la misma corrida).
+
+```python
+def validar_mensual(
+    resultado: ResultadoCalculo,
+    inegi: dict[str, dict[PeriodoMensual, float | None]],
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+```
+
+| Parámetro   | Tipo                                                  | Notas                                                                          |
+| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `resultado` | `ResultadoCalculo`                                    | Periodos deben ser todos `PeriodoMensual`; puede incluir `semi_ok`             |
+| `inegi`     | `dict[str, dict[PeriodoMensual, float \| None]]`      | Obtenido con `FuenteValidacionApi(...).obtener(periodos_mensuales)`            |
+
+`id_corrida` se toma de `resultado.id_corrida` — no se pasa como parámetro.
+
+**Retorna tupla de 3** igual que `validar` — `DiagnosticoFaltantes` siempre vacío (sin `serie` no hay info de faltantes). Mantiene el mismo patrón de desempaquetado.
+
+**Tolerancia por versión:** en resultados combinados (`a_mensual(combinar([r2018, r2024]))`), cada fila puede tener distinta `version`. La tolerancia se aplica por fila usando `_TOLERANCIAS[fila["version"]]`, no una sola vez con `iloc[0]`.
+
+**`version` en `ResumenValidacion`:** para corrida simple → `int` (ej. `2018`). Para resultado combinado con múltiples versiones → `str` compuesto `"V1+V2"` (ej. `"2018+2024"`, versiones ordenadas ascendente). La invariante de `ResumenValidacion` acepta ambas formas.
+
+**Diferencias vs `validar`:**
+
+| Aspecto                      | `validar`                                    | `validar_mensual`                               |
+| ---------------------------- | -------------------------------------------- | ----------------------------------------------- |
+| Tipo de periodos en resultado| `PeriodoQuincenal`                           | `PeriodoMensual`                                |
+| Cobertura de genéricos       | Calculada desde `serie`                      | `NaN` — no disponible sin `serie`               |
+| `DiagnosticoFaltantes`       | Calculado                                    | Vacío (mismo tipo, mismo patrón de retorno)     |
+| Tolerancia                   | Una por corrida (`iloc[0]`)                  | Por fila según `version`                        |
+| `semi_ok`                    | No aparece (calculador solo produce quinc.)  | Sí — tratado igual que `ok` para validar        |
+| Indicador INEGI              | 910420 (quincenal)                           | 910392 (mensual)                                |
+
+**Flujo típico:**
+
+```python
+r_q = corrida.ejecutar(...)                    # quincenal + validación completa
+r_m = a_mensual(r_q.resultado)                 # convierte a mensual
+fuente = FuenteValidacionApi(token, "inpc")
+periodos_m = list(r_m.df.index.get_level_values("periodo").unique())
+inegi_m = fuente.obtener(periodos_m)
+resumen_m, reporte_m, _ = validar_mensual(r_m, inegi_m)
+```
 
 ---
 
@@ -1681,7 +1736,9 @@ y marca la validación como `no_disponible`.
 
 ```python
 class FuenteValidacion(Protocol):
-    def obtener(self, periodos: list[Periodo]) -> dict[str, dict[Periodo, float | None]]: ...
+    def obtener(
+        self, periodos: list[PeriodoQuincenal | PeriodoMensual]
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]: ...
 ```
 
 `obtener()` devuelve un dict keyed por nombre de índice (ej. `{"INPC": {periodo: valor}}` para `"inpc"`,
@@ -1692,7 +1749,7 @@ Lanza excepción cuando la fuente no está disponible — el caso de uso la capt
 Implementaciones:
 
 - `_FuenteValidacionNula` — usada cuando `token_inegi=None`. Siempre lanza `FuenteNoDisponible`.
-- `FuenteValidacionApi` — usada cuando `token_inegi` está presente y `tipo in INDICADORES_INEGI`. Ver §8.6.
+- `FuenteValidacionApi` — usada cuando `token_inegi` está presente y `tipo in _INDICADORES_QUINCENALES`. Ver §8.6.
 
 ---
 
@@ -2025,12 +2082,18 @@ class FuenteValidacionApi:
     def __init__(self, token: str, tipo: str) -> None: ...
 ```
 
-Lanza `ErrorConfiguracion` si `tipo not in INDICADORES_INEGI`.
+Lanza `ErrorConfiguracion` si `tipo not in _INDICADORES_QUINCENALES`.
 
-**Mapeo tipo → (índice → indicador):**
+**Detección automática mensual/quincenal:**
+
+`obtener(periodos)` detecta el tipo de los periodos recibidos (`isinstance(periodos[0], PeriodoMensual)`).
+Si son mensuales, usa `_INDICADORES_MENSUALES`; si quincenales, usa `_INDICADORES_QUINCENALES`.
+Lanza `ErrorConfiguracion` si el tipo no tiene indicador mensual definido.
+
+**Mapeo tipo → (índice → indicador) — quincenales:**
 
 ```python
-INDICADORES_INEGI: dict[str, dict[str, str]] = {
+_INDICADORES_QUINCENALES: dict[str, dict[str, str]] = {
     "inpc": {
         "INPC": "910420",
     },
@@ -2039,20 +2102,39 @@ INDICADORES_INEGI: dict[str, dict[str, str]] = {
         "no subyacente": "910424",
     },
     "inflacion subcomponente": {
-        "mercancias":                                       "910422",
-        "servicios":                                        "910423",
-        "agropecuarios":                                    "910425",
-        "energeticos y tarifas autorizadas por el gobierno":"910426",
+        "mercancias":                                        "910422",
+        "servicios":                                         "910423",
+        "agropecuarios":                                     "910425",
+        "energeticos y tarifas autorizadas por el gobierno": "910426",
     },
 }
 ```
 
-El dict vive en el mismo archivo. La clave exterior es el `tipo` que se pasa a `Corrida.ejecutar()`.
-La clave interior es el nombre exacto de la categoría en la canasta (valor de la columna de clasificación).
-`corrida.py` detecta si hay validación vía `tipo in INDICADORES_INEGI`.
+**Mapeo tipo → (índice → indicador) — mensuales:**
 
-`obtener()` itera sobre `self._indicadores.items()`, llama a `_fetch()` por cada indicador y
-devuelve `dict[str, dict[Periodo, float | None]]` keyed por nombre de índice.
+```python
+_INDICADORES_MENSUALES: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910392",
+    },
+    "inflacion componente": {
+        "subyacente":    "910393",
+        "no subyacente": "910396",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910394",
+        "servicios":                                         "910395",
+        "agropecuarios":                                     "910397",
+        "energeticos y tarifas autorizadas por el gobierno": "910398",
+    },
+}
+```
+
+Los dicts son privados. `corrida.py` detecta si hay validación vía `tipo in _INDICADORES_QUINCENALES`.
+La clave interior es el nombre exacto de la categoría en la canasta.
+
+`obtener()` itera sobre los indicadores del dict correspondiente, llama a `_fetch()` por cada uno y
+devuelve `dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]` keyed por nombre de índice.
 
 **URL de la API:**
 
@@ -2060,7 +2142,7 @@ devuelve `dict[str, dict[Periodo, float | None]]` keyed por nombre de índice.
 https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/{indicador}/es/00/false/BIE-BISE/2.0/{token}?type=json
 ```
 
-Una sola llamada devuelve todo el histórico disponible (~917 observaciones para INPC).
+Una sola llamada devuelve todo el histórico disponible (~917 observaciones para INPC quincenal).
 El token no es validado por la API (cualquier string funciona).
 
 **Formato de respuesta:**
@@ -2080,27 +2162,14 @@ Las observaciones vienen en orden cronológico descendente. `OBS_STATUS` siempre
 
 **Mapeo `TIME_PERIOD` → periodo:**
 
+`_fetch()` detecta el formato de `TIME_PERIOD` por conteo de partes (`split("/")`):
+
 | Formato | Partes | Tipo | Construcción |
 | ------- | ------ | ---- | ------------ |
 | `"YYYY/MM/QQ"` | 3 | quincenal | `PeriodoQuincenal(YYYY, MM, QQ)` |
 | `"YYYY/MM"` | 2 | mensual | `PeriodoMensual(YYYY, MM)` |
 
-Verificado: `"2018/07/02"` (quincenal) devuelve `100.0` (base canasta 2018). `"2026/03"` (mensual, indicador 910392) devuelve `145.544`.
-
-**Indicadores disponibles (`INDICADORES_INEGI`):**
-
-```python
-INDICADORES_INEGI: dict[str, dict[str, str]] = {
-    "inpc": {
-        "INPC": "910420",        # quincenal — TIME_PERIOD: "YYYY/MM/QQ"
-        "INPC mensual": "910392", # mensual   — TIME_PERIOD: "YYYY/MM"
-    },
-    "inflacion componente": { ... },
-    "inflacion subcomponente": { ... },
-}
-```
-
-`_fetch()` detecta el formato de `TIME_PERIOD` por conteo de partes (`split("/")`): 3 partes → `PeriodoQuincenal`, 2 partes → `PeriodoMensual`.
+Verificado: `"2018/07/02"` (quincenal) devuelve `100.0` (base canasta 2018). `"2026/03"` (mensual, 910392) devuelve `145.544`.
 
 **`OBS_VALUE`:** string con decimales (`"145.44600000000000000000"`). Se convierte con `float()`.
 Si es `null` (JSON `None`), se devuelve `None` para ese periodo sin interrumpir el parseo.
@@ -2997,3 +3066,23 @@ Internamente encadena `resultado_referencia` automáticamente entre corridas con
 **Por qué es v2.0:** cambia la firma pública de `ejecutar`, `ManifestCorrida` (que referencia una sola canasta/series), y la lógica de persistencia. Rompe compatibilidad con código existente.
 
 **Cuándo implementar:** cuando la combinación manual con `ResultadoCalculo.combinar()` resulte insuficiente para los casos de uso del proyecto.
+
+---
+
+### 12.13 Validación de variaciones contra series INEGI (v1.2.4)
+
+**Situación actual:** `FuenteValidacionApi` obtiene índices de nivel (INPC, subyacente, etc.) y los compara con `indice_replicado`. Las variaciones calculadas por `variacion_periodica`, `variacion_desde` y `variacion_acumulada_anual` no se validan directamente contra series publicadas del INEGI.
+
+**Mejora propuesta:** ampliar `FuenteValidacionApi` con dos nuevos dicts de indicadores (privados) para series de variación — uno quincenal y uno mensual — cubriendo los 3 tipos disponibles (`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`):
+
+- inflación periódica mensual / quincenal
+- inflación interanual (base = mismo periodo del año anterior)
+- inflación acumulada anual (base = dic año anterior)
+
+Total: 7 índices × 4 tipos de variación × 2 frecuencias = 56 indicadores.
+
+**Política de redondeo:** comparar variaciones con tolerancia de 3 decimales (las variaciones tienen magnitudes ~0.001–0.01, distinta escala que los índices de nivel).
+
+**Nueva sección §8.7** en `docs/diseño.md` con los mapeos completos de indicadores.
+
+**Por qué no se implementa ahora:** requiere verificación empírica de que las variaciones calculadas internamente (`variacion_periodica`, etc.) coinciden con las series publicadas por el INEGI dentro de la tolerancia de 3 decimales, antes de definir los mapeos.
