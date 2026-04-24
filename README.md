@@ -29,17 +29,18 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.2)
+## Alcance actual (v1.2.3)
 
-La v1.2.2 del proyecto permite:
+La v1.2.3 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
 - calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
 - imputar periodos faltantes en series via bfill/ffill con trazabilidad completa;
 - combinar resultados de distintas corridas en un unico `ResultadoCalculo` cronologico;
-- validar el resultado contra lo publicado por el INEGI via su API de indicadores;
-- calcular variaciones periodicas, acumuladas anuales y desde un periodo base;
+- convertir resultados quincenales a mensuales via `a_mensual()`;
+- validar indices quincenales o mensuales contra lo publicado por el INEGI via su API;
+- calcular variaciones periodicas, acumuladas anuales y desde un periodo base (quincenales y mensuales);
 - exportar resultados de calculo y validacion;
 - ejecutar un demo completo con datos sinteticos (ver `demo/`).
 
@@ -176,6 +177,19 @@ rv_anual = variacion_acumulada_anual(resultado_completo)
 ```
 
 El resultado `rv.df` tiene MultiIndex `(Periodo, indice)` y columna `variacion` (fraccion, no porcentaje).
+
+**Validar contra el INEGI:**
+
+```python
+from replica_inpc import validar_mensual, validar_quincenal
+
+# Valida indices mensuales — acepta resultado quincenal o mensual.
+# Si es quincenal, aplica a_mensual() internamente.
+resumen, reporte, _ = validar_mensual(resultado_completo, token=TOKEN_INEGI)
+
+# Valida indices quincenales directamente.
+resumen_q, reporte_q, diag_q = validar_quincenal(resultado_completo, token=TOKEN_INEGI)
+```
 
 **Subindices por clasificador:**
 

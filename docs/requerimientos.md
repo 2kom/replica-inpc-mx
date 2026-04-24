@@ -623,7 +623,8 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 | v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado + imputación bfill/ffill de faltantes en series + `combinar` para series históricas continuas     |
 | v1.2.1  | v1.2.0 + tabla de renombres 1:1 entre canastas (`RENOMBRES_INDICES`) + normalización cross-versión en `combinar`                                 |
 | v1.2.2  | v1.2.1 + variaciones periódicas, acumuladas anuales y desde periodo base (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`) |
-| v1.3.0  | v1.2.2 + canastas 2010 y 2013                                                                                                                    |
+| v1.2.3  | v1.2.2 + `PeriodoMensual` + `a_mensual()` + variaciones mensuales + `validar_mensual(resultado, token)` + `validar_quincenal(resultado, token)`  |
+| v1.3.0  | v1.2.3 + canastas 2010 y 2013                                                                                                                    |
 
 ### 13.1 Subindices
 
