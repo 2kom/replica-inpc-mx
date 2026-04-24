@@ -249,16 +249,10 @@ def validar(
     )
 
 
-def validar_mensual(
+def _validar_sin_canasta(
     resultado: ResultadoCalculo,
-    inegi: Mapping[str, Mapping[PeriodoMensual, float | None]],
+    inegi: Mapping[str, Mapping[PeriodoQuincenal | PeriodoMensual, float | None]],
 ) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
-    """Valida un ResultadoCalculo mensual contra índices mensuales del INEGI.
-
-    No requiere canasta ni serie — las columnas de cobertura de genéricos quedan
-    en NaN. DiagnosticoFaltantes siempre vacío. Tolerancia aplicada por fila
-    según la version de cada periodo. Ver docs/diseño.md §5.11.
-    """
     id_corrida = resultado.id_corrida
     tipo = resultado.df["tipo"].iloc[0]
     con_validacion = tipo in TIPOS_CON_VALIDACION
@@ -395,3 +389,27 @@ def validar_mensual(
         ReporteDetalladoValidacion(df_reporte, id_corrida),
         DiagnosticoFaltantes(df_diagnostico),
     )
+
+
+def validar_mensual(
+    resultado: ResultadoCalculo,
+    inegi: Mapping[str, Mapping[PeriodoMensual, float | None]],
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+    """Valida un ResultadoCalculo mensual contra índices mensuales del INEGI.
+
+    No requiere canasta ni serie — columnas de cobertura quedan en NaN.
+    DiagnosticoFaltantes siempre vacío. Ver docs/diseño.md §5.11.
+    """
+    return _validar_sin_canasta(resultado, inegi)
+
+
+def validar_quincenal_resultado(
+    resultado: ResultadoCalculo,
+    inegi: Mapping[str, Mapping[PeriodoQuincenal, float | None]],
+) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+    """Valida un ResultadoCalculo quincenal sin canasta/serie.
+
+    Columnas de cobertura quedan en NaN. DiagnosticoFaltantes siempre vacío.
+    Ver docs/diseño.md §6.2.
+    """
+    return _validar_sin_canasta(resultado, inegi)
