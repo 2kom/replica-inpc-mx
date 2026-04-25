@@ -145,6 +145,26 @@ _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
     },
 }
 
+_INCIDENCIAS_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "909281",
+    },
+    "inflacion componente": {
+        "subyacente": "909282",
+        "no subyacente": "909290",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "909283",
+        "servicios": "909286",
+        "agropecuarios": "909291",
+        "energeticos y tarifas autorizadas por el gobierno": "909294",
+    },
+}
+
+_INCIDENCIAS_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
+    "interanual": _INCIDENCIAS_INTERANUAL_MENSUAL,
+}
+
 _VARIACIONES_POR_TIPO_QUINCENAL: dict[str, dict[str, dict[str, str]]] = {
     "periodica": _VARIACIONES_PERIODICA_QUINCENAL,
     "interanual": _VARIACIONES_INTERANUAL_QUINCENAL,
@@ -235,6 +255,44 @@ class FuenteValidacionApi:
             if historico:
                 min_p = min(historico.keys())
                 resultado[nombre] = {p: historico.get(p) for p in periodos if p >= min_p}  # type: ignore[operator]
+            else:
+                resultado[nombre] = {}
+        return resultado
+
+    def obtener_incidencias(
+        self,
+        periodos: list[PeriodoMensual],
+        tipo_incidencia: Literal["interanual"],
+    ) -> dict[str, dict[PeriodoMensual, float | None]]:
+        """Devuelve series de incidencia publicadas por INEGI.
+
+        Solo soporta PeriodoMensual e incidencia interanual. Ausencia de clave
+        en el resultado indica fuera_de_rango_inegi (no publicado por INEGI aún).
+        """
+        if tipo_incidencia not in _INCIDENCIAS_POR_TIPO:
+            raise ErrorConfiguracion(
+                f"tipo_incidencia '{tipo_incidencia}' no válido. "
+                f"Valores soportados: {list(_INCIDENCIAS_POR_TIPO)}"
+            )
+        indicadores_tipo = _INCIDENCIAS_POR_TIPO[tipo_incidencia]
+        if self._tipo not in indicadores_tipo:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicadores de incidencia '{tipo_incidencia}'. "
+                f"Tipos soportados: {list(indicadores_tipo)}"
+            )
+        indicadores = indicadores_tipo[self._tipo]
+        resultado: dict[str, dict[PeriodoMensual, float | None]] = {}
+        for nombre, indicador in indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            if historico:
+                min_p = min(historico.keys())
+                resultado[nombre] = {
+                    p: historico.get(p)
+                    for p in periodos
+                    if p >= min_p  # type: ignore[operator]
+                }
             else:
                 resultado[nombre] = {}
         return resultado

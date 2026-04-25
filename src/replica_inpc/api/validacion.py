@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.errores import ErrorConfiguracion
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.validacion import (
     DiagnosticoFaltantes,
     ReporteDetalladoValidacion,
+    ReporteValidacionIncidencias,
     ReporteValidacionVariaciones,
     ResumenValidacion,
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.validar_incidencias import validar_incidencias as _validar_incidencias
 from replica_inpc.dominio.validar_inpc import (
     validar_mensual as _validar_mensual,
 )
@@ -132,6 +135,47 @@ def validar_mensual(
     fuente = FuenteValidacionApi(token=token, tipo=tipo)
     inegi = fuente.obtener(periodos_lista)
     return _validar_mensual(resultado, inegi)  # type: ignore[arg-type]
+
+
+def validar_incidencias_mensual(
+    ri: ResultadoIncidencia,
+    token: str,
+) -> ReporteValidacionIncidencias:
+    """Valida incidencias mensuales calculadas contra series publicadas por el INEGI.
+
+    Solo soporta clase_incidencia='periodica' con frecuencia='anual' (interanual).
+    Lanza ErrorConfiguracion para clases 'desde', 'acumulada_anual' o frecuencias
+    distintas de 'anual'. Ver docs/diseño.md §6.4.
+    """
+    clase = ri.clase_incidencia
+
+    if clase == "desde":
+        raise ErrorConfiguracion(
+            "La incidencia 'desde' no tiene indicadores INEGI disponibles. "
+            "Solo se puede validar incidencia 'periodica' con frecuencia 'anual'."
+        )
+    if clase == "acumulada_anual":
+        raise ErrorConfiguracion(
+            "La incidencia 'acumulada_anual' no está disponible en la API INEGI para incidencias. "
+            "Solo se puede validar incidencia 'periodica' con frecuencia 'anual'."
+        )
+    if ri.frecuencia != "anual":
+        raise ErrorConfiguracion(
+            f"INEGI solo publica incidencia interanual mensual. "
+            f"Frecuencia '{ri.frecuencia}' no está disponible. Usa frecuencia='anual'."
+        )
+
+    periodos = ri.df.index.get_level_values("periodo")
+    if not isinstance(periodos[0], PeriodoMensual):
+        raise ErrorConfiguracion(
+            "validar_incidencias_mensual requiere periodos mensuales (PeriodoMensual). "
+            "Calcula la incidencia sobre un ResultadoCalculo mensual o aplica a_mensual() antes."
+        )
+
+    periodos_lista = list(periodos.unique())
+    fuente = FuenteValidacionApi(token=token, tipo=ri.tipo)
+    inegi = fuente.obtener_incidencias(periodos_lista, "interanual")  # type: ignore[arg-type]
+    return _validar_incidencias(ri, "interanual", inegi)  # type: ignore[arg-type]
 
 
 def validar_quincenal(
