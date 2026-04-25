@@ -29,9 +29,9 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.3)
+## Alcance actual (v1.2.4)
 
-La v1.2.3 del proyecto permite:
+La v1.2.4 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
@@ -41,6 +41,7 @@ La v1.2.3 del proyecto permite:
 - convertir resultados quincenales a mensuales via `a_mensual()`;
 - validar indices quincenales o mensuales contra lo publicado por el INEGI via su API;
 - calcular variaciones periodicas, acumuladas anuales y desde un periodo base (quincenales y mensuales);
+- validar variaciones quincenales o mensuales contra lo publicado por el INEGI via su API;
 - exportar resultados de calculo y validacion;
 - ejecutar un demo completo con datos sinteticos (ver `demo/`).
 
@@ -190,6 +191,30 @@ resumen, reporte, _ = validar_mensual(resultado_completo, token=TOKEN_INEGI)
 # Valida indices quincenales directamente.
 resumen_q, reporte_q, diag_q = validar_quincenal(resultado_completo, token=TOKEN_INEGI)
 ```
+
+**Validar variaciones contra el INEGI:**
+
+```python
+from replica_inpc import variacion_periodica, variacion_acumulada_anual
+from replica_inpc import validar_variaciones_mensual, validar_variaciones_quincenal
+
+# Validar variacion quincenal (periodica quincenal)
+rv_q = variacion_periodica(resultado_completo, "quincenal")
+reporte_var_q = validar_variaciones_quincenal(rv_q, token=TOKEN_INEGI)
+
+# Validar variacion mensual (periodica mensual)
+rv_m = variacion_periodica(resultado_mensual, "mensual")
+reporte_var_m = validar_variaciones_mensual(rv_m, token=TOKEN_INEGI)
+
+# Validar variacion acumulada anual (quincenal o mensual)
+rv_anual = variacion_acumulada_anual(resultado_completo)
+reporte_var_anual = validar_variaciones_quincenal(rv_anual, token=TOKEN_INEGI)
+```
+
+El reporte `reporte_var.df` tiene MultiIndex `(tipo_variacion, periodo, indice)` y columnas
+`variacion_replicada_pp`, `variacion_inegi_pp`, `error_absoluto_pp`, `estado_validacion`.
+Los estados posibles son `ok`, `diferencia_detectada`, `no_disponible`,
+`fuera_de_rango_inegi` (periodo aun no publicado por INEGI) y `excluido_semi_ok`.
 
 **Subindices por clasificador:**
 
