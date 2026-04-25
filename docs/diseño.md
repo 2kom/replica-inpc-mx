@@ -60,6 +60,7 @@ El historial de cambios vive en git.
   - [6.2 Fachada de validación — api/validacion.py](#62-fachada-de-validación--apivalidacionpy)
   - [6.3 Validación de variaciones — api/validacion.py](#63-validación-de-variaciones--apivalidacionpy)
     - [ReporteValidacionVariaciones](#reportevalidacionvariaciones)
+    - [validar\_variaciones\_quincenal](#validar_variaciones_quincenal)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
       - [7.1.1 LectorCanasta](#711-lectorcanasta)
@@ -79,6 +80,7 @@ El historial de cambios vive en git.
       - [diagnostico\_\<id\_corrida\>.csv](#diagnostico_id_corridacsv)
     - [8.6 FuenteValidacionApi (API del INEGI)](#86-fuentevalidacionapi-api-del-inegi)
     - [8.7 Indicadores de variación mensual (API del INEGI)](#87-indicadores-de-variación-mensual-api-del-inegi)
+    - [8.8 Indicadores de variación quincenal (API del INEGI)](#88-indicadores-de-variación-quincenal-api-del-inegi)
   - [9. Estrategia de errores](#9-estrategia-de-errores)
     - [9.1 Jerarquía de excepciones](#91-jerarquía-de-excepciones)
     - [9.2 Propagación](#92-propagación)
@@ -127,7 +129,7 @@ El historial de cambios vive en git.
     - [12.10 Incompatibilidad de nombres de categorías entre canastas al combinar resultados ✓ RESUELTO](#1210-incompatibilidad-de-nombres-de-categorías-entre-canastas-al-combinar-resultados--resuelto)
     - [12.11 Salida mensual directa desde `ejecutar_corrida` (v1.x)](#1211-salida-mensual-directa-desde-ejecutar_corrida-v1x)
     - [12.12 `ejecutar` multi-canasta (v2.0)](#1212-ejecutar-multi-canasta-v20)
-    - [12.13 Validación de variaciones contra series INEGI (v1.2.4)](#1213-validación-de-variaciones-contra-series-inegi-v124)
+    - [12.13 Validación de variaciones contra series INEGI (v1.2.4) ✓ RESUELTO](#1213-validación-de-variaciones-contra-series-inegi-v124--resuelto)
     - [12.14 Rediseño de API de validación: `ResultadoCalculo`, `ResultadoValidacion` y wrappers con token (v2.0)](#1214-rediseño-de-api-de-validación-resultadocalculo-resultadovalidacion-y-wrappers-con-token-v20)
 
 ---
@@ -1395,14 +1397,14 @@ class ResultadoVariacion:
 
 **Invariantes — validados al construir:**
 
-| Invariante              | Regla                                                       |
-| ----------------------- | ----------------------------------------------------------- |
-| df no vacío             | `df` no puede estar vacío                                   |
-| índice correcto         | MultiIndex con niveles `["periodo", "indice"]`              |
-| columna `variacion`     | debe existir en `df`                                        |
-| `tipo` no vacío         | string no vacío                                             |
-| `descripcion` no vacío  | string no vacío                                             |
-| `clase_variacion` válido | valor en `{"periodica", "acumulada_anual", "desde"}`       |
+| Invariante               | Regla                                                       |
+| ------------------------ | ----------------------------------------------------------- |
+| df no vacío              | `df` no puede estar vacío                                   |
+| índice correcto          | MultiIndex con niveles `["periodo", "indice"]`              |
+| columna `variacion`      | debe existir en `df`                                        |
+| `tipo` no vacío          | string no vacío                                             |
+| `descripcion` no vacío   | string no vacío                                             |
+| `clase_variacion` válido | valor en `{"periodica", "acumulada_anual", "desde"}`        |
 
 ---
 
@@ -1682,19 +1684,20 @@ class ReporteValidacionVariaciones:
 
 | Columna | dtype pandas | Notas |
 | --- | --- | --- |
-| `variacion_replicada` | `float` / `NaN` | variación calculada en decimal; NaN si `excluido_semi_ok` o sin dato |
-| `variacion_inegi_pp` | `float` / `NaN` | variación publicada por INEGI en porcentaje; NaN si no disponible |
-| `error_absoluto_pp` | `float` / `NaN` | `abs(variacion_replicada × 100 − variacion_inegi_pp)`; NaN si no comparable |
+| `variacion_replicada_pp` | `float` / `NaN` | variación calculada en porcentaje (pp); NaN si `excluido_semi_ok` o sin dato |
+| `variacion_inegi_pp` | `float` / `NaN` | variación publicada por INEGI en porcentaje (pp); NaN si no disponible |
+| `error_absoluto_pp` | `float` / `NaN` | `abs(variacion_replicada_pp − variacion_inegi_pp)`; NaN si no comparable |
 | `estado_validacion` | `object` (str) | ver valores abajo |
 
 Valores de `estado_validacion`:
 
 | Valor | Condición |
 | --- | --- |
-| `'ok'` | `error_absoluto_pp` ≤ 0.09 pp |
-| `'diferencia_detectada'` | `error_absoluto_pp` > 0.09 pp |
-| `'excluido_semi_ok'` | base del periodo tiene `estado_calculo == 'semi_ok'` |
-| `'no_disponible'` | INEGI no publicó dato para ese periodo/índice |
+| `'ok'` | `error_absoluto_pp` ≤ 0.009 pp |
+| `'diferencia_detectada'` | `error_absoluto_pp` > 0.009 pp |
+| `'excluido_semi_ok'` | base del periodo tiene `estado_calculo == 'semi_ok'` (solo mensual) |
+| `'no_disponible'` | INEGI publicó el indicador para ese rango pero no hay valor en ese periodo |
+| `'fuera_de_rango_inegi'` | el periodo es anterior al primer dato publicado por INEGI para ese indicador |
 
 **Invariantes — validados al construir:**
 
@@ -1702,15 +1705,15 @@ Valores de `estado_validacion`:
 | --- | --- |
 | Al menos una fila | el DataFrame no está vacío |
 | Índice sin duplicados | el MultiIndex no tiene filas repetidas |
-| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'excluido_semi_ok', 'no_disponible'}` |
+| `estado_validacion` válido | valores in `{'ok', 'diferencia_detectada', 'excluido_semi_ok', 'no_disponible', 'fuera_de_rango_inegi'}` |
 
 ---
 
 ### 5.16 validar_variaciones.py
 
-Función del dominio que compara una variación mensual calculada contra las series
-publicadas por el INEGI. No hace requests — recibe los datos INEGI ya obtenidos por la
-capa api. Privada: llamada solo desde `api/validacion.py`.
+Función del dominio que compara una variación mensual o quincenal calculada contra las
+series publicadas por el INEGI. No hace requests — recibe los datos INEGI ya obtenidos
+por la capa api. Privada: llamada solo desde `api/validacion.py`.
 
 **Archivo:** `dominio/validar_variaciones.py`
 
@@ -1718,35 +1721,40 @@ capa api. Privada: llamada solo desde `api/validacion.py`.
 def validar_variaciones(
     rv: ResultadoVariacion,
     tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-    inegi: dict[str, dict[PeriodoMensual, float | None]],
+    inegi: dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]],
 ) -> ReporteValidacionVariaciones:
 ```
 
-**Precondición:** `rv` debe tener periodos `PeriodoMensual`. `tipo_variacion` indica qué tipo
-de base usar para la exclusión semi_ok.
+**Precondición:** `rv` puede tener periodos `PeriodoMensual` o `PeriodoQuincenal`. `tipo_variacion`
+indica qué tipo de base usar para la exclusión semi_ok.
 
 **Algoritmo:**
 
 1. Lee `periodos_semiok` desde `rv.periodos_semiok` (poblado al calcular la variación).
 2. Para cada `(periodo, indice)` en `rv.df` determina el `estado_validacion`:
-   - Calcula `base` según `tipo_variacion`: `"periodica"` → `_restar_meses(p, 1)`, `"interanual"` → `_restar_meses(p, 12)`, `"acumulada_anual"` → `PeriodoMensual(p.año - 1, 12)`.
+   - Calcula `base` según `tipo_variacion` y tipo de periodo (ver tabla abajo).
    - Si `base` está en `periodos_semiok` → `"excluido_semi_ok"`
-   - Si INEGI no tiene dato para ese `(indice, periodo)` → `"no_disponible"`
-   - Si `abs(variacion_replicada × 100 − variacion_inegi_pp)` ≤ `_TOLERANCIA_VARIACION_PP` → `"ok"`
+   - Si `indice` no está en `inegi` o `periodo` no está en `inegi[indice]` → `"fuera_de_rango_inegi"` (el periodo es anterior al primer dato publicado por INEGI para ese indicador)
+   - Si `inegi[indice][periodo]` es `None` → `"no_disponible"`
+   - Si `abs(variacion_replicada_pp − variacion_inegi_pp)` ≤ `_TOLERANCIA_VARIACION_PP` → `"ok"`
    - Si no → `"diferencia_detectada"`
 3. Construye y retorna `ReporteValidacionVariaciones`.
 
-**Cálculo del periodo base por tipo de variación:**
+**Cálculo del periodo base:**
 
-| `tipo_variacion` | Base |
-| --- | --- |
-| `"periodica"` | `_restar_meses(p, 1)` |
-| `"interanual"` | `_restar_meses(p, 12)` |
-| `"acumulada_anual"` | `PeriodoMensual(p.año - 1, 12)` |
+| `tipo_variacion` | `PeriodoMensual` | `PeriodoQuincenal` |
+| --- | --- | --- |
+| `"periodica"` | `_restar_meses(p, 1)` | `_restar_quincenas(p, 1)` |
+| `"interanual"` | `_restar_meses(p, 12)` | `_restar_quincenas(p, 24)` |
+| `"acumulada_anual"` | `PeriodoMensual(p.año - 1, 12)` | `PeriodoQuincenal(p.año - 1, 12, 2)` |
 
-`_restar_meses` se reimplementa inline — no importa el privado de `variaciones.py`.
+`_restar_meses` y `_restar_quincenas` se implementan inline en el archivo.
 
-**Tolerancia:** `_TOLERANCIA_VARIACION_PP = 0.09` (pp). Ver §8.7.
+**Detección `fuera_de_rango_inegi`:** `obtener_variaciones` solo incluye en el dict retornado
+los periodos `p >= min(historico)` — la ausencia de la clave en el dict indica que el periodo
+está fuera del rango publicado por INEGI. Ver §8.6.
+
+**Tolerancia:** `_TOLERANCIA_VARIACION_PP = 0.009` (pp). Aplica igual para mensual y quincenal. Ver §8.7 y §8.8.
 
 ---
 
@@ -1952,15 +1960,42 @@ Detalle por periodo e índice. Ver §5.15 para el esquema completo.
 
 `como_tabla(ancho=False)`: descarta nivel `tipo_variacion`; `ancho=True` pivota periodos como columnas.
 
-**Tolerancia:** 0.09 pp. Ver §8.7.
+**Tolerancia:** 0.009 pp. Ver §8.7.
 
 **Exportación desde `replica_inpc`:**
 
 ```python
-from replica_inpc import validar_variaciones_mensual
+from replica_inpc import validar_variaciones_mensual, validar_variaciones_quincenal
 ```
 
 > **v2.0:** `ResumenValidacionVariaciones` será retornado nuevamente cuando la función acepte múltiples variaciones a la vez.
+
+### validar_variaciones_quincenal
+
+```python
+def validar_variaciones_quincenal(
+    rv: ResultadoVariacion,
+    token: str,
+) -> ReporteValidacionVariaciones: ...
+```
+
+Igual que `validar_variaciones_mensual` pero para periodos `PeriodoQuincenal`. Lanza `ErrorConfiguracion` si:
+
+- `clase_variacion == "desde"`: INEGI no publica ese tipo.
+- `clase_variacion == "periodica"` con `rv.descripcion` no en `{"quincenal", "anual"}`: INEGI solo publica periódica quincenal e interanual.
+- Los periodos en `rv.df` no son `PeriodoQuincenal`.
+
+Mapeo `descripcion` → `tipo_variacion_inegi`:
+
+| `clase_variacion` | `rv.descripcion` | `tipo_variacion_inegi` |
+| --- | --- | --- |
+| `"periodica"` | `"quincenal"` | `"periodica"` |
+| `"periodica"` | `"anual"` | `"interanual"` |
+| `"acumulada_anual"` | cualquiera | `"acumulada_anual"` |
+
+**Nota sobre cobertura:** interanual quincenal y acumulada anual quincenal solo tienen datos INEGI desde `1Q Ago 2024`. Periodos anteriores aparecen como `fuera_de_rango_inegi` en el reporte. Ver §8.8.
+
+**periodos_semiok:** siempre vacío para quincenal — `semi_ok` es concepto mensual (mes con solo 1 quincena disponible). La exclusión no aplica a cálculos quincenales.
 
 ---
 
@@ -2546,23 +2581,28 @@ no hacen requests adicionales. Para limpiar en tests: `FuenteValidacionApi._cach
 ```python
 def obtener_variaciones(
     self,
-    periodos: list[PeriodoMensual],
+    periodos: list[PeriodoMensual] | list[PeriodoQuincenal],
     tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-) -> dict[str, dict[PeriodoMensual, float | None]]:
+) -> dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]]:
 ```
 
-Obtiene series de variación mensual publicadas por INEGI. Reutiliza el mismo cache de clase
-que `obtener()`. Usa los dicts privados de §8.7 según `tipo_variacion`:
+Obtiene series de variación mensual o quincenal publicadas por INEGI. Detecta automáticamente
+si los periodos son mensuales o quincenales y usa los dicts correspondientes (§8.7 o §8.8).
+Reutiliza el mismo cache de clase que `obtener()`.
 
-| `tipo_variacion` | Dict privado |
-| --- | --- |
-| `"periodica"` | `_VARIACIONES_PERIODICA_MENSUAL` |
-| `"interanual"` | `_VARIACIONES_INTERANUAL_MENSUAL` |
-| `"acumulada_anual"` | `_VARIACIONES_ACUMULADA_ANUAL_MENSUAL` |
+| `tipo_variacion` | Dict mensual (§8.7) | Dict quincenal (§8.8) |
+| --- | --- | --- |
+| `"periodica"` | `_VARIACIONES_PERIODICA_MENSUAL` | `_VARIACIONES_PERIODICA_QUINCENAL` |
+| `"interanual"` | `_VARIACIONES_INTERANUAL_MENSUAL` | `_VARIACIONES_INTERANUAL_QUINCENAL` |
+| `"acumulada_anual"` | `_VARIACIONES_ACUMULADA_ANUAL_MENSUAL` | `_VARIACIONES_ACUMULADA_ANUAL_QUINCENAL` |
+
+**Detección `fuera_de_rango_inegi`:** solo incluye en el dict retornado los periodos
+`p >= min(historico)`. Los periodos anteriores al primer dato publicado por INEGI quedan
+ausentes del dict — la ausencia de clave es la señal que usa `validar_variaciones` para
+asignar `"fuera_de_rango_inegi"`. Si el histórico está vacío, retorna dict vacío.
 
 Lanza `ErrorConfiguracion` si `tipo_variacion` no está en los tres valores válidos.
-Retorna `dict[str, dict[PeriodoMensual, float | None]]` keyed por nombre de índice
-(ej. `{"INPC": {PeriodoMensual(2024, 1): 0.89, ...}}`). Mismos errores que `obtener()`.
+Mismos errores que `obtener()`.
 
 ---
 
@@ -2573,7 +2613,7 @@ Series de variación publicadas por INEGI en la misma API BIE-BISE. Se usan para
 
 **Unidades:** porcentaje (p.ej. `0.86` = 0.86%). Nuestras variaciones están en decimal → multiplicar por 100 para comparar.
 
-**Tolerancia:** 0.09 pp (porcentaje) en diferencia absoluta — igual para canastas 2018 y 2024.
+**Tolerancia:** 0.009 pp (porcentaje) en diferencia absoluta — igual para canastas 2018 y 2024.
 
 **Exclusión de periodos:** no comparar cuando el periodo base del cálculo tenga `estado_calculo = "semi_ok"`. Esto excluye automáticamente Ago 2018 (periódica) y Jul 2019 (interanual), cuya base es Jul 2018 (solo 1 quincena disponible). Verificación empírica confirmó que sin esta exclusión el error máximo supera 0.3 pp; con exclusión, max ~0.006 pp.
 
@@ -2638,6 +2678,91 @@ _VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
     },
 }
 ```
+
+### 8.8 Indicadores de variación quincenal (API del INEGI)
+
+Series de variación quincenal publicadas por INEGI en la misma API BIE-BISE. Se usan para validar
+`variacion_periodica`, `variacion_acumulada_anual` calculadas sobre datos quincenales.
+
+**Unidades:** porcentaje (igual que §8.7). Misma tolerancia: 0.009 pp.
+
+**Cobertura:**
+
+- Periódica quincenal: datos históricos desde ~1988 (INPC), ~1995 (subyacente), 2011 (subcomponentes).
+- Interanual quincenal: solo desde `1Q Ago 2024` — periodos anteriores → `fuera_de_rango_inegi`.
+- Acumulada anual quincenal: solo desde `1Q Ago 2024` — periodos anteriores → `fuera_de_rango_inegi`.
+
+**Verificación empírica (2026-04-25):**
+
+| tipo | comparados | fuera_rango | max_error |
+| --- | --- | --- | --- |
+| periódica | 184 | 0 | 0.00566 pp |
+| interanual | 39 | 121 | 0.00512 pp |
+| acumulada | 39 | 134 | 0.00512 pp |
+
+Todos dentro de 0.009 pp. `periodos_semiok` vacío en quincenal — no hay exclusiones.
+
+**Mapeos — inflación periódica quincenal (`variacion_periodica(..., "quincenal")`):**
+
+```python
+_VARIACIONES_PERIODICA_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910427",
+    },
+    "inflacion componente": {
+        "subyacente":    "910428",
+        "no subyacente": "910431",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910429",
+        "servicios":                                         "910430",
+        "agropecuarios":                                     "910432",
+        "energeticos y tarifas autorizadas por el gobierno": "910433",
+    },
+}
+```
+
+**Mapeos — inflación interanual quincenal (`variacion_periodica(..., "anual")`):**
+
+```python
+_VARIACIONES_INTERANUAL_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910438",
+    },
+    "inflacion componente": {
+        "subyacente":    "910439",
+        "no subyacente": "910442",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910440",
+        "servicios":                                         "910441",
+        "agropecuarios":                                     "910443",
+        "energeticos y tarifas autorizadas por el gobierno": "910444",
+    },
+}
+```
+
+**Mapeos — inflación acumulada anual quincenal (`variacion_acumulada_anual(...)`):**
+
+```python
+_VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910445",
+    },
+    "inflacion componente": {
+        "subyacente":    "910446",
+        "no subyacente": "910449",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910447",
+        "servicios":                                         "910448",
+        "agropecuarios":                                     "910450",
+        "energeticos y tarifas autorizadas por el gobierno": "910451",
+    },
+}
+```
+
+---
 
 ## 9. Estrategia de errores
 
@@ -3448,45 +3573,19 @@ Internamente encadena `resultado_referencia` automáticamente entre corridas con
 
 ---
 
-### 12.13 Validación de variaciones contra series INEGI (v1.2.4)
+### 12.13 Validación de variaciones contra series INEGI (v1.2.4) ✓ RESUELTO
 
-**Situación actual:** `FuenteValidacionApi` obtiene índices de nivel (INPC, subyacente, etc.) y los compara con `indice_replicado`. Las variaciones calculadas por `variacion_periodica`, `variacion_desde` y `variacion_acumulada_anual` no se validan directamente contra series publicadas del INEGI.
+**Implementado:** `validar_variaciones_mensual` y `validar_variaciones_quincenal` en `api/validacion.py`. Ver §6.3.
 
-**Mejora propuesta:** ampliar `FuenteValidacionApi` con tres nuevos dicts de indicadores (privados) para series de variación mensual, cubriendo los 3 tipos disponibles (`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`):
+**Mensual:** 21 indicadores (7 × 3 tipos). Ver §8.7. Verificación empírica 2026-04-24.
 
-- inflación periódica mensual (`variacion_periodica(..., "mensual")`)
-- inflación interanual (`variacion_periodica(..., "anual")`)
-- inflación acumulada anual (`variacion_acumulada_anual(...)`)
+**Quincenal:** 21 indicadores (7 × 3 tipos). Ver §8.8. Verificación empírica 2026-04-25.
 
-Total mensual: 7 índices × 3 tipos de variación = 21 indicadores. Ver mapeos en §8.7.
+**Tolerancia:** 0.009 pp para mensual y quincenal.
 
-**Unidades INEGI:** porcentaje. Nuestras variaciones son decimales → multiplicar × 100 para comparar.
+**Estado `fuera_de_rango_inegi`:** periodos anteriores al primer dato publicado por INEGI para ese indicador. Para interanual y acumulada quincenal, afecta todo el rango 2018–2024 (INEGI solo publica desde `1Q Ago 2024`).
 
-**Tolerancia:** diferencia absoluta ≤ 0.09 pp — igual para canastas 2018 y 2024.
-
-**Exclusión de periodos semi_ok:** no comparar cuando el periodo base del cálculo tenga `estado_calculo = "semi_ok"` en el `ResultadoCalculo`. Concretamente:
-
-- Periódica (lag=1): base = `_restar_meses(p, 1)` — excluye Ago 2018 (base Jul 2018 `semi_ok`)
-- Interanual (lag=12): base = `_restar_meses(p, 12)` — excluye Jul 2019 (base Jul 2018 `semi_ok`)
-- Acumulada: base = `PeriodoMensual(p.año-1, 12)` — sin exclusiones en práctica
-
-**Verificación empírica (2026-04-24):** 21 combinaciones, 80–92 periodos cada una. Todos OK tras exclusión. Errores típicos < 0.006 pp; tolerancia 0.09 pp es holgada.
-
-**Mapeos completos:** §8.7.
-
-**Nueva función pública en `api/validacion.py`:**
-
-```python
-def validar_variaciones_mensual(
-    resultado: ResultadoCalculo,
-    token: str,
-) -> ResumenValidacionVariaciones:
-    ...
-```
-
-Recibe un `ResultadoCalculo` (mensual o quincenal — si quincenal, aplica `a_mensual()` internamente). Calcula las tres variaciones, obtiene series INEGI, compara con exclusión de semi_ok, y retorna un resumen. Ver §6.3 para el modelo de retorno.
-
-**Quincenal:** pendiente para v1.2.5 — requiere verificación empírica equivalente con datos quincenales.
+**Mapeos completos:** §8.7 (mensual) y §8.8 (quincenal).
 
 ---
 
