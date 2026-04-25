@@ -65,7 +65,9 @@ def validar_variaciones(
                 "tipo_variacion": tipo_variacion,
                 "periodo": periodo,
                 "indice": indice,
-                "variacion_replicada": float(variacion_rep) if not pd.isna(variacion_rep) else None,
+                "variacion_replicada_pp": float(variacion_rep) * 100
+                if not pd.isna(variacion_rep)
+                else None,
                 "variacion_inegi_pp": float(var_inegi) if var_inegi is not None else None,
                 "error_absoluto_pp": error_pp,
                 "estado_validacion": estado,

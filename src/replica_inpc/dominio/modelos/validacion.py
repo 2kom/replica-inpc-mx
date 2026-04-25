@@ -360,9 +360,9 @@ class ReporteValidacionVariaciones:
             duplicados o si `estado_validacion` contiene valores inválidos.
 
     Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `periodo`, `indice`):
-        variacion_replicada (float/NaN): variación calculada en decimal.
-        variacion_inegi_pp (float/NaN): variación publicada por INEGI en porcentaje.
-        error_absoluto_pp (float/NaN): abs(variacion_replicada × 100 − variacion_inegi_pp).
+        variacion_replicada_pp (float/NaN): variación calculada en porcentaje (pp).
+        variacion_inegi_pp (float/NaN): variación publicada por INEGI en porcentaje (pp).
+        error_absoluto_pp (float/NaN): abs(variacion_replicada_pp − variacion_inegi_pp).
         estado_validacion (str): `'ok'`, `'diferencia_detectada'`, `'excluido_semi_ok'`
             o `'no_disponible'`.
 
@@ -399,7 +399,7 @@ class ReporteValidacionVariaciones:
         Args:
             ancho: Si `False` (default), retorna el DataFrame con índice
                 `(periodo, indice)`. Si `True`, pivota con periodos como columnas
-                y filas `{indice}_variacion_replicada`, `{indice}_variacion_inegi_pp`,
+                y filas `{indice}_variacion_replicada_pp`, `{indice}_variacion_inegi_pp`,
                 `{indice}_error_absoluto_pp`, `{indice}_estado_validacion`.
         """
         tipos = self._df.index.get_level_values("tipo_variacion").unique()
@@ -413,7 +413,7 @@ class ReporteValidacionVariaciones:
         for indice in indices:
             df_ind: pd.DataFrame = df.xs(indice, level="indice")  # type: ignore[assignment]
             cols = {
-                "variacion_replicada": f"{indice}_variacion_replicada",
+                "variacion_replicada_pp": f"{indice}_variacion_replicada_pp",
                 "variacion_inegi_pp": f"{indice}_variacion_inegi_pp",
                 "error_absoluto_pp": f"{indice}_error_absoluto_pp",
                 "estado_validacion": f"{indice}_estado_validacion",
