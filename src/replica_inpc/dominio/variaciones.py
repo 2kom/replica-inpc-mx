@@ -110,7 +110,14 @@ def variacion_periodica(
             f"Se requieren >= {lag} {unidad} de datos."
         )
 
-    return ResultadoVariacion(df_var.sort_index(), tipo=tipo, descripcion=frecuencia)
+    semiok = frozenset(df[df["estado_calculo"] == "semi_ok"].index.get_level_values("periodo"))
+    return ResultadoVariacion(
+        df_var.sort_index(),
+        tipo=tipo,
+        descripcion=frecuencia,
+        clase_variacion="periodica",
+        periodos_semiok=semiok,
+    )
 
 
 def variacion_desde(
@@ -208,10 +215,15 @@ def variacion_desde(
                 f"Ningún índice tiene dato en el rango [{desde_p}, {hasta_efectivo}]. Usa incluir_parciales=True."
             )
 
+        semiok_desde = frozenset(
+            df[df["estado_calculo"] == "semi_ok"].index.get_level_values("periodo")
+        )
         return ResultadoVariacion(
             df_var.sort_index(),
             tipo=tipo,
             descripcion=f"desde {desde_p} hasta {hasta_efectivo}",
+            clase_variacion="desde",
+            periodos_semiok=semiok_desde,
         )
 
     else:
@@ -269,11 +281,16 @@ def variacion_desde(
             if periodo != base_periodo
         }
 
+        semiok_desde2 = frozenset(
+            df[df["estado_calculo"] == "semi_ok"].index.get_level_values("periodo")
+        )
         return ResultadoVariacion(
             df_var.sort_index(),
             tipo=tipo,
             descripcion=f"desde {desde_p} hasta {hasta_efectivo}",
+            clase_variacion="desde",
             indices_parciales=indices_parciales if indices_parciales else None,
+            periodos_semiok=semiok_desde2,
         )
 
 
@@ -307,4 +324,11 @@ def variacion_acumulada_anual(
             "Sin periodos con base anual disponible. Se requiere  >= 1 año de datos."
         )
 
-    return ResultadoVariacion(df_var.sort_index(), tipo=tipo, descripcion="acumulada_anual")
+    semiok_ac = frozenset(df[df["estado_calculo"] == "semi_ok"].index.get_level_values("periodo"))
+    return ResultadoVariacion(
+        df_var.sort_index(),
+        tipo=tipo,
+        descripcion="acumulada_anual",
+        clase_variacion="acumulada_anual",
+        periodos_semiok=semiok_ac,
+    )

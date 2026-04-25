@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 import requests  # type: ignore
 
 from replica_inpc.dominio.errores import (
@@ -39,6 +41,60 @@ _INDICADORES_MENSUALES: dict[str, dict[str, str]] = {
         "agropecuarios": "910397",
         "energeticos y tarifas autorizadas por el gobierno": "910398",
     },
+}
+
+_VARIACIONES_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910399",
+    },
+    "inflacion componente": {
+        "subyacente": "910400",
+        "no subyacente": "910403",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910401",
+        "servicios": "910402",
+        "agropecuarios": "910404",
+        "energeticos y tarifas autorizadas por el gobierno": "910405",
+    },
+}
+
+_VARIACIONES_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910406",
+    },
+    "inflacion componente": {
+        "subyacente": "910407",
+        "no subyacente": "910410",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910408",
+        "servicios": "910409",
+        "agropecuarios": "910411",
+        "energeticos y tarifas autorizadas por el gobierno": "910412",
+    },
+}
+
+_VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910413",
+    },
+    "inflacion componente": {
+        "subyacente": "910414",
+        "no subyacente": "910417",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910415",
+        "servicios": "910416",
+        "agropecuarios": "910418",
+        "energeticos y tarifas autorizadas por el gobierno": "910419",
+    },
+}
+
+_VARIACIONES_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
+    "periodica": _VARIACIONES_PERIODICA_MENSUAL,
+    "interanual": _VARIACIONES_INTERANUAL_MENSUAL,
+    "acumulada_anual": _VARIACIONES_ACUMULADA_ANUAL_MENSUAL,
 }
 
 _URL = (
@@ -86,6 +142,35 @@ class FuenteValidacionApi:
             else _INDICADORES_QUINCENALES[self._tipo]
         )
         resultado: dict[str, dict[_Periodo, float | None]] = {}
+        for nombre, indicador in indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            resultado[nombre] = {p: historico.get(p) for p in periodos}
+        return resultado
+
+    def obtener_variaciones(
+        self,
+        periodos: list[PeriodoMensual],
+        tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
+    ) -> dict[str, dict[PeriodoMensual, float | None]]:
+        """Devuelve series de variación mensual publicadas por INEGI.
+
+        Reutiliza el mismo cache de clase que `obtener()`.
+        """
+        if tipo_variacion not in _VARIACIONES_POR_TIPO:
+            raise ErrorConfiguracion(
+                f"tipo_variacion '{tipo_variacion}' no válido. "
+                f"Valores soportados: {list(_VARIACIONES_POR_TIPO)}"
+            )
+        indicadores_tipo = _VARIACIONES_POR_TIPO[tipo_variacion]
+        if self._tipo not in indicadores_tipo:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicadores de variación '{tipo_variacion}'. "
+                f"Tipos soportados: {list(indicadores_tipo)}"
+            )
+        indicadores = indicadores_tipo[self._tipo]
+        resultado: dict[str, dict[PeriodoMensual, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)

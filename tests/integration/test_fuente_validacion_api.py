@@ -273,6 +273,68 @@ class TestRespuestaInvalida:
             fuente.obtener([_P1])
 
 
+class TestObtenerVariaciones:
+    def test_retorna_dict_keyed_por_indice(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener_variaciones([_PM1], "periodica")
+        assert "INPC" in resultado
+
+    def test_valores_para_periodos_pedidos(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener_variaciones([_PM1, _PM2], "periodica")
+        assert resultado["INPC"][_PM1] == pytest.approx(145.200)
+        assert resultado["INPC"][_PM2] == pytest.approx(144.300)
+
+    def test_tipo_variacion_invalido_lanza_error(self, mocker):
+        from replica_inpc.dominio.errores import ErrorConfiguracion
+
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        with pytest.raises(ErrorConfiguracion):
+            fuente.obtener_variaciones([_PM1], "invalido")  # type: ignore[arg-type]
+
+    def test_usa_indicador_periodica(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_PM1], "periodica")
+        url = mock_get.call_args[0][0]
+        assert "910399" in url
+
+    def test_usa_indicador_interanual(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_PM1], "interanual")
+        url = mock_get.call_args[0][0]
+        assert "910406" in url
+
+    def test_usa_indicador_acumulada_anual(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones(
+            [_PM1], "acumulada_anual"
+        )
+        url = mock_get.call_args[0][0]
+        assert "910413" in url
+
+    def test_reutiliza_cache_de_obtener(self, mocker):
+        mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        # primera llamada llena cache con indicador 910399
+        fuente.obtener_variaciones([_PM1], "periodica")
+        # segunda llamada con mismo indicador no hace request
+        fuente.obtener_variaciones([_PM2], "periodica")
+        assert mock_get.call_count == 1
+
+    def test_subcomponentes_devuelven_claves_correctas(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        resultado = fuente.obtener_variaciones([_PM1], "periodica")
+        assert set(resultado.keys()) == {
+            "mercancias",
+            "servicios",
+            "agropecuarios",
+            "energeticos y tarifas autorizadas por el gobierno",
+        }
+
+
 # --- helpers ---
 
 

@@ -1,5 +1,9 @@
 from replica_inpc.api.corrida import Corrida
-from replica_inpc.api.validacion import validar_mensual, validar_quincenal
+from replica_inpc.api.validacion import (
+    validar_mensual,
+    validar_quincenal,
+    validar_variaciones_mensual,
+)
 from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.modelos.resultado import combinar
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal, periodo_desde_str
@@ -21,6 +25,7 @@ __all__ = [
     "periodo_desde_str",
     "validar_mensual",
     "validar_quincenal",
+    "validar_variaciones_mensual",
     "variacion_acumulada_anual",
     "variacion_desde",
     "variacion_periodica",

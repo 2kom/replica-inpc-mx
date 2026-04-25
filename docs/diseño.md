@@ -59,7 +59,6 @@ El historial de cambios vive en git.
   - [6. Fachada — api/corrida.py](#6-fachada--apicorridapy)
   - [6.2 Fachada de validación — api/validacion.py](#62-fachada-de-validación--apivalidacionpy)
   - [6.3 Validación de variaciones — api/validacion.py](#63-validación-de-variaciones--apivalidacionpy)
-    - [ResumenValidacionVariaciones](#resumenvalidacionvariaciones)
     - [ReporteValidacionVariaciones](#reportevalidacionvariaciones)
   - [7. Capa de aplicación](#7-capa-de-aplicación)
     - [7.1 Puertos](#71-puertos)
@@ -1351,13 +1350,22 @@ class ResultadoVariacion:
         df: pd.DataFrame,
         tipo: str,
         descripcion: str,
+        clase_variacion: Literal["periodica", "acumulada_anual", "desde"],
         indices_parciales: dict[str, Periodo] | None = None,
+        periodos_semiok: frozenset[Periodo] | None = None,
     ) -> None: ...
 
     @property
     def tipo(self) -> str: ...               # clasificación: "inpc", "CCIF division", etc.
     @property
-    def descripcion(self) -> str: ...        # "anual", "acumulada_anual", "desde 2Q Ene 2023 hasta 2Q Dic 2024"
+    def descripcion(self) -> str: ...        # "mensual", "anual", "acumulada_anual", "desde 2Q Ene 2023 hasta 2Q Dic 2024"
+    @property
+    def clase_variacion(self) -> str: ...    # "periodica", "acumulada_anual" o "desde"
+    @property
+    def periodos_semiok(self) -> frozenset[Periodo]: ...
+    # Periodos con estado_calculo == "semi_ok" en el ResultadoCalculo origen.
+    # Poblado automáticamente por variacion_periodica, variacion_acumulada_anual y variacion_desde.
+    # Usado por validar_variaciones para excluir periodos cuya base es semi_ok.
     @property
     def df(self) -> pd.DataFrame: ...
     @property
@@ -1387,13 +1395,14 @@ class ResultadoVariacion:
 
 **Invariantes — validados al construir:**
 
-| Invariante             | Regla                                          |
-| ---------------------- | ---------------------------------------------- |
-| df no vacío            | `df` no puede estar vacío                      |
-| índice correcto        | MultiIndex con niveles `["periodo", "indice"]` |
-| columna `variacion`    | debe existir en `df`                           |
-| `tipo` no vacío        | string no vacío                                |
-| `descripcion` no vacío | string no vacío                                |
+| Invariante              | Regla                                                       |
+| ----------------------- | ----------------------------------------------------------- |
+| df no vacío             | `df` no puede estar vacío                                   |
+| índice correcto         | MultiIndex con niveles `["periodo", "indice"]`              |
+| columna `variacion`     | debe existir en `df`                                        |
+| `tipo` no vacío         | string no vacío                                             |
+| `descripcion` no vacío  | string no vacío                                             |
+| `clase_variacion` válido | valor en `{"periodica", "acumulada_anual", "desde"}`       |
 
 ---
 
@@ -1447,6 +1456,8 @@ Raises `InvarianteViolado` si:
 - `resultado.df["tipo"]` no es homogéneo
 - Ningún periodo tiene base disponible: `"Sin periodos con base para frecuencia '{frecuencia}'. Se requieren ≥{lag} periodos de datos."`
 
+`descripcion` = `frecuencia`. `clase_variacion` = `"periodica"`. `periodos_semiok` poblado desde `resultado.df["estado_calculo"]`.
+
 `indices_parciales` = `{}` (no aplica).
 
 `descripcion` = valor de `frecuencia` (posiblemente corregido a `"mensual"` si hubo warning).
@@ -1494,7 +1505,7 @@ Raises `InvarianteViolado` si:
 - `base_periodo` no existe en el df (ej. `desde` es el primer periodo de datos): `"No hay datos en '{base_periodo}' (base de '{desde_p}'). 'desde' mínimo válido: '{min_desde}'."`
 - Ningún índice tiene dato en el rango (output vacío): `"Ningún índice tiene dato en el rango [{desde}, {hasta}]. Usa incluir_parciales=True."` (solo si `incluir_parciales=False`) o `"Sin datos en el rango desde {desde} hasta {hasta}."` (si `incluir_parciales=True`)
 
-`descripcion` = `f"desde {desde} hasta {hasta_efectivo}"`.
+`descripcion` = `f"desde {desde} hasta {hasta_efectivo}"`. `clase_variacion` = `"desde"`. `periodos_semiok` poblado desde `resultado.df["estado_calculo"]`.
 
 ---
 
@@ -1522,7 +1533,7 @@ Raises `InvarianteViolado` si:
 
 `indices_parciales` = `{}` (no aplica).
 
-`descripcion` = `"acumulada_anual"`.
+`descripcion` = `"acumulada_anual"`. `clase_variacion` = `"acumulada_anual"`. `periodos_semiok` poblado desde `resultado.df["estado_calculo"]`.
 
 ---
 
@@ -1609,8 +1620,10 @@ resultado_mensual = combinar([a_mensual(r2018.resultado), a_mensual(r2024.result
 
 ### 5.14 ResumenValidacionVariaciones
 
+> **Dead code — diferido a v2.0.** La clase existe en `dominio/modelos/validacion.py` pero no es retornada por ninguna función pública desde v1.2.4. Se retomará cuando `validar_variaciones_mensual` acepte múltiples variaciones a la vez.
+
 **Representación:** DataFrame-backed. Índice MultiIndex `(tipo_variacion, indice)`.
-Agrega el resultado de validar las tres variaciones mensuales contra el INEGI.
+Agrega el resultado de validar variaciones mensuales contra el INEGI.
 
 ```python
 class ResumenValidacionVariaciones:
@@ -1657,14 +1670,13 @@ class ReporteValidacionVariaciones:
     @property
     def df(self) -> pd.DataFrame: ...
 
-    def como_tabla(self, tipo_variacion: str | None = None) -> pd.DataFrame: ...
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame: ...
 
     def _repr_html_(self) -> str:
         return self.como_tabla()._repr_html_()
 ```
 
-**`como_tabla(tipo_variacion=None)`:** filtra por `tipo_variacion`; sin argumento devuelve
-todas las filas. Útil para inspeccionar un solo tipo de variación en un notebook.
+**`como_tabla(ancho=False)`:** descarta el nivel `tipo_variacion` del índice (siempre es uno solo en v1). `ancho=False` devuelve formato largo con índice `(periodo, indice)`. `ancho=True` pivota con periodos como columnas y filas `{indice}_variacion_replicada`, `{indice}_variacion_inegi_pp`, `{indice}_error_absoluto_pp`, `{indice}_estado_validacion`.
 
 **Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `periodo`, `indice`):**
 
@@ -1696,42 +1708,37 @@ Valores de `estado_validacion`:
 
 ### 5.16 validar_variaciones.py
 
-Función del dominio que compara las tres variaciones mensuales calculadas contra las
-series de variación publicadas por el INEGI. No hace requests — recibe los datos INEGI
-ya obtenidos por la capa api.
+Función del dominio que compara una variación mensual calculada contra las series
+publicadas por el INEGI. No hace requests — recibe los datos INEGI ya obtenidos por la
+capa api. Privada: llamada solo desde `api/validacion.py`.
 
 **Archivo:** `dominio/validar_variaciones.py`
 
 ```python
 def validar_variaciones(
-    resultado: ResultadoCalculo,
-    inegi_periodica: dict[str, dict[PeriodoMensual, float | None]],
-    inegi_interanual: dict[str, dict[PeriodoMensual, float | None]],
-    inegi_acumulada: dict[str, dict[PeriodoMensual, float | None]],
-) -> tuple[ResumenValidacionVariaciones, ReporteValidacionVariaciones]:
+    rv: ResultadoVariacion,
+    tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
+    inegi: dict[str, dict[PeriodoMensual, float | None]],
+) -> ReporteValidacionVariaciones:
 ```
 
-**Precondición:** `resultado` debe ser mensual (todos `PeriodoMensual`). La capa api aplica
-`a_mensual()` antes de llamar esta función.
+**Precondición:** `rv` debe tener periodos `PeriodoMensual`. `tipo_variacion` indica qué tipo
+de base usar para la exclusión semi_ok.
 
 **Algoritmo:**
 
-1. Extrae `periodos_semiok` del resultado: set de `PeriodoMensual` con `estado_calculo == "semi_ok"`.
-2. Calcula las tres variaciones internamente:
-   - `rv_periodica = variacion_periodica(resultado, "mensual")`
-   - `rv_interanual = variacion_periodica(resultado, "anual")`
-   - `rv_acumulada = variacion_acumulada_anual(resultado)`
-3. Para cada combinación `(tipo_variacion, periodo, indice)` determina el `estado_validacion`:
-   - Si la base del periodo está en `periodos_semiok` → `"excluido_semi_ok"`
+1. Lee `periodos_semiok` desde `rv.periodos_semiok` (poblado al calcular la variación).
+2. Para cada `(periodo, indice)` en `rv.df` determina el `estado_validacion`:
+   - Calcula `base` según `tipo_variacion`: `"periodica"` → `_restar_meses(p, 1)`, `"interanual"` → `_restar_meses(p, 12)`, `"acumulada_anual"` → `PeriodoMensual(p.año - 1, 12)`.
+   - Si `base` está en `periodos_semiok` → `"excluido_semi_ok"`
    - Si INEGI no tiene dato para ese `(indice, periodo)` → `"no_disponible"`
    - Si `abs(variacion_replicada × 100 − variacion_inegi_pp)` ≤ `_TOLERANCIA_VARIACION_PP` → `"ok"`
    - Si no → `"diferencia_detectada"`
-4. Construye `ReporteValidacionVariaciones` con todas las filas.
-5. Agrega por `(tipo_variacion, indice)` para construir `ResumenValidacionVariaciones`.
+3. Construye y retorna `ReporteValidacionVariaciones`.
 
 **Cálculo del periodo base por tipo de variación:**
 
-| Tipo | Base |
+| `tipo_variacion` | Base |
 | --- | --- |
 | `"periodica"` | `_restar_meses(p, 1)` |
 | `"interanual"` | `_restar_meses(p, 12)` |
@@ -1740,14 +1747,6 @@ def validar_variaciones(
 `_restar_meses` se reimplementa inline — no importa el privado de `variaciones.py`.
 
 **Tolerancia:** `_TOLERANCIA_VARIACION_PP = 0.09` (pp). Ver §8.7.
-
-**`estado_validacion_global` en resumen:**
-
-| Condición | Valor |
-| --- | --- |
-| algún `"diferencia_detectada"` | `"diferencia_detectada"` |
-| solo `"no_disponible"` (sin comparaciones) | `"no_disponible"` |
-| resto | `"ok"` |
 
 ---
 
@@ -1926,56 +1925,32 @@ series publicadas por el INEGI. Vive en `api/validacion.py` y se exporta desde `
 
 ```python
 def validar_variaciones_mensual(
-    resultado: ResultadoCalculo,
+    rv: ResultadoVariacion,
     token: str,
-) -> tuple[ResumenValidacionVariaciones, ReporteValidacionVariaciones]: ...
+) -> ReporteValidacionVariaciones: ...
 ```
 
 **Comportamiento:**
 
-1. Si `resultado` es quincenal → aplica `a_mensual(resultado)` internamente.
-2. Calcula las tres variaciones sobre el resultado mensual:
-   - `variacion_periodica(res, "mensual")` — inflación periódica mensual
-   - `variacion_periodica(res, "anual")` — inflación interanual
-   - `variacion_acumulada_anual(res)` — inflación acumulada anual
-3. Detecta `tipo` desde `resultado.df["tipo"].iloc[0]`.
-4. Construye `FuenteValidacionApi(token, tipo)` y llama `.obtener_variaciones(periodos, tipo_variacion)` × 3.
-5. Delega a `validar_variaciones` del dominio (`dominio/validar_variaciones.py`).
-6. Retorna la tupla resultante.
+1. Valida que `rv.clase_variacion` sea soportada — lanza `ErrorConfiguracion` si:
+   - `clase_variacion == "desde"`: INEGI no publica ese tipo de variación.
+   - `clase_variacion == "periodica"` con `rv.descripcion` no en `{"mensual", "anual"}`: INEGI solo publica periódica mensual e interanual.
+2. Valida que los periodos en `rv.df` sean `PeriodoMensual` — lanza `ErrorConfiguracion` si no.
+3. Determina `tipo_variacion_inegi`:
+   - `clase="periodica"` + `descripcion="mensual"` → `"periodica"`
+   - `clase="periodica"` + `descripcion="anual"` → `"interanual"`
+   - `clase="acumulada_anual"` → `"acumulada_anual"`
+4. Construye `FuenteValidacionApi(token=token, tipo=rv.tipo)` y llama `.obtener_variaciones(periodos, tipo_variacion_inegi)` una vez.
+5. Delega a `validar_variaciones(rv, tipo_variacion_inegi, inegi)` del dominio.
+6. Retorna el `ReporteValidacionVariaciones` resultante.
 
-**Exclusión de periodos `semi_ok`:** no se comparan periodos cuya base tenga
-`estado_calculo == "semi_ok"` en el `ResultadoCalculo`. Ver §8.7.
-
-### ResumenValidacionVariaciones
-
-Resumen agregado por tipo de variación e índice.
-
-Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `indice`):
-
-| Columna | Tipo | Descripción |
-| --- | --- | --- |
-| `n_comparaciones` | `int` | periodos efectivamente comparados |
-| `n_excluidos` | `int` | periodos excluidos por base `semi_ok` |
-| `n_no_disponibles` | `int` | periodos sin dato INEGI |
-| `max_error_pp` | `float/NaN` | error absoluto máximo en pp |
-| `estado_validacion_global` | `str` | `ok`, `diferencia_detectada` o `no_disponible` |
-
-Valores de `tipo_variacion`: `"periodica"`, `"interanual"`, `"acumulada_anual"`.
+**Exclusión de periodos `semi_ok`:** `rv.periodos_semiok` (poblado automáticamente por las funciones de variación) es usado por `validar_variaciones` para excluir periodos cuya base tiene `estado_calculo == "semi_ok"`. Ver §8.7.
 
 ### ReporteValidacionVariaciones
 
-Detalle por tipo de variación, periodo e índice.
+Detalle por periodo e índice. Ver §5.15 para el esquema completo.
 
-Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `periodo`, `indice`):
-
-| Columna | Tipo | Descripción |
-| --- | --- | --- |
-| `variacion_replicada` | `float/NaN` | variación calculada en decimal |
-| `variacion_inegi_pp` | `float/NaN` | variación publicada por INEGI en porcentaje |
-| `error_absoluto_pp` | `float/NaN` | `abs(variacion_replicada × 100 − variacion_inegi_pp)` |
-| `estado_validacion` | `str` | `ok`, `diferencia_detectada`, `excluido_semi_ok` o `no_disponible` |
-
-Método `como_tabla(tipo_variacion=None)`: filtra por tipo de variación; sin argumento devuelve todos.
+`como_tabla(ancho=False)`: descarta nivel `tipo_variacion`; `ancho=True` pivota periodos como columnas.
 
 **Tolerancia:** 0.09 pp. Ver §8.7.
 
@@ -1985,7 +1960,7 @@ Método `como_tabla(tipo_variacion=None)`: filtra por tipo de variación; sin ar
 from replica_inpc import validar_variaciones_mensual
 ```
 
-> **v2.0:** esta función retornará `ResultadoValidacionVariaciones` en lugar de la tupla actual.
+> **v2.0:** `ResumenValidacionVariaciones` será retornado nuevamente cuando la función acepte múltiples variaciones a la vez.
 
 ---
 

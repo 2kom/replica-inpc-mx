@@ -6,8 +6,10 @@ from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.validacion import (
     DiagnosticoFaltantes,
     ReporteDetalladoValidacion,
+    ReporteValidacionVariaciones,
     ResumenValidacion,
 )
+from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual
 from replica_inpc.dominio.validar_inpc import (
     validar_mensual as _validar_mensual,
@@ -15,7 +17,54 @@ from replica_inpc.dominio.validar_inpc import (
 from replica_inpc.dominio.validar_inpc import (
     validar_quincenal_resultado as _validar_quincenal_resultado,
 )
+from replica_inpc.dominio.validar_variaciones import validar_variaciones as _validar_variaciones
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValidacionApi
+
+_FRECUENCIAS_INEGI = {"mensual": "periodica", "anual": "interanual"}
+
+
+def validar_variaciones_mensual(
+    rv: ResultadoVariacion,
+    token: str,
+) -> ReporteValidacionVariaciones:
+    """Valida una variación mensual calculada contra series publicadas por el INEGI.
+
+    Soporta variaciones de clase 'periodica' (frecuencias 'mensual' o 'anual') y
+    'acumulada_anual'. Lanza ErrorConfiguracion si la clase es 'desde' o si la
+    frecuencia de 'periodica' no es mensual ni anual.
+    Ver docs/diseño.md §6.3.
+    """
+    clase = rv.clase_variacion
+
+    if clase == "desde":
+        raise ErrorConfiguracion(
+            "La variación 'desde' no tiene indicadores INEGI disponibles. "
+            "Solo se pueden validar variaciones 'periodica' (mensual o anual) y 'acumulada_anual'."
+        )
+
+    periodos = rv.df.index.get_level_values("periodo")
+    if not isinstance(periodos[0], PeriodoMensual):
+        raise ErrorConfiguracion(
+            "validar_variaciones_mensual requiere periodos mensuales (PeriodoMensual). "
+            "Calcula la variación sobre un ResultadoCalculo mensual o aplica a_mensual() antes."
+        )
+
+    if clase == "periodica":
+        frecuencia = rv.descripcion
+        if frecuencia not in _FRECUENCIAS_INEGI:
+            raise ErrorConfiguracion(
+                f"INEGI solo publica variación periódica mensual e interanual. "
+                f"Frecuencia '{frecuencia}' no está disponible. "
+                f"Frecuencias válidas: {list(_FRECUENCIAS_INEGI)}."
+            )
+        tipo_variacion_inegi = _FRECUENCIAS_INEGI[frecuencia]
+    else:
+        tipo_variacion_inegi = "acumulada_anual"
+
+    periodos_lista = list(periodos.unique())
+    fuente = FuenteValidacionApi(token=token, tipo=rv.tipo)
+    inegi = fuente.obtener_variaciones(periodos_lista, tipo_variacion_inegi)  # type: ignore[arg-type]
+    return _validar_variaciones(rv, tipo_variacion_inegi, inegi)  # type: ignore[arg-type]
 
 
 def validar_mensual(

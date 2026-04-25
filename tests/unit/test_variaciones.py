@@ -65,42 +65,50 @@ _P_ENE19_2 = PeriodoQuincenal(2019, 1, 2)  # "2Q Ene 2019"
 
 def test_rv_construccion_valida():
     df = _mk_df_var((_P0, "INPC", 0.01))
-    rv = ResultadoVariacion(df, tipo="inpc", descripcion="anual")
+    rv = ResultadoVariacion(df, tipo="inpc", descripcion="anual", clase_variacion="periodica")
     assert rv.tipo == "inpc"
     assert rv.descripcion == "anual"
+    assert rv.clase_variacion == "periodica"
     assert rv.indices_parciales == {}
+    assert rv.periodos_semiok == frozenset()
 
 
 def test_rv_df_vacio():
     idx = pd.MultiIndex.from_tuples([], names=["periodo", "indice"])
     df = pd.DataFrame({"variacion": pd.Series([], dtype=float)}, index=idx)
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, tipo="inpc", descripcion="x")
+        ResultadoVariacion(df, tipo="inpc", descripcion="x", clase_variacion="periodica")
 
 
 def test_rv_indice_incorrecto():
     df = pd.DataFrame({"variacion": [0.01]})
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, tipo="inpc", descripcion="x")
+        ResultadoVariacion(df, tipo="inpc", descripcion="x", clase_variacion="periodica")
 
 
 def test_rv_columna_faltante():
     idx = pd.MultiIndex.from_tuples([(_P0, "INPC")], names=["periodo", "indice"])
     df = pd.DataFrame({"otro": [0.01]}, index=idx)
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, tipo="inpc", descripcion="x")
+        ResultadoVariacion(df, tipo="inpc", descripcion="x", clase_variacion="periodica")
 
 
 def test_rv_tipo_vacio():
     df = _mk_df_var((_P0, "INPC", 0.01))
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, tipo="", descripcion="x")
+        ResultadoVariacion(df, tipo="", descripcion="x", clase_variacion="periodica")
 
 
 def test_rv_descripcion_vacia():
     df = _mk_df_var((_P0, "INPC", 0.01))
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, tipo="inpc", descripcion="")
+        ResultadoVariacion(df, tipo="inpc", descripcion="", clase_variacion="periodica")
+
+
+def test_rv_clase_invalida():
+    df = _mk_df_var((_P0, "INPC", 0.01))
+    with pytest.raises(InvarianteViolado):
+        ResultadoVariacion(df, tipo="inpc", descripcion="mensual", clase_variacion="invalida")  # type: ignore[arg-type]
 
 
 # -- variacion_periodica -------------------------------------------------------

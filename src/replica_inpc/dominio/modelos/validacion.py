@@ -300,6 +300,134 @@ class ReporteDetalladoValidacion:
         return self.como_tabla(ancho=False)._repr_html_()  # type: ignore[operator]
 
 
+class ResumenValidacionVariaciones:
+    """Resumen agregado de la validación de variaciones mensuales vs INEGI.
+
+    Args:
+        df: DataFrame con índice MultiIndex `(tipo_variacion, indice)` y
+            métricas agregadas de comparación.
+
+    Raises:
+        InvarianteViolado: Si el DataFrame está vacío, si el índice tiene
+            duplicados o si `estado_validacion_global` contiene valores inválidos.
+
+    Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `indice`):
+        n_comparaciones (int): periodos efectivamente comparados.
+        n_excluidos (int): periodos excluidos por base `semi_ok`.
+        n_no_disponibles (int): periodos sin dato INEGI.
+        max_error_pp (float/NaN): error absoluto máximo en pp; NaN si n_comparaciones == 0.
+        estado_validacion_global (str): `'ok'`, `'diferencia_detectada'` o `'no_disponible'`.
+
+    Ver: docs/diseño.md §5.14
+    """
+
+    def __init__(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise InvarianteViolado(
+                "El DataFrame de ResumenValidacionVariaciones no puede estar vacío."
+            )
+        if df.index.duplicated().any():
+            raise InvarianteViolado(
+                "El índice de ResumenValidacionVariaciones no puede tener duplicados."
+            )
+        if (
+            not df["estado_validacion_global"]
+            .isin({"ok", "diferencia_detectada", "no_disponible"})
+            .all()
+        ):
+            raise InvarianteViolado(
+                "La columna 'estado_validacion_global' debe contener solo los valores "
+                "'ok', 'diferencia_detectada' o 'no_disponible'."
+            )
+        self._df = df
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df
+
+    def _repr_html_(self) -> str:
+        return self._df._repr_html_()  # type: ignore[operator]
+
+
+class ReporteValidacionVariaciones:
+    """Detalle por periodo de la validación de variaciones mensuales vs INEGI.
+
+    Args:
+        df: DataFrame con índice MultiIndex `(tipo_variacion, periodo, indice)`.
+
+    Raises:
+        InvarianteViolado: Si el DataFrame está vacío, si el índice tiene
+            duplicados o si `estado_validacion` contiene valores inválidos.
+
+    Esquema del DataFrame (índice MultiIndex: `tipo_variacion`, `periodo`, `indice`):
+        variacion_replicada (float/NaN): variación calculada en decimal.
+        variacion_inegi_pp (float/NaN): variación publicada por INEGI en porcentaje.
+        error_absoluto_pp (float/NaN): abs(variacion_replicada × 100 − variacion_inegi_pp).
+        estado_validacion (str): `'ok'`, `'diferencia_detectada'`, `'excluido_semi_ok'`
+            o `'no_disponible'`.
+
+    Ver: docs/diseño.md §5.15
+    """
+
+    def __init__(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise InvarianteViolado(
+                "El DataFrame de ReporteValidacionVariaciones no puede estar vacío."
+            )
+        if df.index.duplicated().any():
+            raise InvarianteViolado(
+                "El índice de ReporteValidacionVariaciones no puede tener duplicados."
+            )
+        if (
+            not df["estado_validacion"]
+            .isin({"ok", "diferencia_detectada", "excluido_semi_ok", "no_disponible"})
+            .all()
+        ):
+            raise InvarianteViolado(
+                "La columna 'estado_validacion' debe contener solo los valores "
+                "'ok', 'diferencia_detectada', 'excluido_semi_ok' o 'no_disponible'."
+            )
+        self._df = df
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df
+
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame:
+        """Devuelve el reporte en formato largo o pivoteado (periodos como columnas).
+
+        Args:
+            ancho: Si `False` (default), retorna el DataFrame con índice
+                `(periodo, indice)`. Si `True`, pivota con periodos como columnas
+                y filas `{indice}_variacion_replicada`, `{indice}_variacion_inegi_pp`,
+                `{indice}_error_absoluto_pp`, `{indice}_estado_validacion`.
+        """
+        tipos = self._df.index.get_level_values("tipo_variacion").unique()
+        df: pd.DataFrame = self._df.xs(tipos[0], level="tipo_variacion")  # type: ignore[assignment]
+
+        if not ancho:
+            return df
+
+        indices = df.index.get_level_values("indice").unique()
+        partes = []
+        for indice in indices:
+            df_ind: pd.DataFrame = df.xs(indice, level="indice")  # type: ignore[assignment]
+            cols = {
+                "variacion_replicada": f"{indice}_variacion_replicada",
+                "variacion_inegi_pp": f"{indice}_variacion_inegi_pp",
+                "error_absoluto_pp": f"{indice}_error_absoluto_pp",
+                "estado_validacion": f"{indice}_estado_validacion",
+            }
+            partes.append(df_ind[list(cols.keys())].rename(columns=cols).T)
+
+        resultado = pd.concat(partes)
+        resultado.index.name = "indice"
+        return resultado
+
+    def _repr_html_(self) -> str:
+        return self.como_tabla()._repr_html_()  # type: ignore[operator]
+
+
 class DiagnosticoFaltantes:
     """Representa el diagnóstico detallado de faltantes detectados en una corrida.
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import Literal
+
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+
+_CLASES_VALIDAS = {"periodica", "acumulada_anual", "desde"}
 
 
 class ResultadoVariacion:
@@ -12,7 +16,9 @@ class ResultadoVariacion:
         df: pd.DataFrame,
         tipo: str,
         descripcion: str,
+        clase_variacion: Literal["periodica", "acumulada_anual", "desde"],
         indices_parciales: dict[str, PeriodoQuincenal | PeriodoMensual] | None = None,
+        periodos_semiok: frozenset[PeriodoQuincenal | PeriodoMensual] | None = None,
     ) -> None:
         if df.empty:
             raise InvarianteViolado("El DataFrame de ResultadoVariacion no puede estar vacío.")
@@ -26,11 +32,20 @@ class ResultadoVariacion:
             raise InvarianteViolado("'tipo' no puede ser vacío.")
         if not descripcion or not descripcion.strip():
             raise InvarianteViolado("'descripcion' no puede ser vacía.")
+        if clase_variacion not in _CLASES_VALIDAS:
+            raise InvarianteViolado(
+                f"'clase_variacion' debe ser uno de {sorted(_CLASES_VALIDAS)}, "
+                f"se recibió '{clase_variacion}'."
+            )
 
         self._df = df
         self._tipo = tipo
         self._descripcion = descripcion
+        self._clase_variacion = clase_variacion
         self._indices_parciales = indices_parciales or {}
+        self._periodos_semiok: frozenset[PeriodoQuincenal | PeriodoMensual] = (
+            periodos_semiok or frozenset()
+        )
 
     @property
     def tipo(self) -> str:
@@ -39,6 +54,14 @@ class ResultadoVariacion:
     @property
     def descripcion(self) -> str:
         return self._descripcion
+
+    @property
+    def clase_variacion(self) -> str:
+        return self._clase_variacion
+
+    @property
+    def periodos_semiok(self) -> frozenset[PeriodoQuincenal | PeriodoMensual]:
+        return self._periodos_semiok
 
     @property
     def df(self) -> pd.DataFrame:
