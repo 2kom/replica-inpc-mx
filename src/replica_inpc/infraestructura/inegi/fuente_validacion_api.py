@@ -97,6 +97,60 @@ _VARIACIONES_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
     "acumulada_anual": _VARIACIONES_ACUMULADA_ANUAL_MENSUAL,
 }
 
+_VARIACIONES_PERIODICA_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910427",
+    },
+    "inflacion componente": {
+        "subyacente": "910428",
+        "no subyacente": "910431",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910429",
+        "servicios": "910430",
+        "agropecuarios": "910432",
+        "energeticos y tarifas autorizadas por el gobierno": "910433",
+    },
+}
+
+_VARIACIONES_INTERANUAL_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910438",
+    },
+    "inflacion componente": {
+        "subyacente": "910439",
+        "no subyacente": "910442",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910440",
+        "servicios": "910441",
+        "agropecuarios": "910443",
+        "energeticos y tarifas autorizadas por el gobierno": "910444",
+    },
+}
+
+_VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910445",
+    },
+    "inflacion componente": {
+        "subyacente": "910446",
+        "no subyacente": "910449",
+    },
+    "inflacion subcomponente": {
+        "mercancias": "910447",
+        "servicios": "910448",
+        "agropecuarios": "910450",
+        "energeticos y tarifas autorizadas por el gobierno": "910451",
+    },
+}
+
+_VARIACIONES_POR_TIPO_QUINCENAL: dict[str, dict[str, dict[str, str]]] = {
+    "periodica": _VARIACIONES_PERIODICA_QUINCENAL,
+    "interanual": _VARIACIONES_INTERANUAL_QUINCENAL,
+    "acumulada_anual": _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL,
+}
+
 _URL = (
     "https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml"
     "/INDICATOR/{indicador}/es/00/false/BIE-BISE/2.0/{token}?type=json"
@@ -151,31 +205,38 @@ class FuenteValidacionApi:
 
     def obtener_variaciones(
         self,
-        periodos: list[PeriodoMensual],
+        periodos: list[PeriodoMensual] | list[PeriodoQuincenal],
         tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-    ) -> dict[str, dict[PeriodoMensual, float | None]]:
-        """Devuelve series de variación mensual publicadas por INEGI.
+    ) -> dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]]:
+        """Devuelve series de variación publicadas por INEGI.
 
-        Reutiliza el mismo cache de clase que `obtener()`.
+        Detecta automáticamente si los periodos son mensuales o quincenales y
+        usa el mapa de indicadores correspondiente. Solo incluye en el resultado
+        periodos >= min(historico) — ausencia de clave indica fuera_de_rango_inegi.
         """
-        if tipo_variacion not in _VARIACIONES_POR_TIPO:
+        es_quincenal = bool(periodos) and isinstance(periodos[0], PeriodoQuincenal)
+        mapa = _VARIACIONES_POR_TIPO_QUINCENAL if es_quincenal else _VARIACIONES_POR_TIPO
+        if tipo_variacion not in mapa:
             raise ErrorConfiguracion(
-                f"tipo_variacion '{tipo_variacion}' no válido. "
-                f"Valores soportados: {list(_VARIACIONES_POR_TIPO)}"
+                f"tipo_variacion '{tipo_variacion}' no válido. Valores soportados: {list(mapa)}"
             )
-        indicadores_tipo = _VARIACIONES_POR_TIPO[tipo_variacion]
+        indicadores_tipo = mapa[tipo_variacion]
         if self._tipo not in indicadores_tipo:
             raise ErrorConfiguracion(
                 f"tipo '{self._tipo}' no tiene indicadores de variación '{tipo_variacion}'. "
                 f"Tipos soportados: {list(indicadores_tipo)}"
             )
         indicadores = indicadores_tipo[self._tipo]
-        resultado: dict[str, dict[PeriodoMensual, float | None]] = {}
+        resultado: dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)
             historico = self._cache[indicador]
-            resultado[nombre] = {p: historico.get(p) for p in periodos}
+            if historico:
+                min_p = min(historico.keys())
+                resultado[nombre] = {p: historico.get(p) for p in periodos if p >= min_p}  # type: ignore[operator]
+            else:
+                resultado[nombre] = {}
         return resultado
 
     def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:

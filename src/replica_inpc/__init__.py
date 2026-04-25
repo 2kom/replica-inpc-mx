@@ -3,6 +3,7 @@ from replica_inpc.api.validacion import (
     validar_mensual,
     validar_quincenal,
     validar_variaciones_mensual,
+    validar_variaciones_quincenal,
 )
 from replica_inpc.dominio.conversion import a_mensual
 from replica_inpc.dominio.modelos.resultado import combinar
@@ -26,6 +27,7 @@ __all__ = [
     "validar_mensual",
     "validar_quincenal",
     "validar_variaciones_mensual",
+    "validar_variaciones_quincenal",
     "variacion_acumulada_anual",
     "variacion_desde",
     "variacion_periodica",

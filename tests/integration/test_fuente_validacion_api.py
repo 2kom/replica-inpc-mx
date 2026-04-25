@@ -334,6 +334,82 @@ class TestObtenerVariaciones:
             "energeticos y tarifas autorizadas por el gobierno",
         }
 
+    def test_periodo_antes_de_min_ausente_del_resultado(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        periodo_antiguo = PeriodoMensual(2000, 1)
+        resultado = fuente.obtener_variaciones([_PM1, periodo_antiguo], "periodica")
+        # min_p = _PM2 (Feb 2026); periodo_antiguo < min_p → no está en resultado
+        assert periodo_antiguo not in resultado["INPC"]
+        assert _PM1 in resultado["INPC"]
+
+
+_RESPUESTA_VAR_QUINCENAL = {
+    "Series": [
+        {
+            "OBSERVATIONS": [
+                {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "0.62", "OBS_STATUS": "3"},
+                {"TIME_PERIOD": "2026/02/02", "OBS_VALUE": "0.45", "OBS_STATUS": "3"},
+            ]
+        }
+    ]
+}
+
+
+class TestObtenerVariacionesQuincenal:
+    def test_usa_indicador_quincenal_periodica(self, mocker):
+        mock_get = mocker.patch(
+            "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
+        )
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_P1], "periodica")
+        url = mock_get.call_args[0][0]
+        assert "910427" in url
+
+    def test_usa_indicador_quincenal_interanual(self, mocker):
+        mock_get = mocker.patch(
+            "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
+        )
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_P1], "interanual")
+        url = mock_get.call_args[0][0]
+        assert "910438" in url
+
+    def test_usa_indicador_quincenal_acumulada_anual(self, mocker):
+        mock_get = mocker.patch(
+            "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
+        )
+        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones(
+            [_P1], "acumulada_anual"
+        )
+        url = mock_get.call_args[0][0]
+        assert "910445" in url
+
+    def test_valores_para_periodos_pedidos(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        resultado = fuente.obtener_variaciones([_P1, _P2], "periodica")
+        assert resultado["INPC"][_P1] == pytest.approx(0.62)
+        assert resultado["INPC"][_P2] == pytest.approx(0.45)
+
+    def test_periodo_antes_de_min_ausente_del_resultado(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        periodo_antiguo = PeriodoQuincenal(2000, 1, 1)
+        resultado = fuente.obtener_variaciones([_P1, periodo_antiguo], "periodica")
+        # min_p = _P2 (2026/02/02); periodo_antiguo < min_p → ausente
+        assert periodo_antiguo not in resultado["INPC"]
+        assert _P1 in resultado["INPC"]
+
+    def test_subcomponentes_quincenal_claves_correctas(self, mocker):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
+        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        resultado = fuente.obtener_variaciones([_P1], "periodica")
+        assert set(resultado.keys()) == {
+            "mercancias",
+            "servicios",
+            "agropecuarios",
+            "energeticos y tarifas autorizadas por el gobierno",
+        }
+
 
 # --- helpers ---
 

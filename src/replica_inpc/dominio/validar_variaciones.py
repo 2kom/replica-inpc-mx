@@ -6,13 +6,18 @@ import pandas as pd
 
 from replica_inpc.dominio.modelos.validacion import ReporteValidacionVariaciones
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoMensual
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
-_TOLERANCIA_VARIACION_PP = 0.09
+_TOLERANCIA_VARIACION_PP = 0.009
 
 _LAG_POR_TIPO: dict[str, int] = {
     "periodica": 1,
     "interanual": 12,
+}
+
+_LAG_QUINCENAL: dict[str, int] = {
+    "periodica": 1,
+    "interanual": 24,
 }
 
 
@@ -22,10 +27,19 @@ def _restar_meses(periodo: PeriodoMensual, n: int) -> PeriodoMensual:
     return PeriodoMensual(ordinal // 12, ordinal % 12 + 1)
 
 
+def _restar_quincenas(periodo: PeriodoQuincenal, n: int) -> PeriodoQuincenal:
+    o = periodo.año * 24 + (periodo.mes - 1) * 2 + (periodo.quincena - 1) - n
+    return PeriodoQuincenal(o // 24, (o % 24) // 2 + 1, o % 2 + 1)
+
+
 def _base_periodo(
-    periodo: PeriodoMensual,
+    periodo: PeriodoMensual | PeriodoQuincenal,
     tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-) -> PeriodoMensual:
+) -> PeriodoMensual | PeriodoQuincenal:
+    if isinstance(periodo, PeriodoQuincenal):
+        if tipo_variacion == "acumulada_anual":
+            return PeriodoQuincenal(periodo.año - 1, 12, 2)
+        return _restar_quincenas(periodo, _LAG_QUINCENAL[tipo_variacion])
     if tipo_variacion == "acumulada_anual":
         return PeriodoMensual(periodo.año - 1, 12)
     return _restar_meses(periodo, _LAG_POR_TIPO[tipo_variacion])
@@ -34,11 +48,12 @@ def _base_periodo(
 def validar_variaciones(
     rv: ResultadoVariacion,
     tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-    inegi: dict[str, dict[PeriodoMensual, float | None]],
+    inegi: dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]],
 ) -> ReporteValidacionVariaciones:
-    """Compara una variación mensual calculada contra series publicadas por el INEGI.
+    """Compara una variación calculada contra series publicadas por el INEGI.
 
-    Precondición: rv debe tener periodos PeriodoMensual.
+    Soporta PeriodoMensual y PeriodoQuincenal. Ausencia de clave en inegi[indice]
+    para un periodo dado indica fuera_de_rango_inegi (no publicado por INEGI aún).
     """
     periodos_semiok = rv.periodos_semiok
     filas: list[dict] = []
@@ -46,19 +61,21 @@ def validar_variaciones(
     for (periodo, indice), row in rv.df.iterrows():  # type: ignore[union-attr]
         variacion_rep = row["variacion"]
         base = _base_periodo(periodo, tipo_variacion)  # type: ignore[arg-type]
+        inegi_vals = inegi.get(indice, {})
 
         if base in periodos_semiok:
             estado = "excluido_semi_ok"
-            var_inegi = None
-            error_pp = None
+            var_inegi, error_pp = None, None
+        elif periodo not in inegi_vals:
+            estado = "fuera_de_rango_inegi"
+            var_inegi, error_pp = None, None
+        elif inegi_vals[periodo] is None or pd.isna(variacion_rep):  # type: ignore[arg-type]
+            estado = "no_disponible"
+            var_inegi, error_pp = None, None
         else:
-            var_inegi = inegi.get(indice, {}).get(periodo)  # type: ignore[arg-type]
-            if var_inegi is None or pd.isna(variacion_rep):
-                estado = "no_disponible"
-                error_pp = None
-            else:
-                error_pp = abs(float(variacion_rep) * 100 - float(var_inegi))
-                estado = "ok" if error_pp <= _TOLERANCIA_VARIACION_PP else "diferencia_detectada"
+            var_inegi = inegi_vals[periodo]  # type: ignore[assignment]
+            error_pp = abs(float(variacion_rep) * 100 - float(var_inegi))  # type: ignore[arg-type]
+            estado = "ok" if error_pp <= _TOLERANCIA_VARIACION_PP else "diferencia_detectada"
 
         filas.append(
             {

@@ -380,12 +380,21 @@ class ReporteValidacionVariaciones:
             )
         if (
             not df["estado_validacion"]
-            .isin({"ok", "diferencia_detectada", "excluido_semi_ok", "no_disponible"})
+            .isin(
+                {
+                    "ok",
+                    "diferencia_detectada",
+                    "excluido_semi_ok",
+                    "no_disponible",
+                    "fuera_de_rango_inegi",
+                }
+            )
             .all()
         ):
             raise InvarianteViolado(
                 "La columna 'estado_validacion' debe contener solo los valores "
-                "'ok', 'diferencia_detectada', 'excluido_semi_ok' o 'no_disponible'."
+                "'ok', 'diferencia_detectada', 'excluido_semi_ok', 'no_disponible' "
+                "o 'fuera_de_rango_inegi'."
             )
         self._df = df
 

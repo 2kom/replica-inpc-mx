@@ -10,7 +10,7 @@ from replica_inpc.dominio.modelos.validacion import (
     ResumenValidacion,
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoMensual
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.validar_inpc import (
     validar_mensual as _validar_mensual,
 )
@@ -21,6 +21,8 @@ from replica_inpc.dominio.validar_variaciones import validar_variaciones as _val
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValidacionApi
 
 _FRECUENCIAS_INEGI = {"mensual": "periodica", "anual": "interanual"}
+
+_FRECUENCIAS_INEGI_QUINCENAL = {"quincenal": "periodica", "anual": "interanual"}
 
 
 def validar_variaciones_mensual(
@@ -58,6 +60,50 @@ def validar_variaciones_mensual(
                 f"Frecuencias válidas: {list(_FRECUENCIAS_INEGI)}."
             )
         tipo_variacion_inegi = _FRECUENCIAS_INEGI[frecuencia]
+    else:
+        tipo_variacion_inegi = "acumulada_anual"
+
+    periodos_lista = list(periodos.unique())
+    fuente = FuenteValidacionApi(token=token, tipo=rv.tipo)
+    inegi = fuente.obtener_variaciones(periodos_lista, tipo_variacion_inegi)  # type: ignore[arg-type]
+    return _validar_variaciones(rv, tipo_variacion_inegi, inegi)  # type: ignore[arg-type]
+
+
+def validar_variaciones_quincenal(
+    rv: ResultadoVariacion,
+    token: str,
+) -> ReporteValidacionVariaciones:
+    """Valida una variación quincenal calculada contra series publicadas por el INEGI.
+
+    Soporta variaciones de clase 'periodica' (frecuencias 'quincenal' o 'anual') y
+    'acumulada_anual'. Lanza ErrorConfiguracion si la clase es 'desde', si la
+    frecuencia de 'periodica' no es quincenal ni anual, o si los periodos no son
+    PeriodoQuincenal. Ver docs/diseño.md §6.3.
+    """
+    clase = rv.clase_variacion
+
+    if clase == "desde":
+        raise ErrorConfiguracion(
+            "La variación 'desde' no tiene indicadores INEGI disponibles. "
+            "Solo se pueden validar variaciones 'periodica' (quincenal o anual) y 'acumulada_anual'."
+        )
+
+    periodos = rv.df.index.get_level_values("periodo")
+    if not isinstance(periodos[0], PeriodoQuincenal):
+        raise ErrorConfiguracion(
+            "validar_variaciones_quincenal requiere periodos quincenales (PeriodoQuincenal). "
+            "Calcula la variación sobre un ResultadoCalculo quincenal."
+        )
+
+    if clase == "periodica":
+        frecuencia = rv.descripcion
+        if frecuencia not in _FRECUENCIAS_INEGI_QUINCENAL:
+            raise ErrorConfiguracion(
+                f"INEGI solo publica variación periódica quincenal e interanual. "
+                f"Frecuencia '{frecuencia}' no está disponible. "
+                f"Frecuencias válidas: {list(_FRECUENCIAS_INEGI_QUINCENAL)}."
+            )
+        tipo_variacion_inegi = _FRECUENCIAS_INEGI_QUINCENAL[frecuencia]
     else:
         tipo_variacion_inegi = "acumulada_anual"
 

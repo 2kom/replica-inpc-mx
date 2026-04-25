@@ -5,7 +5,7 @@ import uuid
 import pandas as pd
 import pytest
 
-from replica_inpc.api.validacion import validar_variaciones_mensual
+from replica_inpc.api.validacion import validar_variaciones_mensual, validar_variaciones_quincenal
 from replica_inpc.dominio.errores import ErrorConfiguracion
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -131,3 +131,66 @@ class TestLlamadasFuente:
         validar_variaciones_mensual(rv, _TOKEN)
         tipo_llamado = mock_fuente.obtener_variaciones.call_args[0][1]
         assert tipo_llamado == "acumulada_anual"
+
+
+def _mock_fuente_q(mocker, periodos):
+    mock_fuente = mocker.MagicMock()
+    mock_fuente.obtener_variaciones.return_value = {"INPC": {p: None for p in periodos}}
+    mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi", return_value=mock_fuente)
+    return mock_fuente
+
+
+class TestQuincenal:
+    def test_retorna_reporte(self, mocker):
+        _mock_fuente_q(mocker, _PERIODOS_Q)
+        rv = _rv_quincenal(_PERIODOS_Q)
+        from replica_inpc.dominio.modelos.validacion import ReporteValidacionVariaciones
+
+        assert isinstance(validar_variaciones_quincenal(rv, _TOKEN), ReporteValidacionVariaciones)
+
+    def test_clase_desde_lanza_error(self):
+        rv = _rv_quincenal(
+            _PERIODOS_Q, clase="desde", descripcion="desde 2019/01/1 hasta 2019/05/2"
+        )
+        with pytest.raises(ErrorConfiguracion, match="desde"):
+            validar_variaciones_quincenal(rv, _TOKEN)
+
+    def test_periodos_mensuales_lanza_error(self):
+        rv = _rv_mensual(_PERIODOS_M)
+        with pytest.raises(ErrorConfiguracion, match="PeriodoQuincenal"):
+            validar_variaciones_quincenal(rv, _TOKEN)
+
+    def test_periodica_quincenal_usa_periodica(self, mocker):
+        mock_fuente = _mock_fuente_q(mocker, _PERIODOS_Q)
+        rv = _rv_quincenal(_PERIODOS_Q, clase="periodica", descripcion="quincenal")
+        validar_variaciones_quincenal(rv, _TOKEN)
+        tipo_llamado = mock_fuente.obtener_variaciones.call_args[0][1]
+        assert tipo_llamado == "periodica"
+
+    def test_periodica_anual_usa_interanual(self, mocker):
+        mock_fuente = _mock_fuente_q(mocker, _PERIODOS_Q)
+        rv = _rv_quincenal(_PERIODOS_Q, clase="periodica", descripcion="anual")
+        validar_variaciones_quincenal(rv, _TOKEN)
+        tipo_llamado = mock_fuente.obtener_variaciones.call_args[0][1]
+        assert tipo_llamado == "interanual"
+
+    def test_acumulada_anual_usa_acumulada_anual(self, mocker):
+        mock_fuente = _mock_fuente_q(mocker, _PERIODOS_Q)
+        rv = _rv_quincenal(_PERIODOS_Q, clase="acumulada_anual", descripcion="acumulada_anual")
+        validar_variaciones_quincenal(rv, _TOKEN)
+        tipo_llamado = mock_fuente.obtener_variaciones.call_args[0][1]
+        assert tipo_llamado == "acumulada_anual"
+
+    def test_periodica_bimestral_lanza_error(self):
+        rv = _rv_quincenal(_PERIODOS_Q, clase="periodica", descripcion="bimestral")
+        with pytest.raises(ErrorConfiguracion, match="bimestral"):
+            validar_variaciones_quincenal(rv, _TOKEN)
+
+    def test_construye_fuente_con_token_y_tipo(self, mocker):
+        mock_cls = mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi")
+        mock_cls.return_value.obtener_variaciones.return_value = {
+            "INPC": {p: None for p in _PERIODOS_Q}
+        }
+        rv = _rv_quincenal(_PERIODOS_Q)
+        validar_variaciones_quincenal(rv, _TOKEN)
+        mock_cls.assert_called_once_with(token=_TOKEN, tipo="inpc")

@@ -8,8 +8,12 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.validacion import ReporteValidacionVariaciones
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoMensual
-from replica_inpc.dominio.validar_variaciones import validar_variaciones
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.validar_variaciones import (
+    _base_periodo,
+    _restar_quincenas,
+    validar_variaciones,
+)
 
 _ID = str(uuid.uuid4())
 
@@ -57,9 +61,15 @@ class TestRetornoTipo:
 
 
 class TestEstadoValidacion:
-    def test_sin_inegi_es_no_disponible(self):
+    def test_sin_inegi_es_fuera_de_rango_inegi(self):
         rv = _rv(_PERIODOS)
         reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
+        assert (reporte.df["estado_validacion"] == "fuera_de_rango_inegi").all()
+
+    def test_inegi_none_es_no_disponible(self):
+        rv = _rv(_PERIODOS)
+        inegi: dict = {"INPC": {p: None for p in _PERIODOS}}
+        reporte = validar_variaciones(rv, "periodica", inegi)
         assert (reporte.df["estado_validacion"] == "no_disponible").all()
 
     def test_dentro_tolerancia_es_ok(self):
@@ -120,7 +130,7 @@ class TestEstadoValidacion:
         estado_feb = reporte.df.loc[
             ("periodica", PeriodoMensual(2019, 2), "INPC"), "estado_validacion"  # type: ignore[union-attr]
         ]
-        assert estado_feb == "no_disponible"
+        assert estado_feb == "fuera_de_rango_inegi"
 
 
 class TestColumnas:
@@ -165,3 +175,50 @@ class TestInvariantesModelos:
         )
         with pytest.raises(InvarianteViolado):
             ReporteValidacionVariaciones(df)
+
+
+_PERIODOS_Q = [PeriodoQuincenal(2019, m, q) for m in range(1, 4) for q in (1, 2)]
+
+
+class TestRestarQuincenas:
+    def test_resta_una_quincena_dentro_del_mes(self):
+        assert _restar_quincenas(PeriodoQuincenal(2019, 2, 1), 1) == PeriodoQuincenal(2019, 1, 2)
+
+    def test_resta_una_quincena_cruzando_mes(self):
+        assert _restar_quincenas(PeriodoQuincenal(2019, 1, 1), 1) == PeriodoQuincenal(2018, 12, 2)
+
+    def test_resta_24_quincenas_es_interanual(self):
+        assert _restar_quincenas(PeriodoQuincenal(2019, 2, 1), 24) == PeriodoQuincenal(2018, 2, 1)
+
+    def test_resta_24_quincenas_cruzando_anio(self):
+        assert _restar_quincenas(PeriodoQuincenal(2019, 1, 1), 24) == PeriodoQuincenal(2018, 1, 1)
+
+
+class TestBasePeriodoQuincenal:
+    def test_periodica_resta_una_quincena(self):
+        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "periodica") == PeriodoQuincenal(
+            2019, 2, 2
+        )
+
+    def test_interanual_resta_24_quincenas(self):
+        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "interanual") == PeriodoQuincenal(
+            2018, 3, 1
+        )
+
+    def test_acumulada_anual_es_dic2q_anio_anterior(self):
+        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "acumulada_anual") == PeriodoQuincenal(
+            2018, 12, 2
+        )
+
+
+class TestFueraDeRangoInegi:
+    def test_periodo_ausente_del_dict_es_fuera_de_rango(self):
+        rv = _rv(_PERIODOS_Q)
+        reporte = validar_variaciones(rv, "periodica", {"INPC": {}})
+        assert (reporte.df["estado_validacion"] == "fuera_de_rango_inegi").all()
+
+    def test_periodo_con_none_es_no_disponible(self):
+        rv = _rv(_PERIODOS_Q)
+        inegi: dict = {"INPC": {p: None for p in _PERIODOS_Q}}
+        reporte = validar_variaciones(rv, "periodica", inegi)
+        assert (reporte.df["estado_validacion"] == "no_disponible").all()
