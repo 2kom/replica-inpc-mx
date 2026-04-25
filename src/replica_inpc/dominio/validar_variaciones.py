@@ -58,9 +58,12 @@ def validar_variaciones(
     periodos_semiok = rv.periodos_semiok
     filas: list[dict] = []
 
-    for (periodo, indice), row in rv.df.iterrows():  # type: ignore[union-attr]
+    for idx, row in rv.df.iterrows():  # type: ignore[union-attr]
+        periodo: PeriodoMensual | PeriodoQuincenal
+        indice: str
+        periodo, indice = idx  # type: ignore[misc]
         variacion_rep = row["variacion"]
-        base = _base_periodo(periodo, tipo_variacion)  # type: ignore[arg-type]
+        base = _base_periodo(periodo, tipo_variacion)
         inegi_vals = inegi.get(indice, {})
 
         if base in periodos_semiok:
@@ -69,7 +72,7 @@ def validar_variaciones(
         elif periodo not in inegi_vals:
             estado = "fuera_de_rango_inegi"
             var_inegi, error_pp = None, None
-        elif inegi_vals[periodo] is None or pd.isna(variacion_rep):  # type: ignore[arg-type]
+        elif inegi_vals[periodo] is None or pd.isna(variacion_rep):
             estado = "no_disponible"
             var_inegi, error_pp = None, None
         else:
