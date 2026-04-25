@@ -69,10 +69,11 @@ El historial de cambios vive en git.
     - [8.2 Formato del CSV de series](#82-formato-del-csv-de-series)
     - [8.3 Repositorio de corridas (filesystem)](#83-repositorio-de-corridas-filesystem)
     - [8.4 Almacén de artefactos (filesystem)](#84-almacén-de-artefactos-filesystem)
-    - [8.6 FuenteValidacionApi (API del INEGI)](#86-fuentevalidacionapi-api-del-inegi)
     - [8.5 Formato de los CSV de salida (escritor)](#85-formato-de-los-csv-de-salida-escritor)
       - [reporte\_\<id\_corrida\>.csv](#reporte_id_corridacsv)
       - [diagnostico\_\<id\_corrida\>.csv](#diagnostico_id_corridacsv)
+    - [8.6 FuenteValidacionApi (API del INEGI)](#86-fuentevalidacionapi-api-del-inegi)
+    - [8.7 Indicadores de variación mensual (API del INEGI)](#87-indicadores-de-variación-mensual-api-del-inegi)
   - [9. Estrategia de errores](#9-estrategia-de-errores)
     - [9.1 Jerarquía de excepciones](#91-jerarquía-de-excepciones)
     - [9.2 Propagación](#92-propagación)
@@ -2155,6 +2156,73 @@ class AlmacenArtefactosFs:
 
 ---
 
+### 8.5 Formato de los CSV de salida (escritor)
+
+Archivos exportados a `output/` para consumo del usuario. Generados por
+`EscritorResultados` cuando `persistir=True`.
+
+#### reporte_<id_corrida>.csv
+
+El MultiIndex `(Periodo, indice)` de `ReporteDetalladoValidacion.df` se aplana
+como columnas regulares. `Periodo` se serializa a string (`"1Q Ene 2024"`).
+Diseñado para concatenarse con reportes de otras versiones y construir un historial
+completo del INPC — el par `(periodo, subindice)` identifica unívocamente cada fila.
+
+**Renombrado al serializar:** las columnas del modelo se renombran en el CSV para
+mayor legibilidad en v1. El serializador aplica este mapeo:
+
+| Nombre en modelo (`§5.6`)     | Nombre en CSV       |
+| ----------------------------- | ------------------- |
+| nivel `indice` del MultiIndex | `subindice`         |
+| `indice_replicado`            | `inpc_replicado`    |
+| `indice_inegi`                | `inpc_inegi`        |
+
+En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
+
+| Columna                       | Tipo     | Notas                                                                         |
+| ----------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `periodo`                     | `str`    | Ej. `"1Q Ene 2018"`                                                           |
+| `subindice`                   | `str`    | Ej. `"INPC general"`                                                          |
+| `version`                     | `int`    |                                                                               |
+| `inpc_replicado`              | `float`  | `null` si `estado_calculo != 'ok'`                                            |
+| `inpc_inegi`                  | `float`  | `null` si validación no disponible                                            |
+| `error_absoluto`              | `float`  | `null` si validación no disponible                                            |
+| `error_relativo`              | `float`  | `null` si validación no disponible                                            |
+| `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`                                         |
+| `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`                                             |
+| `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `diferencia_detectada_imputado`, `no_disponible`|
+| `total_genericos_esperados`   | `int`    |                                                                               |
+| `total_genericos_con_indice`  | `int`    |                                                                               |
+| `total_genericos_sin_indice`  | `int`    |                                                                               |
+| `cobertura_genericos_pct`     | `float`  |                                                                               |
+| `ponderador_total_esperado`   | `float`  |                                                                               |
+| `ponderador_total_cubierto`   | `float`  |                                                                               |
+
+#### diagnostico_<id_corrida>.csv
+
+Índice entero descartado (`index=False`). `Periodo` en columna `periodo` serializado
+a string.
+
+| Columna          | Tipo  | Notas                                                |
+| ---------------- | ----- | ---------------------------------------------------- |
+| `id_corrida`     | `str` |                                                      |
+| `version`        | `int` |                                                      |
+| `periodo`        | `str` | `null` si `nivel_faltante = 'estructural'`           |
+| `generico`       | `str` |                                                      |
+| `nivel_faltante` | `str` | `periodo`, `estructural`                             |
+| `tipo_faltante`  | `str` | `indice`, `ponderador`, `indice_imputado`            |
+| `detalle`        | `str` | para `indice_imputado`: `"imputado desde <Periodo>"` |
+
+**Adaptador:**
+
+```python
+class EscritorResultadosCsv:
+    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None: ...
+    def escribir_diagnostico(self, diagnostico: DiagnosticoFaltantes, ruta: Path) -> None: ...
+```
+
+---
+
 ### 8.6 FuenteValidacionApi (API del INEGI)
 
 Implementa `FuenteValidacion` consultando la API de indicadores del INEGI.
@@ -2279,72 +2347,78 @@ no hacen requests adicionales. Para limpiar en tests: `FuenteValidacionApi._cach
 
 ---
 
-### 8.5 Formato de los CSV de salida (escritor)
+### 8.7 Indicadores de variación mensual (API del INEGI)
 
-Archivos exportados a `output/` para consumo del usuario. Generados por
-`EscritorResultados` cuando `persistir=True`.
+Series de variación publicadas por INEGI en la misma API BIE-BISE. Se usan para validar
+`variacion_periodica`, `variacion_acumulada_anual` calculadas internamente.
 
-#### reporte_<id_corrida>.csv
+**Unidades:** porcentaje (p.ej. `0.86` = 0.86%). Nuestras variaciones están en decimal → multiplicar por 100 para comparar.
 
-El MultiIndex `(Periodo, indice)` de `ReporteDetalladoValidacion.df` se aplana
-como columnas regulares. `Periodo` se serializa a string (`"1Q Ene 2024"`).
-Diseñado para concatenarse con reportes de otras versiones y construir un historial
-completo del INPC — el par `(periodo, subindice)` identifica unívocamente cada fila.
+**Tolerancia:** 0.09 pp (porcentaje) en diferencia absoluta — igual para canastas 2018 y 2024.
 
-**Renombrado al serializar:** las columnas del modelo se renombran en el CSV para
-mayor legibilidad en v1. El serializador aplica este mapeo:
+**Exclusión de periodos:** no comparar cuando el periodo base del cálculo tenga `estado_calculo = "semi_ok"`. Esto excluye automáticamente Ago 2018 (periódica) y Jul 2019 (interanual), cuya base es Jul 2018 (solo 1 quincena disponible). Verificación empírica confirmó que sin esta exclusión el error máximo supera 0.3 pp; con exclusión, max ~0.006 pp.
 
-| Nombre en modelo (`§5.6`)     | Nombre en CSV       |
-| ----------------------------- | ------------------- |
-| nivel `indice` del MultiIndex | `subindice`         |
-| `indice_replicado`            | `inpc_replicado`    |
-| `indice_inegi`                | `inpc_inegi`        |
+**Verificación empírica (2026-04-24):** 21 combinaciones (7 índices × 3 tipos), 80–92 periodos cada una. Todos dentro de tolerancia tras exclusión. Errores típicos < 0.006 pp.
 
-En v2, cuando se agreguen subíndices, este mapeo deberá revisarse.
-
-| Columna                       | Tipo     | Notas                                                                         |
-| ----------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `periodo`                     | `str`    | Ej. `"1Q Ene 2018"`                                                           |
-| `subindice`                   | `str`    | Ej. `"INPC general"`                                                          |
-| `version`                     | `int`    |                                                                               |
-| `inpc_replicado`              | `float`  | `null` si `estado_calculo != 'ok'`                                            |
-| `inpc_inegi`                  | `float`  | `null` si validación no disponible                                            |
-| `error_absoluto`              | `float`  | `null` si validación no disponible                                            |
-| `error_relativo`              | `float`  | `null` si validación no disponible                                            |
-| `estado_calculo`              | `str`    | `ok`, `null_por_faltantes`, `fallida`                                         |
-| `motivo_error`                | `str`    | `null` si `estado_calculo = 'ok'`                                             |
-| `estado_validacion`           | `str`    | `ok`, `diferencia_detectada`, `diferencia_detectada_imputado`, `no_disponible`|
-| `total_genericos_esperados`   | `int`    |                                                                               |
-| `total_genericos_con_indice`  | `int`    |                                                                               |
-| `total_genericos_sin_indice`  | `int`    |                                                                               |
-| `cobertura_genericos_pct`     | `float`  |                                                                               |
-| `ponderador_total_esperado`   | `float`  |                                                                               |
-| `ponderador_total_cubierto`   | `float`  |                                                                               |
-
-#### diagnostico_<id_corrida>.csv
-
-Índice entero descartado (`index=False`). `Periodo` en columna `periodo` serializado
-a string.
-
-| Columna          | Tipo  | Notas                                                |
-| ---------------- | ----- | ---------------------------------------------------- |
-| `id_corrida`     | `str` |                                                      |
-| `version`        | `int` |                                                      |
-| `periodo`        | `str` | `null` si `nivel_faltante = 'estructural'`           |
-| `generico`       | `str` |                                                      |
-| `nivel_faltante` | `str` | `periodo`, `estructural`                             |
-| `tipo_faltante`  | `str` | `indice`, `ponderador`, `indice_imputado`            |
-| `detalle`        | `str` | para `indice_imputado`: `"imputado desde <Periodo>"` |
-
-**Adaptador:**
+**Mapeos — inflación periódica mensual (`variacion_periodica(..., "mensual")`):**
 
 ```python
-class EscritorResultadosCsv:
-    def escribir_reporte(self, reporte: ReporteDetalladoValidacion, ruta: Path) -> None: ...
-    def escribir_diagnostico(self, diagnostico: DiagnosticoFaltantes, ruta: Path) -> None: ...
+_VARIACIONES_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910399",
+    },
+    "inflacion componente": {
+        "subyacente":    "910400",
+        "no subyacente": "910403",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910401",
+        "servicios":                                         "910402",
+        "agropecuarios":                                     "910404",
+        "energeticos y tarifas autorizadas por el gobierno": "910405",
+    },
+}
 ```
 
----
+**Mapeos — inflación interanual (`variacion_periodica(..., "anual")`):**
+
+```python
+_VARIACIONES_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910406",
+    },
+    "inflacion componente": {
+        "subyacente":    "910407",
+        "no subyacente": "910410",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910408",
+        "servicios":                                         "910409",
+        "agropecuarios":                                     "910411",
+        "energeticos y tarifas autorizadas por el gobierno": "910412",
+    },
+}
+```
+
+**Mapeos — inflación acumulada anual (`variacion_acumulada_anual(...)`):**
+
+```python
+_VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
+    "inpc": {
+        "INPC": "910413",
+    },
+    "inflacion componente": {
+        "subyacente":    "910414",
+        "no subyacente": "910417",
+    },
+    "inflacion subcomponente": {
+        "mercancias":                                        "910415",
+        "servicios":                                         "910416",
+        "agropecuarios":                                     "910418",
+        "energeticos y tarifas autorizadas por el gobierno": "910419",
+    },
+}
+```
 
 ## 9. Estrategia de errores
 
@@ -3159,19 +3233,41 @@ Internamente encadena `resultado_referencia` automáticamente entre corridas con
 
 **Situación actual:** `FuenteValidacionApi` obtiene índices de nivel (INPC, subyacente, etc.) y los compara con `indice_replicado`. Las variaciones calculadas por `variacion_periodica`, `variacion_desde` y `variacion_acumulada_anual` no se validan directamente contra series publicadas del INEGI.
 
-**Mejora propuesta:** ampliar `FuenteValidacionApi` con dos nuevos dicts de indicadores (privados) para series de variación — uno quincenal y uno mensual — cubriendo los 3 tipos disponibles (`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`):
+**Mejora propuesta:** ampliar `FuenteValidacionApi` con tres nuevos dicts de indicadores (privados) para series de variación mensual, cubriendo los 3 tipos disponibles (`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`):
 
-- inflación periódica mensual / quincenal
-- inflación interanual (base = mismo periodo del año anterior)
-- inflación acumulada anual (base = dic año anterior)
+- inflación periódica mensual (`variacion_periodica(..., "mensual")`)
+- inflación interanual (`variacion_periodica(..., "anual")`)
+- inflación acumulada anual (`variacion_acumulada_anual(...)`)
 
-Total: 7 índices × 4 tipos de variación × 2 frecuencias = 56 indicadores.
+Total mensual: 7 índices × 3 tipos de variación = 21 indicadores. Ver mapeos en §8.7.
 
-**Política de redondeo:** comparar variaciones con tolerancia de 3 decimales (las variaciones tienen magnitudes ~0.001–0.01, distinta escala que los índices de nivel).
+**Unidades INEGI:** porcentaje. Nuestras variaciones son decimales → multiplicar × 100 para comparar.
 
-**Nueva sección §8.7** en `docs/diseño.md` con los mapeos completos de indicadores.
+**Tolerancia:** diferencia absoluta ≤ 0.09 pp — igual para canastas 2018 y 2024.
 
-**Por qué no se implementa ahora:** requiere verificación empírica de que las variaciones calculadas internamente (`variacion_periodica`, etc.) coinciden con las series publicadas por el INEGI dentro de la tolerancia de 3 decimales, antes de definir los mapeos.
+**Exclusión de periodos semi_ok:** no comparar cuando el periodo base del cálculo tenga `estado_calculo = "semi_ok"` en el `ResultadoCalculo`. Concretamente:
+
+- Periódica (lag=1): base = `_restar_meses(p, 1)` — excluye Ago 2018 (base Jul 2018 `semi_ok`)
+- Interanual (lag=12): base = `_restar_meses(p, 12)` — excluye Jul 2019 (base Jul 2018 `semi_ok`)
+- Acumulada: base = `PeriodoMensual(p.año-1, 12)` — sin exclusiones en práctica
+
+**Verificación empírica (2026-04-24):** 21 combinaciones, 80–92 periodos cada una. Todos OK tras exclusión. Errores típicos < 0.006 pp; tolerancia 0.09 pp es holgada.
+
+**Mapeos completos:** §8.7.
+
+**Nueva función pública en `api/validacion.py`:**
+
+```python
+def validar_variaciones_mensual(
+    resultado: ResultadoCalculo,
+    token: str,
+) -> ResumenValidacionVariaciones:
+    ...
+```
+
+Recibe un `ResultadoCalculo` (mensual o quincenal — si quincenal, aplica `a_mensual()` internamente). Calcula las tres variaciones, obtiene series INEGI, compara con exclusión de semi_ok, y retorna un resumen. Ver §6.3 para el modelo de retorno.
+
+**Quincenal:** pendiente para v1.2.5 — requiere verificación empírica equivalente con datos quincenales.
 
 ---
 
