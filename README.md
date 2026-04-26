@@ -34,7 +34,7 @@ Para profundizar:
 La v1.2.5 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
-- calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
+- calcular el INPC general mediante Laspeyres directo (canasta 2018) o encadenado (canasta 2024);
 - calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
 - imputar periodos faltantes en series via bfill/ffill con trazabilidad completa;
 - combinar resultados de distintas corridas en un unico `ResultadoCalculo` cronologico;
@@ -49,7 +49,7 @@ La v1.2.5 del proyecto permite:
 
 El proyecto **no** incluye todavia:
 
-- soporte operativo para canastas 2010 y 2013;
+- soporte operativo para canastas 2010 y 2013; el calculo encadenado de 2013 esta diseñado, pero aun no probado;
 - mapeo de splits, fusiones, categorias nuevas o eliminadas entre canastas: las categorias que
   desaparecen, aparecen o se parten entre versiones aparecen solo en los periodos donde existen,
   sin continuidad historica.

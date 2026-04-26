@@ -101,7 +101,7 @@ El historial de cambios vive en git.
   - [11. Decisiones y razones](#11-decisiones-y-razones)
     - [11.1 `SerieNormalizada` en formato ancho](#111-serienormalizada-en-formato-ancho)
     - [11.2 `generico_original` como diccionario](#112-generico_original-como-diccionario)
-    - [11.3 Correspondencia genérico↔genérico por normalización exacta](#113-correspondencia-genéricogenérico-por-normalización-exacta)
+    - [11.3 Correspondencia genérico \<-\> genérico por normalización exacta](#113-correspondencia-genérico---genérico-por-normalización-exacta)
     - [11.4 pandas en el dominio](#114-pandas-en-el-dominio)
     - [11.5 `ponderador` y `encadenamiento` como `str`](#115-ponderador-y-encadenamiento-como-str)
     - [11.6 `Periodo` como tipo propio](#116-periodo-como-tipo-propio)
@@ -130,7 +130,7 @@ El historial de cambios vive en git.
     - [12.3 Agregados CCIF en `LectorSeriesCsv`](#123-agregados-ccif-en-lectorseriescsv)
     - [12.4 Detección dinámica del header en `LectorSeriesCsv`](#124-detección-dinámica-del-header-en-lectorseriescsv)
     - [12.5 ñ en canasta intermedia ✓ RESUELTO](#125-ñ-en-canasta-intermedia--resuelto)
-    - [12.6 Formato de series BIE en versiones 2010 y 2013](#126-formato-de-series-bie-en-versiones-2010-y-2013)
+    - [12.6 Formato de series BIE en versiones 2010 y 2013 ✓ RESUELTO](#126-formato-de-series-bie-en-versiones-2010-y-2013--resuelto)
     - [12.7 Cobertura parcial de periodos no reportada explícitamente ✓ RESUELTO](#127-cobertura-parcial-de-periodos-no-reportada-explícitamente--resuelto)
     - [12.8 `AlmacenArtefactos.obtener` devuelve índice como string](#128-almacenartefactosobtener-devuelve-índice-como-string)
     - [12.9 Validación INEGI solo disponible para tipos específicos ✓ RESUELTO](#129-validación-inegi-solo-disponible-para-tipos-específicos--resuelto)
@@ -2495,9 +2495,21 @@ títulos largos de las series. Se normaliza a horizontal transponiendo.
 
 El metadata (`Periodicidad`, `Unidad`, `Base`, etc.) se descarta implícitamente: en horizontal se conservan solo columnas cuyo nombre coincide con el patrón de periodo; en vertical se conservan solo filas cuyo `Título` coincide con ese patrón.
 
-**Extracción del genérico desde `Título`:** se aplica regex `\b\d{3}\b\s*(.*)`
-sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto
-son agregados CCIF y se descartan (ver §12.3).
+**Extracción del genérico desde `Título`:** `LectorSeriesCsv` usa estrategias
+determinísticas según el formato real del título:
+
+1. **Formato con clave de genérico de 3 dígitos** (series 2018/2024): se aplica
+   regex `\b\d{3}\b\s*(.*)` sobre cada fila. Solo las filas con código de
+   3 dígitos son genéricos — el resto son agregados CCIF y se descartan
+   (ver §12.3).
+2. **Formato jerárquico BIE sin clave de genérico terminal** (series 2010/2013):
+   se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título
+   empiece con `titulo + ","`). En esas filas, el genérico se obtiene
+   preferentemente del último componente después de coma; si no hay coincidencia
+   suficiente, se permite match por sufijo del título completo. El extractor
+   aplica una tabla mínima de aliases para diferencias reales verificadas contra
+   los insumos (`niña`/`niñas`, `deshechables`/`desechables`). No usa matching
+   fuzzy.
 
 **Normalización de nombres:** se eliminan tildes vocálicas (`á`→`a`, etc.),
 se conserva `ñ`, se elimina puntuación y se pone en minúsculas. El resultado
@@ -2526,7 +2538,7 @@ class LectorSeriesCsv:
 | `EncodingNoLegible`        | No se puede decodificar con cp1252 ni con latin-1             |
 | `OrientacionNoDetectable`  | No se puede determinar si el archivo es horizontal o vertical |
 | `PeriodoNoInterpretable`   | Una columna de periodo no puede parsearse                     |
-| `SerieVacia`               | Ninguna fila tiene código de 3 dígitos en el `Título`         |
+| `SerieVacia`               | Ninguna estrategia de extracción produce genéricos válidos    |
 
 ---
 
@@ -3198,13 +3210,25 @@ El suite es suficiente cuando cubre los siguientes comportamientos:
 
 ---
 
-### 11.3 Correspondencia genérico↔genérico por normalización exacta
+### 11.3 Correspondencia genérico <-> genérico por normalización exacta
 
 **Decisión:** matching exacto después de normalizar — quitar tildes + lowercase (`unicodedata`). `rapidfuzz` removido del stack.
 
 **Alternativa considerada:** matching fuzzy con `rapidfuzz`.
 
-**Razón:** la divergencia entre nombres de series y canasta es sistemática y determinista — los ponderadores fueron extraídos sin tildes mientras las series las conservan. Después de normalizar ambos lados, los 299 genéricos de la canasta 2018 coinciden exactamente. El fuzzy resolvía un problema que la normalización resuelve de forma predecible y sin riesgo de falsos positivos entre genéricos con nombres parecidos.
+**Razón:** la divergencia entre nombres de series y canasta es sistemática y
+determinista. En 2018/2024, después de normalizar ambos lados, los genéricos
+extraídos de las series BIE coinciden exactamente con la canasta. En 2010/2013,
+el problema no es de correspondencia sino de extracción: los títulos BIE no
+terminan con una clave de genérico de 3 dígitos, por lo que `LectorSeriesCsv`
+debe producir el mismo `generico_limpio` usando una estrategia jerárquica
+determinística (ver §8.2 y §12.6). Una vez producida la `SerieNormalizada`,
+`correspondencia.py` sigue comparando strings directos y falla si falta algún
+genérico.
+
+El fuzzy resolvía un problema que la normalización y la extracción determinística
+resuelven de forma predecible, sin riesgo de falsos positivos entre genéricos
+con nombres parecidos.
 
 ---
 
@@ -3710,15 +3734,37 @@ Decisiones de diseño que se tomaron con limitaciones conocidas. Cada entrada re
 
 ---
 
-### 12.6 Formato de series BIE en versiones 2010 y 2013
+### 12.6 Formato de series BIE en versiones 2010 y 2013 ✓ RESUELTO
 
-**Comportamiento actual:** `LectorSeriesCsv` extrae genéricos con el patrón `\b\d{3}\b` en el campo `Título`. Verificado solo contra series de la canasta 2018.
+**Comportamiento anterior:** `LectorSeriesCsv` extraía genéricos con el patrón
+`\b\d{3}\b` en el campo `Título`. Esto funcionaba para series 2018/2024, pero
+fallaba para series 2010/2013.
 
-**Problema:** las series 2010 y 2013 descargadas del BIE podrían tener un formato de título distinto donde los códigos de genérico no sean de 3 dígitos. Si no hay matches, el lector lanzaría `SerieVacia` sin indicar que el problema es de formato.
+**Hallazgo con datos reales:** en `series2010_horizontal_metadata.CSV`, los
+títulos contienen la frase `base segunda quincena de diciembre 2010=100`. El
+regex de 3 dígitos captura ese `100` y produce nombres largos incorrectos; la
+intersección contra `ponderadores_2010.csv` es 0. Las canastas 2010 y 2013
+comparten los mismos 283 genéricos, por lo que el mismo formato de series aplica
+a ambas.
 
-**Mejora propuesta:** verificar el formato real de las series 2010/2013 en el BIE y ajustar el patrón si es necesario.
+**Solución:** agregar una segunda estrategia de extracción en `LectorSeriesCsv`
+para el formato jerárquico BIE 2010/2013:
 
-**Cuándo implementar:** antes de implementar corridas 2010 y 2013.
+1. detectar filas terminales del árbol BIE: títulos sin hijos cuyo título
+   empiece con `titulo + ","`;
+2. preferir match exacto contra el último componente después de coma;
+3. si no hay match, usar sufijo del título completo;
+4. aplicar aliases mínimos para diferencias reales entre canasta y serie:
+   - `vestidos faldas y pantalones para niñas` ↔ `Vestidos, faldas y pantalones para niña`;
+   - `papel higienico y pañuelos desechables` ↔ `Papel higiénico y pañuelos deshechables`.
+
+Prueba exploratoria sobre datos reales: la regla terminal + último componente
+resuelve 281/283 genéricos con 0 ambiguos; los 2 restantes son exactamente los
+aliases anteriores. No se usa fuzzy matching.
+
+**Alcance:** este cambio desbloquea la etapa 1 de v1.3.0: corrida 2010 en
+referencia original `2Q Dic 2010 = 100`. No resuelve por sí solo la metodología
+de encadenamiento 2013 ni el rebase posterior a `2Q Jul 2018 = 100`.
 
 ---
 
