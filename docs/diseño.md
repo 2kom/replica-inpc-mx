@@ -2504,12 +2504,12 @@ determinísticas según el formato real del título:
    (ver §12.3).
 2. **Formato jerárquico BIE sin clave de genérico terminal** (series 2010/2013):
    se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título
-   empiece con `titulo + ","`). En esas filas, el genérico se obtiene
-   preferentemente del último componente después de coma; si no hay coincidencia
-   suficiente, se permite match por sufijo del título completo. El extractor
-   aplica una tabla mínima de aliases para diferencias reales verificadas contra
-   los insumos (`niña`/`niñas`, `deshechables`/`desechables`). No usa matching
-   fuzzy.
+   empiece con `titulo + ","`). En esas filas, el extractor ubica el último
+   componente con código CCIF (`01.1.1`, `04.5.1`, etc.) y genera candidatos de
+   sufijo con los componentes posteriores. Esto preserva genéricos que contienen
+   comas, como `Leche evaporada, condensada y maternizada`. El extractor aplica
+   una tabla mínima de aliases para diferencias reales verificadas contra los
+   insumos (`niña`/`niñas`, `deshechables`/`desechables`). No usa matching fuzzy.
 
 **Normalización de nombres:** se eliminan tildes vocálicas (`á`→`a`, etc.),
 se conserva `ñ`, se elimina puntuación y se pone en minúsculas. El resultado
@@ -3752,14 +3752,16 @@ para el formato jerárquico BIE 2010/2013:
 
 1. detectar filas terminales del árbol BIE: títulos sin hijos cuyo título
    empiece con `titulo + ","`;
-2. preferir match exacto contra el último componente después de coma;
-3. si no hay match, usar sufijo del título completo;
+2. ubicar el último componente con código CCIF (`01.1.1`, `04.5.1`, etc.);
+3. generar candidatos de sufijo con los componentes posteriores a ese código,
+   para conservar nombres de genéricos que contienen comas;
 4. aplicar aliases mínimos para diferencias reales entre canasta y serie:
    - `vestidos faldas y pantalones para niñas` ↔ `Vestidos, faldas y pantalones para niña`;
    - `papel higienico y pañuelos desechables` ↔ `Papel higiénico y pañuelos deshechables`.
 
-Prueba exploratoria sobre datos reales: la regla terminal + último componente
-resuelve 281/283 genéricos con 0 ambiguos; los 2 restantes son exactamente los
+Prueba exploratoria sobre datos reales: la regla terminal + candidatos de sufijo
+después del último código CCIF produce 360 candidatos únicos, de los cuales
+283/283 coinciden con los genéricos de `ponderadores_2010.csv` tras aplicar los
 aliases anteriores. No se usa fuzzy matching.
 
 **Alcance:** este cambio desbloquea la etapa 1 de v1.3.0: corrida 2010 en

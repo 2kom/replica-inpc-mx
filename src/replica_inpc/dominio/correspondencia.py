@@ -5,9 +5,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 
 
-def alinear_genericos(
-    canasta: CanastaCanonica, serie: SerieNormalizada
-) -> SerieNormalizada:
+def alinear_genericos(canasta: CanastaCanonica, serie: SerieNormalizada) -> SerieNormalizada:
     """Verifica y alinea los genéricos de una serie al orden de la canasta.
 
     Esta función asume que `canasta.df.index` y `serie.df.index` ya fueron
@@ -44,14 +42,13 @@ def alinear_genericos(
     genericos_serie = set(serie.df.index)
     faltantes = [g for g in canasta.df.index if g not in genericos_serie]
     if faltantes:
+        print(f"{len(faltantes)} de genericos no alineados")
         raise CorrespondenciaInsuficiente(faltantes)
 
     serie_filtrada = serie.df.loc[canasta.df.index]
 
     mapeo_reordenado = {
-        llave: valor
-        for llave, valor in serie.mapeo.items()
-        if llave in serie_filtrada.index
+        llave: valor for llave, valor in serie.mapeo.items() if llave in serie_filtrada.index
     }
 
     return SerieNormalizada(serie_filtrada, mapeo_reordenado)

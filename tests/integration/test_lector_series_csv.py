@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from replica_inpc.dominio.correspondencia import alinear_genericos
 from replica_inpc.dominio.errores import (
     ArchivoCorrupto,
     ArchivoNoEncontrado,
@@ -11,6 +12,7 @@ from replica_inpc.dominio.errores import (
     SerieVacia,
 )
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "inputs"
@@ -168,3 +170,25 @@ def test_lector_series_csv_real_2018_vertical_nometadata():
     assert isinstance(resultado, SerieNormalizada)
     assert not resultado.df.index.duplicated().any()
     assert len(resultado.df) == 299
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize(
+    "archivo",
+    [
+        "series2010_horizontal_metadata.CSV",
+        "series2010_horizontal_nometadata.CSV",
+        "series2010_vertical_metadata.CSV",
+        "series2010_vertical_nometadata.CSV",
+    ],
+)
+def test_lector_series_csv_real_2010_bie_alinea_canasta(archivo: str):
+    canasta = LectorCanastaCsv().leer(DATA_DIR / "ponderadores_2010.csv", 2010)
+    resultado = LectorSeriesCsv().leer(DATA_DIR / archivo)
+    resultado_alineado = alinear_genericos(canasta, resultado)
+
+    assert isinstance(resultado, SerieNormalizada)
+    assert not resultado.df.index.duplicated().any()
+    assert len(resultado.df) == 360
+    assert len(resultado_alineado.df) == 283
+    assert resultado_alineado.df.index.equals(canasta.df.index)
