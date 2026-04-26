@@ -29,9 +29,9 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.4)
+## Alcance actual (v1.2.5)
 
-La v1.2.4 del proyecto permite:
+La v1.2.5 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
 - calcular el INPC general mediante Laspeyres directo (canastas 2018) o encadenado (canastas 2013 y 2024);
@@ -42,12 +42,13 @@ La v1.2.4 del proyecto permite:
 - validar indices quincenales o mensuales contra lo publicado por el INEGI via su API;
 - calcular variaciones periodicas, acumuladas anuales y desde un periodo base (quincenales y mensuales);
 - validar variaciones quincenales o mensuales contra lo publicado por el INEGI via su API;
+- calcular incidencias periodicas, acumuladas anuales y desde un periodo base por subindice clasificador (mensuales o quincenales), incluyendo flujos multi-canasta (2018 + 2024);
+- validar incidencias mensuales periodicas contra lo publicado por el INEGI via su API;
 - exportar resultados de calculo y validacion;
 - ejecutar un demo completo con datos sinteticos (ver `demo/`).
 
 El proyecto **no** incluye todavia:
 
-- incidencias;
 - soporte operativo para canastas 2010 y 2013;
 - mapeo de splits, fusiones, categorias nuevas o eliminadas entre canastas: las categorias que
   desaparecen, aparecen o se parten entre versiones aparecen solo en los periodos donde existen,
@@ -234,6 +235,57 @@ El resultado incluye:
 - `resultado.reporte.como_tabla()` — INPC replicado vs INEGI por periodo
 - `resultado.resultado.como_tabla()` — índices calculados
 - `resultado.diagnostico` — faltantes detectados e imputados
+
+**Calcular incidencias:**
+
+```python
+from replica_inpc import incidencia_periodica, incidencia_acumulada_anual, incidencia_desde
+
+# Incidencia periodica mensual (contribucion de cada subindice a la variacion mensual del INPC)
+# Soporta multi-canasta: acepta una lista de (ruta_canasta, version)
+ri_mensual = incidencia_periodica(
+    inpc=resultado_mensual,
+    clasificacion=clasificacion_mensual,
+    canastas=[
+        ("data/inputs/canastas/ponderadores_2018.csv", 2018),
+        ("data/inputs/canastas/ponderadores_2024.csv", 2024),
+    ],
+    frecuencia="mensual",
+)
+
+# Incidencia acumulada anual
+ri_anual = incidencia_acumulada_anual(
+    inpc=resultado_mensual,
+    clasificacion=clasificacion_mensual,
+    canastas=[("data/inputs/canastas/ponderadores_2018.csv", 2018)],
+)
+
+# Incidencia desde un periodo base especifico
+ri_desde = incidencia_desde(
+    inpc=resultado_mensual,
+    clasificacion=clasificacion_mensual,
+    canastas=[("data/inputs/canastas/ponderadores_2018.csv", 2018)],
+    desde=periodo_desde_str("Ene 2024"),
+    hasta=periodo_desde_str("Jun 2024"),
+)
+```
+
+El resultado `ri.df` tiene MultiIndex `(periodo, indice)` y columnas
+`incidencia_pp`, `tipo`, `frecuencia`, `clase_incidencia`, `estado_calculo`.
+La suma de `incidencia_pp` sobre todos los subindices para un periodo dado
+es igual a la variacion del INPC en puntos porcentuales.
+
+**Validar incidencias contra el INEGI:**
+
+```python
+from replica_inpc import validar_incidencias_mensual
+
+# Solo soporta incidencia 'periodica' con frecuencia='mensual'.
+reporte_inc = validar_incidencias_mensual(ri_mensual, token=TOKEN_INEGI)
+```
+
+El reporte `reporte_inc.df` tiene MultiIndex `(tipo_incidencia, periodo, indice)` y columnas
+`incidencia_replicada_pp`, `incidencia_inegi_pp`, `error_absoluto_pp`, `estado_validacion`.
 
 Para detalles de arquitectura y contratos, ver `docs/diseño.md`.
 

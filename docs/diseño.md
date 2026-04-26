@@ -139,7 +139,7 @@ El historial de cambios vive en git.
     - [12.12 `ejecutar` multi-canasta (v2.0)](#1212-ejecutar-multi-canasta-v20)
     - [12.13 Validación de variaciones contra series INEGI (v1.2.4) ✓ RESUELTO](#1213-validación-de-variaciones-contra-series-inegi-v124--resuelto)
     - [12.14 Rediseño de API de validación: `ResultadoCalculo`, `ResultadoValidacion` y wrappers con token (v2.0)](#1214-rediseño-de-api-de-validación-resultadocalculo-resultadovalidacion-y-wrappers-con-token-v20)
-    - [12.15 Incidencias cross-canasta (v2.0)](#1215-incidencias-cross-canasta-v20)
+    - [12.15 Incidencias cross-canasta (v1.2.5 ✓ RESUELTO — API explícita diferida a v2.0)](#1215-incidencias-cross-canasta-v125--resuelto--api-explícita-diferida-a-v20)
 
 ---
 
@@ -1817,20 +1817,20 @@ _LAG_QUINCENAL: dict[str, int] = {
 def incidencia_periodica(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
     frecuencia: str,
 ) -> ResultadoIncidencia: ...
 
 def incidencia_acumulada_anual(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
 ) -> ResultadoIncidencia: ...
 
 def incidencia_desde(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
     desde: PeriodoQuincenal | PeriodoMensual,
     hasta: PeriodoQuincenal | PeriodoMensual,
 ) -> ResultadoIncidencia: ...
@@ -1845,9 +1845,16 @@ Donde:
 - `SubInpc_c_t` = `clasificacion.df.loc[(t, c), "indice_replicado"]`
 - `SubInpc_c_{base}` = `clasificacion.df.loc[(base, c), "indice_replicado"]`
 - `INPC_{base}` = `inpc.df.loc[(base, "INPC"), "indice_replicado"]`
-- `pond_c` = `canasta.df.groupby(tipo_clas)["ponderador"].sum()[c]`
-- `pond_total` = `canasta.df["ponderador"].sum()`
+- `ver_base` = `version_por_periodo[base]` — versión de la canasta del periodo base
+- `pond_c` = `canastas[ver_base].df.groupby(tipo_clas)["ponderador"].sum()[c]`
+- `pond_total` = `canastas[ver_base].df["ponderador"].sum()`
 - `tipo_clas` = `clasificacion.df["tipo"].iloc[0]`
+
+Para canastas con `LaspeyresEncadenado` (encadenamiento ≠ NaN) cuando `ver_p == ver_base`, los índices se de-encadenan antes de aplicar la fórmula:
+
+$$\text{SubInpc}^{\text{raw}}_{c,t} = \frac{\text{SubInpc}_{c,t}}{f_{h,c}}, \quad \text{INPC}^{\text{raw}}_{\text{base}} = \frac{\text{INPC}_{\text{base}}}{f_{h,\text{INPC}}}$$
+
+donde `f_h_c = SubInpc_c[traslape] / 100` y `f_h_INPC = INPC[traslape] / 100`, con `traslape` = primer periodo de la versión encadenada. Para periodos de transición cross-canasta (`ver_p ≠ ver_base`) o canasta 2018 (LaspeyresDirecto): `f_h = 1`.
 
 **Periodo base por función:**
 
@@ -1869,14 +1876,13 @@ Donde:
 
 - `inpc.df["tipo"].iloc[0] != "inpc"` — primer argumento debe ser resultado `tipo="inpc"`
 - `clasificacion.df["tipo"].iloc[0]` no en `COLUMNAS_CLASIFICACION` — no es tipo de clasificación válido
-- `inpc.version != clasificacion.version` — versiones distintas
-- Cualquier versión es `None` (resultados combinados no soportados — ver §12.15)
+- Alguna versión presente en `clasificacion.df["version"].unique()` no está en `canastas` — falta canasta para alguna versión del resultado
 - `frecuencia` no reconocida según tipo de periodo (`_LAG_MENSUAL` o `_LAG_QUINCENAL`)
 
 **Aditividad:**
 
 - `LaspeyresDirecto`: Σ_c `incidencia_pp_c_t` = `variacion_periodica_INPC_t` exacto por construcción.
-- `LaspeyresEncadenado`: imprecisión teórica pequeña porque cada categoría tiene su propio `f_h_c`; en la práctica negligible para canasta 2024 reciente. Verificar empíricamente antes de cerrar v1.2.5.
+- `LaspeyresEncadenado`: exacto por construcción mediante de-encadenamiento ÷ `f_h_i` (v1.2.5). Verificado empíricamente contra INEGI: Σ inc_i = var_INPC en todos los periodos canasta 2024.
 
 **Exportación desde `replica_inpc`:**
 
@@ -1890,7 +1896,7 @@ from replica_inpc import incidencia_periodica, incidencia_acumulada_anual, incid
 
 Paralelo a `ResumenValidacionVariaciones`. **Archivo:** `dominio/modelos/validacion.py`.
 
-**Índice MultiIndex:** `(tipo_incidencia, indice)` donde `tipo_incidencia` ∈ `{"interanual"}` (tipos con indicadores INEGI disponibles).
+**Índice MultiIndex:** `(tipo_incidencia, indice)` donde `tipo_incidencia` ∈ `{"periodica"}` (tipos con indicadores INEGI disponibles).
 
 **Columnas:** `n_comparaciones`, `n_excluidos`, `n_no_disponibles`, `max_error_pp`, `estado_validacion_global`.
 
@@ -1919,11 +1925,11 @@ Función del dominio que compara incidencias calculadas contra series publicadas
 **Archivo:** `dominio/validar_incidencias.py`
 
 ```python
-_TOLERANCIA_INCIDENCIA_PP: float  # TBD — verificación empírica pendiente
+_TOLERANCIA_INCIDENCIA_PP: float = 0.009
 
 def validar_incidencias(
     ri: ResultadoIncidencia,
-    tipo_incidencia: Literal["interanual"],
+    tipo_incidencia: Literal["periodica"],
     inegi: dict[str, dict[PeriodoMensual, float | None]],
 ) -> ReporteValidacionIncidencias: ...
 ```
@@ -2197,16 +2203,14 @@ def validar_incidencias_mensual(
 
 1. Valida que `ri.clase_incidencia` y `ri.frecuencia` sean soportadas — lanza `ErrorConfiguracion` si:
    - `clase_incidencia == "desde"`: INEGI no publica ese tipo.
-   - `clase_incidencia == "periodica"` con `ri.frecuencia != "anual"`: INEGI solo publica incidencia interanual.
    - `clase_incidencia == "acumulada_anual"`: no disponible en API INEGI para incidencias.
+   - `clase_incidencia == "periodica"` con `ri.frecuencia != "mensual"`: INEGI solo publica incidencia periódica mensual.
 2. Valida que los periodos en `ri.df` sean `PeriodoMensual` — lanza `ErrorConfiguracion` si no.
-3. Construye `FuenteValidacionApi(token=token, tipo=ri.tipo)` y llama `.obtener_incidencias(periodos, "interanual")`.
-4. Delega a `validar_incidencias(ri, "interanual", inegi)` del dominio.
+3. Construye `FuenteValidacionApi(token=token, tipo=ri.tipo)` y llama `.obtener_incidencias(periodos, "periodica")`.
+4. Delega a `validar_incidencias(ri, "periodica", inegi)` del dominio.
 5. Retorna el `ReporteValidacionIncidencias` resultante.
 
 **Tipos validables:** `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` — mismos que para variaciones.
-
-**Nota:** los indicadores INEGI para incidencias están pendientes de documentar en §8.9. La tolerancia `_TOLERANCIA_INCIDENCIA_PP` se fija después de verificación empírica.
 
 **Exportación desde `replica_inpc`:**
 
@@ -2983,15 +2987,25 @@ _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
 
 ### 8.9 Indicadores de incidencia mensual (API del INEGI)
 
-Series de incidencia mensual publicadas por INEGI en la API BIE-BISE. Se usan para validar `incidencia_periodica(..., "anual")` (interanual) sobre datos mensuales.
+Series de incidencia mensual publicadas por INEGI en la API BIE-BISE. Se usan para validar `incidencia_periodica(..., "mensual")` sobre datos mensuales. Implementado en v1.2.5.
 
-**Estado:** pendiente — usuario proporcionará números de indicador. Verificación empírica de tolerancia y cobertura pendiente para determinar `_TOLERANCIA_INCIDENCIA_PP`.
+**Estado:** implementado. Tolerancia verificada empíricamente: `_TOLERANCIA_INCIDENCIA_PP = 0.009`.
 
 **Tipos disponibles:** `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` — mismos tipos que §8.7.
 
-**Clase:** solo `"interanual"` — INEGI no publica incidencia periódica mensual ni acumulada anual en el BIE.
+**Clase:** solo `"periodica"` — INEGI publica incidencia periódica mensual en el BIE. No publica acumulada anual ni desde un base.
 
-> Completar con mapeo `_INCIDENCIAS_INTERANUAL_MENSUAL` y verificación empírica antes de v1.2.5.
+**Mapeo `_INCIDENCIAS_PERIODICA_MENSUAL`** (dict `tipo → {indice → indicador_BIE}`):
+
+| tipo | indice | indicador |
+| --- | --- | --- |
+| `"inpc"` | `"INPC"` | 909281 |
+| `"inflacion componente"` | `"subyacente"` | 909282 |
+| `"inflacion componente"` | `"no subyacente"` | 909290 |
+| `"inflacion subcomponente"` | `"mercancias"` | 909283 |
+| `"inflacion subcomponente"` | `"servicios"` | 909286 |
+| `"inflacion subcomponente"` | `"agropecuarios"` | 909291 |
+| `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | 909294 |
 
 ---
 
@@ -3894,31 +3908,22 @@ validacion.diagnostico.df   # periodos no verificados por ausencia en API
 
 ---
 
-### 12.15 Incidencias cross-canasta (v2.0)
+### 12.15 Incidencias cross-canasta (v1.2.5 ✓ RESUELTO — API explícita diferida a v2.0)
 
-**Situación actual:** `incidencia_periodica`, `incidencia_acumulada_anual` e `incidencia_desde` requieren `ResultadoCalculo` con `version` no `None`. Si el usuario pasa un resultado combinado (`combinar([r2018, r2024])`), se lanza `ErrorConfiguracion`.
+**Situación en v1.2.5:** `incidencia_periodica`, `incidencia_acumulada_anual` e `incidencia_desde` aceptan `canastas: dict[int, CanastaCanonica]`. El usuario pasa una canasta por cada versión presente en el `ResultadoCalculo` combinado, y la función aplica automáticamente:
 
-**Problema:** para el flujo habitual (INPC histórico 2018–2024 combinado), no es posible calcular incidencias directamente. El usuario tendría que calcularlas por separado para cada canasta y concatenar manualmente.
+- **Fix 1:** ponderadores según la canasta del periodo base (`ver_base = version_por_periodo[base_p]`), no del periodo actual. Para periodos de transición (base en 2018, actual en 2024) usa ponderadores 2018.
+- **Fix 2:** de-encadenamiento ÷ `f_h_i` para periodos dentro de la misma canasta encadenada (`ver_p == ver_base`, encadenamiento ≠ NaN). Garantiza Σ inc_i = var_INPC. Para cross-canasta y canasta 2018: `f_h = 1`.
 
-**Mejora propuesta (v2.0):** soporte para `version=None` mediante dos canastas:
+**Flujo habitual (combinado 2018 + 2024):**
 
 ```python
 incidencia_periodica(
-    inpc,
-    clasificacion,
-    canasta_pre=canasta_2018,
-    canasta_post=canasta_2024,
+    inpc=resultado_combinado_mensual,
+    clasificacion=clasificacion_combinada_mensual,
+    canastas={2018: canasta_2018, 2024: canasta_2024},
     frecuencia="mensual",
 )
 ```
 
-Internamente:
-
-- Split en `empalme = PeriodoMensual(2024, 7)` (mensual) o `PeriodoQuincenal(2024, 7, 2)` (quincenal).
-- Periodos `< empalme` → usa `canasta_pre` para `pond_c` y `pond_total`.
-- Periodos `>= empalme` → usa `canasta_post`.
-- Concatena ambos resultados en un único `ResultadoIncidencia`.
-
-**Referencia:** proyecto anterior resolvió esto en `orquestacion.py: incidencia_porcentual()` dividiendo en segmentos pre/post empalme y calculando por separado.
-
-**Cuándo implementar:** v2.0, junto con §12.12 (multi-canasta) y §12.14 (rediseño de API).
+**API explícita `canasta_pre/canasta_post` (v2.0):** diferida. La funcionalidad correcta ya está implementada en v1.2.5 vía `dict[int, CanastaCanonica]`; la API nominal con argumentos nombrados se formaliza en v2.0 junto con §12.12 y §12.14.

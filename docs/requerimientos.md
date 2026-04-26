@@ -625,7 +625,8 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 | v1.2.2  | v1.2.1 + variaciones periódicas, acumuladas anuales y desde periodo base (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`) |
 | v1.2.3  | v1.2.2 + `PeriodoMensual` + `a_mensual()` + variaciones mensuales + `validar_mensual(resultado, token)` + `validar_quincenal(resultado, token)`  |
 | v1.2.4  | v1.2.3 + `validar_variaciones_mensual(rv, token)` + `validar_variaciones_quincenal(rv, token)` + estado `fuera_de_rango_inegi`                   |
-| v1.3.0  | v1.2.4 + canastas 2010 y 2013                                                                                                                    |
+| v1.2.5  | v1.2.4 + `incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde` (multi-canasta 2018+2024) + `validar_incidencias_mensual`      |
+| v1.3.0  | v1.2.5 + canastas 2010 y 2013                                                                                                                    |
 
 ### 13.1 Subindices
 
@@ -638,16 +639,14 @@ La v1.1.0 incluye:
 
 No incluye todavia:
 
-- incidencias por subindice;
+- ~~incidencias por subindice.~~ Incorporado en **v1.2.5** (`incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde`, `validar_incidencias_mensual`).
 - ~~variaciones por subindice.~~ Incorporado en **v1.2.2**.
 
 ### 13.2 Incidencias y variaciones
 
 ~~Ninguna version prevista hasta v1.3.0 incluye variaciones.~~ Incorporado en **v1.2.2** (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`).
 
-Ninguna version prevista hasta v1.3.0 incluye:
-
-- incidencias.
+~~Ninguna version prevista hasta v1.3.0 incluye incidencias.~~ Incorporado en **v1.2.5** (`incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde`, `validar_incidencias_mensual`).
 
 ### 13.3 Operacion sobre canastas 2010 y 2013
 
