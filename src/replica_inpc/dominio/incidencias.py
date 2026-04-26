@@ -141,7 +141,7 @@ def _construir_resultado(
 
     if any(same_encadenada):
         traslape_por_version: dict[int, PeriodoQuincenal | PeriodoMensual] = {
-            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[misc]
+            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[type-var, misc]
             for ver in versiones_encadenadas
             if ver in set(ver_p_per_row)
         }
