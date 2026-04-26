@@ -83,6 +83,25 @@ def _mk_canasta(
     return CanastaCanonica(df, version)  # type: ignore[arg-type]
 
 
+def _mk_canasta_enc(
+    genericos: list[str],
+    ponderadores: list[float],
+    componentes: list[str],
+    encadenamiento: list[float],
+    tipo_col: str = "inflacion componente",
+    version: int = 2024,
+) -> CanastaCanonica:
+    df = pd.DataFrame(
+        {
+            "ponderador": [str(p) for p in ponderadores],
+            "encadenamiento": encadenamiento,
+            tipo_col: componentes,
+        },
+        index=pd.Index(genericos, name="generico"),
+    )
+    return CanastaCanonica(df, version)  # type: ignore[arg-type]
+
+
 # Periodos de prueba (mensuales)
 _P_ENE = PeriodoMensual(2019, 1)
 _P_FEB = PeriodoMensual(2019, 2)
@@ -337,6 +356,100 @@ class TestIncidenciaPeriodica:
         canastas = {2018: _canasta_componente(), 2024: canasta_2024}
         ri = incidencia_periodica(_inpc_mensual(), clas_combinada, canastas, "mensual")
         assert isinstance(ri, ResultadoIncidencia)
+
+    def test_canasta_encadenada_deencadenamiento_valores(self):
+        # f_h_sub=1.2 (sub_traslape=120), f_h_nosub=0.9 (nosub_traslape=90), f_h_INPC=1.1
+        # Valores combinados = raw * f_h; traslape = P_ENE (version=2024)
+        # Raw P_FEB: sub=102, nosub=101 → inc_sub=70*(102-100)/100=1.4, inc_nosub=30*(101-100)/100=0.3
+        canasta_enc = _mk_canasta_enc(
+            genericos=["gen_sub_1", "gen_sub_2", "gen_nosub"],
+            ponderadores=[42.0, 28.0, 30.0],
+            componentes=["subyacente", "subyacente", "no subyacente"],
+            encadenamiento=[1.0, 1.0, 1.0],
+        )
+        inpc = _mk_rc({"INPC": [(_P_ENE, 110.0), (_P_FEB, 111.87)]}, version=2024)
+        clas = _mk_rc(
+            {
+                "subyacente": [(_P_ENE, 120.0), (_P_FEB, 122.4)],
+                "no subyacente": [(_P_ENE, 90.0), (_P_FEB, 90.9)],
+            },
+            tipo="inflacion componente",
+            version=2024,
+        )
+        ri = incidencia_periodica(inpc, clas, {2024: canasta_enc}, "mensual")
+        inc_sub = float(ri.df.loc[(_P_FEB, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        inc_nosub = float(ri.df.loc[(_P_FEB, "no subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        assert inc_sub == pytest.approx(1.4, rel=1e-5)
+        assert inc_nosub == pytest.approx(0.3, rel=1e-5)
+
+    def test_canasta_encadenada_sigma(self):
+        # Σ inc_i debe igualar variación INPC (1.7 pp) tras de-encadenamiento
+        canasta_enc = _mk_canasta_enc(
+            genericos=["gen_sub_1", "gen_sub_2", "gen_nosub"],
+            ponderadores=[42.0, 28.0, 30.0],
+            componentes=["subyacente", "subyacente", "no subyacente"],
+            encadenamiento=[1.0, 1.0, 1.0],
+        )
+        inpc = _mk_rc({"INPC": [(_P_ENE, 110.0), (_P_FEB, 111.87)]}, version=2024)
+        clas = _mk_rc(
+            {
+                "subyacente": [(_P_ENE, 120.0), (_P_FEB, 122.4)],
+                "no subyacente": [(_P_ENE, 90.0), (_P_FEB, 90.9)],
+            },
+            tipo="inflacion componente",
+            version=2024,
+        )
+        ri = incidencia_periodica(inpc, clas, {2024: canasta_enc}, "mensual")
+        inc_sub = float(ri.df.loc[(_P_FEB, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        inc_nosub = float(ri.df.loc[(_P_FEB, "no subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        # INPC raw: P_ENE=100, P_FEB=101.7 → variación=1.7 pp
+        assert inc_sub + inc_nosub == pytest.approx(1.7, rel=1e-5)
+
+    def test_multicanasta_transicion_usa_pond_base(self):
+        # P_FEB (version=2024) base=P_ENE (version=2018): usa ponderadores canasta 2018
+        # canasta 2018: sub=70, nosub=30; canasta 2024: sub=75, nosub=25
+        # Si se usaran pond 2024 el resultado sería distinto
+        canasta_2024_diff = _mk_canasta(
+            genericos=["gen_sub_1", "gen_sub_2", "gen_nosub"],
+            ponderadores=[50.0, 25.0, 25.0],
+            componentes=["subyacente", "subyacente", "no subyacente"],
+            version=2024,
+        )
+        rows = []
+        for p, v, ver in [(_P_ENE, 71.4, 2018), (_P_FEB, 72.8, 2024)]:
+            rows.append(
+                {
+                    "periodo": p,
+                    "indice": "subyacente",
+                    "version": ver,
+                    "tipo": "inflacion componente",
+                    "indice_replicado": v,
+                    "estado_calculo": "ok",
+                    "motivo_error": None,
+                }
+            )
+        for p, v, ver in [(_P_ENE, 30.6, 2018), (_P_FEB, 31.2, 2024)]:
+            rows.append(
+                {
+                    "periodo": p,
+                    "indice": "no subyacente",
+                    "version": ver,
+                    "tipo": "inflacion componente",
+                    "indice_replicado": v,
+                    "estado_calculo": "ok",
+                    "motivo_error": None,
+                }
+            )
+        df = pd.DataFrame(rows).set_index(["periodo", "indice"])
+        clas_combinada = ResultadoCalculo(df, "test")
+        canastas = {2018: _canasta_componente(), 2024: canasta_2024_diff}
+        ri = incidencia_periodica(_inpc_mensual(), clas_combinada, canastas, "mensual")
+        # P_FEB base=P_ENE (version=2018) → ponderadores 2018: sub=70, nosub=30
+        inc_sub = float(ri.df.loc[(_P_FEB, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        inc_nosub = float(ri.df.loc[(_P_FEB, "no subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
+        # Con pond 2018: 70*(72.8-71.4)/101 y 30*(31.2-30.6)/101
+        assert inc_sub == pytest.approx(70 * (72.8 - 71.4) / 101.0, rel=1e-5)
+        assert inc_nosub == pytest.approx(30 * (31.2 - 30.6) / 101.0, rel=1e-5)
 
     def test_error_frecuencia_invalida(self):
         with pytest.raises(ErrorConfiguracion, match="Frecuencia"):

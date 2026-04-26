@@ -116,10 +116,75 @@ def _construir_resultado(
     version_por_periodo = (
         df_clas.reset_index().groupby("periodo")["version"].first().astype(int).to_dict()
     )
+
+    # Fix 1: ponderadores según versión del periodo base, no del periodo actual.
+    # Para periodos de transición (base en canasta 2018, actual en 2024) se usan
+    # los ponderadores de canasta 2018; para pares dentro de la misma canasta no cambia.
+    ver_p_per_row = [version_por_periodo[p] for p in periodos]
+    ver_base_per_row = [
+        version_por_periodo.get(base_por_periodo[p], version_por_periodo[p])  # type: ignore[arg-type]
+        for p in periodos
+    ]
+
+    # Fix 2: de-encadenamiento para versiones que usan LaspeyresEncadenado.
+    # LaspeyresEncadenado aplica f_h_i distinto por subíndice; esto rompe Σ inc_i = var_INPC.
+    # Solución: normalizar I_t e I_base al nivel del traslape (÷ f_h_i) antes de calcular.
+    # Solo aplica cuando base_p y p son de la misma canasta encadenada (mismo ver).
+    # Para cross-canasta (transición) los valores ya están en escala compatible → f_h = 1.
+    versiones_encadenadas = {
+        int(v) for v, c in canastas.items() if not c.df["encadenamiento"].isna().all()
+    }
+    same_encadenada = [
+        ver_p == ver_base and ver_p in versiones_encadenadas
+        for ver_p, ver_base in zip(ver_p_per_row, ver_base_per_row)
+    ]
+
+    if any(same_encadenada):
+        traslape_por_version: dict[int, PeriodoQuincenal | PeriodoMensual] = {
+            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[type-var]
+            for ver in versiones_encadenadas
+            if ver in set(ver_p_per_row)
+        }
+        f_h_clas_map: dict[tuple[int, str], float] = {}
+        f_h_inpc_map: dict[int, float] = {}
+        for ver, traslape in traslape_por_version.items():
+            for idx in df_clas.index.get_level_values("indice").unique():
+                try:
+                    val = float(df_clas.at[(traslape, idx), "indice_replicado"])  # type: ignore[arg-type]
+                    if not pd.isna(val) and val != 0:
+                        f_h_clas_map[(ver, str(idx))] = val / 100
+                except KeyError:
+                    pass
+            try:
+                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])  # type: ignore[union-attr]
+                if not pd.isna(val) and val != 0:
+                    f_h_inpc_map[ver] = val / 100
+            except KeyError:
+                pass
+        f_h_i_series = pd.Series(
+            [
+                f_h_clas_map.get((ver_p, str(idx)), 1.0) if same else 1.0
+                for ver_p, idx, same in zip(ver_p_per_row, indices_clas, same_encadenada)
+            ],
+            index=df_clas.index,
+            dtype=float,
+        )
+        f_h_inpc_series = pd.Series(
+            [
+                f_h_inpc_map.get(ver_p, 1.0) if same else 1.0
+                for ver_p, same in zip(ver_p_per_row, same_encadenada)
+            ],
+            index=df_clas.index,
+            dtype=float,
+        )
+    else:
+        f_h_i_series = pd.Series(1.0, index=df_clas.index, dtype=float)
+        f_h_inpc_series = pd.Series(1.0, index=df_clas.index, dtype=float)
+
     pond_serie = pd.Series(
         [
-            float(pond_por_version[version_por_periodo[p]].get(c, float("nan")))
-            for p, c in zip(periodos, indices_clas)
+            float(pond_por_version[ver_base].get(c, float("nan")))
+            for ver_base, c in zip(ver_base_per_row, indices_clas)
         ],
         index=df_clas.index,
         dtype=float,
@@ -137,8 +202,14 @@ def _construir_resultado(
         dtype=float,
     )
 
-    # inc_i = w_i * (I_t^i - I_base^i) / INPC_base  →  Σ inc_i = var_INPC en pp
-    incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
+    # inc_i = w_i * (I_t/f_h_i - I_base/f_h_i) / (INPC_base/f_h_INPC)
+    # Para canasta base (2018) y transición cross-canasta: f_h = 1 → fórmula original.
+    # Para misma canasta encadenada (2024+): de-encadenado → Σ inc_i = var_INPC en pp.
+    incidencia_pp = (
+        (valores_t / f_h_i_series - base_clas / f_h_i_series)
+        * pond_serie
+        / (inpc_base_serie / f_h_inpc_series)
+    )
 
     # Drop rows where current value exists but incidencia is NaN (base missing)
     mask_drop = valores_t.notna() & incidencia_pp.isna()
