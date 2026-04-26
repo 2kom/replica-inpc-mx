@@ -48,6 +48,7 @@ def _es_mensual(df: pd.DataFrame) -> bool:
 def _validar_entradas(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
+    canastas: dict[int, CanastaCanonica],
     frecuencia: str | None = None,
 ) -> None:
     tipo_inpc = str(inpc.df["tipo"].iloc[0])
@@ -61,17 +62,12 @@ def _validar_entradas(
             f"El tipo de clasificación '{tipo_clas}' no es válido. "
             f"Tipos soportados: {sorted(COLUMNAS_CLASIFICACION)}"
         )
-    inpc_vers = inpc.df["version"].unique()
-    clas_vers = clasificacion.df["version"].unique()
-    if len(inpc_vers) > 1 or len(clas_vers) > 1:
+    clas_vers = set(int(v) for v in clasificacion.df["version"].unique())
+    faltantes = clas_vers - set(canastas.keys())
+    if faltantes:
         raise ErrorConfiguracion(
-            "Las incidencias no son compatibles con resultados combinados (múltiples versiones). "
-            "Usa resultados de una sola canasta. Ver §12.15."
-        )
-    if inpc_vers[0] != clas_vers[0]:
-        raise ErrorConfiguracion(
-            f"Las versiones de inpc ({inpc_vers[0]}) y clasificacion ({clas_vers[0]}) "
-            "deben coincidir."
+            f"Falta canasta para versión(es) {sorted(faltantes)}. "
+            "Proporciona una canasta por cada versión presente en el resultado."
         )
     if frecuencia is not None:
         mensual = _es_mensual(inpc.df)
@@ -87,15 +83,16 @@ def _validar_entradas(
 def _construir_resultado(
     df_clas: pd.DataFrame,
     df_inpc: pd.DataFrame,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
     base_por_periodo: dict[PeriodoQuincenal | PeriodoMensual, PeriodoQuincenal | PeriodoMensual],
     tipo_clas: str,
     frecuencia: str,
     clase_incidencia: str,
 ) -> ResultadoIncidencia:
-    ponderadores = canasta.df["ponderador"].astype(float)
-    pond_c = ponderadores.groupby(canasta.df[tipo_clas]).sum()
-    pond_total = float(ponderadores.sum())
+    pond_por_version: dict[int, pd.Series] = {}
+    for v, c in canastas.items():
+        ponds = c.df["ponderador"].astype(float)
+        pond_por_version[v] = ponds.groupby(c.df[tipo_clas]).sum()
 
     semiok_clas = frozenset(
         df_clas[df_clas["estado_calculo"] == "semi_ok"].index.get_level_values("periodo")
@@ -116,25 +113,32 @@ def _construir_resultado(
     base_clas = valores_t.reindex(base_idx)
     base_clas.index = df_clas.index
 
+    version_por_periodo = (
+        df_clas.reset_index().groupby("periodo")["version"].first().astype(int).to_dict()
+    )
+    pond_serie = pd.Series(
+        [
+            float(pond_por_version[version_por_periodo[p]].get(c, float("nan")))
+            for p, c in zip(periodos, indices_clas)
+        ],
+        index=df_clas.index,
+        dtype=float,
+    )
+
     inpc_base_por_periodo: dict[PeriodoQuincenal | PeriodoMensual, float] = {}
     for p, base_p in base_por_periodo.items():
         try:
             inpc_base_por_periodo[p] = float(df_inpc.at[(base_p, "INPC"), "indice_replicado"])  # type: ignore[union-attr]
         except KeyError:
             inpc_base_por_periodo[p] = float("nan")
-
     inpc_base_serie = pd.Series(
         [inpc_base_por_periodo.get(p, float("nan")) for p in periodos],
         index=df_clas.index,
         dtype=float,
     )
-    pond_serie = pd.Series(
-        [float(pond_c.get(c, float("nan"))) for c in indices_clas],
-        index=df_clas.index,
-        dtype=float,
-    )
 
-    incidencia_pp = (valores_t - base_clas) * pond_serie / (pond_total * inpc_base_serie)
+    # inc_i = w_i * (I_t^i - I_base^i) / INPC_base  →  Σ inc_i = var_INPC en pp
+    incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
 
     # Drop rows where current value exists but incidencia is NaN (base missing)
     mask_drop = valores_t.notna() & incidencia_pp.isna()
@@ -185,10 +189,10 @@ def _construir_resultado(
 def incidencia_periodica(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
     frecuencia: str,
 ) -> ResultadoIncidencia:
-    _validar_entradas(inpc, clasificacion, frecuencia)
+    _validar_entradas(inpc, clasificacion, canastas, frecuencia)
 
     df_clas = clasificacion.df
     df_inpc = inpc.df
@@ -209,16 +213,16 @@ def incidencia_periodica(
     }
 
     return _construir_resultado(
-        df_clas, df_inpc, canasta, base_por_periodo, tipo_clas, frecuencia, "periodica"
+        df_clas, df_inpc, canastas, base_por_periodo, tipo_clas, frecuencia, "periodica"
     )
 
 
 def incidencia_acumulada_anual(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
 ) -> ResultadoIncidencia:
-    _validar_entradas(inpc, clasificacion)
+    _validar_entradas(inpc, clasificacion, canastas)
 
     df_clas = clasificacion.df
     df_inpc = inpc.df
@@ -233,18 +237,24 @@ def incidencia_acumulada_anual(
         base_por_periodo = {p: PeriodoQuincenal(p.año - 1, 12, 2) for p in periodos_uniq}
 
     return _construir_resultado(
-        df_clas, df_inpc, canasta, base_por_periodo, tipo_clas, "acumulada_anual", "acumulada_anual"
+        df_clas,
+        df_inpc,
+        canastas,
+        base_por_periodo,
+        tipo_clas,
+        "acumulada_anual",
+        "acumulada_anual",
     )
 
 
 def incidencia_desde(
     inpc: ResultadoCalculo,
     clasificacion: ResultadoCalculo,
-    canasta: CanastaCanonica,
+    canastas: dict[int, CanastaCanonica],
     desde: PeriodoQuincenal | PeriodoMensual,
     hasta: PeriodoQuincenal | PeriodoMensual,
 ) -> ResultadoIncidencia:
-    _validar_entradas(inpc, clasificacion)
+    _validar_entradas(inpc, clasificacion, canastas)
 
     df_clas = clasificacion.df
     df_inpc = inpc.df
@@ -262,5 +272,5 @@ def incidencia_desde(
 
     frecuencia = f"desde {desde} hasta {hasta}"
     return _construir_resultado(
-        df_clas_rango, df_inpc, canasta, base_por_periodo, tipo_clas, frecuencia, "desde"
+        df_clas_rango, df_inpc, canastas, base_por_periodo, tipo_clas, frecuencia, "desde"
     )

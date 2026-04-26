@@ -50,19 +50,19 @@ def _inegi_con_valores(periodos: list[PeriodoMensual], valor_pp: float = 0.3) ->
 class TestRetornoTipo:
     def test_retorna_reporte(self):
         ri = _ri(_PERIODOS)
-        result = validar_incidencias(ri, "interanual", _inegi_vacio())
+        result = validar_incidencias(ri, "periodica", _inegi_vacio())
         assert isinstance(result, ReporteValidacionIncidencias)
 
     def test_indice_tres_niveles(self):
         ri = _ri(_PERIODOS)
-        reporte = validar_incidencias(ri, "interanual", _inegi_vacio())
+        reporte = validar_incidencias(ri, "periodica", _inegi_vacio())
         assert reporte.df.index.names == ["tipo_incidencia", "periodo", "indice"]
 
     def test_tipo_incidencia_en_indice(self):
         ri = _ri(_PERIODOS)
-        reporte = validar_incidencias(ri, "interanual", _inegi_vacio())
+        reporte = validar_incidencias(ri, "periodica", _inegi_vacio())
         tipos = reporte.df.index.get_level_values("tipo_incidencia").unique().tolist()
-        assert tipos == ["interanual"]
+        assert tipos == ["periodica"]
 
 
 # -- estados -------------------------------------------------------------------
@@ -71,50 +71,50 @@ class TestRetornoTipo:
 class TestEstadoValidacion:
     def test_sin_inegi_es_fuera_de_rango(self):
         ri = _ri(_PERIODOS)
-        reporte = validar_incidencias(ri, "interanual", _inegi_vacio())
+        reporte = validar_incidencias(ri, "periodica", _inegi_vacio())
         assert (reporte.df["estado_validacion"] == "fuera_de_rango_inegi").all()
 
     def test_inegi_none_es_no_disponible(self):
         ri = _ri(_PERIODOS)
         inegi: dict = {"INPC": {p: None for p in _PERIODOS}}
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         assert (reporte.df["estado_validacion"] == "no_disponible").all()
 
     def test_dentro_tolerancia_es_ok(self):
         ri = _ri(_PERIODOS, valores=[0.3] * len(_PERIODOS))  # type: ignore[list-item]
         inegi = _inegi_con_valores(_PERIODOS, valor_pp=0.3)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         assert (reporte.df["estado_validacion"] == "ok").all()
 
     def test_fuera_tolerancia_es_diferencia_detectada(self):
         ri = _ri(_PERIODOS, valores=[0.3] * len(_PERIODOS))  # type: ignore[list-item]
         inegi = _inegi_con_valores(_PERIODOS, valor_pp=5.0)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         assert (reporte.df["estado_validacion"] == "diferencia_detectada").all()
 
     def test_periodo_semiok_excluido(self):
         semiok = {PeriodoMensual(2019, 1)}
         ri = _ri(_PERIODOS, semiok=semiok)
         inegi = _inegi_con_valores(_PERIODOS, valor_pp=0.3)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         estado_ene = reporte.df.loc[
-            ("interanual", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
+            ("periodica", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
         ]
         assert estado_ene == "excluido_semi_ok"
 
     def test_periodo_no_semiok_no_excluido(self):
         ri = _ri(_PERIODOS)
         inegi = _inegi_con_valores(_PERIODOS, valor_pp=0.3)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         estado = reporte.df.loc[
-            ("interanual", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
+            ("periodica", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
         ]
         assert estado == "ok"
 
     def test_incidencia_replicada_almacenada_directamente(self):
         ri = _ri(_PERIODOS, valores=[0.285] * len(_PERIODOS))  # type: ignore[list-item]
         inegi = _inegi_con_valores(_PERIODOS, valor_pp=0.285)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         assert reporte.df["incidencia_replicada_pp"].tolist() == pytest.approx(
             [0.285] * len(_PERIODOS)
         )
@@ -126,7 +126,7 @@ class TestEstadoValidacion:
 class TestColumnas:
     def test_columnas_esperadas(self):
         ri = _ri(_PERIODOS)
-        reporte = validar_incidencias(ri, "interanual", _inegi_vacio())
+        reporte = validar_incidencias(ri, "periodica", _inegi_vacio())
         assert set(reporte.df.columns) == {
             "incidencia_replicada_pp",
             "incidencia_inegi_pp",
@@ -155,7 +155,7 @@ class TestInvariantesModelo:
 
     def test_estado_invalido_lanza_error(self):
         idx = pd.MultiIndex.from_tuples(
-            [("interanual", PeriodoMensual(2019, 1), "INPC")],
+            [("periodica", PeriodoMensual(2019, 1), "INPC")],
             names=["tipo_incidencia", "periodo", "indice"],
         )
         df = pd.DataFrame(
@@ -177,13 +177,13 @@ class TestInvariantesModelo:
 class TestComoTabla:
     def test_largo_retorna_sin_nivel_tipo(self):
         ri = _ri(_PERIODOS)
-        reporte = validar_incidencias(ri, "interanual", _inegi_vacio())
+        reporte = validar_incidencias(ri, "periodica", _inegi_vacio())
         tabla = reporte.como_tabla(ancho=False)
         assert "tipo_incidencia" not in tabla.index.names
 
     def test_ancho_pivota_periodos(self):
         ri = _ri(_PERIODOS[:3])
         inegi = _inegi_con_valores(_PERIODOS[:3], valor_pp=0.3)
-        reporte = validar_incidencias(ri, "interanual", inegi)
+        reporte = validar_incidencias(ri, "periodica", inegi)
         tabla = reporte.como_tabla(ancho=True)
         assert tabla.shape[1] == len(_PERIODOS[:3])

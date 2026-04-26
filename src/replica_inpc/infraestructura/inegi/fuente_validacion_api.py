@@ -145,7 +145,7 @@ _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
     },
 }
 
-_INCIDENCIAS_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
+_INCIDENCIAS_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
     "inpc": {
         "INPC": "909281",
     },
@@ -162,7 +162,7 @@ _INCIDENCIAS_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
 }
 
 _INCIDENCIAS_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
-    "interanual": _INCIDENCIAS_INTERANUAL_MENSUAL,
+    "periodica": _INCIDENCIAS_PERIODICA_MENSUAL,
 }
 
 _VARIACIONES_POR_TIPO_QUINCENAL: dict[str, dict[str, dict[str, str]]] = {
@@ -262,7 +262,7 @@ class FuenteValidacionApi:
     def obtener_incidencias(
         self,
         periodos: list[PeriodoMensual],
-        tipo_incidencia: Literal["interanual"],
+        tipo_incidencia: Literal["periodica"],
     ) -> dict[str, dict[PeriodoMensual, float | None]]:
         """Devuelve series de incidencia publicadas por INEGI.
 

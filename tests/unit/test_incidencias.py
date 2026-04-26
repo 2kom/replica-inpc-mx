@@ -222,54 +222,43 @@ class TestResultadoIncidenciaInvariantes:
 
 
 class TestIncidenciaPeriodica:
+    def _canastas(self) -> dict[int, CanastaCanonica]:
+        return {2018: _canasta_componente()}
+
     def test_retorna_resultado_incidencia(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         assert isinstance(ri, ResultadoIncidencia)
 
     def test_clase_es_periodica(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         assert ri.clase_incidencia == "periodica"
 
     def test_frecuencia_almacenada(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         assert ri.frecuencia == "mensual"
 
     def test_tipo_almacenado(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         assert ri.tipo == "inflacion componente"
 
     def test_formula_mensual(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
-        # FEB: base=ENE
-        # sub: (72.8 - 71.4) * 70 / (100 * 101.0) = 98/10100
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
+        # FEB: base=ENE; incidencia = w * (I_t - I_base) / INPC_base
+        # sub: 70 * (72.8 - 71.4) / 101.0
         inc_sub_feb = float(ri.df.loc[(_P_FEB, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
-        assert inc_sub_feb == pytest.approx(1.4 * 70 / (100 * 101.0), rel=1e-6)
-        # nosub: (31.2 - 30.6) * 30 / (100 * 101.0)
+        assert inc_sub_feb == pytest.approx(1.4 * 70 / 101.0, rel=1e-6)
+        # nosub: 30 * (31.2 - 30.6) / 101.0
         inc_nosub_feb = float(ri.df.loc[(_P_FEB, "no subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
-        assert inc_nosub_feb == pytest.approx(0.6 * 30 / (100 * 101.0), rel=1e-6)
+        assert inc_nosub_feb == pytest.approx(0.6 * 30 / 101.0, rel=1e-6)
 
     def test_primer_periodo_excluido_sin_base(self):
         # DIC18 no tiene base (lag=1 → NOV18 no existe), se excluye
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         periodos = ri.df.index.get_level_values("periodo").unique()
         assert _P_DIC18 not in periodos
 
     def test_estado_ok_cuando_base_ok(self):
-        ri = incidencia_periodica(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), "mensual"
-        )
+        ri = incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "mensual")
         estados = ri.df.loc[_P_FEB]["estado_calculo"].unique()  # type: ignore[union-attr]
         assert list(estados) == ["ok"]
 
@@ -287,29 +276,31 @@ class TestIncidenciaPeriodica:
             },
             tipo="inflacion componente",
         )
-        ri = incidencia_periodica(inpc, clas, _canasta_componente(), "mensual")
+        ri = incidencia_periodica(inpc, clas, self._canastas(), "mensual")
         estados_feb = ri.df.loc[_P_FEB]["estado_calculo"].unique()  # type: ignore[union-attr]
         assert list(estados_feb) == ["semi_ok"]
         assert _P_FEB in ri.periodos_semiok
 
     def test_error_tipo_inpc_invalido(self):
         with pytest.raises(ErrorConfiguracion, match="tipo 'inpc'"):
-            incidencia_periodica(_clas_mensual(), _clas_mensual(), _canasta_componente(), "mensual")
+            incidencia_periodica(_clas_mensual(), _clas_mensual(), self._canastas(), "mensual")
 
     def test_error_tipo_clasificacion_invalido(self):
         with pytest.raises(ErrorConfiguracion):
-            incidencia_periodica(_inpc_mensual(), _inpc_mensual(), _canasta_componente(), "mensual")
+            incidencia_periodica(_inpc_mensual(), _inpc_mensual(), self._canastas(), "mensual")
 
-    def test_error_versiones_distintas(self):
+    def test_error_canasta_faltante_para_version(self):
+        # clas tiene versión 2024 pero canastas solo tiene 2018 → error
         clas_2024 = _mk_rc(
             {"subyacente": [(_P_ENE, 71.4)], "no subyacente": [(_P_ENE, 30.6)]},
             tipo="inflacion componente",
             version=2024,
         )
-        with pytest.raises(ErrorConfiguracion, match="versiones"):
-            incidencia_periodica(_inpc_mensual(), clas_2024, _canasta_componente(), "mensual")
+        with pytest.raises(ErrorConfiguracion, match="canasta"):
+            incidencia_periodica(_inpc_mensual(), clas_2024, self._canastas(), "mensual")
 
-    def test_error_version_combinada(self):
+    def test_resultado_combinado_con_ambas_canastas(self):
+        # resultado combinado 2018+2024 funciona si se proveen ambas canastas
         rows = []
         for p, v, ver in [(_P_ENE, 71.4, 2018), (_P_FEB, 72.8, 2024)]:
             rows.append(
@@ -323,16 +314,33 @@ class TestIncidenciaPeriodica:
                     "motivo_error": None,
                 }
             )
+        for p, v, ver in [(_P_ENE, 30.6, 2018), (_P_FEB, 31.2, 2024)]:
+            rows.append(
+                {
+                    "periodo": p,
+                    "indice": "no subyacente",
+                    "version": ver,
+                    "tipo": "inflacion componente",
+                    "indice_replicado": v,
+                    "estado_calculo": "ok",
+                    "motivo_error": None,
+                }
+            )
         df = pd.DataFrame(rows).set_index(["periodo", "indice"])
         clas_combinada = ResultadoCalculo(df, "test")
-        with pytest.raises(ErrorConfiguracion, match="combinados"):
-            incidencia_periodica(_inpc_mensual(), clas_combinada, _canasta_componente(), "mensual")
+        canasta_2024 = _mk_canasta(
+            genericos=["gen_sub_1", "gen_sub_2", "gen_nosub"],
+            ponderadores=[45.0, 25.0, 30.0],
+            componentes=["subyacente", "subyacente", "no subyacente"],
+            version=2024,
+        )
+        canastas = {2018: _canasta_componente(), 2024: canasta_2024}
+        ri = incidencia_periodica(_inpc_mensual(), clas_combinada, canastas, "mensual")
+        assert isinstance(ri, ResultadoIncidencia)
 
     def test_error_frecuencia_invalida(self):
         with pytest.raises(ErrorConfiguracion, match="Frecuencia"):
-            incidencia_periodica(
-                _inpc_mensual(), _clas_mensual(), _canasta_componente(), "quincenal"
-            )
+            incidencia_periodica(_inpc_mensual(), _clas_mensual(), self._canastas(), "quincenal")
 
     def test_quincenal(self):
         inpc_q = _mk_rc({"INPC": [(_Q0, 100.0), (_Q1, 101.0), (_Q2, 102.0)]})
@@ -343,10 +351,10 @@ class TestIncidenciaPeriodica:
             },
             tipo="inflacion componente",
         )
-        ri = incidencia_periodica(inpc_q, clas_q, _canasta_componente(), "quincenal")
-        # Q1: base=Q0; sub: (71.0-70.0)*70/(100*100) = 0.007
+        ri = incidencia_periodica(inpc_q, clas_q, {2018: _canasta_componente()}, "quincenal")
+        # Q1: base=Q0; sub: 70 * (71.0-70.0) / 100.0 = 0.7
         inc_sub_q1 = float(ri.df.loc[(_Q1, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
-        assert inc_sub_q1 == pytest.approx(1.0 * 70 / (100 * 100.0), rel=1e-6)
+        assert inc_sub_q1 == pytest.approx(1.0 * 70 / 100.0, rel=1e-6)
 
 
 # -- incidencia_acumulada_anual ------------------------------------------------
@@ -381,28 +389,30 @@ class TestIncidenciaAcumuladaAnual:
             tipo="inflacion componente",
         )
 
+    def _canastas(self) -> dict[int, CanastaCanonica]:
+        return {2018: _canasta_componente()}
+
     def test_retorna_resultado_incidencia(self):
-        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), _canasta_componente())
+        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), self._canastas())
         assert isinstance(ri, ResultadoIncidencia)
 
     def test_clase_es_acumulada_anual(self):
-        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), _canasta_componente())
+        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), self._canastas())
         assert ri.clase_incidencia == "acumulada_anual"
 
     def test_base_es_dic_anio_anterior(self):
         # base de ENE 2019 debe ser DIC 2018
-        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), _canasta_componente())
+        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), self._canastas())
         # DIC 2018 en el resultado sería base de sí mismo → inc=0
         # pero DIC 2018 base sería DIC 2017 (no disponible) → excluido
         periodos = ri.df.index.get_level_values("periodo").unique()
         assert PeriodoMensual(2018, 12) not in periodos
 
     def test_formula_acumulada(self):
-        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), _canasta_componente())
-        # ENE 2019: base = DIC 2018
-        # sub: (71.05 - 70.0) * 70 / (100 * 100.0) = 1.05 * 70 / 10000 = 0.00735
+        ri = incidencia_acumulada_anual(self._inpc(), self._clas(), self._canastas())
+        # ENE 2019: base = DIC 2018; sub: 70 * (71.05 - 70.0) / 100.0
         inc = float(ri.df.loc[(PeriodoMensual(2019, 1), "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
-        assert inc == pytest.approx(1.05 * 70 / (100 * 100.0), rel=1e-6)
+        assert inc == pytest.approx(1.05 * 70 / 100.0, rel=1e-6)
 
     def test_quincenal_base_2q_dic(self):
         inpc_q = _mk_rc({"INPC": [(_Q0, 100.0), (_Q1, 101.0)]})
@@ -414,7 +424,7 @@ class TestIncidenciaAcumuladaAnual:
             tipo="inflacion componente",
         )
         # Q0 = 2Q Dic 2018; base para Q1 (1Q Ene 2019) = 2Q Dic 2018 = Q0
-        ri = incidencia_acumulada_anual(inpc_q, clas_q, _canasta_componente())
+        ri = incidencia_acumulada_anual(inpc_q, clas_q, {2018: _canasta_componente()})
         periodos = ri.df.index.get_level_values("periodo").unique()
         assert _Q1 in periodos
 
@@ -423,47 +433,37 @@ class TestIncidenciaAcumuladaAnual:
 
 
 class TestIncidenciaDesde:
+    def _canastas(self) -> dict[int, CanastaCanonica]:
+        return {2018: _canasta_componente()}
+
     def test_retorna_resultado_incidencia(self):
-        ri = incidencia_desde(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), _P_ENE, _P_MAR
-        )
+        ri = incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), _P_ENE, _P_MAR)
         assert isinstance(ri, ResultadoIncidencia)
 
     def test_clase_es_desde(self):
-        ri = incidencia_desde(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), _P_ENE, _P_MAR
-        )
+        ri = incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), _P_ENE, _P_MAR)
         assert ri.clase_incidencia == "desde"
 
     def test_rango_incluye_desde_hasta(self):
-        ri = incidencia_desde(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), _P_ENE, _P_MAR
-        )
+        ri = incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), _P_ENE, _P_MAR)
         periodos = ri.df.index.get_level_values("periodo").unique()
         assert _P_ENE in periodos
         assert _P_MAR in periodos
         assert _P_DIC18 not in periodos
 
     def test_incidencia_en_desde_es_cero(self):
-        ri = incidencia_desde(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), _P_ENE, _P_MAR
-        )
+        ri = incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), _P_ENE, _P_MAR)
         # En ENE (=desde), base=ENE → incidencia = 0
         inc = float(ri.df.loc[(_P_ENE, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
         assert inc == pytest.approx(0.0, abs=1e-10)
 
     def test_formula_desde(self):
-        ri = incidencia_desde(
-            _inpc_mensual(), _clas_mensual(), _canasta_componente(), _P_ENE, _P_MAR
-        )
-        # FEB: base=ENE
-        # sub: (72.8 - 71.4) * 70 / (100 * 101.0)
+        ri = incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), _P_ENE, _P_MAR)
+        # FEB: base=ENE; sub: 70 * (72.8 - 71.4) / 101.0
         inc = float(ri.df.loc[(_P_FEB, "subyacente"), "incidencia_pp"])  # type: ignore[union-attr]
-        assert inc == pytest.approx(1.4 * 70 / (100 * 101.0), rel=1e-6)
+        assert inc == pytest.approx(1.4 * 70 / 101.0, rel=1e-6)
 
     def test_rango_vacio_lanza_error(self):
         futuro = PeriodoMensual(2030, 1)
         with pytest.raises(InvarianteViolado):
-            incidencia_desde(
-                _inpc_mensual(), _clas_mensual(), _canasta_componente(), futuro, futuro
-            )
+            incidencia_desde(_inpc_mensual(), _clas_mensual(), self._canastas(), futuro, futuro)

@@ -143,26 +143,26 @@ def validar_incidencias_mensual(
 ) -> ReporteValidacionIncidencias:
     """Valida incidencias mensuales calculadas contra series publicadas por el INEGI.
 
-    Solo soporta clase_incidencia='periodica' con frecuencia='anual' (interanual).
+    Solo soporta clase_incidencia='periodica' con frecuencia='mensual'.
     Lanza ErrorConfiguracion para clases 'desde', 'acumulada_anual' o frecuencias
-    distintas de 'anual'. Ver docs/diseño.md §6.4.
+    distintas de 'mensual'. Ver docs/diseño.md §6.4.
     """
     clase = ri.clase_incidencia
 
     if clase == "desde":
         raise ErrorConfiguracion(
             "La incidencia 'desde' no tiene indicadores INEGI disponibles. "
-            "Solo se puede validar incidencia 'periodica' con frecuencia 'anual'."
+            "Solo se puede validar incidencia 'periodica' con frecuencia 'mensual'."
         )
     if clase == "acumulada_anual":
         raise ErrorConfiguracion(
             "La incidencia 'acumulada_anual' no está disponible en la API INEGI para incidencias. "
-            "Solo se puede validar incidencia 'periodica' con frecuencia 'anual'."
+            "Solo se puede validar incidencia 'periodica' con frecuencia 'mensual'."
         )
-    if ri.frecuencia != "anual":
+    if ri.frecuencia != "mensual":
         raise ErrorConfiguracion(
-            f"INEGI solo publica incidencia interanual mensual. "
-            f"Frecuencia '{ri.frecuencia}' no está disponible. Usa frecuencia='anual'."
+            f"INEGI solo publica incidencia periódica mensual. "
+            f"Frecuencia '{ri.frecuencia}' no está disponible. Usa frecuencia='mensual'."
         )
 
     periodos = ri.df.index.get_level_values("periodo")
@@ -174,8 +174,8 @@ def validar_incidencias_mensual(
 
     periodos_lista = list(periodos.unique())
     fuente = FuenteValidacionApi(token=token, tipo=ri.tipo)
-    inegi = fuente.obtener_incidencias(periodos_lista, "interanual")  # type: ignore[arg-type]
-    return _validar_incidencias(ri, "interanual", inegi)  # type: ignore[arg-type]
+    inegi = fuente.obtener_incidencias(periodos_lista, "periodica")  # type: ignore[arg-type]
+    return _validar_incidencias(ri, "periodica", inegi)  # type: ignore[arg-type]
 
 
 def validar_quincenal(

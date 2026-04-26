@@ -8,13 +8,12 @@ from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.validacion import ReporteValidacionIncidencias
 from replica_inpc.dominio.periodos import PeriodoMensual
 
-# Verificación empírica pendiente antes de cerrar v1.2.5
 _TOLERANCIA_INCIDENCIA_PP: float = 0.009
 
 
 def validar_incidencias(
     ri: ResultadoIncidencia,
-    tipo_incidencia: Literal["interanual"],
+    tipo_incidencia: Literal["periodica"],
     inegi: dict[str, dict[PeriodoMensual, float | None]],
 ) -> ReporteValidacionIncidencias:
     """Compara incidencias calculadas contra series publicadas por el INEGI.
