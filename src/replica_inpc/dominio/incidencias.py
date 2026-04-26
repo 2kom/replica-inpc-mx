@@ -141,7 +141,7 @@ def _construir_resultado(
 
     if any(same_encadenada):
         traslape_por_version: dict[int, PeriodoQuincenal | PeriodoMensual] = {
-            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[type-var]
+            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[misc]
             for ver in versiones_encadenadas
             if ver in set(ver_p_per_row)
         }
@@ -156,7 +156,7 @@ def _construir_resultado(
                 except KeyError:
                     pass
             try:
-                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])  # type: ignore[union-attr]
+                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
                 if not pd.isna(val) and val != 0:
                     f_h_inpc_map[ver] = val / 100
             except KeyError:
@@ -193,7 +193,7 @@ def _construir_resultado(
     inpc_base_por_periodo: dict[PeriodoQuincenal | PeriodoMensual, float] = {}
     for p, base_p in base_por_periodo.items():
         try:
-            inpc_base_por_periodo[p] = float(df_inpc.at[(base_p, "INPC"), "indice_replicado"])  # type: ignore[union-attr]
+            inpc_base_por_periodo[p] = float(df_inpc.at[(base_p, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
         except KeyError:
             inpc_base_por_periodo[p] = float("nan")
     inpc_base_serie = pd.Series(
