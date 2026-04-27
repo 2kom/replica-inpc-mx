@@ -48,20 +48,24 @@ def _calcular_df(
     version: VersionCanasta,
     f_h_override: float | None = None,
 ) -> pd.DataFrame:
+
     f_k = _obtener_f_k(df_canasta, df_serie, version)
     ponderadores = df_canasta["ponderador"].astype(float)
+    traslape = RANGOS_VALIDOS[version][0]
 
-    periodos_null = df_serie.isnull().any(axis=0)
+    theta = 1.0 / f_k
+    df_int = df_serie.multiply(theta, axis=0)
 
-    df_raw = df_serie.divide(f_k, axis=0)
-    resultado_raw = df_raw.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+    i_tramo = df_int.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+
     if f_h_override is not None:
-        traslape = RANGOS_VALIDOS[version][0]
-        f_h = f_h_override / float(resultado_raw[traslape])
+        f_h = f_h_override / float(i_tramo[traslape])
     else:
         f_h = float((ponderadores * f_k).sum() / ponderadores.sum())
-    resultado = resultado_raw * f_h
 
+    resultado = i_tramo * f_h
+
+    periodos_null = df_serie.isnull().any(axis=0)
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
         names=["periodo", "indice"],
@@ -99,7 +103,12 @@ class LaspeyresEncadenado(CalculadorBase):
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]
             df = _calcular_df(
-                canasta.df, serie.df, indice, tipo, canasta.version, self._f_h.get(indice)
+                canasta.df,
+                serie.df,
+                indice,
+                tipo,
+                canasta.version,
+                self._f_h.get(indice),
             )
             return ResultadoCalculo(df, id_corrida)
 

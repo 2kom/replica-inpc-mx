@@ -38,8 +38,8 @@ TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
 )
 
 RANGOS_VALIDOS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {
-    2010: (PeriodoQuincenal(2010, 12, 2), PeriodoQuincenal(2013, 4, 1)),
-    2013: (PeriodoQuincenal(2013, 4, 1), PeriodoQuincenal(2018, 7, 2)),
+    2010: (PeriodoQuincenal(2010, 12, 2), PeriodoQuincenal(2013, 3, 2)),
+    2013: (PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2018, 7, 2)),
     2018: (PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2024, 7, 2)),
     2024: (PeriodoQuincenal(2024, 7, 2), None),
 }
