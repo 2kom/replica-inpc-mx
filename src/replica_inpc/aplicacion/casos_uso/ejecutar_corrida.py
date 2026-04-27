@@ -74,7 +74,7 @@ def _f_h_desde_referencia(
     f_h: dict[str, float] = {}
     for key, val in df.loc[mask, "indice_replicado"].items():
         if val is not None and not pd.isna(val):
-            f_h[str(key[1])] = float(val) / 100  # type: ignore[index]
+            f_h[str(key[1])] = float(val)  # type: ignore[index]
     return f_h
 
 

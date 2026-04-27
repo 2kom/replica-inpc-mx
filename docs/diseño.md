@@ -2030,8 +2030,12 @@ r_2013 = corrida.ejecutar(
 
 `f_k` por genérico proviene de la columna `encadenamiento` de `ponderadores_2013.csv`
 (θ=1 para todos los genéricos — ponderadores ya alineados al periodo base).
-Continuidad en traslape garantizada por fórmula: `I_j^raw[traslape] = 100` para todo
-genérico → `resultado[traslape] = f_h × 100 = r_2010.resultado[traslape]`.
+
+**Continuidad en traslape (2013 ≠ 2024):** para 2013, `f_k ≈ 1`, por lo que
+`resultado_raw[traslape] ≈ 108.7` (nivel INPC con ponderadores 2013, no 100).
+`f_h = r_2010.resultado[traslape] / resultado_raw[traslape] ≈ 1.0025` →
+`resultado[traslape] = r_2010.resultado[traslape]` ✓. Para 2024, `f_k = I_j[traslape]/100`
+hace que `resultado_raw[traslape] = 100` y el mecanismo es distinto.
 
 Validación: fila "Total" de `series2010_horizontal_metadata.CSV` en base `2Q Dic 2010 = 100`.
 Desde `Periodo(2013, 4, 1)` esa fila publica el INPC con ponderadores 2013. Diferencias

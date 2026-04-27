@@ -55,11 +55,11 @@ def _calcular_df(
 
     df_raw = df_serie.divide(f_k, axis=0)
     resultado_raw = df_raw.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
-    f_h: float = (
-        f_h_override
-        if f_h_override is not None
-        else float((ponderadores * f_k).sum() / ponderadores.sum())
-    )
+    if f_h_override is not None:
+        traslape = RANGOS_VALIDOS[version][0]
+        f_h = f_h_override / float(resultado_raw[traslape])
+    else:
+        f_h = float((ponderadores * f_k).sum() / ponderadores.sum())
     resultado = resultado_raw * f_h
 
     idx = pd.MultiIndex.from_tuples(
