@@ -1991,7 +1991,7 @@ class Corrida:
 | `persistir` | no | `False` | Si `True`, guarda artefactos en `ruta_datos` y exporta CSV a `ruta_salida`. La fachada crea los directorios si no existen. |
 | `resultado_referencia` | no | `None` | `ResultadoCalculo` de la corrida anterior (ej. 2018) para obtener `f_h` exacto del INEGI en el periodo de traslape. Solo aplica a canastas encadenadas (2013, 2024). Si la canasta no usa encadenamiento, se emite `UserWarning` y se ignora. Ver §11.20. |
 
-**Uso típico:**
+**Uso típico — canastas 2018 y 2024:**
 
 ```python
 corrida = Corrida(token_inegi="mi_token")
@@ -2003,6 +2003,40 @@ r_2024 = corrida.ejecutar(
     resultado_referencia=r_2018.resultado,  # f_h exacto — ver §11.20
 )
 ```
+
+**Uso típico — canastas 2010 y 2013 (v1.3.0):**
+
+Las canastas 2010 y 2013 comparten los mismos 283 genéricos y las mismas series BIE
+(`series2010_*`). La corrida 2010 usa `LaspeyresDirecto` (sin columna `encadenamiento`);
+la corrida 2013 usa `LaspeyresEncadenado` con `resultado_referencia=corrida_2010.resultado`
+para obtener el `f_h` exacto en el periodo de traslape `Periodo(2013, 4, 1)`. Ver §11.20.
+
+```python
+corrida = Corrida()
+r_2010 = corrida.ejecutar(
+    canasta="data/inputs/ponderadores_2010.csv",
+    series="data/inputs/series2010_horizontal_metadata.CSV",
+    version=2010,
+    tipo="inpc",
+)
+r_2013 = corrida.ejecutar(
+    canasta="data/inputs/ponderadores_2013.csv",
+    series="data/inputs/series2010_horizontal_metadata.CSV",
+    version=2013,
+    tipo="inpc",
+    resultado_referencia=r_2010.resultado,
+)
+```
+
+`f_k` por genérico proviene de la columna `encadenamiento` de `ponderadores_2013.csv`
+(θ=1 para todos los genéricos — ponderadores ya alineados al periodo base).
+Continuidad en traslape garantizada por fórmula: `I_j^raw[traslape] = 100` para todo
+genérico → `resultado[traslape] = f_h × 100 = r_2010.resultado[traslape]`.
+
+Validación: fila "Total" de `series2010_horizontal_metadata.CSV` en base `2Q Dic 2010 = 100`.
+Desde `Periodo(2013, 4, 1)` esa fila publica el INPC con ponderadores 2013. Diferencias
+pequeñas por redondeo son aceptables; errores sistemáticos o crecientes indican problema
+en `f_h` o `f_k`. La tolerancia provisional de 2013 en §11.8 se actualiza tras el smoke test.
 
 **Selección de fuente de validación:**
 
@@ -3765,8 +3799,9 @@ después del último código CCIF produce 360 candidatos únicos, de los cuales
 aliases anteriores. No se usa fuzzy matching.
 
 **Alcance:** este cambio desbloquea la etapa 1 de v1.3.0: corrida 2010 en
-referencia original `2Q Dic 2010 = 100`. No resuelve por sí solo la metodología
-de encadenamiento 2013 ni el rebase posterior a `2Q Jul 2018 = 100`.
+referencia original `2Q Dic 2010 = 100`. La metodología de encadenamiento 2013
+está documentada en §6 ("Uso típico — canastas 2010 y 2013"); el rebase posterior
+a `2Q Jul 2018 = 100` es la etapa 3 de v1.3.0 y está pendiente.
 
 ---
 
