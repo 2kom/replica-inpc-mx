@@ -48,24 +48,20 @@ def _calcular_df(
     version: VersionCanasta,
     f_h_override: float | None = None,
 ) -> pd.DataFrame:
-
     f_k = _obtener_f_k(df_canasta, df_serie, version)
     ponderadores = df_canasta["ponderador"].astype(float)
-    traslape = RANGOS_VALIDOS[version][0]
-
-    theta = 1.0 / f_k
-    df_int = df_serie.multiply(theta, axis=0)
-
-    i_tramo = df_int.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
-
-    if f_h_override is not None:
-        f_h = f_h_override / float(i_tramo[traslape])
-    else:
-        f_h = float((ponderadores * f_k).sum() / ponderadores.sum())
-
-    resultado = i_tramo * f_h
 
     periodos_null = df_serie.isnull().any(axis=0)
+
+    df_raw = df_serie.divide(f_k, axis=0)
+    resultado_raw = df_raw.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+    f_h: float = (
+        f_h_override
+        if f_h_override is not None
+        else float((ponderadores * f_k).sum() / ponderadores.sum())
+    )
+    resultado = resultado_raw * f_h
+
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
         names=["periodo", "indice"],
