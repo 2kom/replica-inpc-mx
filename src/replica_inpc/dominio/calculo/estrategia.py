@@ -8,9 +8,9 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 
 def para_canasta(
     canasta: CanastaCanonica,
-    f_h_por_indice: dict[str, float] | None = None,
+    referencia_empalme_por_indice: dict[str, float] | None = None,
 ) -> CalculadorBase:
 
     if canasta.df["encadenamiento"].isna().all():
         return LaspeyresDirecto()
-    return LaspeyresEncadenado(f_h_por_indice)
+    return LaspeyresEncadenado(referencia_empalme_por_indice)

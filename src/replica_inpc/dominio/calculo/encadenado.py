@@ -46,21 +46,45 @@ def _calcular_df(
     indice: str,
     tipo: str,
     version: VersionCanasta,
-    f_h_override: float | None = None,
+    referencia_empalme: float | None = None,
 ) -> pd.DataFrame:
     f_k = _obtener_f_k(df_canasta, df_serie, version)
     ponderadores = df_canasta["ponderador"].astype(float)
+    traslape = RANGOS_VALIDOS[version][0]
 
     periodos_null = df_serie.isnull().any(axis=0)
 
-    df_raw = df_serie.divide(f_k, axis=0)
-    resultado_raw = df_raw.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
-    f_h: float = (
-        f_h_override
-        if f_h_override is not None
-        else float((ponderadores * f_k).sum() / ponderadores.sum())
-    )
-    resultado = resultado_raw * f_h
+    if version == 2013:
+        i_tramo = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+    elif version == 2024:
+        df_base_traslape = df_serie.divide(f_k, axis=0)
+        i_tramo = df_base_traslape.multiply(ponderadores, axis=0).sum().divide(
+            ponderadores.sum()
+        )
+    else:
+        raise ErrorCalculo(
+            f"LaspeyresEncadenado solo aplica a canastas 2013 y 2024, no a {version}."
+        )
+
+    if traslape not in i_tramo.index:
+        raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
+
+    if referencia_empalme is not None and version == 2013:
+        factor_h = referencia_empalme / float(i_tramo[traslape])
+    elif referencia_empalme is not None and version == 2024:
+        factor_h = referencia_empalme / 100
+    elif version == 2013:
+        referencia_estimada = (
+            df_serie.multiply(f_k, axis=0)
+            .multiply(ponderadores, axis=0)
+            .sum()
+            .divide(ponderadores.sum())
+        )
+        factor_h = float(referencia_estimada[traslape] / i_tramo[traslape])
+    else:
+        factor_h = float((ponderadores * f_k).sum() / ponderadores.sum())
+
+    resultado = i_tramo * factor_h
 
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
@@ -85,8 +109,8 @@ def _calcular_df(
 
 
 class LaspeyresEncadenado(CalculadorBase):
-    def __init__(self, f_h_por_indice: dict[str, float] | None = None) -> None:
-        self._f_h = f_h_por_indice or {}
+    def __init__(self, referencia_empalme_por_indice: dict[str, float] | None = None) -> None:
+        self._referencia_empalme = referencia_empalme_por_indice or {}
 
     def calcular(
         self,
@@ -104,13 +128,20 @@ class LaspeyresEncadenado(CalculadorBase):
                 indice,
                 tipo,
                 canasta.version,
-                self._f_h.get(indice),
+                self._referencia_empalme.get(indice),
             )
             return ResultadoCalculo(df, id_corrida)
 
         assert tipo in COLUMNAS_CLASIFICACION
         dfs = [
-            _calcular_df(df_c, df_s, cat, tipo, canasta.version, self._f_h.get(cat))
+            _calcular_df(
+                df_c,
+                df_s,
+                cat,
+                tipo,
+                canasta.version,
+                self._referencia_empalme.get(cat),
+            )
             for cat, df_c, df_s in grupos_por_clasificacion(canasta, serie, tipo)
         ]
         return ResultadoCalculo(pd.concat(dfs), id_corrida)

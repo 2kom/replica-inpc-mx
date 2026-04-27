@@ -64,18 +64,18 @@ def _rellenar_faltantes(
     return SerieNormalizada(df_relleno, serie.mapeo), imputados
 
 
-def _f_h_desde_referencia(
+def _referencia_empalme_desde_resultado(
     resultado_ref: ResultadoCalculo, traslape: PeriodoQuincenal
 ) -> dict[str, float]:
     df = resultado_ref.df
     mask = (df.index.get_level_values("periodo") == traslape) & (df["estado_calculo"] == "ok")
     if not mask.any():
         return {}
-    f_h: dict[str, float] = {}
+    referencia_empalme: dict[str, float] = {}
     for key, val in df.loc[mask, "indice_replicado"].items():
         if val is not None and not pd.isna(val):
-            f_h[str(key[1])] = float(val) / 100  # type: ignore[index]
-    return f_h
+            referencia_empalme[str(key[1])] = float(val)  # type: ignore[index]
+    return referencia_empalme
 
 
 class EjecutarCorrida:
@@ -151,7 +151,7 @@ class EjecutarCorrida:
         serie = alinear_genericos(canasta, serie)
         serie, imputados = _rellenar_faltantes(serie)
 
-        f_h_por_indice: dict[str, float] = {}
+        referencia_empalme_por_indice: dict[str, float] = {}
         if resultado_referencia is not None:
             if canasta.df["encadenamiento"].isna().all():
                 print(
@@ -163,9 +163,13 @@ class EjecutarCorrida:
                 )
             else:
                 traslape = RANGOS_VALIDOS[version][0]
-                f_h_por_indice = _f_h_desde_referencia(resultado_referencia, traslape)
+                referencia_empalme_por_indice = _referencia_empalme_desde_resultado(
+                    resultado_referencia, traslape
+                )
 
-        resultado = para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)
+        resultado = para_canasta(canasta, referencia_empalme_por_indice).calcular(
+            canasta, serie, id_corrida, tipo
+        )
 
         try:
             periodos_unicos = resultado.df.index.get_level_values("periodo").unique().tolist()
