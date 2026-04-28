@@ -29,15 +29,18 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI.
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC.
 
-## Alcance actual (v1.2.5)
+## Alcance actual (v1.3.0)
 
-La v1.2.5 del proyecto permite:
+La v1.3.0 del proyecto permite:
 
 - importar canastas y series de genericos en formato CSV;
-- calcular el INPC general mediante Laspeyres directo (canasta 2018) o encadenado (canasta 2024);
+- calcular el INPC general mediante Laspeyres directo (canastas 2010 y 2018) o encadenado (canastas 2013 y 2024);
+- ejecutar la serie historica 2010-2024 con `Corrida.ejecutar_historico()`;
+- rebasar el bloque 2010+2013 a la referencia `2Q Jul 2018 = 100` con denominador endogeno;
 - calcular subindices por clasificador (COG, CCIF, inflacion componente, inflacion subcomponente, durabilidad, entre otros);
 - imputar periodos faltantes en series via bfill/ffill con trazabilidad completa;
 - combinar resultados de distintas corridas en un unico `ResultadoCalculo` cronologico;
+- leer series BIE 2010/2013 con formato jerarquico sin clave terminal de generico;
 - convertir resultados quincenales a mensuales via `a_mensual()`;
 - validar indices quincenales o mensuales contra lo publicado por el INEGI via su API;
 - calcular variaciones periodicas, acumuladas anuales y desde un periodo base (quincenales y mensuales);
@@ -49,7 +52,6 @@ La v1.2.5 del proyecto permite:
 
 El proyecto **no** incluye todavia:
 
-- soporte operativo para canastas 2010 y 2013; el calculo encadenado de 2013 esta diseñado, pero aun no probado;
 - mapeo de splits, fusiones, categorias nuevas o eliminadas entre canastas: las categorias que
   desaparecen, aparecen o se parten entre versiones aparecen solo en los periodos donde existen,
   sin continuidad historica.
@@ -102,8 +104,8 @@ from replica_inpc.api.corrida import Corrida
 corrida = Corrida(token_inegi=TOKEN_INEGI)
 
 resultado_2018 = corrida.ejecutar(
-    canasta="data/inputs/canastas/ponderadores_2018.csv",
-    series="data/inputs/series/series_2018.csv",
+    canasta="data/inputs/ponderadores_2018.csv",
+    series="data/inputs/series2018_horizontal_metadata.CSV",
     version=2018,
     tipo="inpc",
     persistir=False,
@@ -115,14 +117,35 @@ resultado_2018 = corrida.ejecutar(
 ```python
 # resultado_referencia es la corrida 2018; provee f_h exacto del INEGI para el periodo de traslape.
 resultado_2024 = corrida.ejecutar(
-    canasta="data/inputs/canastas/ponderadores_2024.csv",
-    series="data/inputs/series/series_2024.csv",
+    canasta="data/inputs/ponderadores_2024.csv",
+    series="data/inputs/series2024_horizontal_metadata.CSV",
     version=2024,
     tipo="inpc",
     resultado_referencia=resultado_2018.resultado,
     persistir=False,
 )
 ```
+
+**Histórico 2010-2024 (v1.3.0):**
+
+```python
+historico = corrida.ejecutar_historico(
+    "data/inputs/ponderadores_2010.csv",
+    "data/inputs/series2010_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2013.csv",
+    "data/inputs/series2010_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2018.csv",
+    "data/inputs/series2018_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2024.csv",
+    "data/inputs/series2024_horizontal_metadata.CSV",
+    tipo="inpc",
+)
+```
+
+`ejecutar_historico` calcula 2010 directo, 2013 alineando series por
+`encadenamiento` y empalmando en `2Q Mar 2013`, 2018 directo y 2024 encadenado.
+Después rebasa el bloque 2010+2013 a `2Q Jul 2018 = 100` y lo combina con
+2018+2024.
 
 **Combinar corridas en serie temporal continua:**
 
@@ -221,8 +244,8 @@ Los estados posibles son `ok`, `diferencia_detectada`, `no_disponible`,
 
 ```python
 resultado = corrida.ejecutar(
-    canasta="data/inputs/canastas/ponderadores_2018.csv",
-    series="data/inputs/series/series_2018.csv",
+    canasta="data/inputs/ponderadores_2018.csv",
+    series="data/inputs/series2018_horizontal_metadata.CSV",
     version=2018,
     tipo="inflacion componente",
     persistir=False,
@@ -247,8 +270,8 @@ ri_mensual = incidencia_periodica(
     inpc=resultado_mensual,
     clasificacion=clasificacion_mensual,
     canastas=[
-        ("data/inputs/canastas/ponderadores_2018.csv", 2018),
-        ("data/inputs/canastas/ponderadores_2024.csv", 2024),
+        ("data/inputs/ponderadores_2018.csv", 2018),
+        ("data/inputs/ponderadores_2024.csv", 2024),
     ],
     frecuencia="mensual",
 )
@@ -257,14 +280,14 @@ ri_mensual = incidencia_periodica(
 ri_anual = incidencia_acumulada_anual(
     inpc=resultado_mensual,
     clasificacion=clasificacion_mensual,
-    canastas=[("data/inputs/canastas/ponderadores_2018.csv", 2018)],
+    canastas=[("data/inputs/ponderadores_2018.csv", 2018)],
 )
 
 # Incidencia desde un periodo base especifico
 ri_desde = incidencia_desde(
     inpc=resultado_mensual,
     clasificacion=clasificacion_mensual,
-    canastas=[("data/inputs/canastas/ponderadores_2018.csv", 2018)],
+    canastas=[("data/inputs/ponderadores_2018.csv", 2018)],
     desde=periodo_desde_str("Ene 2024"),
     hasta=periodo_desde_str("Jun 2024"),
 )

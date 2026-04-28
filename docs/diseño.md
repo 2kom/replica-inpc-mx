@@ -53,6 +53,7 @@ El historial de cambios vive en git.
       - [Funciones públicas](#funciones-públicas)
       - [Helpers privados](#helpers-privados)
     - [5.13 a\_mensual — conversión quincenal → mensual](#513-a_mensual--conversión-quincenal--mensual)
+    - [5.13.1 rebasar — reexpresión a nueva referencia](#5131-rebasar--reexpresión-a-nueva-referencia)
     - [5.14 ResumenValidacionVariaciones](#514-resumenvalidacionvariaciones)
     - [5.15 ReporteValidacionVariaciones](#515-reportevalidacionvariaciones)
     - [5.16 validar\_variaciones.py](#516-validar_variacionespy)
@@ -120,7 +121,7 @@ El historial de cambios vive en git.
     - [11.19 Vectorización del loop interno de `validar_inpc`](#1119-vectorización-del-loop-interno-de-validar_inpc)
     - [11.20 Implementación de `LaspeyresEncadenado` — derivación de `f_h`](#1120-implementación-de-laspeyresencadenado--derivación-de-f_h)
       - [Primer enfoque (descartado): media ponderada con ponderadores nuevos](#primer-enfoque-descartado-media-ponderada-con-ponderadores-nuevos)
-      - [Enfoque final: $f\_h$ desde el resultado de la versión anterior](#enfoque-final-f_h-desde-el-resultado-de-la-versión-anterior)
+      - [Enfoque final: empalme desde el resultado de la versión anterior](#enfoque-final-empalme-desde-el-resultado-de-la-versión-anterior)
     - [11.21 Imputación de faltantes en series](#1121-imputación-de-faltantes-en-series)
     - [11.22 `combinar` — función de combinación histórica de `ResultadoCalculo`](#1122-combinar--función-de-combinación-histórica-de-resultadocalculo)
     - [11.23 `RENOMBRES_INDICES` y normalización cross-versión en `combinar`](#1123-renombres_indices-y-normalización-cross-versión-en-combinar)
@@ -173,10 +174,10 @@ El sistema selecciona la estrategia según la versión de canasta:
 - versiones 2010 y 2018 → `LaspeyresDirecto` — $INPC = \sum_j w_j \cdot I_j$
 - versiones 2013 y 2024 → `LaspeyresEncadenado` — $INPC = f \cdot \sum_j w_j \cdot \theta_j \cdot I_j$
 
-Para 2013, θ=1 para todos los genéricos: los ponderadores ENIGH 2010 fueron alineados
-al periodo base dic 2010, por lo que no hay desfase que normalizar.
-Para 2024, $θ_j = \frac{100}{I_j^{2Q Jul 2024}}$ por genérico: los ponderadores ENIGH 2022
-están referenciados a jul 2024 mientras los índices publicados tienen base jul 2018.
+Para 2013 y 2024, $\theta_j = \frac{1}{f_{k,j}}$ donde $f_{k,j}$ es el valor de la
+columna `encadenamiento` del genérico $j$: en 2013 actúa como factor de alineación
+dentro de la escala vieja `2Q Dic 2010 = 100`; en 2024 equivale a
+$I_j^{2Q\,\text{Jul}\,2024} / 100$ (nivel publicado en el traslape dividido entre 100).
 
 La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
 `encadenamiento` con valores → encadenado.
@@ -891,11 +892,11 @@ con valores → encadenado.
 ```python
 def para_canasta(
     canasta: CanastaCanonica,
-    f_h_por_indice: dict[str, float] | None = None,
+    referencia_empalme_por_indice: dict[str, float] | None = None,
 ) -> CalculadorBase:
     if canasta.df["encadenamiento"].isna().all():
         return LaspeyresDirecto()
-    return LaspeyresEncadenado(f_h_por_indice)
+    return LaspeyresEncadenado(referencia_empalme_por_indice)
 ```
 
 | Versión    | Implementación        | Archivo                         |
@@ -904,8 +905,9 @@ def para_canasta(
 | 2013, 2024 | `LaspeyresEncadenado` | `dominio/calculo/encadenado.py` |
 
 El caso de uso `ejecutar_corrida.py` no necesita saber qué estrategia existe —
-extrae `f_h_por_indice` del `resultado_referencia` (si lo hay) y llama
-`para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)`.
+extrae `referencia_empalme_por_indice` del `resultado_referencia` (si lo hay) y
+llama `para_canasta(canasta, referencia_empalme_por_indice).calcular(canasta,
+serie, id_corrida, tipo)`.
 
 ---
 
@@ -934,49 +936,61 @@ Donde $w_j$ son los ponderadores del grupo e $I_j^t$ es el índice del genérico
 
 #### 5.8.2 LaspeyresEncadenado
 
-Aplica a canastas con encadenamiento (versiones 2013 y 2024). El factor $f_k$ por genérico se define como el valor del índice publicado del genérico $k$ en el **periodo de traslape** de la versión dividido entre 100:
+Aplica a canastas con columna `encadenamiento` poblada (versiones 2013 y 2024). El
+calculador usa el mismo esquema algebraico general para ambas versiones:
 
-$$f_k = \frac{I_k^{\text{pub}}[t_{\text{traslape}}]}{100}$$
+$$I_k^{\text{base}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k}$$
 
-| Versión | Traslape (`t_traslape`)  |
-| ------- | ------------------------ |
-| 2013    | `Periodo(2013, 4, 1)`    |
-| 2024    | `Periodo(2024, 7, 2)`    |
+$$I_h^{\text{base}}[t] = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^{\text{base}}[t]}{\displaystyle\sum_{k \in h} w_k}$$
 
-Las series publicadas ya están encadenadas: $I_k^{\text{pub}} = f_k \cdot I_k^{\text{raw}}$, donde $I_k^{\text{raw}}$ tiene base $t_{\text{traslape}} = 100$. El calculador invierte ese encadenamiento por genérico, aplica Laspeyres sobre los índices crudos y re-encadena el agregado con su propio factor ponderado.
+$$I_h^{\text{salida}}[t] = f_h \cdot I_h^{\text{base}}[t]$$
 
-**Obtención de $f_k$ (por genérico):** dos fuentes, en orden de preferencia:
+La interpretación de $f_h$ depende de la versión, porque 2013 y 2024 no tienen el
+mismo tipo de empalme:
 
-1. **Columna `encadenamiento` de la canasta** — cuando está poblada (versiones 2013 y 2024). Se convierte con `astype(float)`.
-2. **Serie en el periodo de traslape** — fallback cuando la columna está ausente o vacía. Se obtiene como `serie.df[RANGOS_VALIDOS[version][0]] / 100`.
+| Versión | Traslape (`t_traslape`) | Interpretación |
+| ------- | ----------------------- | -------------- |
+| 2013 | `Periodo(2013, 3, 2)` | `encadenamiento` alinea genéricos dentro de la escala vieja `2Q Dic 2010 = 100`; el agregado se empalma contra 2010 en el mismo nivel |
+| 2024 | `Periodo(2024, 7, 2)` | `encadenamiento` equivale a `I_k[traslape] / 100`; el agregado se escala con referencia 2018 |
 
-**Fórmula para un agregado $h$ (INPC o subíndice):**
+**Obtención de $f_k$ (por genérico):**
 
-$$I_k^{\text{raw}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k} \qquad \text{De-encadenamos por genérico}$$
+1. **Columna `encadenamiento` de la canasta** — fuente preferida para 2013 y 2024. Se convierte con `astype(float)`.
+2. **Serie en el periodo de traslape** — fallback solo cuando la columna está ausente o vacía. Se obtiene como `serie.df[RANGOS_VALIDOS[version][0]] / 100`.
 
-$$I_h^{\text{raw}}[t] = \frac{\displaystyle\sum_{k \in h} w_k \cdot I_k^{\text{raw}}[t]}{\displaystyle\sum_{k \in h} w_k} \qquad \text{Laspeyres crudo}$$
+**Obtención de $f_h$ (por agregado):**
 
-$$I_h^{\text{pub}}[t] = f_h \cdot I_h^{\text{raw}}[t] \qquad \text{Re-encadenamiento del agregado}$$
+- **2013 con `resultado_referencia`:**
 
-**Obtención de $f_h$ (por agregado):** dos fuentes, en orden de preferencia:
+  $$f_h = \frac{I_h^{2010}[t_{\text{traslape}}]}{I_h^{\text{base}}[t_{\text{traslape}}]}$$
 
-1. **Resultado de referencia** — `resultado_referencia.df.at[(traslape, indice), "indice_replicado"] / 100`. Se provee el `ResultadoCalculo` de la versión anterior (2018 para el encadenamiento 2024). Este es el $f_h$ exacto del INEGI: $f_h^{\text{INEGI}} = I_h^{(2018)}[t_{\text{traslape}}] / 100$, calculado con los 299 ponderadores de la estructura anterior.
+  donde `resultado_referencia` es la corrida 2010. Esto garantiza continuidad en
+  `2Q Mar 2013`: el primer valor de la canasta 2013 queda exactamente anclado al
+  cierre calculado con la canasta 2010. Sin referencia, `factor_h = 1.0`.
 
-2. **Media ponderada de $f_k$** — fallback cuando no hay referencia o el índice no está en ella:
+- **2024 con `resultado_referencia`:**
 
-$$f_h = \frac{\displaystyle\sum_{k \in h} w_k \cdot f_k}{\displaystyle\sum_{k \in h} w_k}$$
+  $$f_h = \frac{I_h^{2018}[t_{\text{traslape}}]}{100}$$
 
-   Esta aproximación usa ponderadores **nuevos** en lugar de los viejos, y produce un error sistemático observable en datos reales (~0.53% relativo). Ver §11.20.
+  donde `resultado_referencia` es la corrida 2018. Este es el factor del índice
+  superior en el traslape `2Q Jul 2024`.
 
-Para el INPC general $\sum_{k \in h} w_k = 100$ (invariante de `CanastaCanonica`). Para subíndices $\sum_{k \in h} w_k < 100$; el denominador correcto es siempre $\sum_{k \in h} w_k$.
+- **Fallback para 2024 sin referencia:** media ponderada de los factores individuales con
+  ponderadores de la canasta nueva:
 
-En el periodo de traslape con fuente 1: $I_h^{\text{pub}}[t_{\text{traslape}}] \approx f_h \cdot 100$ exacto. Con fuente 2: $\approx$ exacto (los $f_k$ individuales son exactos; el error surge solo al agregar con ponderadores distintos).
+  $$f_h = \frac{\displaystyle\sum_{k \in h} w_k \cdot f_k}{\displaystyle\sum_{k \in h} w_k}$$
+
+  Esta aproximación introduce un error sistemático observable; ver §11.20.
+
+Para el INPC general $\sum_{k \in h} w_k = 100$ (invariante de `CanastaCanonica`).
+Para subíndices $\sum_{k \in h} w_k < 100$; el denominador correcto es siempre
+$\sum_{k \in h} w_k$.
 
 **Firma:**
 
 ```python
 class LaspeyresEncadenado(CalculadorBase):
-    def __init__(self, f_h_por_indice: dict[str, float] | None = None) -> None: ...
+    def __init__(self, referencia_empalme_por_indice: dict[str, float] | None = None) -> None: ...
     def calcular(
         self,
         canasta: CanastaCanonica,
@@ -986,7 +1000,10 @@ class LaspeyresEncadenado(CalculadorBase):
     ) -> ResultadoCalculo: ...
 ```
 
-El constructor recibe `f_h_por_indice` — un diccionario `{nombre_indice: f_h}` extraído de un `resultado_referencia` en el traslape. Si es `None` o un índice no está en el dict, se usa la media ponderada (fuente 2). El dispatch entre INPC y subíndices es interno.
+El constructor recibe `referencia_empalme_por_indice` — un diccionario
+`{nombre_indice: valor_en_traslape}` extraído de un `resultado_referencia`. En
+2013 ese valor se usa para anclar el nivel en `2Q Mar 2013`; en 2024 se divide
+entre 100 para obtener `f_h`. El dispatch entre INPC y subíndices es interno.
 
 **No-aditividad:** después del periodo de traslape, los subíndices encadenados no necesariamente suman al INPC encadenado. Cada agregado tiene su propio $f_h$. El INEGI advierte esta propiedad explícitamente. El proyecto replica cada índice de forma independiente — no intenta reconstruir el INPC a partir de subíndices.
 
@@ -1105,8 +1122,8 @@ de cada canasta base del INPC.
 
 ```python
 RANGOS_VALIDOS: dict[VersionCanasta, tuple[Periodo, Periodo | None]] = {
-    2010: (Periodo(2010, 12, 2), Periodo(2013, 4, 1)),
-    2013: (Periodo(2013, 4, 1), Periodo(2018, 7, 2)),
+    2010: (Periodo(2010, 12, 2), Periodo(2013, 3, 2)),
+    2013: (Periodo(2013, 3, 2), Periodo(2018, 7, 2)),
     2018: (Periodo(2018, 7, 2), Periodo(2024, 7, 2)),
     2024: (Periodo(2024, 7, 2), None),  # None = hasta el último periodo disponible
 }
@@ -1629,6 +1646,47 @@ resultado_mensual = combinar([a_mensual(r2018.resultado), a_mensual(r2024.result
 
 ---
 
+### 5.13.1 rebasar — reexpresión a nueva referencia
+
+**Archivo:** `dominio/conversion.py`. Exportada desde `replica_inpc`.
+
+```python
+def rebasar(
+    resultado: ResultadoCalculo,
+    periodo_base: PeriodoQuincenal,
+    valor_base: float = 100.0,
+) -> ResultadoCalculo:
+```
+
+Reexpresa todos los índices de un `ResultadoCalculo` quincenal a una nueva referencia, usando el valor replicado propio como denominador (rebase endógeno). Para cada índice único en el MultiIndex:
+
+$$I_h^{\text{rebased}}[t] = I_h[t] \cdot \frac{\text{valor\_base}}{I_h[\text{periodo\_base}]}$$
+
+El denominador $I_h[\text{periodo\_base}]$ proviene del propio resultado calculado, no de una fuente externa.
+
+**Restricciones:**
+
+- `periodo_base` debe existir en el resultado para cada índice → `InvarianteViolado` si falta.
+- El valor en `periodo_base` debe tener `estado_calculo in {"ok", "semi_ok"}` → `InvarianteViolado` si no.
+- El valor en `periodo_base` no puede ser cero → `InvarianteViolado`.
+
+**`id_corrida`:** `f"{resultado.id_corrida}-base-{periodo_base}"`.
+
+**Uso principal:** rebasar el bloque 2010+2013 (en referencia `2Q Dic 2010 = 100`) a `2Q Jul 2018 = 100` antes de combinarlo con 2018+2024. Ver §11.22.
+
+```python
+from replica_inpc import rebasar, PeriodoQuincenal
+
+tramo_rebased = rebasar(
+    combinar([r2010, r2013]),
+    periodo_base=PeriodoQuincenal(2018, 7, 2),
+)
+```
+
+**Aplica a múltiples índices:** cuando `tipo` produce varios índices (por ejemplo `inflacion componente` produce "subyacente" y "no subyacente"), cada índice se rebasa de forma independiente con su propio denominador en `periodo_base`.
+
+---
+
 ### 5.14 ResumenValidacionVariaciones
 
 > **Dead code — diferido a v2.0.** La clase existe en `dominio/modelos/validacion.py` pero no es retornada por ninguna función pública desde v1.2.4. Se retomará cuando `validar_variaciones_mensual` acepte múltiples variaciones a la vez.
@@ -1989,7 +2047,7 @@ class Corrida:
 | `version` | sí | — | `VersionCanasta`: `2010`, `2013`, `2018`, `2024` |
 | `tipo` | no | `"inpc"` | Tipo de índice a calcular. Valores válidos: claves de `INDICE_POR_TIPO` o valores de `COLUMNAS_CLASIFICACION`. Lanza `ErrorConfiguracion` si no es válido. |
 | `persistir` | no | `False` | Si `True`, guarda artefactos en `ruta_datos` y exporta CSV a `ruta_salida`. La fachada crea los directorios si no existen. |
-| `resultado_referencia` | no | `None` | `ResultadoCalculo` de la corrida anterior (ej. 2018) para obtener `f_h` exacto del INEGI en el periodo de traslape. Solo aplica a canastas encadenadas (2013, 2024). Si la canasta no usa encadenamiento, se emite `UserWarning` y se ignora. Ver §11.20. |
+| `resultado_referencia` | no | `None` | `ResultadoCalculo` de la corrida anterior (2010 para 2013, 2018 para 2024) usado como referencia de empalme en el periodo de traslape. Solo aplica a canastas encadenadas (2013, 2024). Si la canasta no usa encadenamiento, se imprime una advertencia y se ignora. Ver §11.20. |
 
 **Uso típico — canastas 2018 y 2024:**
 
@@ -2009,7 +2067,8 @@ r_2024 = corrida.ejecutar(
 Las canastas 2010 y 2013 comparten los mismos 283 genéricos y las mismas series BIE
 (`series2010_*`). La corrida 2010 usa `LaspeyresDirecto` (sin columna `encadenamiento`);
 la corrida 2013 usa `LaspeyresEncadenado` con `resultado_referencia=corrida_2010.resultado`
-para obtener el `f_h` exacto en el periodo de traslape `Periodo(2013, 4, 1)`. Ver §11.20.
+para empalmar el agregado contra 2010 en el periodo de traslape real
+`Periodo(2013, 3, 2)`. Ver §11.20.
 
 ```python
 corrida = Corrida()
@@ -2029,7 +2088,9 @@ r_2013 = corrida.ejecutar(
 ```
 
 `f_k` por genérico proviene de la columna `encadenamiento` de `ponderadores_2013.csv`
-(θ=1 para todos los genéricos — ponderadores ya alineados al periodo base).
+y se usa como factor de alineación por genérico: primero se calcula
+`serie_alineada = serie_publicada / f_k`, después se aplica Laspeyres con
+ponderadores 2013 y finalmente se empalma contra 2010 en `2Q Mar 2013`.
 
 **Continuidad en traslape (2013 ≠ 2024):** para 2013, `f_k ≈ 1`, por lo que
 `resultado_raw[traslape] ≈ 108.7` (nivel INPC con ponderadores 2013, no 100).
@@ -2038,9 +2099,32 @@ r_2013 = corrida.ejecutar(
 hace que `resultado_raw[traslape] = 100` y el mecanismo es distinto.
 
 Validación: fila "Total" de `series2010_horizontal_metadata.CSV` en base `2Q Dic 2010 = 100`.
-Desde `Periodo(2013, 4, 1)` esa fila publica el INPC con ponderadores 2013. Diferencias
+Desde `Periodo(2013, 3, 2)` esa fila publica el INPC con ponderadores 2013. Diferencias
 pequeñas por redondeo son aceptables; errores sistemáticos o crecientes indican problema
-en `f_h` o `f_k`. La tolerancia provisional de 2013 en §11.8 se actualiza tras el smoke test.
+en `f_h` o `f_k`.
+
+**Uso histórico completo — `ejecutar_historico` (v1.3.0):**
+
+```python
+historico = corrida.ejecutar_historico(
+    canasta_2010="data/inputs/ponderadores_2010.csv",
+    series_2010="data/inputs/series2010_horizontal_metadata.CSV",
+    canasta_2013="data/inputs/ponderadores_2013.csv",
+    series_2013="data/inputs/series2010_horizontal_metadata.CSV",
+    canasta_2018="data/inputs/ponderadores_2018.csv",
+    series_2018="data/inputs/series2018_horizontal_metadata.CSV",
+    canasta_2024="data/inputs/ponderadores_2024.csv",
+    series_2024="data/inputs/series2024_horizontal_metadata.CSV",
+    tipo="inpc",
+)
+```
+
+La fachada orquesta las cuatro corridas, combina 2010+2013, rebasa ese bloque de
+forma endógena a `2Q Jul 2018 = 100` y concatena el resultado con 2018+2024.
+La verificación local contra el script exploratorio de metodología confirmó
+equivalencia en el rango `2Q Dic 2010`–`2Q Jul 2018`: 183 periodos comunes,
+sin diferencias de `version`, `tipo` ni `estado_calculo`, y diferencia máxima
+en `indice_replicado` de `5.852029971720185e-11`.
 
 **Selección de fuente de validación:**
 
@@ -2423,7 +2507,7 @@ class EjecutarCorrida:
 5. Filtrar columnas de `serie` a `RANGOS_VALIDOS[version]` → `SerieNormalizada` con solo los periodos válidos. Si ninguna columna cae en el rango → `PeriodosInsuficientes`
 6. `correspondencia.py` — valida y alinea genérico↔genérico
 6.5. `_rellenar_faltantes(serie)` → `(SerieNormalizada, imputados)`. Rellena NaN con el valor del periodo disponible más próximo (adelante primero, atrás si no hay). `imputados` es `dict[tuple[str, Periodo], Periodo]` que mapea `(generico, periodo)` al periodo fuente del que se tomó el valor — ver §11.21.
-7. Si `resultado_referencia` no es `None` y la canasta usa encadenamiento: `_f_h_desde_referencia(resultado_referencia, traslape)` → `f_h_por_indice`. Si la canasta no usa encadenamiento: emite `UserWarning` e ignora `resultado_referencia`. Cálculo: `para_canasta(canasta, f_h_por_indice).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
+7. Si `resultado_referencia` no es `None` y la canasta usa encadenamiento: `_referencia_empalme_desde_resultado(resultado_referencia, traslape)` → `referencia_empalme_por_indice`. Si la canasta no usa encadenamiento: imprime una advertencia e ignora `resultado_referencia`. Cálculo: `para_canasta(canasta, referencia_empalme_por_indice).calcular(canasta, serie, id_corrida, tipo)` → `ResultadoCalculo`. El dispatch entre INPC y subíndices es interno al calculador — ver §5.8.1 y §5.8.3.
 8. `periodos = resultado.df.index.get_level_values("periodo").unique()`; `FuenteValidacion.obtener(periodos)` — si lanza `ErrorValidacion`: continúa con validación `no_disponible`
 9. `validar_inpc.py` recibe también `imputados: dict[tuple[str, Periodo], Periodo]` — construye `ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes` (incluye filas `tipo_faltante = 'indice_imputado'` para cada par en `imputados`; periodos imputados que superan tolerancia reciben `estado_validacion = 'diferencia_detectada_imputado'`)
 10. Si `persistir=True`:
@@ -3330,12 +3414,15 @@ con nombres parecidos.
 
 | Versión | Tolerancia (`error_absoluto`) | Nota                                      |
 | ------- | ----------------------------- | ----------------------------------------- |
-| 2010    | `<= 0.0005`                   | provisional — sin validación empírica aún |
-| 2013    | `<= 0.0005`                   | provisional — sin validación empírica aún |
-| 2018    | `<= 0.0005`                   | basada en experiencia previa              |
-| 2024    | `<= 0.005`                    | mayor variación por encadenamiento        |
+| 2010    | `<= 0.0009`                   | validado contra serie oficial base 2018   |
+| 2013    | `<= 0.0009`                   | validado contra serie oficial base 2018   |
+| 2018    | `<= 0.0009`                   | validado contra serie oficial base 2018   |
+| 2024    | `<= 0.0009`                   | validado contra serie oficial base 2018   |
 
-**Razón:** las diferencias observadas entre el INPC replicado y el publicado por el INEGI varían por versión — la canasta 2024 usa Laspeyres encadenado con normalización, lo que introduce mayor variación numérica acumulada. Una tolerancia única global sería demasiado estricta para 2024 o demasiado laxa para 2018. Las tolerancias de 2010 y 2013 son provisionales y deben revisarse cuando se implemente y pruebe con datos reales.
+**Razón:** la validación histórica completa (`ejecutar_historico`) queda en el
+orden de milésimas de punto de índice. La tolerancia homogénea `0.0009` cubre
+los tramos 2010, 2013 y 2018; el peor error observado en la validación quincenal
+actual pertenece al empalme 2024 y es esperado por redondeo/encadenamiento.
 
 ---
 
@@ -3475,11 +3562,14 @@ con nombres parecidos.
 
 #### Primer enfoque (descartado): media ponderada con ponderadores nuevos
 
-El diseño original computaba $f_h$ como media ponderada de los $f_k$ individuales usando los ponderadores de la canasta nueva (2024):
+El diseño original computaba $f_h$ como media ponderada de los $f_k$ individuales usando los ponderadores de la canasta nueva:
 
-$$f_h^{\text{nuevo}} = \frac{\sum_{k \in h} w_k^{(2024)} \cdot f_k}{\sum_{k \in h} w_k^{(2024)}}$$
+$$f_h^{\text{nuevo}} = \frac{\sum_{k \in h} w_k^{\text{nueva}} \cdot f_k}{\sum_{k \in h} w_k^{\text{nueva}}}$$
 
-**Por qué falló con datos reales:** el INEGI calcula $f_h$ con los 299 ponderadores de la canasta 2018, no con los 292 de la canasta 2024. Las dos estructuras son diferentes tanto en número de genéricos como en los pesos relativos. Al validar contra los valores publicados, el error resultante fue:
+**Por qué falló con datos reales en 2024:** el INEGI calcula $f_h$ con los 299
+ponderadores de la canasta 2018, no con los 292 de la canasta 2024. Las dos
+estructuras son diferentes tanto en número de genéricos como en los pesos
+relativos. Al validar contra los valores publicados, el error resultante fue:
 
 - `error_absoluto` ≈ 0.716–0.737 puntos de índice (creciente conforme sube el INPC)
 - `error_relativo` ≈ 0.53% sistemático en todos los periodos post-traslape
@@ -3487,23 +3577,57 @@ $$f_h^{\text{nuevo}} = \frac{\sum_{k \in h} w_k^{(2024)} \cdot f_k}{\sum_{k \in 
 
 El error es proporcional al nivel del INPC porque $f_h^{\text{nuevo}} \neq f_h^{\text{INEGI}}$ por una diferencia fija de ponderación; a medida que el INPC crece, el error absoluto crece con él. Una tolerancia absoluta (como la declarada en §6.1) no puede cubrir este error indefinidamente.
 
-#### Enfoque final: $f_h$ desde el resultado de la versión anterior
+#### Enfoque final: empalme desde el resultado de la versión anterior
 
-**Decisión:** `f_h` se obtiene del resultado de la corrida 2018 en el periodo de traslape:
+**Decisión:** `LaspeyresEncadenado` recibe un diccionario de valores de referencia
+por índice, extraídos del `ResultadoCalculo` de la canasta anterior en el periodo
+de traslape. La forma de convertir esa referencia a factor de empalme depende de
+la versión:
+
+- **2024:** la referencia 2018 se divide entre 100:
 
 $$f_h^{\text{INEGI}} = \frac{I_h^{(2018)}[t_{\text{traslape}}]}{100}$$
 
-donde $I_h^{(2018)}[t_{\text{traslape}}]$ es el índice calculado con LaspeyresDirecto sobre la canasta 2018 (299 genéricos, ponderadores viejos) en el periodo de traslape. Este valor es algebraicamente idéntico al $f_h$ que usa el INEGI.
+  donde $I_h^{(2018)}[t_{\text{traslape}}]$ es el índice calculado con
+  `LaspeyresDirecto` sobre la canasta 2018 en `2Q Jul 2024`.
 
-**Por qué funciona:** en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que:
+- **2013:** la referencia 2010 está en la misma escala vieja (`2Q Dic 2010 = 100`)
+  que el tramo 2013 alineado por genérico. El factor de empalme se calcula como:
+
+$$f_h^{2013} = \frac{I_h^{(2010)}[2Q\,Mar\,2013]}{I_h^{\text{base 2013}}[2Q\,Mar\,2013]}$$
+
+  Esto garantiza continuidad en el empalme real `2Q Mar 2013`.
+
+**Por qué funciona para 2024:** en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que:
 
 $$I_h^{(2018)}[t_{\text{traslape}}] = \frac{\sum_{k} w_k^{(2018)} \cdot f_k \cdot 100}{\sum_k w_k^{(2018)}} = 100 \cdot f_h^{\text{INEGI}}$$
 
-**Implementación:** `LaspeyresEncadenado` recibe `f_h_por_indice: dict[str, float] | None` en el constructor. `EjecutarCorrida.ejecutar()` recibe `resultado_referencia: ResultadoCalculo | None` y extrae el dict con la función `_f_h_desde_referencia(resultado_ref, traslape)`. `para_canasta(canasta, f_h_por_indice)` pasa el dict al constructor.
+**Por qué funciona para 2013:** el `encadenamiento` de `ponderadores_2013.csv`
+actúa como factor de alineación por genérico. La variante verificada con datos
+reales fue:
+
+$$I_k^{\text{alineado}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k}$$
+
+Después de aplicar Laspeyres con ponderadores 2013, el agregado se escala con el
+factor maestro anterior para que el valor en `2Q Mar 2013` coincida con el cierre
+de la canasta 2010.
+
+**Implementación:** `LaspeyresEncadenado` recibe
+`referencia_empalme_por_indice: dict[str, float] | None` en el constructor.
+`EjecutarCorrida.ejecutar()` recibe
+`resultado_referencia: ResultadoCalculo | None` y extrae el dict con
+`_referencia_empalme_desde_resultado(resultado_ref, traslape)`.
+`para_canasta(canasta, referencia_empalme_por_indice)` pasa el dict al constructor.
 
 **Flujo de uso:**
 
 ```python
+corrida_2010 = Corrida(...).ejecutar(canasta_2010, series_2010, version=2010)
+corrida_2013 = Corrida(...).ejecutar(
+    canasta_2013, series_2010, version=2013,
+    resultado_referencia=corrida_2010.resultado,
+)
+
 corrida_2018 = Corrida(...).ejecutar(canasta_2018, series_2018, version=2018)
 corrida_2024 = Corrida(...).ejecutar(
     canasta_2024, series_2024, version=2024,
@@ -3511,7 +3635,10 @@ corrida_2024 = Corrida(...).ejecutar(
 )
 ```
 
-**Fallback:** si `resultado_referencia` es `None` o el índice no está en el dict (p. ej. subíndices con clasificadores que no existen en la corrida de referencia), se usa la media ponderada con ponderadores nuevos. Este fallback introduce el error sistemático descrito arriba y es aceptable solo cuando no se dispone del resultado 2018.
+**Fallback:** si `resultado_referencia` es `None` o el índice no está en el dict,
+2013 usa `factor_h = 1.0` y 2024 usa la media ponderada con ponderadores nuevos.
+El fallback de 2024 introduce el error sistemático descrito arriba y es aceptable
+solo cuando no se dispone del resultado 2018.
 
 **No-aditividad:** cada agregado $h$ tiene su propio $f_h$. Los subíndices encadenados no suman al INPC encadenado post-traslape. Propiedad esperada y documentada por el INEGI; el proyecto replica cada índice independientemente.
 
@@ -3556,6 +3683,16 @@ Implementado como `df.bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la seri
 **Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoCalculo` — versiones válidas por fila, sin índices duplicados, consistencia ok/fallo. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
 
 **`version_canonica`:** `combinar` acepta `version_canonica: VersionCanasta | None = None`. Si `None`, usa la versión más reciente de los resultados pasados. Si se especifica, renombra los índices de todas las demás versiones hacia los nombres de esa versión. Ver §11.23 para la tabla de correspondencia y el algoritmo.
+
+**Rebase histórico:** para empalmar el bloque 2010+2013 con la base actual
+`2Q Jul 2018 = 100`, el dominio expone `rebasar(resultado, periodo_base,
+valor_base=100.0)` en `dominio/conversion.py`. El denominador es endógeno: usa
+el valor replicado propio del `ResultadoCalculo` en `periodo_base`, no la serie
+oficial como insumo. En `Corrida.ejecutar_historico`, el flujo es:
+
+1. `tramo_viejo = combinar([r2010, r2013])`
+2. `tramo_rebased = rebasar(tramo_viejo, PeriodoQuincenal(2018, 7, 2))`
+3. `combinar([tramo_rebased, r2018, r2024])`
 
 ---
 
@@ -3802,10 +3939,10 @@ después del último código CCIF produce 360 candidatos únicos, de los cuales
 283/283 coinciden con los genéricos de `ponderadores_2010.csv` tras aplicar los
 aliases anteriores. No se usa fuzzy matching.
 
-**Alcance:** este cambio desbloquea la etapa 1 de v1.3.0: corrida 2010 en
-referencia original `2Q Dic 2010 = 100`. La metodología de encadenamiento 2013
-está documentada en §6 ("Uso típico — canastas 2010 y 2013"); el rebase posterior
-a `2Q Jul 2018 = 100` es la etapa 3 de v1.3.0 y está pendiente.
+**Alcance:** este cambio desbloqueó la lectura operativa de las series 2010/2013.
+La etapa v1.3.0 completa agrega también el cálculo encadenado 2013, el rebase
+endógeno del bloque 2010+2013 a `2Q Jul 2018 = 100` y la fachada
+`Corrida.ejecutar_historico(...)`.
 
 ---
 

@@ -28,9 +28,9 @@ La `v1` debe permitir:
 
 El desarrollo se plantea de forma incremental:
 
-1. iniciar con la canasta `2018`;
-2. despues incorporar la canasta `2024`;
-3. posteriormente considerar las canastas `2010` y `2013`.
+1. ~~iniciar con la canasta `2018`;~~ incorporado en `v1.0.0`;
+2. ~~despues incorporar la canasta `2024`;~~ incorporado en `v1.2.0`;
+3. ~~posteriormente considerar las canastas `2010` y `2013`;~~ incorporado en `v1.3.0`.
 
 ## 3. Casos de uso de la version 1
 
@@ -94,6 +94,8 @@ La tolerancia es configurable por version:
 
 | Version | Tolerancia (`error_absoluto`) |
 | --- | --- |
+| 2010 | `<= 0.0009` |
+| 2013 | `<= 0.0009` |
 | 2018 | `<= 0.0009` |
 | 2024 | `<= 0.0009` |
 
@@ -626,7 +628,7 @@ Esta seccion documenta que cubre cada version publicada o prevista, y que queda 
 | v1.2.3  | v1.2.2 + `PeriodoMensual` + `a_mensual()` + variaciones mensuales + `validar_mensual(resultado, token)` + `validar_quincenal(resultado, token)`  |
 | v1.2.4  | v1.2.3 + `validar_variaciones_mensual(rv, token)` + `validar_variaciones_quincenal(rv, token)` + estado `fuera_de_rango_inegi`                   |
 | v1.2.5  | v1.2.4 + `incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde` (multi-canasta 2018+2024) + `validar_incidencias_mensual`      |
-| v1.3.0  | v1.2.5 + canastas 2010 y 2013                                                                                                                    |
+| v1.3.0  | v1.2.5 + canastas 2010 y 2013 + serie histórica 2010-2024 con `ejecutar_historico` y rebase a base 2018                                          |
 
 ### 13.1 Subindices
 
@@ -654,6 +656,20 @@ Incorporado en **v1.3.0**. Las versiones anteriores operan unicamente sobre:
 
 - canasta 2018 (desde v1.0.0);
 - canasta 2024 (desde v1.2.0).
+
+La v1.3.0 agrega:
+
+- lectura operativa de series BIE 2010/2013 con formato jerarquico sin clave terminal de generico;
+- calculo directo para canasta 2010 en la referencia original `2Q Dic 2010 = 100`;
+- calculo encadenado para canasta 2013 usando `encadenamiento` como factor de alineacion por generico (`serie / f_k`);
+- empalme real 2010->2013 en `2Q Mar 2013`;
+- rebase endogeno del bloque 2010+2013 a `2Q Jul 2018 = 100`;
+- fachada `Corrida.ejecutar_historico(...)` para construir el historico 2010-2024.
+
+La equivalencia entre el proceso exploratorio y la implementacion quedo verificada
+para el rango `2Q Dic 2010` a `2Q Jul 2018`: 183 periodos comunes, sin diferencias
+de `version`, `tipo` ni `estado_calculo`, y diferencia maxima en
+`indice_replicado` de `5.852029971720185e-11`.
 
 ### 13.4 Uso directo de archivos oficiales `.xlsx` y `.pdf`
 

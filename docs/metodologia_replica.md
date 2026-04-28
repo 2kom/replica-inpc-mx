@@ -27,7 +27,7 @@ Los nombres de los genéricos en la canasta y en las series provienen de fuentes
 
 Solo los genéricos que aparecen en ambas fuentes participan en el cálculo. Los genéricos sin correspondencia se reportan en el diagnóstico de faltantes.
 
-## Cálculo del INPC general
+## Cálculo del INPC general con canastas directas
 
 Con los genéricos alineados, el proyecto aplica la fórmula de Laspeyres directamente sobre los índices publicados:
 
@@ -41,6 +41,9 @@ Donde:
 
 **Nota sobre los ponderadores**: los ponderadores de la canasta suman 100 (no 1 como en el manual del INEGI). La división entre 100 en la fórmula es el ajuste equivalente; el resultado es idéntico al Laspeyres del manual donde $\omega_k = w_k / 100$ y $\sum \omega_k = 1$.
 
+Este cálculo directo aplica a las canastas 2010 y 2018. La canasta 2010 opera en
+la referencia original `2Q Dic 2010 = 100`.
+
 ## Cálculo de subíndices
 
 Para calcular subíndices por clasificador (por ejemplo, inflación componente, CCIF, COG), el proyecto agrupa los genéricos según la categoría de clasificación y aplica Laspeyres a cada grupo por separado:
@@ -51,22 +54,48 @@ Donde $h$ es el conjunto de genéricos que pertenecen a la categoría. Los ponde
 
 El resultado es un índice por categoría y periodo, con la misma escala que el INPC (base = 100 en el periodo de referencia de la canasta).
 
-## Cálculo del INPC encadenado (canasta 2024)
+## Cálculo del INPC encadenado
 
-Para la canasta 2024, el proyecto aplica Laspeyres encadenado. Los índices de genéricos publicados están en base 2Q jul. 2018 = 100, pero los ponderadores 2024 corresponden al 2Q jul. 2024. El proyecto normaliza cada serie al traslape antes de agregar:
+El proyecto usa `LaspeyresEncadenado` para canastas con columna
+`encadenamiento` poblada: 2013 y 2024. En ambos casos se divide cada serie por
+su factor de genérico antes de agregar:
 
-$$INPC_t = f_h \cdot \frac{\displaystyle\sum_{k=1}^{292} w_k \cdot \dfrac{I_k^t}{f_k}}{\displaystyle\sum_{k=1}^{292} w_k}$$
+$$INPC_t = f_h \cdot \frac{\displaystyle\sum_{k=1}^{N} w_k \cdot \dfrac{I_k^t}{f_k}}{\displaystyle\sum_{k=1}^{N} w_k}$$
 
 Donde:
 
-- $I_k^t$: índice nacional del genérico $k$ en el periodo $t$, publicado por el INEGI en base 2Q jul. 2018.
-- $f_k$: factor de encadenamiento del genérico $k$, tomado de la columna `encadenamiento` de la canasta 2024. Equivale a $I_k^{2Q\,\text{Jul}\,2024} / 100$.
-- $w_k$: ponderador del genérico $k$ (canasta 2024, ENIGH Estacional 2022).
+- $I_k^t$: índice nacional del genérico $k$ en el periodo $t$, publicado por el INEGI.
+- $f_k$: factor del genérico $k$, tomado de la columna `encadenamiento` de la canasta.
+- $w_k$: ponderador del genérico $k$.
 - $f_h$: factor de encadenamiento del índice superior $h$ en el traslape.
 
-Esta fórmula es algebraicamente equivalente al procedimiento oficial del INEGI (pasos θ → normalizar → Laspeyres → escalar por $f_h$). Ver `docs/metodologia_inegi.md` para el detalle.
+### Canasta 2013
 
-**Cómo se obtiene $f_h$:** el valor correcto es el INPC calculado con la canasta 2018 en el periodo de traslape, dividido entre 100. El proyecto lo extrae del `resultado_referencia` que el usuario pasa al ejecutar la corrida 2024:
+La canasta 2013 usa las mismas series BIE que 2010, todavía en la referencia
+`2Q Dic 2010 = 100`. El factor `encadenamiento` de `ponderadores_2013.csv` no se
+usa para convertir a una base 100 estilo 2024; se usa como factor de alineación
+por genérico:
+
+$$I_k^{\text{alineado}}[t] = \frac{I_k^{\text{pub}}[t]}{f_k}$$
+
+Después se aplica Laspeyres con ponderadores 2013 y se empalma contra el valor
+replicado con canasta 2010 en el traslape real `2Q Mar 2013`:
+
+$$f_h^{2013} = \frac{INPC_{2010}^{2Q\,Mar\,2013}}{INPC_{2013,\text{alineado}}^{2Q\,Mar\,2013}}$$
+
+Esta variante fue la que reprodujo la fila oficial `Total` de la serie BIE en la
+escala vieja antes del rebase.
+
+### Canasta 2024
+
+Para la canasta 2024, los índices de genéricos publicados están en base
+`2Q Jul 2018 = 100`, pero los ponderadores 2024 corresponden al traslape
+`2Q Jul 2024`. En este caso, `f_k` equivale a
+$I_k^{2Q\,\text{Jul}\,2024} / 100$.
+
+**Cómo se obtiene $f_h$:** el valor correcto es el INPC calculado con la canasta
+2018 en el periodo de traslape, dividido entre 100. El proyecto lo extrae del
+`resultado_referencia` que el usuario pasa al ejecutar la corrida 2024:
 
 ```python
 resultado_2024 = corrida.ejecutar(
@@ -78,7 +107,29 @@ Sin `resultado_referencia`, el proyecto usa como fallback $f_h = \sum_k w_k f_k 
 
 **No aditividad:** los subíndices encadenados calculados por el proyecto no son aditivos al INPC encadenado después del traslape. Cada índice superior se encadena de forma independiente, igual que en la metodología oficial.
 
-**Serie histórica continua:** para obtener una serie continua que abarque los tramos 2018 y 2024:
+**Serie histórica continua:** para obtener una serie continua que abarque los
+tramos 2010, 2013, 2018 y 2024, la fachada `Corrida` ofrece
+`ejecutar_historico`:
+
+```python
+historico = corrida.ejecutar_historico(
+    "data/inputs/ponderadores_2010.csv",
+    "data/inputs/series2010_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2013.csv",
+    "data/inputs/series2010_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2018.csv",
+    "data/inputs/series2018_horizontal_metadata.CSV",
+    "data/inputs/ponderadores_2024.csv",
+    "data/inputs/series2024_horizontal_metadata.CSV",
+    tipo="inpc",
+)
+```
+
+Internamente, el proyecto combina 2010+2013, rebasa ese bloque de forma endógena
+a `2Q Jul 2018 = 100` usando su propio valor replicado en ese periodo, y después
+concatena con 2018+2024.
+
+Para obtener una serie continua manual de los tramos 2018 y 2024:
 
 ```python
 from replica_inpc import combinar
@@ -133,13 +184,16 @@ Equivale a `variacion_desde` con `desde = "1Q Ene <año>"` pero usando como base
 
 ### Advertencia para resultados encadenados (canasta 2024)
 
-Por la no aditividad del encadenamiento, la variación del INPC general encadenado no coincide con la suma ponderada de las variaciones de sus subíndices. Calcular variaciones directamente sobre el `ResultadoCalculo` de la corrida (o sobre el resultado combinado) produce el valor correcto. No reconstuir el INPC desde componentes para luego calcular variación.
+Por la no aditividad del encadenamiento, la variación del INPC general encadenado no coincide con la suma ponderada de las variaciones de sus subíndices. Calcular variaciones directamente sobre el `ResultadoCalculo` de la corrida (o sobre el resultado combinado) produce el valor correcto. No reconstruir el INPC desde componentes para luego calcular variación.
 
 ## Validación
 
 Al terminar el cálculo, el proyecto consulta la API de indicadores del INEGI para obtener los valores oficiales publicados y los compara con los valores replicados.
 
-Para el INPC general y los clasificadores con indicadores disponibles en la API, se calcula el error absoluto y el error relativo por periodo. La tolerancia para la canasta 2018 es `<= 0.0009` en error absoluto. El resultado global de la validación puede ser:
+Para el INPC general y los clasificadores con indicadores disponibles en la API,
+se calcula el error absoluto y el error relativo por periodo. La tolerancia
+vigente para las canastas 2010, 2013, 2018 y 2024 es `<= 0.0009` en error
+absoluto. El resultado global de la validación puede ser:
 
 - `ok`: todos los periodos dentro de la tolerancia numérica.
 - `ok_parcial`: algunos periodos fuera de tolerancia o sin dato oficial.
