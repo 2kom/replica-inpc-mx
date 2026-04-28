@@ -97,3 +97,55 @@ def test_null_por_faltantes_detectado_en_serie_original():
 
     assert resultado.df.at[(post_traslape, "INPC"), "estado_calculo"] == "null_por_faltantes"
     assert resultado.df.at[(traslape, "INPC"), "estado_calculo"] == "ok"
+
+
+# ── Tests versión 2013 ─────────────────────────────────────────────────────────
+
+_traslape_2013 = PeriodoQuincenal(2013, 3, 2)
+_post_2013 = PeriodoQuincenal(2013, 4, 1)
+
+# Canasta 2013: f_k = encadenamiento (ratios ENIGH, no niveles de índice)
+_df_canasta_2013 = pd.DataFrame(
+    {
+        "ponderador": ["10.0", "20.0", "30.0", "40.0"],
+        "encadenamiento": ["1.2", "0.8", "1.1", "0.9"],
+    },
+    index=["arroz", "frijol", "leche", "huevo"],
+)
+
+# Serie en escala publicada BIE (ya multiplicada por f_k respecto a base 2010)
+_df_serie_2013 = pd.DataFrame(
+    {
+        "arroz": [120.0, 123.0],
+        "frijol": [80.0, 82.0],
+        "leche": [110.0, 113.0],
+        "huevo": [90.0, 91.5],
+    },
+    index=[_traslape_2013, _post_2013],
+).T
+
+_canasta_2013 = CanastaCanonica(_df_canasta_2013, 2013)
+_serie_2013 = SerieNormalizada(_df_serie_2013, _mapeo)
+
+
+def test_2013_divide_por_f_k_antes_de_laspeyres():
+    # sin referencia → factor_h = 1.0, resultado = Laspeyres(serie/f_k)
+    resultado = LaspeyresEncadenado().calcular(_canasta_2013, _serie_2013, "", tipo="inpc")
+
+    f_k = _df_canasta_2013["encadenamiento"].astype(float)
+    ponderadores = _df_canasta_2013["ponderador"].astype(float)
+    serie_div = _df_serie_2013.divide(f_k, axis=0)
+    esperado_traslape = (serie_div[_traslape_2013] * ponderadores).sum() / ponderadores.sum()
+
+    inpc_traslape = resultado.df.at[(_traslape_2013, "INPC"), "indice_replicado"]
+    assert inpc_traslape == pytest.approx(esperado_traslape)
+
+
+def test_2013_con_referencia_empalme_ancla_en_traslape():
+    ref = 109.172
+    resultado = LaspeyresEncadenado({"INPC": ref}).calcular(
+        _canasta_2013, _serie_2013, "", tipo="inpc"
+    )
+    inpc_traslape = resultado.df.at[(_traslape_2013, "INPC"), "indice_replicado"]
+    # Con factor_h = ref / i_tramo[traslape], resultado[traslape] = ref
+    assert inpc_traslape == pytest.approx(ref)

@@ -11,7 +11,7 @@ from replica_inpc.api.validacion import (
     validar_variaciones_mensual,
     validar_variaciones_quincenal,
 )
-from replica_inpc.dominio.conversion import a_mensual
+from replica_inpc.dominio.conversion import a_mensual, rebasar
 from replica_inpc.dominio.modelos.resultado import combinar
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal, periodo_desde_str
 from replica_inpc.dominio.tipos import ResultadoCorrida, VersionCanasta
@@ -29,6 +29,7 @@ __all__ = [
     "VersionCanasta",
     "a_mensual",
     "combinar",
+    "rebasar",
     "incidencia_acumulada_anual",
     "incidencia_desde",
     "incidencia_periodica",

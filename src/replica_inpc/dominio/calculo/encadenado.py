@@ -54,17 +54,8 @@ def _calcular_df(
 
     periodos_null = df_serie.isnull().any(axis=0)
 
-    if version == 2013:
-        i_tramo = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
-    elif version == 2024:
-        df_base_traslape = df_serie.divide(f_k, axis=0)
-        i_tramo = df_base_traslape.multiply(ponderadores, axis=0).sum().divide(
-            ponderadores.sum()
-        )
-    else:
-        raise ErrorCalculo(
-            f"LaspeyresEncadenado solo aplica a canastas 2013 y 2024, no a {version}."
-        )
+    df_base = df_serie.divide(f_k, axis=0)
+    i_tramo = df_base.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
 
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
@@ -74,13 +65,7 @@ def _calcular_df(
     elif referencia_empalme is not None and version == 2024:
         factor_h = referencia_empalme / 100
     elif version == 2013:
-        referencia_estimada = (
-            df_serie.multiply(f_k, axis=0)
-            .multiply(ponderadores, axis=0)
-            .sum()
-            .divide(ponderadores.sum())
-        )
-        factor_h = float(referencia_estimada[traslape] / i_tramo[traslape])
+        factor_h = 1.0
     else:
         factor_h = float((ponderadores * f_k).sum() / ponderadores.sum())
 

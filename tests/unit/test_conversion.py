@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from replica_inpc.dominio.conversion import a_mensual
+from replica_inpc.dominio.conversion import a_mensual, rebasar
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -120,3 +120,58 @@ def test_input_mensual_invalido():
     r = ResultadoCalculo(df, "abc")
     with pytest.raises(InvarianteViolado, match="quincenal"):
         a_mensual(r)
+
+
+# ── Tests rebasar ──────────────────────────────────────────────────────────────
+
+_R1 = PeriodoQuincenal(2018, 6, 2)
+_R2 = PeriodoQuincenal(2018, 7, 2)
+_R3 = PeriodoQuincenal(2018, 8, 1)
+
+
+def _resultado_rebasar(*rows: tuple) -> ResultadoCalculo:
+    """Crea ResultadoCalculo quincenal con índice INPC. rows = (periodo, valor)."""
+    filas = [
+        {
+            "periodo": p,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "inpc",
+            "indice_replicado": v,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        }
+        for p, v in rows
+    ]
+    df = pd.DataFrame(filas)
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    return ResultadoCalculo(df, "xyz")
+
+
+def test_rebasar_periodo_base_queda_en_100():
+    r = _resultado_rebasar((_R1, 120.0), (_R2, 133.112), (_R3, 135.0))
+    rb = rebasar(r, _R2)
+    assert rb.df.at[(_R2, "INPC"), "indice_replicado"] == pytest.approx(100.0)
+
+
+def test_rebasar_proporcional():
+    r = _resultado_rebasar((_R1, 120.0), (_R2, 133.112), (_R3, 135.0))
+    rb = rebasar(r, _R2)
+    esperado_r1 = 120.0 * 100.0 / 133.112
+    esperado_r3 = 135.0 * 100.0 / 133.112
+    assert rb.df.at[(_R1, "INPC"), "indice_replicado"] == pytest.approx(esperado_r1)
+    assert rb.df.at[(_R3, "INPC"), "indice_replicado"] == pytest.approx(esperado_r3)
+
+
+def test_rebasar_periodo_inexistente_lanza_error():
+    r = _resultado_rebasar((_R1, 120.0), (_R3, 135.0))
+    with pytest.raises(InvarianteViolado):
+        rebasar(r, _R2)
+
+
+def test_rebasar_id_corrida_incluye_periodo_base():
+    r = _resultado_rebasar((_R2, 133.112), (_R3, 135.0))
+    rb = rebasar(r, _R2)
+    assert str(_R2) in rb.id_corrida

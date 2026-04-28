@@ -6,6 +6,8 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
+_ESTADOS_CON_VALOR = frozenset({"ok", "semi_ok"})
+
 
 def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     """Convierte un ResultadoCalculo quincenal a periodos mensuales.
@@ -102,3 +104,58 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
 
     df_result.sort_index(level="periodo", sort_remaining=False, inplace=True)
     return ResultadoCalculo(df_result, resultado.id_corrida)
+
+
+def rebasar(
+    resultado: ResultadoCalculo,
+    periodo_base: PeriodoQuincenal,
+    valor_base: float = 100.0,
+) -> ResultadoCalculo:
+    """Reexpresa cada índice a una nueva referencia usando el valor replicado propio.
+
+    El denominador es endógeno: usa el valor calculado en `periodo_base`, no un
+    valor oficial externo. Cualquier error en ese denominador se propaga
+    proporcionalmente a todo el tramo.
+
+    Args:
+        resultado: ResultadoCalculo quincenal con el bloque a reexpresar.
+        periodo_base: Periodo cuyo valor replicado será `valor_base` tras el rebase.
+        valor_base: Valor al que se ancla `periodo_base` (default 100.0).
+
+    Returns:
+        ResultadoCalculo con los mismos periodos e índices rescalados.
+
+    Raises:
+        InvarianteViolado: Si `periodo_base` no existe en el resultado, o si el
+            valor en ese periodo no está disponible o es cero.
+    """
+    df = resultado.df.copy()
+    indices_unicos = df.index.get_level_values("indice").unique()
+
+    for indice in indices_unicos:
+        key = (periodo_base, indice)
+        if key not in df.index:
+            raise InvarianteViolado(
+                f"periodo_base {periodo_base} no existe para índice '{indice}'."
+            )
+        fila_base = df.loc[key]  # type: ignore[index]
+        if fila_base["estado_calculo"] not in _ESTADOS_CON_VALOR:
+            raise InvarianteViolado(
+                f"El valor base de '{indice}' en {periodo_base} no está disponible "
+                f"(estado_calculo='{fila_base['estado_calculo']}')."
+            )
+        base = float(fila_base["indice_replicado"])
+        if base == 0:
+            raise InvarianteViolado(
+                f"El valor base de '{indice}' en {periodo_base} es cero."
+            )
+
+        mask_indice = df.index.get_level_values("indice") == indice
+        mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
+        df.loc[mask_indice & mask_valor, "indice_replicado"] = (
+            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
+            * valor_base
+            / base
+        )
+
+    return ResultadoCalculo(df, f"{resultado.id_corrida}-base-{periodo_base}")

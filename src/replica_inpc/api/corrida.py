@@ -4,8 +4,9 @@ from pathlib import Path
 
 from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
+from replica_inpc.dominio.conversion import rebasar
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
-from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
+from replica_inpc.dominio.modelos.resultado import ResultadoCalculo, combinar
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
@@ -28,6 +29,8 @@ from replica_inpc.infraestructura.inegi.fuente_validacion_api import (
     _INDICADORES_QUINCENALES,
     FuenteValidacionApi,
 )
+
+_P_BASE_2018 = PeriodoQuincenal(2018, 7, 2)
 
 
 class _FuenteValidacionNula:
@@ -102,3 +105,56 @@ class Corrida:
             persistir=persistir,
             resultado_referencia=resultado_referencia,
         )
+
+    def ejecutar_historico(
+        self,
+        canasta_2010: str | Path,
+        series_2010: str | Path,
+        canasta_2013: str | Path,
+        series_2013: str | Path,
+        canasta_2018: str | Path,
+        series_2018: str | Path,
+        canasta_2024: str | Path,
+        series_2024: str | Path,
+        tipo: str = "inpc",
+    ) -> ResultadoCalculo:
+        """Calcula el INPC (o subíndices) histórico desde 2Q Dic 2010 hasta hoy.
+
+        Orquesta las cuatro canastas, empalma cada tramo contra el anterior y
+        reexpresa el bloque 2010+2013 a la base `2Q Jul 2018 = 100`.
+
+        El resultado combina:
+        - 2010: Laspeyres directo (2Q Dic 2010 – 2Q Mar 2013)
+        - 2013: Laspeyres con alineación por f_k, empalmado contra 2010
+        - 2018: Laspeyres directo
+        - 2024: Laspeyres encadenado, empalmado contra 2018
+
+        El bloque 2010+2013 se rebasa endógenamente a `2Q Jul 2018 = 100`
+        usando el valor replicado propio en ese periodo.
+
+        Args:
+            canasta_2010: Ruta al CSV de ponderadores 2010.
+            series_2010:  Ruta al CSV de series BIE que cubre 2010–2013.
+            canasta_2013: Ruta al CSV de ponderadores 2013.
+            series_2013:  Ruta al CSV de series BIE que cubre 2013–2018.
+            canasta_2018: Ruta al CSV de ponderadores 2018.
+            series_2018:  Ruta al CSV de series BIE base 2018.
+            canasta_2024: Ruta al CSV de ponderadores 2024.
+            series_2024:  Ruta al CSV de series BIE base 2024.
+            tipo:         Tipo de índice — "inpc" o cualquier columna de clasificación.
+
+        Returns:
+            ResultadoCalculo quincenal con todos los periodos desde 2Q Dic 2010.
+        """
+        r2010 = self.ejecutar(canasta_2010, series_2010, 2010, tipo, persistir=False).resultado
+        r2013 = self.ejecutar(
+            canasta_2013, series_2013, 2013, tipo, persistir=False, resultado_referencia=r2010
+        ).resultado
+        r2018 = self.ejecutar(canasta_2018, series_2018, 2018, tipo, persistir=False).resultado
+        r2024 = self.ejecutar(
+            canasta_2024, series_2024, 2024, tipo, persistir=False, resultado_referencia=r2018
+        ).resultado
+
+        tramo_viejo = combinar([r2010, r2013])
+        tramo_rebased = rebasar(tramo_viejo, _P_BASE_2018)
+        return combinar([tramo_rebased, r2018, r2024])
