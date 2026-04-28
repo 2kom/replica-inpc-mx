@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
@@ -138,11 +140,12 @@ def rebasar(
             raise InvarianteViolado(
                 f"periodo_base {periodo_base} no existe para índice '{indice}'."
             )
-        fila_base = df.loc[key]  # type: ignore[index]
-        if fila_base["estado_calculo"] not in _ESTADOS_CON_VALOR:
+        fila_base: pd.Series[Any] = df.loc[key]  # type: ignore[assignment,index]
+        estado_base = fila_base["estado_calculo"]
+        if estado_base not in _ESTADOS_CON_VALOR:
             raise InvarianteViolado(
                 f"El valor base de '{indice}' en {periodo_base} no está disponible "
-                f"(estado_calculo='{fila_base['estado_calculo']}')."
+                f"(estado_calculo='{estado_base}')."
             )
         base = float(fila_base["indice_replicado"])
         if base == 0:
