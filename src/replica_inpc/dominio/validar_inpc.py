@@ -10,6 +10,7 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.modelos.validacion import (
     DiagnosticoFaltantes,
     ReporteDetalladoValidacion,
+    ReporteValidacionIndices,
     ResumenValidacion,
 )
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -391,25 +392,88 @@ def _validar_sin_canasta(
     )
 
 
+def _validar_indices(
+    resultado: ResultadoCalculo,
+    inegi: Mapping[str, Mapping[PeriodoQuincenal | PeriodoMensual, float | None]],
+) -> ReporteValidacionIndices:
+    tipo = resultado.df["tipo"].iloc[0]
+    indices = resultado.df.index.get_level_values("indice").unique()
+    periodos = resultado.df.index.get_level_values("periodo").unique()
+    res_lookup = resultado.df[
+        ["estado_calculo", "indice_replicado", "motivo_error", "version"]
+    ].to_dict("index")
+
+    filas = []
+    for indice in indices:
+        inegi_indice = inegi.get(indice, {})
+        for periodo in periodos:
+            row = res_lookup[(periodo, indice)]
+            estado_calculo = row["estado_calculo"]
+            indice_replicado = row["indice_replicado"]
+            tolerancia = _TOLERANCIAS[int(row["version"])]
+
+            indice_inegi: float | None = None
+            error_absoluto: float | None = None
+            error_relativo: float | None = None
+
+            if periodo not in inegi_indice:
+                estado_validacion = "fuera_de_rango_inegi"
+            else:
+                indice_inegi = inegi_indice[periodo]
+                if indice_inegi is None or estado_calculo not in {"ok", "semi_ok"}:
+                    estado_validacion = "no_disponible"
+                    indice_inegi = float("nan") if indice_inegi is None else indice_inegi
+                else:
+                    indice_inegi_val = float(indice_inegi)
+                    error_absoluto_val = abs(indice_replicado - indice_inegi_val)  # type: ignore[operator]
+                    error_relativo_val = error_absoluto_val / abs(indice_inegi_val)
+                    estado_validacion = (
+                        "ok" if error_absoluto_val <= tolerancia else "diferencia_detectada"
+                    )
+                    error_absoluto = error_absoluto_val
+                    error_relativo = error_relativo_val
+
+            filas.append(
+                {
+                    "version": int(row["version"]),
+                    "tipo": tipo,
+                    "indice_replicado": indice_replicado,
+                    "indice_inegi": indice_inegi,
+                    "error_absoluto": error_absoluto,
+                    "error_relativo": error_relativo,
+                    "estado_calculo": estado_calculo,
+                    "motivo_error": row["motivo_error"],
+                    "estado_validacion": estado_validacion,
+                }
+            )
+
+    index_reporte = pd.MultiIndex.from_tuples(
+        [(p, ind) for ind in indices for p in periodos],
+        names=["periodo", "indice"],
+    )
+    df_reporte = pd.DataFrame(filas, index=index_reporte)
+    return ReporteValidacionIndices(df_reporte)
+
+
 def validar_mensual(
     resultado: ResultadoCalculo,
     inegi: Mapping[str, Mapping[PeriodoMensual, float | None]],
-) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+) -> ReporteValidacionIndices:
     """Valida un ResultadoCalculo mensual contra índices mensuales del INEGI.
 
-    No requiere canasta ni serie — columnas de cobertura quedan en NaN.
-    DiagnosticoFaltantes siempre vacío. Ver docs/diseño.md §5.11.
+    Compara fila por fila y regresa un reporte único, análogo a validación de
+    variaciones. Ver docs/diseño.md §5.11.
     """
-    return _validar_sin_canasta(resultado, inegi)  # type: ignore[arg-type]
+    return _validar_indices(resultado, inegi)  # type: ignore[arg-type]
 
 
 def validar_quincenal_resultado(
     resultado: ResultadoCalculo,
     inegi: Mapping[str, Mapping[PeriodoQuincenal, float | None]],
-) -> tuple[ResumenValidacion, ReporteDetalladoValidacion, DiagnosticoFaltantes]:
+) -> ReporteValidacionIndices:
     """Valida un ResultadoCalculo quincenal sin canasta/serie.
 
-    Columnas de cobertura quedan en NaN. DiagnosticoFaltantes siempre vacío.
-    Ver docs/diseño.md §6.2.
+    Compara fila por fila y regresa un reporte único, análogo a validación de
+    variaciones. Ver docs/diseño.md §6.2.
     """
-    return _validar_sin_canasta(resultado, inegi)  # type: ignore[arg-type]
+    return _validar_indices(resultado, inegi)  # type: ignore[arg-type]

@@ -437,6 +437,73 @@ class ReporteValidacionVariaciones:
         return self.como_tabla()._repr_html_()  # type: ignore[operator]
 
 
+class ReporteValidacionIndices:
+    """Detalle por periodo de validación de índices replicados vs INEGI.
+
+    Args:
+        df: DataFrame con índice MultiIndex `(periodo, indice)`.
+
+    Raises:
+        InvarianteViolado: Si el DataFrame está vacío, si el índice tiene
+            duplicados o si `estado_validacion` contiene valores inválidos.
+    """
+
+    def __init__(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise InvarianteViolado(
+                "El DataFrame de ReporteValidacionIndices no puede estar vacío."
+            )
+        if df.index.duplicated().any():
+            raise InvarianteViolado(
+                "El índice de ReporteValidacionIndices no puede tener duplicados."
+            )
+        if (
+            not df["estado_validacion"]
+            .isin(
+                {
+                    "ok",
+                    "diferencia_detectada",
+                    "no_disponible",
+                    "fuera_de_rango_inegi",
+                }
+            )
+            .all()
+        ):
+            raise InvarianteViolado(
+                "La columna 'estado_validacion' debe contener solo los valores "
+                "'ok', 'diferencia_detectada', 'no_disponible' o 'fuera_de_rango_inegi'."
+            )
+        self._df = df
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df
+
+    def como_tabla(self, ancho: bool = False) -> pd.DataFrame:
+        if not ancho:
+            return self._df
+
+        indices = self._df.index.get_level_values("indice").unique()
+        partes = []
+        for indice in indices:
+            df_ind: pd.DataFrame = self._df.xs(indice, level="indice")  # type: ignore[assignment]
+            cols = {
+                "indice_replicado": f"{indice}_indice_replicado",
+                "indice_inegi": f"{indice}_indice_inegi",
+                "error_absoluto": f"{indice}_error_absoluto",
+                "error_relativo": f"{indice}_error_relativo",
+                "estado_validacion": f"{indice}_estado_validacion",
+            }
+            partes.append(df_ind[list(cols.keys())].rename(columns=cols).T)
+
+        resultado = pd.concat(partes)
+        resultado.index.name = "indice"
+        return resultado
+
+    def _repr_html_(self) -> str:
+        return self.como_tabla()._repr_html_()  # type: ignore[operator]
+
+
 class ResumenValidacionIncidencias:
     """Resumen agregado de la validación de incidencias mensuales vs INEGI.
 
