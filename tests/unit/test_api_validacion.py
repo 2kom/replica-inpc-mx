@@ -8,6 +8,7 @@ import pytest
 from replica_inpc.api.validacion import validar_mensual, validar_quincenal
 from replica_inpc.dominio.errores import ErrorConfiguracion
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
+from replica_inpc.dominio.modelos.validacion import ReporteValidacionIndices
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 _ID = str(uuid.uuid4())
@@ -60,22 +61,16 @@ class TestValidarMensual:
         mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi", return_value=mock_fuente)
 
         r = _resultado_mensual([_PM1])
-        resumen, reporte, diag = validar_mensual(r, _TOKEN)
+        reporte = validar_mensual(r, _TOKEN)
 
-        assert resumen is not None
-        assert reporte is not None
-        assert diag is not None
+        assert isinstance(reporte, ReporteValidacionIndices)
 
-    def test_acepta_resultado_quincenal_convierte(self, mocker):
-        mock_fuente = mocker.MagicMock()
-        mock_fuente.obtener.return_value = {"INPC": {_PM1: 103.5}}
-        mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi", return_value=mock_fuente)
+    def test_rechaza_resultado_quincenal(self, mocker):
+        mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi")
 
         r = _resultado_quincenal([_PQ1, _PQ2])
-        resumen, _, _ = validar_mensual(r, _TOKEN)
-
-        periodos_validados = resumen.df.loc[_ID, "periodo_inicio"]
-        assert isinstance(periodos_validados, PeriodoMensual)
+        with pytest.raises(ErrorConfiguracion):
+            validar_mensual(r, _TOKEN)
 
     def test_construye_fuente_con_token_y_tipo(self, mocker):
         mock_cls = mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi")
@@ -105,11 +100,9 @@ class TestValidarQuincenal:
         mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi", return_value=mock_fuente)
 
         r = _resultado_quincenal([_PQ1])
-        resumen, reporte, diag = validar_quincenal(r, _TOKEN)
+        reporte = validar_quincenal(r, _TOKEN)
 
-        assert resumen is not None
-        assert reporte is not None
-        assert diag is not None
+        assert isinstance(reporte, ReporteValidacionIndices)
 
     def test_rechaza_resultado_mensual(self, mocker):
         mocker.patch("replica_inpc.api.validacion.FuenteValidacionApi")
