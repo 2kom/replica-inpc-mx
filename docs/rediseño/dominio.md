@@ -284,3 +284,82 @@ Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicada
 
 ## Funciones de dominio
 
+### Transformaciones de ResultadoIndice
+
+Archivo: `dominio/conversion.py`.
+
+#### empalmar — MODIFICADO
+
+Reemplaza a `combinar`.
+
+```python
+def empalmar(
+    resultados: list[ResultadoIndice],
+    forzar: bool = False,
+) -> ResultadoIndice:
+```
+
+- `forzar=False` (default): lanza `InvarianteViolado` si `periodo_base` no es homogéneo entre inputs
+- `forzar=True`: permite mezcla de escalas distintas + emite `UserWarning` describiendo qué `periodo_base` tiene cada tramo
+- Concatena `.manifiesto` de cada tramo
+- Aplica `RENOMBRES_INDICES` (`correspondencia_canastas.py`) para normalizar nombres de categorías entre versiones
+- Propaga `.resumen`, `.reporte`, `.diagnostico` (merge automático)
+
+> **Nota:** para normalización manual de categorías antes de empalmar, ver `normalizar_categorias` en `api/indices.py` — pendiente de agregar.
+
+#### rebasar
+
+```python
+def rebasar(
+    resultado: ResultadoIndice,
+    periodo_base: PeriodoQuincenal,
+    valor_base: float = 100.0,
+) -> ResultadoIndice:
+```
+
+Sin cambio de lógica respecto a v1. Setea `.periodo_base` en el `ResultadoIndice` devuelto. Ver diseño.md §5.13.1.
+
+#### a_mensual
+
+```python
+def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
+```
+
+Sin cambio de lógica. Tipo actualizado: `ResultadoCalculo` → `ResultadoIndice`. Ver diseño.md §5.13.
+
+---
+
+### Cálculo de variaciones
+
+Mueven de `dominio/variaciones.py` → `dominio/calculo/variaciones.py`. Lógica sin cambio; tipo de `resultado` actualizado: `ResultadoCalculo` → `ResultadoIndice`.
+
+| Función | Descripción | Referencia |
+|---|---|---|
+| `variacion_periodica(resultado, frecuencia)` | variación periodo a periodo | diseño.md §5.12 |
+| `variacion_acumulada_anual(resultado)` | acumulado ene→actual vs dic año anterior | diseño.md §5.12 |
+| `variacion_desde(resultado, desde, hasta, incluir_parciales)` | variación entre dos periodos | diseño.md §5.12 |
+
+---
+
+### Cálculo de incidencias
+
+Mueven de `dominio/incidencias.py` → `dominio/calculo/incidencias.py`. Lógica sin cambio; tipos de `inpc` y `clasificacion` actualizados: `ResultadoCalculo` → `ResultadoIndice`.
+
+| Función | Descripción | Referencia |
+|---|---|---|
+| `incidencia_periodica(inpc, clasificacion, canastas, frecuencia)` | incidencia periodo a periodo | diseño.md §5.17 |
+| `incidencia_acumulada_anual(inpc, clasificacion, canastas)` | acumulado ene→actual | diseño.md §5.17 |
+| `incidencia_desde(inpc, clasificacion, canastas, desde, hasta)` | incidencia entre dos periodos | diseño.md §5.17 |
+
+---
+
+### Validación interna
+
+Privadas — llamadas solo desde `api/validaciones.py`. Lógica sin cambio; tipo de retorno actualizado: objetos sueltos → `ValidacionX` correspondiente.
+
+| Función | Archivo | Devuelve | Referencia |
+|---|---|---|---|
+| `validar_inpc` | `dominio/validar_inpc.py` | `ValidacionIndice` | diseño.md §5.11 |
+| `validar_variaciones` | `dominio/validar_variaciones.py` | `ValidacionVariacion` | diseño.md §5.16 |
+| `validar_incidencias` | `dominio/validar_incidencias.py` | `ValidacionIncidencia` | diseño.md §5.20 |
+
