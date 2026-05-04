@@ -136,3 +136,151 @@ class ManifestDerivado:
 ---
 
 ## Contratos de datos
+
+### Contratos sin cambio
+
+Sin modificaciones en v2. Ver `docs/diseño.md` para esquema completo.
+
+| Contrato | Archivo | Referencia |
+|---|---|---|
+| `CanastaCanonica` | `dominio/modelos/canasta.py` | diseño.md §5.1 |
+| `SerieNormalizada` | `dominio/modelos/serie.py` | diseño.md §5.2 |
+| `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` | `dominio/periodos.py` | diseño.md §5.3 |
+| `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS` | `dominio/tipos.py` | diseño.md §5.9 |
+| `CalculadorBase` (interfaz interna) | `dominio/calculo/` | diseño.md §5.8 |
+
+---
+
+### Resultado (base) — NUEVO
+
+Clase base abstracta compartida por `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`.
+
+**Interfaz:**
+
+- `.df` — DataFrame interno; escape hatch para análisis externos
+- `.pipe(fn, *args, **kwargs)` — encadenamiento estilo pandas
+- `_repr_html_` — display en Jupyter
+- `.como_tabla(ancho: bool = False)` — vista tabular
+- `.resumen` — abstracto; cada subclase implementa con su propio esquema
+- `.reporte` — abstracto; cada subclase implementa con su propio esquema
+- `.diagnostico` — abstracto; cada subclase implementa con su propio esquema
+
+---
+
+### ResultadoIndice — MODIFICADO
+
+Renombrado desde `ResultadoCalculo`. Hereda de `Resultado`.
+
+**Cambios respecto a v1:**
+
+- Nombre: `ResultadoCalculo` → `ResultadoIndice`
+- Agrega `.periodo_base: PeriodoQuincenal | None` — `None` = escala nativa; seteado por `rebasar()`
+- Agrega `.manifiesto: list[ManifestUnidad]` — un elemento por canasta; `empalmar` concatena listas
+- Implementa `.resumen`, `.reporte`, `.diagnostico`
+
+**`ManifestUnidad` (dataclass embebida):**
+
+```python
+@dataclass
+class ManifestUnidad:
+    id_corrida: str
+    version: VersionCanasta
+    ruta_canasta: Path
+    ruta_series: Path
+    fecha: datetime
+```
+
+**`.resumen`** — equivalente a `ResumenValidacion` v1 sin columnas INEGI: `estado_corrida`, `periodo_inicio`, `periodo_fin`, `version`, `total_nulls`.
+
+**`.reporte`** — equivalente a `ReporteDetalladoValidacion` v1 sin columnas INEGI: cobertura de genéricos y ponderadores por periodo.
+
+**`.diagnostico`** — equivalente a `DiagnosticoFaltantes` v1: genéricos ausentes en series CSV.
+
+---
+
+### ResultadoVariacion — MODIFICADO
+
+Hereda de `Resultado`. Mueve de `dominio/modelos/variacion.py` a `dominio/calculo/variacion.py`.
+
+**Cambios respecto a v1:**
+
+- Hereda de `Resultado` (agrega `.pipe()`, `.resumen`, `.reporte`, `.diagnostico`)
+- Agrega `.manifiesto: ManifestDerivado`
+- Agrega `estado_calculo` en df — alineado con `ResultadoIncidencia` (confirmar en implementación)
+- `.resumen`, `.reporte`, `.diagnostico` con esquemas nuevos — pendiente de definir
+
+**`ManifestDerivado` (dataclass embebida, compartida con `ResultadoIncidencia`):**
+
+```python
+@dataclass
+class ManifestDerivado:
+    id_corrida: str
+    tipo: str
+    descripcion: str  # "mensual", "desde Ene 2015 hasta Dic 2024", etc.
+    fecha: datetime
+```
+
+**Propiedades sin cambio:** `.tipo`, `.descripcion`, `.clase_variacion`, `.periodos_semiok`, `.indices_parciales`.
+
+---
+
+### ResultadoIncidencia — MODIFICADO
+
+Hereda de `Resultado`. Mueve de `dominio/modelos/incidencia.py` a `dominio/calculo/incidencia.py`.
+
+**Cambios respecto a v1:**
+
+- Hereda de `Resultado` (agrega `.pipe()`, `.resumen`, `.reporte`, `.diagnostico`)
+- Agrega `.manifiesto: ManifestDerivado` (misma dataclass que `ResultadoVariacion`)
+- `.resumen`, `.reporte`, `.diagnostico` con esquemas nuevos — pendiente de definir
+
+**Propiedades sin cambio:** `.tipo`, `.frecuencia`, `.clase_incidencia`, `.periodos_semiok`.
+
+---
+
+### Validacion (base) — NUEVO
+
+Clase base abstracta compartida por `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Análoga a `Resultado` pero para comparaciones contra INEGI.
+
+**Interfaz:**
+
+- `.calculo` — abstracto; referencia al `ResultadoX` validado (retorno covariante en cada subclase)
+- `.df` — escape hatch
+- `.pipe(fn, *args, **kwargs)`
+- `_repr_html_`
+- `.como_tabla(ancho: bool = False)`
+- `.resumen` — abstracto; estadísticas agregadas de la comparación
+- `.reporte` — abstracto; comparación detallada periodo × índice
+- `.diagnostico` — abstracto; periodos no verificables por ausencia de datos en API INEGI
+
+---
+
+### ValidacionIndice — NUEVO
+
+Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas por INEGI.
+
+- `.calculo: ResultadoIndice`
+- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
+
+---
+
+### ValidacionVariacion — NUEVO
+
+Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
+
+- `.calculo: ResultadoVariacion`
+- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
+
+---
+
+### ValidacionIncidencia — NUEVO
+
+Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
+
+- `.calculo: ResultadoIncidencia`
+- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
+
+---
+
+## Funciones de dominio
+
