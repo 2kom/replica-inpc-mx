@@ -149,9 +149,7 @@ def rebasar(
             )
         base = float(fila_base["indice_replicado"])
         if base == 0:
-            raise InvarianteViolado(
-                f"El valor base de '{indice}' en {periodo_base} es cero."
-            )
+            raise InvarianteViolado(f"El valor base de '{indice}' en {periodo_base} es cero.")
 
         mask_indice = df.index.get_level_values("indice") == indice
         mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)

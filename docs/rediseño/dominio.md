@@ -86,6 +86,9 @@ ResultadoValidacion  (base)
 class ManifestUnidad:
     id_corrida: str
     version: VersionCanasta
+    tipo: str
+    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
+    periodo_base: PeriodoQuincenal | PeriodoMensual | None
     ruta_canasta: Path
     ruta_series: Path
     fecha: datetime
@@ -151,19 +154,113 @@ Sin modificaciones en v2. Ver `docs/diseño.md` para esquema completo.
 
 ---
 
+### Vista — NUEVO
+
+Wrapper ligero que envuelve un `pd.DataFrame` con MultiIndex `(periodo, X)` y agrega formato ancho. Usado por `.resultado` en todas las subclases de `Resultado` y `Validacion`.
+
+**Decisión:** `Vista` no necesita saber el nombre de columna a pivotar — siempre hace `unstack("periodo")` (primer nivel del MultiIndex). El segundo nivel queda como filas. Funciona para cualquier subclase sin configuración extra.
+
+**Decisión:** `.resultado` devuelve `Vista`, no `pd.DataFrame` plano, para permitir `inpc.resultado.ancho` sin requerir que el usuario conozca la API de pandas (`unstack`).
+
+```python
+import pandas as pd
+
+class Vista:
+    def __init__(self, df: pd.DataFrame, columna: str) -> None:
+        self._df = df
+        self._columna = columna
+
+    def _repr_html_(self) -> str:
+        """Muestra formato largo por default en Jupyter."""
+        return self._df._repr_html_()  # type: ignore[operator]
+
+    @property
+    def largo(self) -> pd.DataFrame:
+        """DataFrame completo en formato largo (MultiIndex + todas las columnas de metadata)."""
+        return self._df
+
+    @property
+    def ancho(self) -> pd.DataFrame:
+        """Solo la columna calculada, pivoteada: índices como filas, periodos como columnas."""
+        return self._df[[self._columna]].unstack("periodo")
+```
+
+---
+
 ### Resultado (base) — NUEVO
 
 Clase base abstracta compartida por `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`.
 
-**Interfaz:**
+**Firma:**
 
-- `.df` — DataFrame interno; escape hatch para análisis externos
-- `.pipe(fn, *args, **kwargs)` — encadenamiento estilo pandas
-- `_repr_html_` — display en Jupyter
-- `.como_tabla(ancho: bool = False)` — vista tabular
-- `.resumen` — abstracto; cada subclase implementa con su propio esquema
-- `.reporte` — abstracto; cada subclase implementa con su propio esquema
-- `.diagnostico` — abstracto; cada subclase implementa con su propio esquema
+```python
+from abc import ABC, abstractmethod
+import pandas as pd
+
+class Resultado(ABC):
+    def __init__(self, df: pd.DataFrame) -> None:
+        """df: solo los valores calculados (indice_replicado / variacion_pp / incidencia_pp), formato largo."""
+        self._df = df
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Resultado mínimo en formato largo. MultiIndex (periodo, indice), solo la columna calculada."""
+        return self._df
+
+    @property
+    @abstractmethod
+    def resultado(self) -> Vista:
+        """Resultado completo con metadata. Largo por default; .ancho para formato pivoteado."""
+        ...
+
+    def pipe(self, fn, *args, **kwargs):
+        """Encadenamiento estilo pandas."""
+        return fn(self, *args, **kwargs)
+
+    @abstractmethod
+    def _repr_html_(self) -> str:
+        """Display en Jupyter. Cada subclase define su propio layout."""
+        ...
+
+    @property
+    @abstractmethod
+    def resumen(self) -> pd.DataFrame:
+        """Vista compacta — calculada desde df + manifiesto. Esquema propio de cada subclase."""
+        ...
+
+    @property
+    @abstractmethod
+    def reporte(self) -> pd.DataFrame:
+        """Detalle de calidad por (periodo, indice). Solo el calculador lo conoce."""
+        ...
+
+    @property
+    @abstractmethod
+    def diagnostico(self) -> pd.DataFrame:
+        """Faltantes o periodos problemáticos. Concatenable vía pd.concat."""
+        ...
+```
+
+**Notas:**
+
+- `self._df` = df mínimo: solo la columna calculada (`indice_replicado` / `variacion_pp` / `incidencia_pp`), MultiIndex `(periodo, indice)`. Se pasa en el constructor de cada subclase vía `super().__init__(df_minimo)`.
+- `.df` = `self._df` — largo mínimo. Mismo dato que `.resultado.ancho` pero en formato largo.
+- `.resultado` = abstracto — cada subclase devuelve `Vista(self._df_completo, columna=...)`.
+- `.resultado.largo` = df completo con metadata. ≠ `.df` (tiene más columnas).
+- `.resultado.ancho` = solo la columna calculada, pivoteada (índices × periodos). Mismos datos que `.df`, formato ancho.
+- `.reporte` = `pd.DataFrame` con MultiIndex `(periodo, indice)`.
+- `.diagnostico` = `pd.DataFrame` plano — lista de faltantes, no pivoteable.
+- `.resumen` = `pd.DataFrame` plano — vista compacta agregada, no pivoteable. Se recalcula cada vez.
+- Cada subclase valida sus invariantes **antes** de llamar `super().__init__(df_minimo)`.
+
+**Responsabilidades:**
+
+| propiedad | responde | granularidad |
+|---|---|---|
+| `.resumen` | ¿funcionó? ¿qué rango? ¿qué versión? | una fila por `ManifestUnidad` |
+| `.resultado` | ¿cuáles son los valores calculados? | `(periodo, indice)` — largo/ancho |
+| `.reporte` | ¿qué tan completo fue cada periodo? | `(periodo, indice)` — cobertura genéricos/ponderadores |
+| `.diagnostico` | ¿cuáles genéricos específicamente faltaron? | fila por genérico ausente |
 
 ---
 
@@ -171,12 +268,22 @@ Clase base abstracta compartida por `ResultadoIndice`, `ResultadoVariacion` y `R
 
 Renombrado desde `ResultadoCalculo`. Hereda de `Resultado`.
 
-**Cambios respecto a v1:**
+**Constructor:**
 
-- Nombre: `ResultadoCalculo` → `ResultadoIndice`
-- Agrega `.periodo_base: PeriodoQuincenal | None` — `None` = escala nativa; seteado por `rebasar()`
-- Agrega `.manifiesto: list[ManifestUnidad]` — un elemento por canasta; `empalmar` concatena listas
-- Implementa `.resumen`, `.reporte`, `.diagnostico`
+```python
+def __init__(
+    self,
+    df: pd.DataFrame,
+    manifiesto: list[ManifestUnidad],
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    periodo_base: PeriodoQuincenal | None = None,
+) -> None:
+```
+
+**Decisión:** `reporte_df` y `diagnostico_df` se pasan al constructor porque no pueden derivarse del `df` después del cálculo — el calculador conoce la cobertura de genéricos y los faltantes en el momento de calcular. `.reporte` y `.diagnostico` los almacenan y devuelven directamente.
+
+**Decisión:** sin property `.id_corrida` — acceso solo vía `.manifiesto[0].id_corrida`. Para resultado empalmado no existe un único `id_corrida`.
 
 **`ManifestUnidad` (dataclass embebida):**
 
@@ -185,16 +292,119 @@ Renombrado desde `ResultadoCalculo`. Hereda de `Resultado`.
 class ManifestUnidad:
     id_corrida: str
     version: VersionCanasta
+    tipo: str
+    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
+    periodo_base: PeriodoQuincenal | PeriodoMensual | None
     ruta_canasta: Path
     ruta_series: Path
     fecha: datetime
 ```
 
-**`.resumen`** — equivalente a `ResumenValidacion` v1 sin columnas INEGI: `estado_corrida`, `periodo_inicio`, `periodo_fin`, `version`, `total_nulls`.
+---
 
-**`.reporte`** — equivalente a `ReporteDetalladoValidacion` v1 sin columnas INEGI: cobertura de genéricos y ponderadores por periodo.
+**`.df`** — heredado de `Resultado`
 
-**`.diagnostico`** — equivalente a `DiagnosticoFaltantes` v1: genéricos ausentes en series CSV.
+`self._df_completo[["indice_replicado"]]` derivado en el constructor. MultiIndex `(periodo, indice)`, columna `indice_replicado`.
+
+---
+
+**`.resultado`** — override de `Resultado`
+
+Devuelve `Vista(self._df_completo, columna="indice_replicado")`.
+
+- **`.resultado.largo`** — df completo con metadata:
+
+  Índice: MultiIndex `(periodo, indice)`
+
+  | columna | tipo | notas |
+  |---|---|---|
+  | `version` | int | versión de canasta |
+  | `tipo` | str | `"inpc"`, `"inflacion componente"`, etc. |
+  | `indice_replicado` | float/NaN | NaN cuando `estado_calculo` no es `ok`/`semi_ok` |
+  | `estado_calculo` | str | `ok`, `semi_ok`, `sin_datos`, `fallida` |
+  | `motivo_error` | str/NaN | NaN cuando `ok`/`semi_ok` |
+
+  **`estado_calculo` catálogo:**
+
+  | valor | significado |
+  |---|---|
+  | `ok` | cálculo completo |
+  | `semi_ok` | mes con solo 1 quincena. Solo producido por `a_mensual()` |
+  | `sin_datos` | algún genérico tiene NaN en el periodo. Renombrado desde `null_por_faltantes` v1 |
+  | `fallida` | fallo en el cálculo |
+
+- **`.resultado.ancho`** — `indice_replicado` pivoteado: índices como filas, periodos como columnas. Mismos datos que `.df`, formato ancho.
+
+---
+
+**`.manifiesto` y `.periodo_base`**
+
+- `.manifiesto: list[ManifestUnidad]` — un elemento por canasta; `empalmar` concatena listas
+- `.periodo_base: PeriodoQuincenal | PeriodoMensual | None` — propiedad derivada del manifiesto:
+  - un único valor distinto en todos los `ManifestUnidad` → devuelve ese valor
+  - `None` en cualquier entrada, o valores mixtos → devuelve `None`
+- `rebasar()` setea `ManifestUnidad.periodo_base` en cada entrada del manifiesto; no es atributo suelto
+
+---
+
+**`.resumen`**
+
+Calculado desde `self._df_completo` + `self._manifiesto`. No se almacena.
+
+Índice: `id_corrida` (una fila por `ManifestUnidad`)
+
+| columna | tipo |
+|---|---|
+| `version` | int |
+| `tipo` | str |
+| `estado_calculo` | str |
+| `periodo_inicio` | `PeriodoQuincenal\|PeriodoMensual` |
+| `periodo_fin` | `PeriodoQuincenal\|PeriodoMensual` |
+
+**`estado_calculo` en resumen:**
+
+| valor | condición |
+|---|---|
+| `ok` | todos los periodos `ok` |
+| `con_advertencias` | al menos un periodo `sin_datos`, ninguno `fallida` |
+| `fallida` | al menos un periodo `fallida` |
+
+---
+
+**`.reporte`** — devuelve `pd.DataFrame`
+
+Índice: MultiIndex `(periodo, indice)`
+
+| columna | tipo |
+|---|---|
+| `version` | int |
+| `estado_calculo` | str |
+| `motivo_error` | str/NaN |
+| `genericos_esperados` | int |
+| `genericos_con_indice` | int |
+| `genericos_sin_indice` | int |
+| `cobertura_genericos_pct` | float |
+| `ponderador_esperado` | float |
+| `ponderador_cubierto` | float |
+
+---
+
+**`.diagnostico`** — devuelve `pd.DataFrame` plano
+
+Mismo schema que `DiagnosticoFaltantes` v1. Concatenable con `pd.concat`.
+
+Índice: entero
+
+| columna | tipo |
+|---|---|
+| `id_corrida` | str |
+| `version` | int |
+| `tipo` | str |
+| `periodo` | PeriodoQuincenal/NaN |
+| `generico` | str |
+| `nivel_faltante` | str (`periodo`, `estructural`) |
+| `tipo_faltante` | str (`indice`, `ponderador`, `indice_imputado`) |
+| `detalle` | str |
 
 ---
 
@@ -299,6 +509,7 @@ def empalmar(
 ) -> ResultadoIndice:
 ```
 
+- Valida que todos los inputs tengan el mismo `tipo` (vía `manifiesto[i].tipo`) → `InvarianteViolado` si no
 - `forzar=False` (default): lanza `InvarianteViolado` si `periodo_base` no es homogéneo entre inputs
 - `forzar=True`: permite mezcla de escalas distintas + emite `UserWarning` describiendo qué `periodo_base` tiene cada tramo
 - Concatena `.manifiesto` de cada tramo
@@ -312,7 +523,7 @@ def empalmar(
 ```python
 def rebasar(
     resultado: ResultadoIndice,
-    periodo_base: PeriodoQuincenal,
+    periodo_base: PeriodoQuincenal | PeriodoMensual,
     valor_base: float = 100.0,
 ) -> ResultadoIndice:
 ```
