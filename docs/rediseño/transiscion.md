@@ -59,38 +59,6 @@ ResultadoValidacion  (base)
 
 ---
 
-### Origen: `## Capa dominio/` -> `### Manifiesto por subtipo`
-
-**`ResultadoIndice.manifiesto: list[ManifestUnidad]`** — combinable:
-
-```python
-@dataclass
-class ManifestUnidad:
-    id_corrida: str
-    version: VersionCanasta
-    tipo: str
-    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
-    periodo_base: PeriodoQuincenal | PeriodoMensual | None
-    ruta_canasta: Path
-    ruta_series: Path
-    fecha: datetime
-```
-
-Un elemento para canasta simple; `empalmar` concatena listas. `resumen` se recalcula desde df merged + manifiestos concatenados.
-
-**`ResultadoVariacion.manifiesto` / `ResultadoIncidencia.manifiesto`: `ManifestDerivado`** — no combinable (terminales):
-
-```python
-@dataclass
-class ManifestDerivado:
-    id_corrida: list[str]   # hereda del ResultadoIndice origen
-    tipo: str
-    descripcion: str  # "mensual", "desde Ene 2015 hasta Dic 2024", etc.
-    fecha: datetime
-```
-
----
-
 ### Origen: `## Capa dominio/` -> `### Estructura de dominio.md`
 
 ```
@@ -139,47 +107,3 @@ Sin modificaciones en v2. Ver `docs/diseño.md` para esquema completo.
 ---
 
 ### Origen: `## Contratos de datos`
-
-### Validacion (base) — NUEVO
-
-Clase base abstracta compartida por `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Análoga a `Resultado` pero para comparaciones contra INEGI.
-
-**Interfaz:**
-
-- `.calculo` — abstracto; referencia al `ResultadoX` validado (retorno covariante en cada subclase)
-- `.df` — escape hatch
-- `.pipe(fn, *args, **kwargs)`
-- `_repr_html_`
-- `.como_tabla(ancho: bool = False)`
-- `.resumen` — abstracto; estadísticas agregadas de la comparación
-- `.reporte` — abstracto; comparación detallada periodo × índice
-- `.diagnostico` — abstracto; periodos no verificables por ausencia de datos en API INEGI
-
----
-
-### ValidacionIndice — NUEVO
-
-Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas por INEGI.
-
-- `.calculo: ResultadoIndice`
-- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
-
----
-
-### ValidacionVariacion — NUEVO
-
-Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
-
-- `.calculo: ResultadoVariacion`
-- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
-
----
-
-### ValidacionIncidencia — NUEVO
-
-Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
-
-- `.calculo: ResultadoIncidencia`
-- `.resumen`, `.reporte`, `.diagnostico` — esquemas pendiente de definir
-
----

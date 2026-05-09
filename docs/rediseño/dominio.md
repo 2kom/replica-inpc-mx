@@ -11,8 +11,8 @@
 
 - `ResultadoCalculo` **eliminado** — renombrado a `ResultadoIndice`.
 - `ResultadoIndice` **no** embebe canasta — canasta es parámetro explícito donde se requiere.
-- `ResultadoIndice` agrega atributo `periodo_base: PeriodoQuincenal | None`.
-- `empalmar` verifica `periodo_base` compatible entre inputs y propaga `reporte`, `diagnostico` y `resumen`.
+- `ResultadoIndice` agrega atributo `periodo_referencia: PeriodoQuincenal | PeriodoMensual | None`.
+- `empalmar` verifica `periodo_referencia` compatible entre inputs y propaga `reporte`, `diagnostico` y `resumen`.
 - `ResumenValidacionVariaciones` eliminado — absorbido por `ValidacionVariacion`.
 - Jerarquía separada en dos bases: `Resultado` y `ResultadoValidacion`.
 - `ValidacionX` contiene un `ResultadoX` vía composición; no hereda de `Resultado`.
@@ -40,9 +40,39 @@ Comparte semántica entre `Resultado*` y `Validacion*`. Se marca `PROVISIONAL` p
 - `.reporte` = vista detallada de la unidad de análisis relevante para el contrato.
 - `.diagnostico` = vista accionable de anomalías, faltantes o combinaciones no verificables.
 
+#### Catálogos
+
+##### `estado_calculo` en `ResultadoIndice` — `.df`, `.resultado.largo`, `.reporte`
+
+| valor | significado |
+|---|---|
+| `ok` | todas las quincenas disponibles; cálculo completo |
+| `parcial` | solo una quincena disponible para el periodo; cálculo procede con calidad reducida |
+| `sin_datos` | sin datos de entrada para esta combinación `(periodo, indice)` |
+| `fallida` | cálculo intentado y fallido por error interno |
+
+##### `estado_calculo` en resultados derivados — `.df`, `.resultado.largo`, `.reporte`, `.diagnostico`
+
+Aplica en `ResultadoVariacion` y `ResultadoIncidencia`.
+
+| valor | significado |
+|---|---|
+| `ok` | todos los periodos fuente tenían `estado_calculo = ok` |
+| `parcial` | al menos un periodo fuente tenía `estado_calculo = parcial`; hereda degradación de calidad |
+
+Invariante: `sin_datos` y `fallida` del fuente producen filas **ausentes** en el derivado — el NaN es implícito en `.resultado.ancho`.
+
+##### `estado_calculo` en `.resumen` de cualquier contrato
+
+Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` > `sin_datos` > `parcial` > `ok`.
+
+| clase | valores posibles |
+|---|---|
+| `ResultadoIndice` | `ok`, `parcial`, `sin_datos`, `fallida` |
+| `ResultadoVariacion`, `ResultadoIncidencia` | `ok`, `parcial` |
+
 #### PENDIENTE
 
-- Definir catálogos compartidos por contexto.
 - Definir contrato NaN compartido.
 - Definir convenciones globales de filas ausentes vs NaN.
 - Confirmar si `Validacion*` preserva exactamente esta semántica o requiere asimetrías explícitas.
@@ -66,7 +96,7 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 - `.df` = resultado mínimo; contiene solo columna calculada en formato largo.
 - `.resultado` = resultado completo; conserva metadata y expone `.largo` y `.ancho`.
 - `.resultado.largo` = DataFrame completo con metadata en formato largo.
-- `.resultado.ancho` = columna calculada pivoteada por `periodo`.
+- `.resultado.ancho` = `.df` en formato ancho; solo la columna calculada, pivoteada por `periodo`.
 - `.pipe(fn, *args, **kwargs)` = encadenamiento estilo pandas sobre objeto resultado.
 - `.como_tabla(ancho: bool = False)` = helper tabular de presentación.
 - `_repr_html_()` = representación rica para notebooks.
@@ -117,26 +147,14 @@ Comparte semántica entre `ResultadoVariacion` y `ResultadoIncidencia`.
 - combinaciones `(periodo, indice)` no computables quedan ausentes del largo.
 - el NaN de esas combinaciones aparece implícito en `.resultado.ancho`.
 
-#### Constructor + invariantes compartidos
-
-```python
-def __init__(
-    self,
-    df: pd.DataFrame,
-    manifiesto: ManifestDerivado,
-    reporte_df: pd.DataFrame,
-    diagnostico_df: pd.DataFrame,
-    indices_parciales: pd.DataFrame | None = None,
-) -> None:
-```
+#### Invariantes compartidos
 
 - `df` no vacío -> `InvarianteViolado` si no.
 - `df` usa MultiIndex `(periodo, indice)` -> `InvarianteViolado` si no.
 - `estado_calculo` solo admite `ok` y `parcial` en `df` -> `InvarianteViolado` si contiene `sin_datos` o `fallida`.
 - columna calculada no contiene NaN en filas presentes -> `InvarianteViolado` si no.
-- `manifiesto.id_corridas`, `.tipo`, `.descripcion` no vacíos -> `InvarianteViolado` si no.
+- `manifiesto.id_corrida`, `.tipo`, `.descripcion` no vacíos -> `InvarianteViolado` si no.
 - `manifiesto.tipo == df["tipo"].iloc[0]` -> `InvarianteViolado` si no.
-- `indices_parciales` solo existe cuando la clase derivada es `"desde"` -> `InvarianteViolado` si no.
 - no existe `empalmar` para resultados derivados; primero se empalma `ResultadoIndice`.
 
 #### `.df`
@@ -165,11 +183,7 @@ def __init__(
 
 #### `.indices_parciales`
 
-| aspecto | contrato |
-|---|---|
-| tipo | `pd.DataFrame \| None` |
-| existe cuando | clase derivada = `"desde"` y hubo ajustes |
-| índice | `indice` |
+Esquema de columnas compartido. Condición de existencia: ver contrato de cada clase.
 
 | columna | tipo | notas |
 |---|---|---|
@@ -181,9 +195,9 @@ def __init__(
 | aspecto | contrato |
 |---|---|
 | tipo | `pd.DataFrame` |
-| índice | `id_corrida` |
-| granularidad | una fila por `ManifestDerivado` |
-| cálculo | derivado desde `_df_completo` + `manifiesto`; no se almacena |
+| índice | entero (`0`) |
+| granularidad | una fila; derivados son terminales |
+| cálculo | calculado bajo demanda; no se almacena |
 
 #### `.reporte`
 
@@ -224,7 +238,7 @@ Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `Validacio
 
 ## Contratos de datos
 
-### Resultado (base) — NUEVO — PROVISIONAL
+### Resultado (base) — NUEVO — CERRADO
 
 Clase base abstracta compartida por `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`.
 
@@ -241,7 +255,7 @@ class Resultado(ABC):
 
 - `df` usa MultiIndex `(periodo, indice)` -> contrato base de resultados.
 - `df` contiene solo columna calculada -> metadata adicional vive en `.resultado.largo`.
-- subclase valida invariantes propios antes de llamar `super().__init__(df)`.
+- subclase llama `super().__init__(df[["columna_calculada"]])`; base almacena solo la columna calculada, no el df completo.
 
 #### `.df`
 
@@ -286,7 +300,95 @@ class Resultado(ABC):
 | existencia | abstracta en la clase base |
 | semántica | ver `Semántica compartida global` |
 
-### ResultadoIndice — MODIFICADO — PROVISIONAL
+### ManifestUnidad — NUEVO — CERRADO
+
+Dataclass de manifiesto para `ResultadoIndice`. Representa un tramo elemental de cálculo y es combinable vía `empalmar`.
+
+> **Asimetría respecto a `ManifestDerivado`:** `ManifestUnidad` es combinable y conserva metadatos de cálculo por tramo. `ManifestDerivado` es terminal y resume el origen ya calculado.
+
+#### Constructor + invariantes
+
+```python
+@dataclass
+class ManifestUnidad:
+    id_corrida: str
+    version: VersionCanasta
+    tipo: str
+    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
+    ruta_canasta: Path
+    ruta_series: Path
+    fecha: datetime
+```
+
+- un elemento representa una corrida elemental sobre una sola canasta.
+- `empalmar` concatena listas de `ManifestUnidad` sin colapsarlas.
+- `tipo`, `version`, `ruta_canasta` y `ruta_series` no son decorativos: forman parte de la trazabilidad del cálculo.
+
+#### Campos
+
+| campo | tipo | contrato |
+|---|---|---|
+| `id_corrida` | str | identificador único de la corrida elemental |
+| `version` | `VersionCanasta` | versión de canasta usada en el tramo |
+| `tipo` | str | tipo de índice calculado |
+| `calculador` | literal | variante concreta del calculador usada en el tramo |
+| `ruta_canasta` | `Path` | origen físico de la canasta usada |
+| `ruta_series` | `Path` | origen físico de las series usadas |
+| `fecha` | `datetime` | marca temporal de la corrida |
+
+#### Uso en contratos
+
+| aspecto | contrato |
+|---|---|
+| dueño | `ResultadoIndice.manifiesto` |
+| cardinalidad | `list[ManifestUnidad]` |
+| resumen | `ResultadoIndice.resumen` recalcula una fila por entrada de manifiesto |
+| empalme | concatena listas y preserva trazabilidad por tramo |
+
+### ManifestDerivado — NUEVO — PROVISIONAL
+
+Dataclass de manifiesto para `ResultadoVariacion` y `ResultadoIncidencia`. Resume el origen de un resultado derivado y no es combinable.
+
+> **Asimetría respecto a `ManifestUnidad`:** `ManifestDerivado` no representa tramos elementales ni conserva rutas o calculador; resume el resultado ya derivado y se trata como terminal.
+
+#### Constructor + invariantes
+
+```python
+@dataclass
+class ManifestDerivado:
+    id_corrida: list[str]
+    tipo: str
+    descripcion: str
+    fecha: datetime
+```
+
+- `id_corrida` hereda los ids de todos los `ResultadoIndice` origen; para `ResultadoIncidencia` concatena IDs de `inpc` y `clasificacion`.
+- no existe operación de `empalmar` sobre resultados derivados.
+- `descripcion` expresa la clase o rango analizado: `"mensual"`, `"desde Ene 2015 hasta Dic 2024"`, etc.
+
+#### Campos
+
+| campo | tipo | contrato |
+|---|---|---|
+| `id_corrida` | `list[str]` | ids de corridas origen; para incidencias: IDs de `inpc` + IDs de `clasificacion` |
+| `tipo` | str | tipo de índice derivado |
+| `descripcion` | str | descripción legible del derivado |
+| `fecha` | `datetime` | marca temporal del derivado |
+
+#### Uso en contratos
+
+| aspecto | contrato |
+|---|---|
+| dueño | `ResultadoVariacion.manifiesto`, `ResultadoIncidencia.manifiesto` |
+| cardinalidad | una instancia por resultado derivado |
+| resumen | `.resumen` produce una fila por `ManifestDerivado` |
+| empalme | no aplica; derivados son terminales |
+
+#### PENDIENTE
+
+- Definir si `id_corrida` debe distinguir entre IDs de `inpc` e IDs de `clasificacion` para trazabilidad explícita en `ResultadoIncidencia`.
+
+### ResultadoIndice — MODIFICADO — CERRADO
 
 Renombrado desde `ResultadoCalculo`. Hereda de `Resultado`.
 
@@ -301,19 +403,32 @@ def __init__(
     manifiesto: list[ManifestUnidad],
     reporte_df: pd.DataFrame,
     diagnostico_df: pd.DataFrame,
-    periodo_base: PeriodoQuincenal | None = None,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
 ) -> None:
 ```
 
 - `df` usa MultiIndex `(periodo, indice)` -> `InvarianteViolado` si no.
 - `df` contiene columna `indice_replicado` -> `InvarianteViolado` si no.
 - `reporte_df` y `diagnostico_df` se pasan al constructor -> no se reconstruyen desde `df` después del cálculo.
-- `.manifiesto` = `list[ManifestUnidad]` -> un elemento por canasta; `empalmar` concatena listas.
-- `ManifestUnidad.periodo_base` registra escala base por tramo.
-- `.periodo_base` se deriva del manifiesto:
-  - un único valor distinto en todas las entradas -> devuelve ese valor
-  - `None` en alguna entrada, o valores mixtos -> devuelve `None`
+- `manifiesto` no vacío -> `InvarianteViolado` si no.
 - acceso a `id_corrida` ocurre vía `.manifiesto`; no existe property única para resultados empalmados.
+
+#### `.manifiesto`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `list[ManifestUnidad]` |
+| cardinalidad | un elemento por canasta; `empalmar` concatena listas |
+| semántica | trazabilidad completa del cálculo por tramo |
+
+#### `.periodo_referencia`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `PeriodoQuincenal \| PeriodoMensual \| None` |
+| semántica | periodo en el que los valores del índice son 100 |
+| origen | parámetro directo del constructor; `rebasar` lo setea en el resultado devuelto |
+| `None` | resultado no rebsado explícitamente; escala natural del cálculo |
 
 #### `.df`
 
@@ -323,7 +438,6 @@ def __init__(
 | índice | MultiIndex `(periodo, indice)` |
 | columnas | `indice_replicado` |
 | formato | largo mínimo heredado de `Resultado` |
-| origen | derivado de `self._df_completo[["indice_replicado"]]` |
 
 #### `.resultado`
 
@@ -347,10 +461,10 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
-| valores | `indice_replicado` pivoteado |
 | filas | índices |
 | columnas | periodos |
-| NaN implícito | no aplica por fila ausente; casos no computados ya pueden existir en largo con `indice_replicado=NaN` |
+| valores | `indice_replicado` |
+| NaN | explícito; `indice_replicado=NaN` cuando `estado_calculo` = `sin_datos` o `fallida` |
 
 #### `.resumen`
 
@@ -359,7 +473,7 @@ def __init__(
 | tipo | `pd.DataFrame` |
 | índice | `id_corrida` |
 | granularidad | una fila por `ManifestUnidad` |
-| cálculo | derivado desde `self._df_completo` + `self._manifiesto`; no se almacena |
+| cálculo | calculado bajo demanda; no se almacena |
 
 | columna | tipo |
 |---|---|
@@ -407,9 +521,11 @@ def __init__(
 | `tipo_faltante` | str |
 | `detalle` | str |
 
-### ResultadoVariacion — MODIFICADO — PROVISIONAL
+### ResultadoVariacion — MODIFICADO — CERRADO
 
 Hereda de `Resultado`. Mueve de `dominio/modelos/variacion.py` a `dominio/calculo/variacion.py`.
+
+> **Asimetría respecto a `ResultadoIndice`:** `.resultado.largo` no contiene `motivo_error`. En derivados, `estado_calculo` solo admite `ok` y `parcial`; las combinaciones no computables del fuente quedan **ausentes** del largo. Si se requiere `motivo_error`, ver `.reporte`.
 
 #### Constructor + invariantes
 
@@ -431,7 +547,11 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
 | columnas | `variacion_pp` |
+| formato | largo |
+| filas | solo combinaciones computables |
 
 #### `.resultado`
 
@@ -453,11 +573,22 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
-| valores | `variacion_pp` pivoteado |
+| filas | índices |
+| columnas | periodos |
+| valores | `variacion_pp` |
+| NaN implícito | combinaciones ausentes del `.df` |
 
 #### `.indices_parciales`
 
-Ver `Semántica compartida de resultados derivados`.
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame \| None` |
+| existe cuando | `clase_variacion == "desde"` y hubo ajustes de periodos |
+| índice | `indice` |
+
+Esquema de columnas: ver `Semántica compartida de resultados derivados`.
+
+Invariante: `indices_parciales is not None` si y solo si `clase_variacion == "desde"` -> `InvarianteViolado` si no.
 
 #### `.resumen`
 
@@ -499,9 +630,11 @@ Ver `Semántica compartida de resultados derivados`.
 | `version_t` | int/NaN |
 | `version_lag` | int/NaN |
 
-### ResultadoIncidencia — MODIFICADO — PROVISIONAL
+### ResultadoIncidencia — MODIFICADO — CERRADO
 
 Hereda de `Resultado`. Mueve de `dominio/modelos/incidencia.py` a `dominio/calculo/incidencia.py`.
+
+> **Asimetría respecto a `ResultadoIndice`:** `.resultado.largo` no contiene `motivo_error`. En derivados, `estado_calculo` solo admite `ok` y `parcial`; las combinaciones no computables del fuente quedan **ausentes** del largo. Si se requiere `motivo_error`, ver `.reporte`.
 
 #### Constructor + invariantes
 
@@ -523,7 +656,11 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
 | columnas | `incidencia_pp` |
+| formato | largo |
+| filas | solo combinaciones computables |
 
 #### `.resultado`
 
@@ -545,11 +682,22 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
-| valores | `incidencia_pp` pivoteado |
+| filas | índices |
+| columnas | periodos |
+| valores | `incidencia_pp` |
+| NaN implícito | combinaciones ausentes del `.df` |
 
 #### `.indices_parciales`
 
-Ver `Semántica compartida de resultados derivados`.
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame \| None` |
+| existe cuando | `clase_incidencia == "desde"` y hubo ajustes de periodos |
+| índice | `indice` |
+
+Esquema de columnas: ver `Semántica compartida de resultados derivados`.
+
+Invariante: `indices_parciales is not None` si y solo si `clase_incidencia == "desde"` -> `InvarianteViolado` si no.
 
 #### `.resumen`
 
@@ -593,7 +741,154 @@ Ver `Semántica compartida de resultados derivados`.
 | `version_t` | int/NaN |
 | `version_lag` | int/NaN |
 
-PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `Validacion*`.
+### Validacion (base) — NUEVO — PROVISIONAL
+
+Clase base abstracta compartida por `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Análoga a `Resultado`, pero para comparaciones contra series publicadas por INEGI.
+
+#### Constructor + invariantes
+
+```python
+from abc import ABC, abstractmethod
+
+class Validacion(ABC):
+    ...
+```
+
+- `.calculo` es abstracto -> cada subclase devuelve el `ResultadoX` validado.
+- `.resumen`, `.reporte` y `.diagnostico` son abstractos -> cada subclase define su esquema propio.
+- `.df`, `.pipe(fn, *args, **kwargs)`, `_repr_html_()` y `.como_tabla(ancho: bool = False)` quedan `PENDIENTE` hasta cerrar si forman parte del contrato común.
+
+#### `.calculo`
+
+| aspecto | contrato |
+|---|---|
+| existencia | abstracta en la clase base |
+| tipo | `ResultadoX` covariante según subclase |
+| semántica | ver `Semántica compartida de Validacion` |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
+#### PENDIENTE
+
+- Confirmar si `Validacion` expone `.df`, `.pipe(fn, *args, **kwargs)`, `_repr_html_()` y `.como_tabla(ancho: bool = False)` como contrato común cerrado.
+
+### ValidacionIndice — NUEVO — PROVISIONAL
+
+Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas por INEGI.
+
+#### `.calculo`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `ResultadoIndice` |
+| semántica | resultado de dominio validado contra series publicadas por INEGI |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | estadísticas agregadas de la comparación |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | comparación detallada por `periodo × indice` |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
+
+### ValidacionVariacion — NUEVO — PROVISIONAL
+
+Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
+
+#### `.calculo`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `ResultadoVariacion` |
+| semántica | resultado de dominio validado contra series publicadas por INEGI |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | estadísticas agregadas de la comparación |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | comparación detallada por `periodo × indice` |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
+
+### ValidacionIncidencia — NUEVO — PROVISIONAL
+
+Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
+
+#### `.calculo`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `ResultadoIncidencia` |
+| semántica | resultado de dominio validado contra series publicadas por INEGI |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | estadísticas agregadas de la comparación |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | comparación detallada por `periodo × indice` |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| estado | `PENDIENTE` |
+| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
 
 ## Funciones de dominio
 
@@ -613,13 +908,16 @@ def empalmar(
 ```
 
 - Valida que todos los inputs tengan el mismo `tipo` (vía `manifiesto[i].tipo`) → `InvarianteViolado` si no
-- `forzar=False` (default): lanza `InvarianteViolado` si `periodo_base` no es homogéneo entre inputs
-- `forzar=True`: permite mezcla de escalas distintas + emite `UserWarning` describiendo qué `periodo_base` tiene cada tramo
-- Concatena `.manifiesto` de cada tramo
+- Regla de `periodo_referencia`:
+  - todos `None` → resultado `None`
+  - mezcla `None` + un único valor explícito → resultado hereda ese valor explícito
+  - `forzar=False` (default): dos valores explícitos **distintos** → `InvarianteViolado`
+  - `forzar=True`: dos valores explícitos distintos → permitido + `UserWarning` describiendo qué `periodo_referencia` tiene cada input
+- Concatena `.manifiesto` de cada input
 - Aplica `RENOMBRES_INDICES` (`correspondencia_canastas.py`) para normalizar nombres de categorías entre versiones
 - Propaga `.resumen`, `.reporte`, `.diagnostico` (merge automático)
 
-> **Restricción:** solo para `ResultadoIndice`. No existe `empalmar` para `ResultadoVariacion` ni `ResultadoIncidencia` — siempre se empalma el `ResultadoIndice` fuente antes de calcular variaciones o incidencias. Tramos con escalas distintas (ej. 2Q Dic 2010 vs 2Q Jul 2018) deben rebsarse a base común antes de empalmar.
+> **Restricción:** solo para `ResultadoIndice`. No existe `empalmar` para `ResultadoVariacion` ni `ResultadoIncidencia` — siempre se empalma el `ResultadoIndice` fuente antes de calcular variaciones o incidencias.
 
 > **Nota:** para normalización manual de categorías antes de empalmar, ver `normalizar_categorias` en `api/indices.py` — pendiente de agregar.
 
@@ -628,12 +926,12 @@ def empalmar(
 ```python
 def rebasar(
     resultado: ResultadoIndice,
-    periodo_base: PeriodoQuincenal | PeriodoMensual,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual,
     valor_base: float = 100.0,
 ) -> ResultadoIndice:
 ```
 
-Sin cambio de lógica respecto a v1. Setea `.periodo_base` en el `ResultadoIndice` devuelto. Ver diseño.md §5.13.1.
+Sin cambio de lógica respecto a v1. Setea `.periodo_referencia` en el `ResultadoIndice` devuelto. Ver diseño.md §5.13.1.
 
 #### a_mensual
 
@@ -660,6 +958,17 @@ Mueven de `dominio/variaciones.py` → `dominio/calculo/variaciones.py`. Lógica
 ### Cálculo de incidencias
 
 Mueven de `dominio/incidencias.py` → `dominio/calculo/incidencias.py`. Lógica sin cambio; tipos de `inpc` y `clasificacion` actualizados: `ResultadoCalculo` → `ResultadoIndice`.
+
+#### Precondición compartida
+
+`inpc.periodo_referencia == clasificacion.periodo_referencia` → `InvarianteViolado` si no.
+
+Ambos deben estar en la misma escala de referencia. Si ambos son `None`, se asume misma escala — responsabilidad del llamador.
+
+#### Proveniencia en `ManifestDerivado`
+
+`id_corrida` concatena IDs de los manifiestos de `inpc` y `clasificacion`:
+`inpc.manifiesto[*].id_corrida + clasificacion.manifiesto[*].id_corrida`.
 
 | Función | Descripción | Referencia |
 |---|---|---|
