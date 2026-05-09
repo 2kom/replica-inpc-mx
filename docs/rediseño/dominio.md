@@ -213,7 +213,128 @@ class Resultado(ABC):
 | existencia | abstracta en la clase base |
 | semántica | ver `Semántica compartida global` |
 
-PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `Resultado`, `ResultadoIndice`, `ResultadoVariacion`, `ResultadoIncidencia` y `Validacion*`.
+### ResultadoIndice — MODIFICADO — PROVISIONAL
+
+Renombrado desde `ResultadoCalculo`. Hereda de `Resultado`.
+
+> **Asimetría respecto a resultados derivados:** `ResultadoIndice.resultado.largo` conserva filas con `indice_replicado=NaN` cuando `estado_calculo` es `sin_datos` o `fallida`. En derivados, esas combinaciones tienden a quedar ausentes del largo y el NaN aparece implícito en `.resultado.ancho`.
+
+#### Constructor + invariantes
+
+```python
+def __init__(
+    self,
+    df: pd.DataFrame,
+    manifiesto: list[ManifestUnidad],
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    periodo_base: PeriodoQuincenal | None = None,
+) -> None:
+```
+
+- `df` usa MultiIndex `(periodo, indice)` -> `InvarianteViolado` si no.
+- `df` contiene columna `indice_replicado` -> `InvarianteViolado` si no.
+- `reporte_df` y `diagnostico_df` se pasan al constructor -> no se reconstruyen desde `df` después del cálculo.
+- `.manifiesto` = `list[ManifestUnidad]` -> un elemento por canasta; `empalmar` concatena listas.
+- `ManifestUnidad.periodo_base` registra escala base por tramo.
+- `.periodo_base` se deriva del manifiesto:
+  - un único valor distinto en todas las entradas -> devuelve ese valor
+  - `None` en alguna entrada, o valores mixtos -> devuelve `None`
+- acceso a `id_corrida` ocurre vía `.manifiesto`; no existe property única para resultados empalmados.
+
+#### `.df`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| columnas | `indice_replicado` |
+| formato | largo mínimo heredado de `Resultado` |
+| origen | derivado de `self._df_completo[["indice_replicado"]]` |
+
+#### `.resultado`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `Vista` |
+| columna calculada | `indice_replicado` |
+| largo/ancho | ver `Semántica compartida de Resultado` |
+
+##### `.resultado.largo`
+
+| columna | tipo | NaN cuando | notas |
+|---|---|---|---|
+| `version` | int | nunca | versión de canasta |
+| `tipo` | str | nunca | `"inpc"`, `"inflacion componente"`, etc. |
+| `indice_replicado` | float | `estado_calculo` = `sin_datos` o `fallida` | |
+| `estado_calculo` | str | nunca | `ok`, `parcial`, `sin_datos`, `fallida` |
+| `motivo_error` | str | `estado_calculo` = `ok` o `parcial` | |
+
+##### `.resultado.ancho`
+
+| aspecto | contrato |
+|---|---|
+| valores | `indice_replicado` pivoteado |
+| filas | índices |
+| columnas | periodos |
+| NaN implícito | no aplica por fila ausente; casos no computados ya pueden existir en largo con `indice_replicado=NaN` |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | `id_corrida` |
+| granularidad | una fila por `ManifestUnidad` |
+| cálculo | derivado desde `self._df_completo` + `self._manifiesto`; no se almacena |
+
+| columna | tipo |
+|---|---|
+| `version` | int |
+| `tipo` | str |
+| `estado_calculo` | str |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+
+| columna | tipo |
+|---|---|
+| `version` | int |
+| `estado_calculo` | str |
+| `motivo_error` | str/NaN |
+| `genericos_esperados` | int |
+| `genericos_con_indice` | int |
+| `genericos_sin_indice` | int |
+| `cobertura_genericos_pct` | float |
+| `ponderador_esperado` | float |
+| `ponderador_cubierto` | float |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | entero |
+| compatibilidad | mismo schema que `DiagnosticoFaltantes` v1; concatenable con `pd.concat` |
+
+| columna | tipo |
+|---|---|
+| `id_corrida` | str |
+| `version` | int |
+| `tipo` | str |
+| `periodo` | `PeriodoQuincenal`/NaN |
+| `generico` | str |
+| `nivel_faltante` | str |
+| `tipo_faltante` | str |
+| `detalle` | str |
+
+PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `ResultadoVariacion`, `ResultadoIncidencia` y `Validacion*`.
 
 ## Funciones de dominio
 
