@@ -102,7 +102,7 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 - `.df` = resultado mínimo; contiene solo columna calculada en formato largo.
 - `.resultado` = resultado completo; conserva metadata y expone `.largo` y `.ancho`.
 - `.resultado.largo` = DataFrame completo con metadata en formato largo.
-- `.resultado.ancho` = `.df` en formato ancho; solo la columna calculada, pivoteada por `periodo`.
+- `.resultado.ancho` = columnas clave pivoteadas por `periodo`; una columna para `Resultado*`, múltiples para `Validacion*`.
 - `.pipe(fn, *args, **kwargs)` = encadenamiento estilo pandas sobre objeto resultado.
 - `_repr_html_()` = representación rica para notebooks.
 
@@ -119,23 +119,22 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 import pandas as pd
 
 class Vista:
-    def __init__(self, df: pd.DataFrame, columna: str) -> None:
+    def __init__(self, df: pd.DataFrame, columnas: list[str]) -> None:
         self._df = df
-        self._columna = columna
+        self._columnas = columnas
 
     def _repr_html_(self) -> str:
-        """Muestra formato largo por default en Jupyter."""
         return self._df._repr_html_()  # type: ignore[operator]
 
     @property
     def largo(self) -> pd.DataFrame:
-        """DataFrame completo en formato largo (MultiIndex + todas las columnas de metadata)."""
         return self._df
 
     @property
     def ancho(self) -> pd.DataFrame:
-        """Solo la columna calculada, pivoteada: índices como filas, periodos como columnas."""
-        return self._df[[self._columna]].unstack("periodo")
+        return self._df[self._columnas].unstack("periodo")
+        # lista de 1 columna → pivot simple (Resultado*)
+        # lista de N columnas → MultiIndex cols (columna, periodo) (Validacion*)
 ```
 
 #### PENDIENTE
@@ -228,12 +227,12 @@ Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `Validacio
 
 | propiedad | tipo | significado |
 |---|---|---|
-| `.calculo` | `ResultadoX` | resultado validado sobre el que opera la validación |
+| `.resultado` | `ResultadoX` | `ResultadoX` validado; covariante según subclase |
 | `_repr_html_()` | HTML | representación rica para notebooks; cada subclase decide qué mostrar |
 
 #### Semántica de propiedades de `Validacion`
 
-- `.calculo` = resultado de dominio que sirve como entrada y referencia principal de la validación.
+- `.resultado` = resultado de dominio que sirve como entrada y referencia principal de la validación.
 - `.df` = no aplica; validaciones no tienen columna calculada mínima.
 - `.pipe()` = no aplica; validaciones son terminales, no se encadenan.
 - `_repr_html_()` = abstracto en la base; cada subclase define su representación en notebook.
@@ -452,7 +451,7 @@ def __init__(
 | aspecto | contrato |
 |---|---|
 | tipo | `Vista` |
-| columna calculada | `indice_replicado` |
+| columnas | `["indice_replicado"]` |
 | largo/ancho | ver `Semántica compartida de Resultado` |
 
 ##### `.resultado.largo`
@@ -565,7 +564,7 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
-| columna calculada | `variacion_pp` |
+| columnas | `["variacion_pp"]` |
 
 ##### `.resultado.largo`
 
@@ -674,7 +673,7 @@ def __init__(
 
 | aspecto | contrato |
 |---|---|
-| columna calculada | `incidencia_pp` |
+| columnas | `["incidencia_pp"]` |
 
 ##### `.resultado.largo`
 
@@ -762,12 +761,12 @@ class Validacion(ABC):
     ...
 ```
 
-- `.calculo` es abstracto -> cada subclase devuelve el `ResultadoX` validado.
+- `.resultado` es abstracto -> cada subclase devuelve el `ResultadoX` validado.
 - `.resumen`, `.reporte`, `.diagnostico` y `_repr_html_()` son abstractos -> cada subclase define su esquema propio.
 - sin `.df` — validaciones no tienen columna calculada mínima.
 - sin `.pipe()` — validaciones son terminales; no se encadenan.
 
-#### `.calculo`
+#### `.resultado`
 
 | aspecto | contrato |
 |---|---|
@@ -810,39 +809,105 @@ class Validacion(ABC):
 
 Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas por INEGI.
 
-#### `.calculo`
+#### Constructor + invariantes
+
+- `resultado.manifiesto[i].tipo not in TIPOS_CON_VALIDACION` → `InvarianteViolado`; solo `"inpc"`, `"inflacion componente"` e `"inflacion subcomponente"` tienen series INEGI comparables.
+
+#### `.resultado`
 
 | aspecto | contrato |
 |---|---|
-| tipo | `ResultadoIndice` |
-| semántica | resultado de dominio validado contra series publicadas por INEGI |
+| tipo | `Vista` |
+| columnas | `["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"]` |
+| construcción | `Vista(reporte_df, columnas=[...])` |
+
+- `.resultado.largo` = `reporte_df` completo con comparación INEGI.
+- `.resultado.ancho` = MultiIndex cols `(columna, periodo)`; pivota las cuatro columnas clave.
+- `ResultadoIndice` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+
+> Mismo patrón en `ValidacionVariacion` (`["variacion_pp", "variacion_inegi_pp", "error_absoluto_pp", "estado_validacion"]`) y `ValidacionIncidencia` (`["incidencia_pp", "incidencia_inegi_pp", "error_absoluto_pp", "estado_validacion"]`).
 
 #### `.resumen`
 
+Extiende `ResultadoIndice.resumen`. Mismo índice `id_corrida`, misma granularidad (una fila por `ManifestUnidad`). Agrega columnas de validación:
+
+| columna | tipo | notas |
+|---|---|---|
+| `version` | int | de `ManifestUnidad` |
+| `tipo` | str | de `ManifestUnidad` |
+| `estado_calculo` | str | peor estado del tramo |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | |
+| `n_comparables` | int | periodos efectivamente comparados con dato INEGI |
+| `n_fuera_rango_inegi` | int | periodos sin publicación INEGI para ese indicador |
+| `n_no_disponibles` | int | periodos en rango publicado pero sin valor |
+| `error_absoluto_max` | float / NaN | NaN si `n_comparables == 0` |
+| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `no_disponible` |
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | estadísticas agregadas de la comparación |
+| tipo | `pd.DataFrame` |
+| índice | `id_corrida` |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.reporte`
 
+Extiende `ResultadoIndice.reporte`. Mismo índice `(periodo, indice)`. Agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `version` | int | nunca |
+| `estado_calculo` | str | nunca |
+| `motivo_error` | str/NaN | `estado_calculo = ok` o `parcial` |
+| `genericos_esperados` | int | nunca |
+| `genericos_con_indice` | int | nunca |
+| `genericos_sin_indice` | int | nunca |
+| `cobertura_genericos_pct` | float | nunca |
+| `ponderador_esperado` | float | nunca |
+| `ponderador_cubierto` | float | nunca |
+| `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
+| `indice_inegi` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible}` |
+| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+| `estado_validacion` | str | nunca |
+
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `no_disponible`, `fuera_rango_inegi`.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | comparación detallada por `periodo × indice` |
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.diagnostico`
 
+Subconjunto accionable de `.reporte`: todas las filas donde `estado_validacion != ok`.
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `id_corrida` | str | nunca |
+| `version` | int | nunca |
+| `tipo` | str | nunca |
+| `periodo` | `PeriodoQuincenal \| PeriodoMensual` | nunca |
+| `indice` | str | nunca |
+| `estado_validacion` | str | nunca |
+| `estado_calculo` | str | nunca |
+| `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
+| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+
+`estado_calculo` da contexto: `diferencia_detectada` con `estado_calculo = parcial` es menos grave que con `ok`.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
+| tipo | `pd.DataFrame` |
+| índice | entero |
+| cálculo | bajo demanda; no se almacena |
 
 ### ValidacionVariacion — NUEVO — PROVISIONAL
 
 Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
 
-#### `.calculo`
+#### `.resultado`
 
 | aspecto | contrato |
 |---|---|
@@ -874,7 +939,7 @@ Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas
 
 Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
 
-#### `.calculo`
+#### `.resultado`
 
 | aspecto | contrato |
 |---|---|
@@ -1012,7 +1077,7 @@ Referencia: explicar por qué `Resultado*` y `Validacion*` forman jerarquías se
 
 ### D2. Composición de `ValidacionX` sobre `ResultadoX`
 
-Referencia: explicar por qué `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` contienen un `ResultadoX` vía `.calculo` en vez de heredar de `Resultado`.
+Referencia: explicar por qué `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` contienen un `ResultadoX` vía `.resultado` en vez de heredar de `Resultado`.
 
 ### D3. Asimetría estructural entre `ResultadoIndice` y resultados derivados
 
