@@ -151,6 +151,68 @@ Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `Validacio
 - Confirmar propiedades adicionales compartidas por toda la familia `Validacion*`.
 - Confirmar si `Validacion*` expone también `.df`, `.pipe`, `.como_tabla` y `_repr_html_()` como contrato común.
 
+### Resultado (base) — NUEVO — PROVISIONAL
+
+Clase base abstracta compartida por `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`.
+
+#### Constructor + invariantes
+
+```python
+from abc import ABC, abstractmethod
+import pandas as pd
+
+class Resultado(ABC):
+    def __init__(self, df: pd.DataFrame) -> None:
+        self._df = df
+```
+
+- `df` usa MultiIndex `(periodo, indice)` -> contrato base de resultados.
+- `df` contiene solo columna calculada -> metadata adicional vive en `.resultado.largo`.
+- subclase valida invariantes propios antes de llamar `super().__init__(df)`.
+
+#### `.df`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| columnas | una sola columna calculada |
+| formato | largo |
+| NaN | ver `Semántica compartida global` y `Semántica compartida de Resultado` |
+
+#### `.resultado`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `Vista` |
+| existencia | abstracta en la clase base |
+| responsabilidad de subclase | definir DataFrame completo y columna calculada |
+| largo/ancho | ver `Semántica compartida de Resultado` |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| existencia | abstracta en la clase base |
+| semántica | ver `Semántica compartida global` |
+
 PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `Resultado`, `ResultadoIndice`, `ResultadoVariacion`, `ResultadoIncidencia` y `Validacion*`.
 
 ## Funciones de dominio
