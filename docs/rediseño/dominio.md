@@ -334,7 +334,146 @@ def __init__(
 | `tipo_faltante` | str |
 | `detalle` | str |
 
-PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `ResultadoVariacion`, `ResultadoIncidencia` y `Validacion*`.
+### ResultadoVariacion — MODIFICADO — PROVISIONAL
+
+Hereda de `Resultado`. Mueve de `dominio/modelos/variacion.py` a `dominio/calculo/variacion.py`.
+
+> **Asimetría respecto a `ResultadoIndice`:** `ResultadoVariacion.resultado.largo` contiene solo filas computables. Cuando el cálculo no es posible, la combinación `(periodo, indice)` queda ausente del largo y el NaN aparece implícito en `.resultado.ancho`.
+
+#### Constructor + invariantes
+
+```python
+def __init__(
+    self,
+    df: pd.DataFrame,
+    manifiesto: ManifestDerivado,
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    indices_parciales: pd.DataFrame | None = None,
+) -> None:
+```
+
+- `df` no vacío -> `InvarianteViolado` si no.
+- `df` usa MultiIndex `(periodo, indice)` -> `InvarianteViolado` si no.
+- `df` contiene columnas `tipo`, `clase_variacion`, `variacion_pp`, `estado_calculo` -> `InvarianteViolado` si no.
+- `clase_variacion` es homogénea y pertenece a `{"periodica", "acumulada_anual", "desde"}` -> `InvarianteViolado` si no.
+- `estado_calculo` solo admite `ok` y `parcial` en `df` -> `InvarianteViolado` si contiene `sin_datos` o `fallida`.
+- `variacion_pp` no contiene NaN en `df` -> `InvarianteViolado` si no.
+- `manifiesto.id_corridas`, `.tipo`, `.descripcion` no vacíos -> `InvarianteViolado` si no.
+- `manifiesto.tipo == df["tipo"].iloc[0]` -> `InvarianteViolado` si no.
+- `indices_parciales` solo existe cuando `clase_variacion == "desde"` -> `InvarianteViolado` si no.
+- no existe `empalmar` para `ResultadoVariacion`; primero se empalma `ResultadoIndice`.
+
+#### `.df`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| columnas | `variacion_pp` |
+| formato | largo mínimo heredado de `Resultado` |
+| filas | solo combinaciones computables |
+
+#### `.resultado`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `Vista` |
+| columna calculada | `variacion_pp` |
+| largo/ancho | ver `Semántica compartida de Resultado` |
+
+##### `.resultado.largo`
+
+| columna | tipo | NaN cuando | notas |
+|---|---|---|---|
+| `tipo` | str | nunca | tipo de índice |
+| `clase_variacion` | str | nunca | `periodica`, `acumulada_anual`, `desde` |
+| `variacion_pp` | float | nunca | siempre válido en filas presentes |
+| `estado_calculo` | str | nunca | `ok`, `parcial` |
+| `version_t` | int | nunca | versión de canasta del periodo `t` |
+
+##### `.resultado.ancho`
+
+| aspecto | contrato |
+|---|---|
+| valores | `variacion_pp` pivoteado |
+| filas | índices |
+| columnas | periodos |
+| NaN implícito | combinaciones ausentes por cálculo no computable |
+
+#### `.indices_parciales`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame \| None` |
+| existe cuando | `clase_variacion == "desde"` y hubo ajustes |
+| índice | `indice` |
+
+| columna | tipo | notas |
+|---|---|---|
+| `periodo_desde_real` | `PeriodoQuincenal \| PeriodoMensual` | base real usada |
+| `periodo_hasta_real` | `PeriodoQuincenal \| PeriodoMensual` | cierre real usado |
+
+#### `.resumen`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | `id_corrida` |
+| granularidad | una fila por `ManifestDerivado` |
+| cálculo | derivado desde `_df_completo` + `manifiesto`; no se almacena |
+
+| columna | tipo |
+|---|---|
+| `tipo` | str |
+| `clase_variacion` | str |
+| `descripcion` | str |
+| `estado_calculo` | str |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+
+#### `.reporte`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| cobertura | incluye combinaciones computables y no computables |
+
+| columna | tipo |
+|---|---|
+| `estado_calculo` | str |
+| `motivo_error` | str/NaN |
+| `periodo_lag` | `PeriodoQuincenal \| PeriodoMensual`/NaN |
+| `indice_t` | float/NaN |
+| `indice_lag` | float/NaN |
+| `version_t` | int/NaN |
+| `version_lag` | int/NaN |
+| `cobertura_pct_t` | float/NaN |
+| `cobertura_pct_lag` | float/NaN |
+
+#### `.diagnostico`
+
+| aspecto | contrato |
+|---|---|
+| tipo | `pd.DataFrame` |
+| índice | entero |
+| semántica | subconjunto accionable de `.reporte` con combinaciones no computables |
+
+| columna | tipo |
+|---|---|
+| `id_corrida` | str |
+| `tipo` | str |
+| `clase_variacion` | str |
+| `periodo` | `PeriodoQuincenal \| PeriodoMensual` |
+| `indice` | str |
+| `estado_calculo` | str |
+| `motivo_error` | str |
+| `periodo_lag` | `PeriodoQuincenal \| PeriodoMensual`/NaN |
+| `version_t` | int/NaN |
+| `version_lag` | int/NaN |
+
+PENDIENTE: redistribuir lentamente desde `transiscion.md` los contratos de `ResultadoIncidencia` y `Validacion*`.
 
 ## Funciones de dominio
 
