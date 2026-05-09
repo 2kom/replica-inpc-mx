@@ -1,166 +1,49 @@
 # Rediseño dominio/
 
-## Capa dominio/
+## Alcance
 
-### Decisiones generales
+- Cubre contratos de datos y funciones puras de `dominio/`.
+- Excluye IO, infraestructura, orquestación y API pública.
+- Excluye strings de periodos; dominio recibe solo `Periodo*`.
+- Material transitorio removido de esta sección vive temporalmente en `transiscion.md`.
 
-- Dominio puro: sin IO, sin dependencias externas, sin strings de periodos (recibe solo `Periodo*`)
-- `ResultadoCalculo` **eliminado** — renombrado a `ResultadoIndice` (breaking change v2)
-- `ResultadoIndice` **no** embebe canasta — canasta es parámetro explícito donde se requiere
-- `ResultadoIndice` agrega atributo `periodo_base: PeriodoQuincenal | None` — `None` = escala nativa de la canasta; set por `rebasar()`
-- `empalmar` verifica `periodo_base` compatible entre inputs y propaga reporte/diagnostico/resumen (merge automático)
-- `ResumenValidacionVariaciones` eliminado — dead code desde v1.2.4; absorbido por `ValidacionVariacion`
-- `variaciones.py` e `incidencias.py` se mueven de `dominio/` raíz → `dominio/calculo/`
-- Invariantes siguen lanzando `InvarianteViolado`, nunca `ValueError`
+## Decisiones generales
 
-### Jerarquía de tipos — decisión v2
-
-Dos jerarquías paralelas, independientes:
-
-```
-Resultado  (base)
-├── ResultadoIndice       ← renombrado desde ResultadoCalculo; input de variaciones/incidencias/validaciones
-├── ResultadoVariacion    ← análisis; terminal
-└── ResultadoIncidencia   ← análisis; terminal
-
-ResultadoValidacion  (base)
-├── ValidacionIndice      ← contiene ResultadoIndice
-├── ValidacionVariacion   ← contiene ResultadoVariacion
-└── ValidacionIncidencia  ← contiene ResultadoIncidencia
-```
-
-`ValidacionX` **contiene** un `ResultadoX` vía composición — no hereda de `Resultado`.
-
-**`Resultado` (base)** — mínimo compartido con semántica real:
-- `.df` — DataFrame interno; escape hatch para análisis externos (scipy, networkx, etc.)
-- `.pipe(fn, *args, **kwargs)` — encadenamiento estilo pandas
-- `_repr_html_`
-- `.como_tabla(ancho: bool = False)`
-- `.resumen` — abstracto; cada subclase implementa con su propio esquema
-- `.reporte` — abstracto; cada subclase implementa con su propio esquema
-- `.diagnostico` — abstracto; cada subclase implementa con su propio esquema
-
-**`ResultadoValidacion` (base)** provee:
-- `.calculo` — referencia al `ResultadoX` validado
-- `.resumen`
-- `.reporte`
-- `.diagnostico`
-
-### Inventario de contratos v1 → v2
-
-| Contrato v1 | Destino v2 |
-|---|---|
-| `CanastaCanonica` | sin cambio |
-| `SerieNormalizada` | sin cambio |
-| `PeriodoQuincenal` / `PeriodoMensual` | sin cambio |
-| `ResultadoCalculo` | → `ResultadoIndice` + base `Resultado` |
-| `ResumenValidacion` | → `ResultadoIndice.resumen` (sin columnas INEGI) |
-| `ReporteDetalladoValidacion` | → `ResultadoIndice.reporte` (sin columnas INEGI) |
-| `DiagnosticoFaltantes` | → `ResultadoIndice.diagnostico` (sin cambio de esquema) |
-| `CalculadorBase` / `LaspeyresDirecto` / `LaspeyresEncadenado` | sin cambio (internos) |
-| `tipos.py` | sin cambio |
-| `correspondencia.py` | sin cambio |
-| `ResultadoVariacion` | sin cambio de clase; mueve a `dominio/calculo/`; agrega manifiesto + resumen/reporte/diagnostico propios |
-| `ResumenValidacionVariaciones` | **eliminado** |
-| `ReporteValidacionVariaciones` | → `ValidacionVariacion.reporte` |
-| `ResultadoIncidencia` | sin cambio de clase; mueve a `dominio/calculo/`; agrega manifiesto + resumen/reporte/diagnostico propios |
-| `ResumenValidacionIncidencias` | → `ValidacionIncidencia.resumen` |
-| `ReporteValidacionIncidencias` | → `ValidacionIncidencia.reporte` |
-| `validar_inpc.py` | sin cambio (interno — alimenta `ValidacionIndice`) |
-| `validar_variaciones.py` | sin cambio (interno — alimenta `ValidacionVariacion`) |
-| `validar_incidencias.py` | sin cambio (interno — alimenta `ValidacionIncidencia`) |
-
-**Nuevos en v2:**
-- `Resultado` (base abstracta)
-- `ResultadoValidacion` (base) → `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia`
-- `ManifestUnidad` — dataclass embebida en `ResultadoIndice.manifiesto`
-- `ManifestDerivado` — dataclass embebida en `ResultadoVariacion` / `ResultadoIncidencia`
-- `DiagnosticoValidacion` — cobertura temporal de API INEGI (propuesto §12.14)
-
-### Manifiesto por subtipo
-
-**`ResultadoIndice.manifiesto: list[ManifestUnidad]`** — combinable:
-
-```python
-@dataclass
-class ManifestUnidad:
-    id_corrida: str
-    version: VersionCanasta
-    tipo: str
-    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
-    periodo_base: PeriodoQuincenal | PeriodoMensual | None
-    ruta_canasta: Path
-    ruta_series: Path
-    fecha: datetime
-```
-
-Un elemento para canasta simple; `empalmar` concatena listas. `resumen` se recalcula desde df merged + manifiestos concatenados.
-
-**`ResultadoVariacion.manifiesto` / `ResultadoIncidencia.manifiesto`: `ManifestDerivado`** — no combinable (terminales):
-
-```python
-@dataclass
-class ManifestDerivado:
-    id_corrida: list[str]   # hereda del ResultadoIndice origen
-    tipo: str
-    descripcion: str  # "mensual", "desde Ene 2015 hasta Dic 2024", etc.
-    fecha: datetime
-```
-
-### Estructura de `dominio.md`
-
-```
-## Contratos de datos
-   Resultado (base)
-   ResultadoIndice
-   ResultadoVariacion
-   ResultadoIncidencia
-   ResultadoValidacion (base)
-   ValidacionIndice
-   ValidacionVariacion
-   ValidacionIncidencia
-
-## Funciones de dominio
-   transformaciones de ResultadoIndice  (empalmar, rebasar, a_mensual)
-   cálculo de variaciones               (variacion_periodica, etc.)
-   cálculo de incidencias               (incidencia_periodica, etc.)
-   validación interna                   (validar_inpc, validar_variaciones, validar_incidencias)
-```
-
-### Pendientes — próxima sesión
-
-- Esquemas nuevos de `ResultadoVariacion.resumen` / `.reporte` / `.diagnostico`
-- Esquemas nuevos de `ResultadoIncidencia.resumen` / `.reporte` / `.diagnostico`
-- Contratos completos: `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia`
-- Contrato de `empalmar`: compatibilidad `periodo_base=None` cross-version vs same-version
-- `ResultadoVariacion` — ¿agregar `estado_calculo` en df para consistencia con `ResultadoIncidencia`?
-- Actualizar `api.md`: parámetro `tipo` en `calcular_indice`; firmas completas de `api/incidencias.py`
+- `ResultadoCalculo` **eliminado** — renombrado a `ResultadoIndice`.
+- `ResultadoIndice` **no** embebe canasta — canasta es parámetro explícito donde se requiere.
+- `ResultadoIndice` agrega atributo `periodo_base: PeriodoQuincenal | None`.
+- `empalmar` verifica `periodo_base` compatible entre inputs y propaga `reporte`, `diagnostico` y `resumen`.
+- `ResumenValidacionVariaciones` eliminado — absorbido por `ValidacionVariacion`.
+- Jerarquía separada en dos bases: `Resultado` y `ResultadoValidacion`.
+- `ValidacionX` contiene un `ResultadoX` vía composición; no hereda de `Resultado`.
+- Invariantes lanzan `InvarianteViolado`, nunca `ValueError`.
 
 ---
 
-## Contratos de datos
+## Semántica compartida
 
-### Contratos sin cambio
+### Mapa de propiedades
 
-Sin modificaciones en v2. Ver `docs/diseño.md` para esquema completo.
+| propiedad | existe en | tipo | significado |
+|---|---|---|---|
+| `.df` | `Resultado*` | `pd.DataFrame` | resultado mínimo en formato largo |
+| `.resultado` | `Resultado*` | `Vista` | resultado completo con metadata; expone formato largo y ancho |
+| `.pipe(fn, *args, **kwargs)` | `Resultado*` | callable | encadenamiento estilo pandas sobre objeto resultado |
+| `.como_tabla(ancho: bool = False)` | `Resultado*` | `pd.DataFrame` | helper tabular de presentación |
+| `_repr_html_()` | `Resultado*` | HTML | representación rica para notebooks |
+| `.resumen` | `Resultado*`, `Validacion*` | `pd.DataFrame` | vista compacta; esquema propio de cada subclase |
+| `.reporte` | `Resultado*`, `Validacion*` | `pd.DataFrame` | detalle; esquema propio de cada subclase |
+| `.diagnostico` | `Resultado*`, `Validacion*` | `pd.DataFrame` | anomalías, faltantes o cobertura; esquema propio de cada subclase |
+| `.calculo` | `Validacion*` | `ResultadoX` | resultado validado sobre el que opera la validación |
 
-| Contrato | Archivo | Referencia |
-|---|---|---|
-| `CanastaCanonica` | `dominio/modelos/canasta.py` | diseño.md §5.1 |
-| `SerieNormalizada` | `dominio/modelos/serie.py` | diseño.md §5.2 |
-| `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` | `dominio/periodos.py` | diseño.md §5.3 |
-| `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS` | `dominio/tipos.py` | diseño.md §5.9 |
-| `CalculadorBase` (interfaz interna) | `dominio/calculo/` | diseño.md §5.8 |
+### Vista compartida de resultados
 
----
+`Vista` envuelve un `pd.DataFrame` con MultiIndex `(periodo, X)` y agrega acceso uniforme a formato largo y ancho.
 
-### Vista — NUEVO
-
-Wrapper ligero que envuelve un `pd.DataFrame` con MultiIndex `(periodo, X)` y agrega formato ancho. Usado por `.resultado` en todas las subclases de `Resultado` y `Validacion`.
-
-**Decisión:** `Vista` no necesita saber el nombre de columna a pivotar — siempre hace `unstack("periodo")` (primer nivel del MultiIndex). El segundo nivel queda como filas. Funciona para cualquier subclase sin configuración extra.
-
-**Decisión:** `.resultado` devuelve `Vista`, no `pd.DataFrame` plano, para permitir `inpc.resultado.ancho` sin requerir que el usuario conozca la API de pandas (`unstack`).
+- `.resultado` devuelve `Vista`, no `pd.DataFrame` plano.
+- `.resultado.largo` devuelve DataFrame completo en formato largo con metadata.
+- `.resultado.ancho` devuelve solo columna calculada, pivoteada por `periodo`.
+- `Vista` usa `unstack("periodo")`; `periodo` se asume como primer nivel del MultiIndex.
 
 ```python
 import pandas as pd
@@ -184,6 +67,16 @@ class Vista:
         """Solo la columna calculada, pivoteada: índices como filas, periodos como columnas."""
         return self._df[[self._columna]].unstack("periodo")
 ```
+
+### PENDIENTE
+
+- Definir catálogos compartidos por contexto.
+- Definir contrato NaN compartido.
+- Definir convenciones canónicas de formato largo/ancho e índices.
+
+---
+
+## Contratos de datos
 
 ---
 
@@ -896,4 +789,3 @@ Privadas — llamadas solo desde `api/validaciones.py`. Lógica sin cambio; tipo
 | `validar_inpc` | `dominio/validar_inpc.py` | `ValidacionIndice` | diseño.md §5.11 |
 | `validar_variaciones` | `dominio/validar_variaciones.py` | `ValidacionVariacion` | diseño.md §5.16 |
 | `validar_incidencias` | `dominio/validar_incidencias.py` | `ValidacionIncidencia` | diseño.md §5.20 |
-
