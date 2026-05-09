@@ -71,10 +71,17 @@ Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` >
 | `ResultadoIndice` | `ok`, `parcial`, `sin_datos`, `fallida` |
 | `ResultadoVariacion`, `ResultadoIncidencia` | `ok`, `parcial` |
 
+#### Contrato NaN global — CERRADO
+
+| clase | `.df` incluye filas `sin_datos`/`fallida` | NaN en columna calculada |
+|---|---|---|
+| `ResultadoIndice` | sí — todas las combinaciones intentadas | explícito; columna calculada `=NaN` cuando `sin_datos` o `fallida` |
+| `ResultadoVariacion`, `ResultadoIncidencia` | no — solo combinaciones computables | implícito en `.resultado.ancho` via unstack |
+
+`ResultadoIndice` conoce qué combinaciones intentó — el calculador conoce los genéricos esperados por canasta. Un intento fallido merece fila, con NaN marcando el fallo. Los derivados no intentan nada con `sin_datos`/`fallida` — simplemente no existe fila computable.
+
 #### PENDIENTE
 
-- Definir contrato NaN compartido.
-- Definir convenciones globales de filas ausentes vs NaN.
 - Confirmar si `Validacion*` preserva exactamente esta semántica o requiere asimetrías explícitas.
 
 ### Semántica compartida de `Resultado` — PROVISIONAL
@@ -88,7 +95,6 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 | `.df` | `pd.DataFrame` | resultado mínimo en formato largo |
 | `.resultado` | `Vista` | resultado completo con metadata; expone formato largo y ancho |
 | `.pipe(fn, *args, **kwargs)` | callable | encadenamiento estilo pandas sobre objeto resultado |
-| `.como_tabla(ancho: bool = False)` | `pd.DataFrame` | helper tabular de presentación |
 | `_repr_html_()` | HTML | representación rica para notebooks |
 
 #### Semántica de propiedades de `Resultado`
@@ -98,7 +104,6 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 - `.resultado.largo` = DataFrame completo con metadata en formato largo.
 - `.resultado.ancho` = `.df` en formato ancho; solo la columna calculada, pivoteada por `periodo`.
 - `.pipe(fn, *args, **kwargs)` = encadenamiento estilo pandas sobre objeto resultado.
-- `.como_tabla(ancho: bool = False)` = helper tabular de presentación.
 - `_repr_html_()` = representación rica para notebooks.
 
 #### Vista compartida de resultados
@@ -215,24 +220,23 @@ Esquema de columnas compartido. Condición de existencia: ver contrato de cada c
 | índice | entero |
 | semántica | subconjunto accionable de `.reporte` con combinaciones no computables |
 
-### Semántica compartida de `Validacion` — PROVISIONAL
+### Semántica compartida de `Validacion` — CERRADO
 
-Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Se marca `PROVISIONAL` porque `Validacion*` aún no tiene contrato definitivo.
+Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`.
 
 #### Mapa de propiedades de `Validacion`
 
 | propiedad | tipo | significado |
 |---|---|---|
 | `.calculo` | `ResultadoX` | resultado validado sobre el que opera la validación |
+| `_repr_html_()` | HTML | representación rica para notebooks; cada subclase decide qué mostrar |
 
 #### Semántica de propiedades de `Validacion`
 
 - `.calculo` = resultado de dominio que sirve como entrada y referencia principal de la validación.
-
-#### PENDIENTE
-
-- Confirmar propiedades adicionales compartidas por toda la familia `Validacion*`.
-- Confirmar si `Validacion*` expone también `.df`, `.pipe`, `.como_tabla` y `_repr_html_()` como contrato común.
+- `.df` = no aplica; validaciones no tienen columna calculada mínima.
+- `.pipe()` = no aplica; validaciones son terminales, no se encadenan.
+- `_repr_html_()` = abstracto en la base; cada subclase define su representación en notebook.
 
 ---
 
@@ -345,7 +349,7 @@ class ManifestUnidad:
 | resumen | `ResultadoIndice.resumen` recalcula una fila por entrada de manifiesto |
 | empalme | concatena listas y preserva trazabilidad por tramo |
 
-### ManifestDerivado — NUEVO — PROVISIONAL
+### ManifestDerivado — NUEVO — CERRADO
 
 Dataclass de manifiesto para `ResultadoVariacion` y `ResultadoIncidencia`. Resume el origen de un resultado derivado y no es combinable.
 
@@ -360,9 +364,13 @@ class ManifestDerivado:
     tipo: str
     descripcion: str
     fecha: datetime
+    inpc_ids: list[str] | None = None
+    clasificacion_ids: list[str] | None = None
 ```
 
-- `id_corrida` hereda los ids de todos los `ResultadoIndice` origen; para `ResultadoIncidencia` concatena IDs de `inpc` y `clasificacion`.
+- `id_corrida` = IDs de todas las corridas origen; para incidencias = `inpc_ids + clasificacion_ids`.
+- `(inpc_ids is None) == (clasificacion_ids is None)` → `InvarianteViolado` si no.
+- `inpc_ids` y `clasificacion_ids` solo se populan para `ResultadoIncidencia`; para variaciones quedan `None`.
 - no existe operación de `empalmar` sobre resultados derivados.
 - `descripcion` expresa la clase o rango analizado: `"mensual"`, `"desde Ene 2015 hasta Dic 2024"`, etc.
 
@@ -370,10 +378,12 @@ class ManifestDerivado:
 
 | campo | tipo | contrato |
 |---|---|---|
-| `id_corrida` | `list[str]` | ids de corridas origen; para incidencias: IDs de `inpc` + IDs de `clasificacion` |
+| `id_corrida` | `list[str]` | ids de todas las corridas origen |
 | `tipo` | str | tipo de índice derivado |
 | `descripcion` | str | descripción legible del derivado |
 | `fecha` | `datetime` | marca temporal del derivado |
+| `inpc_ids` | `list[str] \| None` | IDs de corridas de `inpc`; solo para `ResultadoIncidencia` |
+| `clasificacion_ids` | `list[str] \| None` | IDs de corridas de `clasificacion`; solo para `ResultadoIncidencia` |
 
 #### Uso en contratos
 
@@ -384,9 +394,6 @@ class ManifestDerivado:
 | resumen | `.resumen` produce una fila por `ManifestDerivado` |
 | empalme | no aplica; derivados son terminales |
 
-#### PENDIENTE
-
-- Definir si `id_corrida` debe distinguir entre IDs de `inpc` e IDs de `clasificacion` para trazabilidad explícita en `ResultadoIncidencia`.
 
 ### ResultadoIndice — MODIFICADO — CERRADO
 
@@ -438,6 +445,7 @@ def __init__(
 | índice | MultiIndex `(periodo, indice)` |
 | columnas | `indice_replicado` |
 | formato | largo mínimo heredado de `Resultado` |
+| NaN | `indice_replicado=NaN` cuando `estado_calculo = sin_datos` o `fallida`; filas presentes para todos los intentos |
 
 #### `.resultado`
 
@@ -741,7 +749,7 @@ Invariante: `indices_parciales is not None` si y solo si `clase_incidencia == "d
 | `version_t` | int/NaN |
 | `version_lag` | int/NaN |
 
-### Validacion (base) — NUEVO — PROVISIONAL
+### Validacion (base) — NUEVO — CERRADO
 
 Clase base abstracta compartida por `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Análoga a `Resultado`, pero para comparaciones contra series publicadas por INEGI.
 
@@ -755,8 +763,9 @@ class Validacion(ABC):
 ```
 
 - `.calculo` es abstracto -> cada subclase devuelve el `ResultadoX` validado.
-- `.resumen`, `.reporte` y `.diagnostico` son abstractos -> cada subclase define su esquema propio.
-- `.df`, `.pipe(fn, *args, **kwargs)`, `_repr_html_()` y `.como_tabla(ancho: bool = False)` quedan `PENDIENTE` hasta cerrar si forman parte del contrato común.
+- `.resumen`, `.reporte`, `.diagnostico` y `_repr_html_()` son abstractos -> cada subclase define su esquema propio.
+- sin `.df` — validaciones no tienen columna calculada mínima.
+- sin `.pipe()` — validaciones son terminales; no se encadenan.
 
 #### `.calculo`
 
@@ -790,9 +799,12 @@ class Validacion(ABC):
 | existencia | abstracta en la clase base |
 | semántica | ver `Semántica compartida global` |
 
-#### PENDIENTE
+#### `_repr_html_()`
 
-- Confirmar si `Validacion` expone `.df`, `.pipe(fn, *args, **kwargs)`, `_repr_html_()` y `.como_tabla(ancho: bool = False)` como contrato común cerrado.
+| aspecto | contrato |
+|---|---|
+| existencia | abstracta en la clase base |
+| semántica | cada subclase define qué propiedad expone en notebook |
 
 ### ValidacionIndice — NUEVO — PROVISIONAL
 
@@ -987,3 +999,42 @@ Privadas — llamadas solo desde `api/validaciones.py`. Lógica sin cambio; tipo
 | `validar_inpc` | `dominio/validar_inpc.py` | `ValidacionIndice` | diseño.md §5.11 |
 | `validar_variaciones` | `dominio/validar_variaciones.py` | `ValidacionVariacion` | diseño.md §5.16 |
 | `validar_incidencias` | `dominio/validar_incidencias.py` | `ValidacionIncidencia` | diseño.md §5.20 |
+
+---
+
+## Decisiones
+
+Sección de referencia. Aquí deben vivir explicaciones de diseño y decisiones de estructura que hoy siguen dispersas o estacionadas en `transiscion.md`. No usar esta sección para schemas, invariantes operativos ni tablas de columnas.
+
+### D1. Separación entre resultados de cálculo y resultados de validación
+
+Referencia: explicar por qué `Resultado*` y `Validacion*` forman jerarquías separadas, y qué frontera conceptual resuelve esa separación.
+
+### D2. Composición de `ValidacionX` sobre `ResultadoX`
+
+Referencia: explicar por qué `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` contienen un `ResultadoX` vía `.calculo` en vez de heredar de `Resultado`.
+
+### D3. Asimetría estructural entre `ResultadoIndice` y resultados derivados
+
+Referencia: explicar por qué `ResultadoIndice` conserva filas no computables en `.resultado.largo`, mientras `ResultadoVariacion` y `ResultadoIncidencia` tratan esas combinaciones como ausentes del largo y NaN implícito en ancho.
+
+### D4. Separación entre `ManifestUnidad` y `ManifestDerivado`
+
+Referencia: explicar por qué existen dos contratos de manifiesto, qué problema resuelve cada uno y por qué uno es combinable mientras el otro es terminal.
+
+### D5. Adopción de `periodo_referencia` como contrato explícito
+
+Referencia: explicar por qué `periodo_referencia` vive como atributo explícito de `ResultadoIndice`, y cómo gobierna `rebasar`, `empalmar` e incidencias.
+
+### D6. Reubicación de variaciones e incidencias a `dominio/calculo/`
+
+Referencia: explicar por qué `variaciones.py` e `incidencias.py` se mueven fuera de `dominio/` raíz y qué estructura de responsabilidad expresa ese cambio.
+
+### D7. Absorción, renombre y eliminación de contratos v1
+
+Referencia: explicar solo los cambios no triviales de `v1 -> v2`, por ejemplo:
+
+- `ResultadoCalculo` -> `ResultadoIndice` + `Resultado`
+- `ResumenValidacionVariaciones` eliminado
+- reportes y resúmenes absorbidos por contratos nuevos
+- aparición de `ManifestUnidad` y `ManifestDerivado`
