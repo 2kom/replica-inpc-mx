@@ -22,62 +22,6 @@
 
 ## Semántica compartida
 
-### Mapa de propiedades
-
-| propiedad | existe en | tipo | significado |
-|---|---|---|---|
-| `.df` | `Resultado*` | `pd.DataFrame` | resultado mínimo en formato largo |
-| `.resultado` | `Resultado*` | `Vista` | resultado completo con metadata; expone formato largo y ancho |
-| `.pipe(fn, *args, **kwargs)` | `Resultado*` | callable | encadenamiento estilo pandas sobre objeto resultado |
-| `.como_tabla(ancho: bool = False)` | `Resultado*` | `pd.DataFrame` | helper tabular de presentación |
-| `_repr_html_()` | `Resultado*` | HTML | representación rica para notebooks |
-| `.resumen` | `Resultado*`, `Validacion*` | `pd.DataFrame` | vista compacta; esquema propio de cada subclase |
-| `.reporte` | `Resultado*`, `Validacion*` | `pd.DataFrame` | detalle; esquema propio de cada subclase |
-| `.diagnostico` | `Resultado*`, `Validacion*` | `pd.DataFrame` | anomalías, faltantes o cobertura; esquema propio de cada subclase |
-| `.calculo` | `Validacion*` | `ResultadoX` | resultado validado sobre el que opera la validación |
-
-### Vista compartida de resultados
-
-`Vista` envuelve un `pd.DataFrame` con MultiIndex `(periodo, X)` y agrega acceso uniforme a formato largo y ancho.
-
-- `.resultado` devuelve `Vista`, no `pd.DataFrame` plano.
-- `.resultado.largo` devuelve DataFrame completo en formato largo con metadata.
-- `.resultado.ancho` devuelve solo columna calculada, pivoteada por `periodo`.
-- `Vista` usa `unstack("periodo")`; `periodo` se asume como primer nivel del MultiIndex.
-
-```python
-import pandas as pd
-
-class Vista:
-    def __init__(self, df: pd.DataFrame, columna: str) -> None:
-        self._df = df
-        self._columna = columna
-
-    def _repr_html_(self) -> str:
-        """Muestra formato largo por default en Jupyter."""
-        return self._df._repr_html_()  # type: ignore[operator]
-
-    @property
-    def largo(self) -> pd.DataFrame:
-        """DataFrame completo en formato largo (MultiIndex + todas las columnas de metadata)."""
-        return self._df
-
-    @property
-    def ancho(self) -> pd.DataFrame:
-        """Solo la columna calculada, pivoteada: índices como filas, periodos como columnas."""
-        return self._df[[self._columna]].unstack("periodo")
-```
-
-### PENDIENTE
-
-- Definir catálogos compartidos por contexto.
-- Definir contrato NaN compartido.
-- Definir convenciones canónicas de formato largo/ancho e índices.
-
----
-
-## Contratos de datos
-
 ### Semántica compartida global — PROVISIONAL
 
 Comparte semántica entre `Resultado*` y `Validacion*`. Se marca `PROVISIONAL` porque `Validacion*` aún no tiene contrato definitivo.
@@ -123,10 +67,41 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 - `.resultado` = resultado completo; conserva metadata y expone `.largo` y `.ancho`.
 - `.resultado.largo` = DataFrame completo con metadata en formato largo.
 - `.resultado.ancho` = columna calculada pivoteada por `periodo`.
-- `Vista` usa `unstack("periodo")`; `periodo` se asume como primer nivel del MultiIndex.
 - `.pipe(fn, *args, **kwargs)` = encadenamiento estilo pandas sobre objeto resultado.
 - `.como_tabla(ancho: bool = False)` = helper tabular de presentación.
 - `_repr_html_()` = representación rica para notebooks.
+
+#### Vista compartida de resultados
+
+`Vista` envuelve un `pd.DataFrame` con MultiIndex `(periodo, X)` y agrega acceso uniforme a formato largo y ancho.
+
+- `.resultado` devuelve `Vista`, no `pd.DataFrame` plano.
+- `.resultado.largo` devuelve DataFrame completo en formato largo con metadata.
+- `.resultado.ancho` devuelve solo columna calculada, pivoteada por `periodo`.
+- `Vista` usa `unstack("periodo")`; `periodo` se asume como primer nivel del MultiIndex.
+
+```python
+import pandas as pd
+
+class Vista:
+    def __init__(self, df: pd.DataFrame, columna: str) -> None:
+        self._df = df
+        self._columna = columna
+
+    def _repr_html_(self) -> str:
+        """Muestra formato largo por default en Jupyter."""
+        return self._df._repr_html_()  # type: ignore[operator]
+
+    @property
+    def largo(self) -> pd.DataFrame:
+        """DataFrame completo en formato largo (MultiIndex + todas las columnas de metadata)."""
+        return self._df
+
+    @property
+    def ancho(self) -> pd.DataFrame:
+        """Solo la columna calculada, pivoteada: índices como filas, periodos como columnas."""
+        return self._df[[self._columna]].unstack("periodo")
+```
 
 #### PENDIENTE
 
@@ -150,6 +125,10 @@ Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `Validacio
 
 - Confirmar propiedades adicionales compartidas por toda la familia `Validacion*`.
 - Confirmar si `Validacion*` expone también `.df`, `.pipe`, `.como_tabla` y `_repr_html_()` como contrato común.
+
+---
+
+## Contratos de datos
 
 ### Resultado (base) — NUEVO — PROVISIONAL
 
