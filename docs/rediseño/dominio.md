@@ -863,12 +863,13 @@ Extiende `ResultadoIndice.resumen`. Mismo índice `id_corrida`, misma granularid
 | `estado_calculo` | str | peor estado del tramo |
 | `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | |
 | `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | |
-| `n_comparables` | int | periodos efectivamente comparados con dato INEGI |
+| `n_comparables` | int | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
 | `n_fuera_rango_inegi` | int | periodos sin publicación INEGI para ese indicador |
 | `n_no_disponibles` | int | periodos en rango publicado pero sin valor |
 | `n_diferencia_por_parcial` | int | periodos con diferencia atribuible a datos parciales; `0` para resultados quincenales |
+| `n_sin_calculo` | int | filas con `estado_calculo = sin_datos` o `fallida`; comparación imposible desde nuestro lado |
 | `error_absoluto_max` | float / NaN | NaN si `n_comparables == 0` |
-| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
+| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `sin_calculo`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
 
 | aspecto | contrato |
 |---|---|
@@ -892,11 +893,11 @@ Extiende `ResultadoIndice.reporte`. Mismo índice `(periodo, indice)`. Agrega co
 | `ponderador_esperado` | float | nunca |
 | `ponderador_cubierto` | float | nunca |
 | `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
-| `indice_inegi` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible}` |
+| `indice_inegi` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible, sin_calculo}` |
 | `error_absoluto` | float/NaN | mismo que `indice_inegi` |
 | `estado_validacion` | str | nunca |
 
-Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible`, `fuera_rango_inegi`.
 
 | aspecto | contrato |
 |---|---|
@@ -906,7 +907,7 @@ Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_pa
 
 #### `.diagnostico`
 
-Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible` y `fuera_rango_inegi`.
 
 | columna | tipo | NaN cuando |
 |---|---|---|
@@ -918,7 +919,7 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | `estado_validacion` | str | nunca |
 | `estado_calculo` | str | nunca |
 | `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
-| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 | `error_absoluto` | float/NaN | mismo que `indice_inegi` |
 
 `estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
@@ -932,6 +933,10 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 ### ValidacionVariacion — NUEVO — PROVISIONAL
 
 Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
+
+#### Constructor + invariantes
+
+- `resultado.manifiesto.tipo not in TIPOS_CON_VALIDACION` → `InvarianteViolado`; solo `"inpc"`, `"inflacion componente"` e `"inflacion subcomponente"` tienen series INEGI comparables.
 
 #### `.resultado`
 
@@ -983,7 +988,7 @@ Extiende `ResultadoVariacion.resumen`. Mismo índice `0`, misma granularidad (un
 | `n_comparables` | int | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
 | `n_fuera_rango_inegi` | int | filas sin publicación INEGI para ese indicador/periodo |
 | `n_no_disponibles` | int | filas en rango publicado pero sin valor INEGI |
-| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales |
+| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales; `0` para resultados quincenales |
 | `error_absoluto_max_pp` | float/NaN | NaN si `n_comparables == 0` |
 | `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
 
@@ -1052,6 +1057,10 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 
 Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
 
+#### Constructor + invariantes
+
+- `resultado.manifiesto.tipo not in TIPOS_CON_VALIDACION` → `InvarianteViolado`; solo `"inpc"`, `"inflacion componente"` e `"inflacion subcomponente"` tienen series INEGI comparables.
+
 #### `.resultado`
 
 | aspecto | contrato |
@@ -1102,7 +1111,7 @@ Extiende `ResultadoIncidencia.resumen`. Mismo índice `0`, misma granularidad (u
 | `n_comparables` | int | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
 | `n_fuera_rango_inegi` | int | filas sin publicación INEGI para ese indicador/periodo |
 | `n_no_disponibles` | int | filas en rango publicado pero sin valor INEGI |
-| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales |
+| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales; `0` para resultados quincenales |
 | `error_absoluto_max_pp` | float/NaN | NaN si `n_comparables == 0` |
 | `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
 
