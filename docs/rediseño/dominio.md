@@ -22,9 +22,9 @@
 
 ## Semántica compartida
 
-### Semántica compartida global — PROVISIONAL
+### Semántica compartida global — CERRADO
 
-Comparte semántica entre `Resultado*` y `Validacion*`. Se marca `PROVISIONAL` porque `Validacion*` aún no tiene contrato definitivo.
+Comparte semántica entre `Resultado*` y `Validacion*`.
 
 #### Mapa de propiedades compartidas
 
@@ -80,13 +80,16 @@ Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` >
 
 `ResultadoIndice` conoce qué combinaciones intentó — el calculador conoce los genéricos esperados por canasta. Un intento fallido merece fila, con NaN marcando el fallo. Los derivados no intentan nada con `sin_datos`/`fallida` — simplemente no existe fila computable.
 
-#### PENDIENTE
+#### Asimetrías de `Validacion*` respecto a `Resultado*`
 
-- Confirmar si `Validacion*` preserva exactamente esta semántica o requiere asimetrías explícitas.
+`Validacion*` preserva `.resumen`, `.reporte` y `.diagnostico` con la misma semántica. Las asimetrías son explícitas y están documentadas en `Semántica compartida de Validacion`:
 
-### Semántica compartida de `Resultado` — PROVISIONAL
+- sin `.df` — validaciones no tienen columna calculada mínima.
+- sin `.pipe()` — validaciones son terminales; no se encadenan.
 
-Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`. Se marca `PROVISIONAL` mientras se redistribuyen los contratos concretos.
+### Semántica compartida de `Resultado` — CERRADO
+
+Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`.
 
 #### Mapa de propiedades de `Resultado`
 
@@ -102,7 +105,7 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 - `.df` = resultado mínimo; contiene solo columna calculada en formato largo.
 - `.resultado` = resultado completo; conserva metadata y expone `.largo` y `.ancho`.
 - `.resultado.largo` = DataFrame completo con metadata en formato largo.
-- `.resultado.ancho` = columnas clave pivoteadas por `periodo`; una columna para `Resultado*`, múltiples para `Validacion*`.
+- `.resultado.ancho` = columnas clave pivoteadas por `periodo`; `Resultado*` produce filas=indice, cols=periodo; `Validacion*` produce filas=MultiIndex(indice, metrica), cols=periodo.
 - `.pipe(fn, *args, **kwargs)` = encadenamiento estilo pandas sobre objeto resultado.
 - `_repr_html_()` = representación rica para notebooks.
 
@@ -112,7 +115,7 @@ Comparte semántica entre `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIn
 
 - `.resultado` devuelve `Vista`, no `pd.DataFrame` plano.
 - `.resultado.largo` devuelve DataFrame completo en formato largo con metadata.
-- `.resultado.ancho` devuelve solo columna calculada, pivoteada por `periodo`.
+- `.resultado.ancho` pivota por `periodo`; comportamiento según número de columnas en `Vista.columnas`: 1 columna → filas=indice (Resultado*); N columnas → filas=MultiIndex(indice, metrica) (Validacion*).
 - `Vista` usa `unstack("periodo")`; `periodo` se asume como primer nivel del MultiIndex.
 
 ```python
@@ -139,9 +142,9 @@ class Vista:
         # N columnas → filas=MultiIndex(indice, metrica), cols=periodo (Validacion*)
 ```
 
-#### PENDIENTE
+#### Asimetrías dentro de `Resultado*`
 
-- Confirmar si toda la familia `Resultado*` comparte exactamente esta semántica sin asimetrías adicionales.
+`ResultadoIndice` y los derivados NO comparten exactamente la misma semántica en `.resultado.largo`: `ResultadoIndice` conserva filas con NaN cuando `estado_calculo = sin_datos` o `fallida`; los derivados omiten esas combinaciones del largo. La asimetría está documentada en `Semántica compartida de resultados derivados`.
 
 ### Semántica compartida de resultados derivados — PROVISIONAL
 
@@ -229,12 +232,12 @@ Comparte semántica entre `ValidacionIndice`, `ValidacionVariacion` y `Validacio
 
 | propiedad | tipo | significado |
 |---|---|---|
-| `.resultado` | `ResultadoX` | `ResultadoX` validado; covariante según subclase |
+| `.resultado` | `Vista` | comparación entre resultado replicado e INEGI; covariante según subclase |
 | `_repr_html_()` | HTML | representación rica para notebooks; cada subclase decide qué mostrar |
 
 #### Semántica de propiedades de `Validacion`
 
-- `.resultado` = resultado de dominio que sirve como entrada y referencia principal de la validación.
+- `.resultado` = `Vista` con columnas del `ResultadoX` de entrada más columnas de comparación INEGI; expone `.largo` y `.ancho`.
 - `.df` = no aplica; validaciones no tienen columna calculada mínima.
 - `.pipe()` = no aplica; validaciones son terminales, no se encadenan.
 - `_repr_html_()` = abstracto en la base; cada subclase define su representación en notebook.
@@ -763,7 +766,7 @@ class Validacion(ABC):
     ...
 ```
 
-- `.resultado` es abstracto -> cada subclase devuelve el `ResultadoX` validado.
+- `.resultado` es abstracto -> cada subclase devuelve `Vista` con comparación INEGI.
 - `.resumen`, `.reporte`, `.diagnostico` y `_repr_html_()` son abstractos -> cada subclase define su esquema propio.
 - sin `.df` — validaciones no tienen columna calculada mínima.
 - sin `.pipe()` — validaciones son terminales; no se encadenan.
@@ -773,7 +776,7 @@ class Validacion(ABC):
 | aspecto | contrato |
 |---|---|
 | existencia | abstracta en la clase base |
-| tipo | `ResultadoX` covariante según subclase |
+| tipo | `Vista` |
 | semántica | ver `Semántica compartida de Validacion` |
 
 #### `.resumen`
@@ -823,7 +826,7 @@ Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas po
 | columnas | `["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"]` |
 | construcción | `Vista(resultado_largo_df, columnas=[...])` |
 
-- `ResultadoIndice` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+- `ResultadoIndice` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`.
 
 ##### `.resultado.largo`
 
@@ -946,7 +949,7 @@ Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas
 | columnas | `["variacion_pp", "variacion_inegi_pp", "error_absoluto_pp", "estado_validacion"]` |
 | construcción | `Vista(resultado_largo_df, columnas=[...])` |
 
-- `ResultadoVariacion` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+- `ResultadoVariacion` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`.
 
 ##### `.resultado.largo`
 
@@ -1069,7 +1072,7 @@ Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicada
 | columnas | `["incidencia_pp", "incidencia_inegi_pp", "error_absoluto_pp", "estado_validacion"]` |
 | construcción | `Vista(resultado_largo_df, columnas=[...])` |
 
-- `ResultadoIncidencia` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+- `ResultadoIncidencia` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`.
 
 ##### `.resultado.largo`
 
@@ -1288,7 +1291,7 @@ Referencia: explicar por qué `Resultado*` y `Validacion*` forman jerarquías se
 
 ### D2. Composición de `ValidacionX` sobre `ResultadoX`
 
-Referencia: explicar por qué `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` contienen un `ResultadoX` vía `.resultado` en vez de heredar de `Resultado`.
+Referencia: explicar por qué `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` contienen un `ResultadoX` internamente (no expuesto como atributo público) en vez de heredar de `Resultado`. `.resultado` expone una `Vista` de comparación INEGI, no el `ResultadoX` subyacente.
 
 ### D3. Asimetría estructural entre `ResultadoIndice` y resultados derivados
 

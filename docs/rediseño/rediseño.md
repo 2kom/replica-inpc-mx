@@ -506,3 +506,196 @@ Usar cuando varias funciones comparten semántica y solo difieren en una regla e
 
 - PENDIENTE: definir ...
 ````
+
+---
+
+## Plantilla: api/ módulo
+
+Esta plantilla aplica a `docs/rediseño/api.md`, sección `## Módulo por módulo`. No aplica a contratos de dominio, puertos ni casos de uso.
+
+Las funciones de `api/` se dividen en dos categorías:
+
+- **Manuales** — el usuario controla cada paso; aceptan `str | Periodo*` en parámetros de periodo; devuelven objetos de dominio, escalares o series según la función. Aplica en todos los módulos excepto `flujos.py`.
+- **Flujo** — el usuario pasa insumos crudos; la función orquesta todo internamente; no hay acceso a resultados intermedios. Solo en `flujos.py`.
+
+### Cabecera de módulo
+
+```
+### nombre_modulo.py — [RESUELTO | PROVISIONAL | PENDIENTE] (firmas [completas | provisionales])
+```
+
+### Función manual individual
+
+Usar para funciones con contrato propio completo: `calcular_indice`, `empalmar`, `rebasar`, `cargar_canasta`, etc.
+
+`````
+#### nombre_funcion — [RESUELTO | PROVISIONAL | PENDIENTE]
+
+##### Firma
+
+```python
+def nombre_funcion(
+    param: Tipo,
+    periodo: str | PeriodoMensual | PeriodoQuincenal = ...,
+) -> ResultadoX:
+```
+
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `param` | `ResultadoIndice` | ... |
+| `periodo` | `str \| PeriodoMensual \| PeriodoQuincenal` | ver §Manejo de periodos |
+| `param_pendiente` | PENDIENTE | descripción del tipo esperado y por qué está sin definir |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoX` | descripción de qué representa |
+
+Tipos posibles según función:
+- objeto dominio único: `ResultadoIndice`, `ResultadoVariacion`, `ResultadoIncidencia`, `ValidacionX`
+- escalar: `float`
+- par: `tuple[PeriodoX, float]` — para funciones tipo `inflacion_maxima`, `inflacion_minima`
+- serie: `pd.Series` — para funciones tipo `incidencia_en`, `incidencia_acumulada`; índice = `generico`
+- múltiple: `tuple[ValidacionIndice, ValidacionVariacion, ValidacionIncidencia]` — para funciones de validación
+
+##### Errores
+
+| condición | error |
+|---|---|
+| ... | `ErrorX` |
+
+##### Notas
+
+- bullet por nota de UX o comportamiento no obvio
+
+##### Ejemplo
+
+```python
+rep.nombre_funcion(...)
+```
+`````
+
+### Grupo de funciones manuales
+
+Usar cuando varias funciones del mismo módulo comparten parámetros y estructura de retorno: `variacion_*`, `incidencia_*`, `inflacion_*`.
+
+`````
+#### Grupo: nombre_grupo — [RESUELTO | PROVISIONAL | PENDIENTE]
+
+##### Funciones (series)
+
+Omitir si el grupo no tiene funciones que devuelvan objetos de dominio.
+
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `funcion_a` | `funcion_a(resultado, frecuencia)` | `ResultadoVariacion` | ... |
+| `funcion_b` | `funcion_b(resultado, desde, hasta)` | `ResultadoVariacion` | ... |
+
+##### Funciones (escalares)
+
+Omitir si el grupo no tiene funciones que devuelvan escalares, pares o series.
+
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `funcion_c` | `funcion_c(resultado, desde, hasta)` | `float` | ... |
+| `funcion_d` | `funcion_d(resultado)` | `tuple[PeriodoX, float]` | ... |
+| `funcion_e` | `funcion_e(resultado, periodo)` | `pd.Series` | índice = `generico` |
+
+##### Parámetros comunes
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIndice` | ... |
+| `periodo` | `str \| PeriodoMensual \| PeriodoQuincenal` | ver §Manejo de periodos |
+| `param_pendiente` | PENDIENTE | descripción del tipo esperado y por qué está sin definir |
+
+##### Diferencias por función
+
+| función | parámetro específico | tipo | contrato |
+|---|---|---|---|
+| `funcion_a` | `frecuencia` | `Literal["quincenal", "mensual", "anual"]` | ... |
+| `funcion_b` | `desde`, `hasta` | `str \| Periodo*` | periodos inclusivos |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| ... | `ErrorX` |
+
+##### Ejemplos
+
+```python
+rep.funcion_a(resultado, frecuencia="mensual")
+rep.funcion_b(resultado, desde="Ene 2015", hasta="Dic 2024")
+```
+`````
+
+### Función de flujo
+
+Solo aplica en `flujos.py`. Recibe insumos crudos y orquesta múltiples pasos de dominio internamente.
+
+`````
+#### nombre_flujo — [RESUELTO | PROVISIONAL | PENDIENTE]
+
+##### Firma
+
+```python
+def nombre_flujo(
+    canastas: list[CanastaCanonica],
+    series: list[SerieNormalizada],
+    ...
+) -> ResultadoX:
+```
+
+##### Parámetros
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `canastas` | `list[CanastaCanonica]` | orden cronológico; una por versión |
+| `series` | `list[SerieNormalizada]` | mismo orden y longitud que `canastas` |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoX` | descripción de qué representa |
+
+##### Orquestación interna
+
+Pasos que ejecuta la función en orden:
+
+1. ...
+2. ...
+
+El usuario no tiene acceso a resultados intermedios. Para control granular usar funciones manuales.
+
+##### Requiere
+
+- `rep.set_token(...)` o env var `INEGI_TOKEN` — solo si la función hace llamadas a INEGI
+
+##### Errores
+
+| condición | error |
+|---|---|
+| token no configurado cuando se requiere | `ErrorConfiguracion` |
+| longitudes de `canastas` y `series` distintas | `InvarianteViolado` |
+
+##### Ejemplo
+
+```python
+rep.nombre_flujo(canastas, series)
+```
+`````
+
+### Funciones diferidas
+
+Sección al final del módulo. Identificadas pero no implementadas en v2.
+
+```
+#### Funciones diferidas
+
+- `nombre` — qué haría; por qué se difiere
+```
