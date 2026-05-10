@@ -1056,29 +1056,118 @@ Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicada
 
 | aspecto | contrato |
 |---|---|
-| tipo | `ResultadoIncidencia` |
-| semántica | resultado de dominio validado contra series publicadas por INEGI |
+| tipo | `Vista` |
+| columnas | `["incidencia_pp", "incidencia_inegi_pp", "error_absoluto_pp", "estado_validacion"]` |
+| construcción | `Vista(resultado_largo_df, columnas=[...])` |
+
+- `ResultadoIncidencia` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+
+##### `.resultado.largo`
+
+Hereda columnas de `ResultadoIncidencia.resultado.largo` y agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `tipo` | str | nunca |
+| `clase_incidencia` | str | nunca |
+| `incidencia_pp` | float | nunca en filas presentes |
+| `estado_calculo` | str | nunca |
+| `version_t` | int | nunca |
+| `incidencia_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `incidencia_inegi_pp` |
+| `estado_validacion` | str | nunca |
+
+##### `.resultado.ancho`
+
+Pivota las cuatro columnas de `Vista.columnas` por periodo:
+
+| aspecto | contrato |
+|---|---|
+| filas | MultiIndex `(indice, metrica)` |
+| columnas | periodos |
+| valores | valor de cada metrica en ese `(indice, periodo)` |
 
 #### `.resumen`
 
+Extiende `ResultadoIncidencia.resumen`. Mismo índice `0`, misma granularidad (una fila; derivados son terminales). Agrega columnas de validación:
+
+| columna | tipo | notas |
+|---|---|---|
+| `tipo` | str | de `ResultadoIncidencia` |
+| `clase_incidencia` | str | de `ResultadoIncidencia` |
+| `descripcion` | str | de `ResultadoIncidencia` |
+| `estado_calculo` | str | de `ResultadoIncidencia` |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | de `ResultadoIncidencia` |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | de `ResultadoIncidencia` |
+| `n_comparables` | int | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
+| `n_fuera_rango_inegi` | int | filas sin publicación INEGI para ese indicador/periodo |
+| `n_no_disponibles` | int | filas en rango publicado pero sin valor INEGI |
+| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales |
+| `error_absoluto_max_pp` | float/NaN | NaN si `n_comparables == 0` |
+| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | estadísticas agregadas de la comparación |
+| tipo | `pd.DataFrame` |
+| índice | entero (`0`) |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.reporte`
 
+Extiende `ResultadoIncidencia.reporte`. Mismo índice `(periodo, indice)`. Agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `estado_calculo` | str | nunca |
+| `motivo_error` | str/NaN | `estado_calculo = ok` o `parcial` |
+| `periodo_lag` | `Periodo*`/NaN | base no existe |
+| `indice_t` | float/NaN | base no existe |
+| `indice_lag` | float/NaN | base no existe |
+| `ponderador_t` | float/NaN | base no existe |
+| `ponderador_lag` | float/NaN | base no existe |
+| `version_t` | int/NaN | base no existe |
+| `version_lag` | int/NaN | base no existe |
+| `cobertura_pct_t` | float/NaN | base no existe |
+| `cobertura_pct_lag` | float/NaN | base no existe |
+| `incidencia_pp` | float | nunca en filas presentes |
+| `incidencia_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `incidencia_inegi_pp` |
+| `estado_validacion` | str | nunca |
+
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
+
+`estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | comparación detallada por `periodo × indice` |
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.diagnostico`
 
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `tipo` | str | nunca |
+| `clase_incidencia` | str | nunca |
+| `periodo` | `PeriodoQuincenal \| PeriodoMensual` | nunca |
+| `indice` | str | nunca |
+| `version_t` | int | nunca |
+| `estado_validacion` | str | nunca |
+| `estado_calculo` | str | nunca |
+| `incidencia_pp` | float | nunca en filas presentes |
+| `incidencia_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `incidencia_inegi_pp` |
+
+`estado_calculo` da contexto para `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
+| tipo | `pd.DataFrame` |
+| índice | entero |
+| cálculo | bajo demanda; no se almacena |
 
 ## Funciones de dominio
 
