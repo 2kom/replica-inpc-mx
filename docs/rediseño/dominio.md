@@ -132,9 +132,11 @@ class Vista:
 
     @property
     def ancho(self) -> pd.DataFrame:
-        return self._df[self._columnas].unstack("periodo")
-        # lista de 1 columna → pivot simple (Resultado*)
-        # lista de N columnas → MultiIndex cols (columna, periodo) (Validacion*)
+        if len(self._columnas) == 1:
+            return self._df[self._columnas[0]].unstack("periodo")
+        return self._df[self._columnas].stack().unstack("periodo")
+        # 1 columna → filas=indice, cols=periodo (Resultado*)
+        # N columnas → filas=MultiIndex(indice, metrica), cols=periodo (Validacion*)
 ```
 
 #### PENDIENTE
@@ -819,11 +821,34 @@ Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas po
 |---|---|
 | tipo | `Vista` |
 | columnas | `["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"]` |
-| construcción | `Vista(reporte_df, columnas=[...])` |
+| construcción | `Vista(resultado_largo_df, columnas=[...])` |
 
-- `.resultado.largo` = `reporte_df` completo con comparación INEGI.
-- `.resultado.ancho` = MultiIndex cols `(columna, periodo)`; pivota las cuatro columnas clave.
 - `ResultadoIndice` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+
+##### `.resultado.largo`
+
+Hereda columnas de `ResultadoIndice.resultado.largo` y agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `version` | int | nunca |
+| `tipo` | str | nunca |
+| `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
+| `estado_calculo` | str | nunca |
+| `motivo_error` | str/NaN | `estado_calculo = ok` o `parcial` |
+| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+| `estado_validacion` | str | nunca |
+
+##### `.resultado.ancho`
+
+Pivota las cuatro columnas de `Vista.columnas` por periodo:
+
+| aspecto | contrato |
+|---|---|
+| filas | MultiIndex `(indice, metrica)` |
+| columnas | periodos |
+| valores | valor de cada metrica en ese `(indice, periodo)` |
 
 > Mismo patrón en `ValidacionVariacion` (`["variacion_pp", "variacion_inegi_pp", "error_absoluto_pp", "estado_validacion"]`) y `ValidacionIncidencia` (`["incidencia_pp", "incidencia_inegi_pp", "error_absoluto_pp", "estado_validacion"]`).
 
@@ -841,8 +866,9 @@ Extiende `ResultadoIndice.resumen`. Mismo índice `id_corrida`, misma granularid
 | `n_comparables` | int | periodos efectivamente comparados con dato INEGI |
 | `n_fuera_rango_inegi` | int | periodos sin publicación INEGI para ese indicador |
 | `n_no_disponibles` | int | periodos en rango publicado pero sin valor |
+| `n_diferencia_por_parcial` | int | periodos con diferencia atribuible a datos parciales; `0` para resultados quincenales |
 | `error_absoluto_max` | float / NaN | NaN si `n_comparables == 0` |
-| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `no_disponible` |
+| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
 
 | aspecto | contrato |
 |---|---|
@@ -870,7 +896,7 @@ Extiende `ResultadoIndice.reporte`. Mismo índice `(periodo, indice)`. Agrega co
 | `error_absoluto` | float/NaN | mismo que `indice_inegi` |
 | `estado_validacion` | str | nunca |
 
-Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `no_disponible`, `fuera_rango_inegi`.
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
 
 | aspecto | contrato |
 |---|---|
@@ -880,7 +906,7 @@ Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `no_disponible`, `
 
 #### `.diagnostico`
 
-Subconjunto accionable de `.reporte`: todas las filas donde `estado_validacion != ok`.
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
 
 | columna | tipo | NaN cuando |
 |---|---|---|
@@ -895,7 +921,7 @@ Subconjunto accionable de `.reporte`: todas las filas donde `estado_validacion !
 | `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
 | `error_absoluto` | float/NaN | mismo que `indice_inegi` |
 
-`estado_calculo` da contexto: `diferencia_detectada` con `estado_calculo = parcial` es menos grave que con `ok`.
+`estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
 | aspecto | contrato |
 |---|---|
@@ -911,29 +937,116 @@ Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas
 
 | aspecto | contrato |
 |---|---|
-| tipo | `ResultadoVariacion` |
-| semántica | resultado de dominio validado contra series publicadas por INEGI |
+| tipo | `Vista` |
+| columnas | `["variacion_pp", "variacion_inegi_pp", "error_absoluto_pp", "estado_validacion"]` |
+| construcción | `Vista(resultado_largo_df, columnas=[...])` |
+
+- `ResultadoVariacion` subyacente vive como atributo interno; accesible solo vía `.resultado` y propiedades derivadas.
+
+##### `.resultado.largo`
+
+Hereda columnas de `ResultadoVariacion.resultado.largo` y agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `tipo` | str | nunca |
+| `clase_variacion` | str | nunca |
+| `variacion_pp` | float | nunca en filas presentes |
+| `estado_calculo` | str | nunca |
+| `version_t` | int | nunca |
+| `variacion_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `variacion_inegi_pp` |
+| `estado_validacion` | str | nunca |
+
+##### `.resultado.ancho`
+
+Pivota las cuatro columnas de `Vista.columnas` por periodo:
+
+| aspecto | contrato |
+|---|---|
+| filas | MultiIndex `(indice, metrica)` |
+| columnas | periodos |
+| valores | valor de cada metrica en ese `(indice, periodo)` |
 
 #### `.resumen`
 
+Extiende `ResultadoVariacion.resumen`. Mismo índice `0`, misma granularidad (una fila; derivados son terminales). Agrega columnas de validación:
+
+| columna | tipo | notas |
+|---|---|---|
+| `tipo` | str | de `ResultadoVariacion` |
+| `clase_variacion` | str | de `ResultadoVariacion` |
+| `descripcion` | str | de `ResultadoVariacion` |
+| `estado_calculo` | str | de `ResultadoVariacion` |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | de `ResultadoVariacion` |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | de `ResultadoVariacion` |
+| `n_comparables` | int | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
+| `n_fuera_rango_inegi` | int | filas sin publicación INEGI para ese indicador/periodo |
+| `n_no_disponibles` | int | filas en rango publicado pero sin valor INEGI |
+| `n_diferencia_por_parcial` | int | filas con diferencia atribuible a datos parciales |
+| `error_absoluto_max_pp` | float/NaN | NaN si `n_comparables == 0` |
+| `estado_validacion_global` | str | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | estadísticas agregadas de la comparación |
+| tipo | `pd.DataFrame` |
+| índice | entero (`0`) |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.reporte`
 
+Extiende `ResultadoVariacion.reporte`. Mismo índice `(periodo, indice)`. Agrega columnas de comparación INEGI:
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `estado_calculo` | str | nunca |
+| `motivo_error` | str/NaN | `estado_calculo = ok` o `parcial` |
+| `periodo_lag` | `Periodo*`/NaN | base no existe |
+| `indice_t` | float/NaN | base no existe |
+| `indice_lag` | float/NaN | base no existe |
+| `version_t` | int/NaN | base no existe |
+| `version_lag` | int/NaN | base no existe |
+| `cobertura_pct_t` | float/NaN | base no existe |
+| `cobertura_pct_lag` | float/NaN | base no existe |
+| `variacion_pp` | float | nunca en filas presentes |
+| `variacion_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `variacion_inegi_pp` |
+| `estado_validacion` | str | nunca |
+
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
+
+`estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | comparación detallada por `periodo × indice` |
+| tipo | `pd.DataFrame` |
+| índice | MultiIndex `(periodo, indice)` |
+| cálculo | bajo demanda; no se almacena |
 
 #### `.diagnostico`
 
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
+
+| columna | tipo | NaN cuando |
+|---|---|---|
+| `tipo` | str | nunca |
+| `clase_variacion` | str | nunca |
+| `periodo` | `PeriodoQuincenal \| PeriodoMensual` | nunca |
+| `indice` | str | nunca |
+| `version_t` | int | nunca |
+| `estado_validacion` | str | nunca |
+| `estado_calculo` | str | nunca |
+| `variacion_pp` | float | nunca en filas presentes |
+| `variacion_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | float/NaN | mismo que `variacion_inegi_pp` |
+
+`estado_calculo` da contexto para `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
+
 | aspecto | contrato |
 |---|---|
-| estado | `PENDIENTE` |
-| semántica | periodos o índices no verificables por ausencia de datos de INEGI |
+| tipo | `pd.DataFrame` |
+| índice | entero |
+| cálculo | bajo demanda; no se almacena |
 
 ### ValidacionIncidencia — NUEVO — PROVISIONAL
 
