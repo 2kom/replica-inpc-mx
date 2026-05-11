@@ -18,8 +18,7 @@ Destino: `api.md ## Decisiones` (sección pendiente de crear).
 Destino: resolver cada ítem y cerrar o descartar. No son documentación final.
 
 - `config.py`: env var vs singleton vs híbrido — **resuelto**: híbrido (`get_token()` busca env var primero, luego `set_token`)
-- Inyección de dependencias para tests — pendiente
-- Re-export de errores tipados (`rep.errores`) — pendiente
+- Re-export de errores tipados (`rep.errores`) — **resuelto**: SÍ, ver `api.md §D4`
 - Re-export de `Periodo*` y factory `periodo_desde_str` — **resuelto**: SÍ
 
 ---

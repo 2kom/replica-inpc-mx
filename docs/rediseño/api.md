@@ -46,10 +46,15 @@
 
 ### Manejo de periodos
 
-- Funciones públicas aceptan `str | PeriodoMensual | PeriodoQuincenal` en parámetros de periodo.
-- `api/` convierte strings con `periodo_desde_str` antes de pasar a dominio.
+- Funciones públicas aceptan `str` en parámetros de periodo — sin `Periodo*` en la superficie pública.
+- `api/` convierte con `periodo_desde_str` antes de pasar a dominio; detección de formato interna.
 - Dominio recibe solo objetos `Periodo*` — nunca strings.
-- Formatos válidos: `"1Q Ene 2015"`, `"2Q Jul 2018"`, `"Ene 2015"`, `"Dic 2024"`.
+- Formatos válidos (insensible a mayúsculas):
+
+| formato | ejemplo | tipo resultante |
+|---|---|---|
+| `"NQ Mmm AAAA"` | `"1Q ene 2015"`, `"2Q JUL 2018"` | `PeriodoQuincenal` |
+| `"Mmm AAAA"` | `"ene 2015"`, `"DIC 2024"` | `PeriodoMensual` |
 
 ---
 
@@ -333,3 +338,7 @@ PENDIENTE: documentar por qué `get_token()` busca env var primero y luego valor
 ### §D3. Versión explícita en insumos
 
 PENDIENTE: documentar por qué `version` es parámetro obligatorio (no auto-detect) en `cargar_canasta` y `cargar_serie`.
+
+### §D4. Re-export de errores en `__init__.py`
+
+Los tipos de error de `dominio/errores.py` se re-exportan a través de `api/__init__.py` y quedan disponibles como `rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc. El usuario no necesita importar desde rutas internas para capturar errores específicos. Consistente con el estilo flat (`import replica_inpc as rep`).
