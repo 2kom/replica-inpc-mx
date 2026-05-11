@@ -1195,6 +1195,7 @@ Reemplaza a `combinar`.
 def empalmar(
     resultados: list[ResultadoIndice],
     forzar: bool = False,
+    version_nombres: VersionCanasta | None = None,
 ) -> ResultadoIndice:
 ```
 
@@ -1205,7 +1206,10 @@ def empalmar(
   - `forzar=False` (default): dos valores explícitos **distintos** → `InvarianteViolado`
   - `forzar=True`: dos valores explícitos distintos → permitido + `UserWarning` describiendo qué `periodo_referencia` tiene cada input
 - Concatena `.manifiesto` de cada input
-- Aplica `RENOMBRES_INDICES` (`correspondencia_canastas.py`) para normalizar nombres de categorías entre versiones
+- Regla de `version_nombres`:
+  - `None` → usa `max(versions de todos los inputs)` como versión canónica
+  - valor explícito → usa ese valor como versión canónica para `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, version)` en `RENOMBRES_INDICES`, no renombra
+- Aplica `RENOMBRES_INDICES` (`correspondencia_canastas.py`) para normalizar nombres de categorías entre versiones usando la versión canónica resuelta
 - Propaga `.resumen`, `.reporte`, `.diagnostico` (merge automático)
 
 > **Restricción:** solo para `ResultadoIndice`. No existe `empalmar` para `ResultadoVariacion` ni `ResultadoIncidencia` — siempre se empalma el `ResultadoIndice` fuente antes de calcular variaciones o incidencias.

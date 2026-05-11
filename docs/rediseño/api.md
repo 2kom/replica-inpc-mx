@@ -281,8 +281,8 @@ def empalmar(
 - solo une tramos del mismo `tipo`; no hace rebase automático
 - `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
 - renombrado de categorías lo aplica `empalmar` de dominio vía `RENOMBRES_INDICES` en `correspondencia_canastas.py`; `version_nombres` selecciona qué convención usar
-- `version_nombres=None` → versión más reciente de los inputs
-- `version_nombres=X` donde X no está en los inputs → se usa la versión disponible más cercana a X (ej. inputs 2018+2024, `version_nombres=2010` → usa 2018)
+- `version_nombres=None` → versión más reciente de los inputs (`max(versions)`)
+- `version_nombres=X` → dominio usa X como versión canónica contra `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, X)`, los índices de ese tramo no se renombran
 
 ##### Ejemplo
 
@@ -600,35 +600,67 @@ p, i, v   = rep.mayor_incidencia(inc_mensual)
 p, i, v   = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
 ```
 
-### validaciones.py — RESUELTO (firmas provisionales)
+### validaciones.py — RESUELTO (firmas completas)
 
-Funciones públicas:
+#### Grupo: validar_* — RESUELTO
 
-- `validar_indice(resultado)` — compara `ResultadoIndice` contra series INEGI → `ValidacionIndice`
-- `validar_variacion(variacion)` — compara `ResultadoVariacion` contra series INEGI → `ValidacionVariacion`
-- `validar_incidencia(incidencia)` — compara `ResultadoIncidencia` contra series INEGI → `ValidacionIncidencia`
+##### Funciones
 
-Notas:
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `validar_indice` | `validar_indice(resultado)` | `ValidacionIndice` | compara `ResultadoIndice` contra series INEGI |
+| `validar_variacion` | `validar_variacion(resultado)` | `ValidacionVariacion` | compara `ResultadoVariacion` contra series INEGI |
+| `validar_incidencia` | `validar_incidencia(resultado)` | `ValidacionIncidencia` | compara `ResultadoIncidencia` contra series INEGI |
 
-- Cada función acepta solo tipos con series INEGI comparables: `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`. Otros tipos → `InvarianteViolado`.
-- Auto-detecta frecuencia (quincenal/mensual) por tipo de periodo en el resultado de entrada.
-- Delega a `FuenteValidacionApi` para obtener series INEGI.
+##### Parámetros comunes
 
-#### Ejemplos — notebook — validaciones.py
+Cada función recibe un único parámetro `resultado` del tipo `ResultadoX` correspondiente. Contrato compartido:
+
+| aspecto | contrato |
+|---|---|
+| `tipo` | leído del manifiesto del resultado; debe pertenecer a `TIPOS_CON_VALIDACION`; el usuario no lo pasa |
+| frecuencia | auto-detectada por tipo de periodo en el resultado: `PeriodoQuincenal` → quincenal; `PeriodoMensual` → mensual |
+| token INEGI | requerido; obtenido vía `get_token()` (ver `config.py §Token híbrido`) |
+
+##### Diferencias por función
+
+| función | tipo de `resultado` | retorno |
+|---|---|---|
+| `validar_indice` | `ResultadoIndice` | `ValidacionIndice` |
+| `validar_variacion` | `ResultadoVariacion` | `ValidacionVariacion` |
+| `validar_incidencia` | `ResultadoIncidencia` | `ValidacionIncidencia` |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| `tipo` del manifiesto no en `TIPOS_CON_VALIDACION` | `ErrorConfiguracion` |
+| token INEGI no configurado | `ErrorConfiguracion` |
+| API INEGI no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta INEGI con formato inesperado | `RespuestaInvalida` |
+
+##### Notas
+
+- `TIPOS_CON_VALIDACION = {"inpc", "inflacion componente", "inflacion subcomponente"}`.
+
+- `validar_variacion`: comparables contra INEGI son `clase_variacion = "periodica"` (frecuencias `"mensual"` y `"anual"` para periodos mensuales; `"quincenal"` y `"anual"` para quincenales) y `"acumulada_anual"`. `clase_variacion = "desde"` y frecuencias fuera del conjunto válido lanzan `ErrorConfiguracion`.
+
+- `validar_incidencia`: INEGI solo publica incidencia periódica mensual. Únicamente comparable: `clase_incidencia = "periodica"` con periodos mensuales. `clase_incidencia = "desde"` o `"acumulada_anual"` lanzan `ErrorConfiguracion`. Periodos quincenales lanzan `ErrorConfiguracion`.
+
+##### Ejemplos
 
 ```python
 import replica_inpc as rep
 
-val_indice     = rep.validar_indice(indice)        # → ValidacionIndice
-val_variacion  = rep.validar_variacion(variacion)  # → ValidacionVariacion
-val_incidencia = rep.validar_incidencia(incidencia) # → ValidacionIncidencia
+val_indice     = rep.validar_indice(indice)
+val_variacion  = rep.validar_variacion(variacion_periodica_mensual)
+val_incidencia = rep.validar_incidencia(incidencia_periodica_mensual)
 ```
 
-#### Ejemplos — CLI — validaciones.py
-
 ```bash
-replica-inpc validar-indice --resultado resultado.csv
-replica-inpc validar-variacion --resultado variaciones.csv
+replica-inpc validar-indice     --resultado resultado.csv
+replica-inpc validar-variacion  --resultado variaciones.csv
+replica-inpc validar-incidencia --resultado incidencias.csv
 ```
 
 ### flujos.py — PROVISIONAL (firmas provisionales)
