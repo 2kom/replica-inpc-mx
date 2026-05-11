@@ -1,12 +1,19 @@
 # Rediseño api/
 
-## Capa api/
+## Alcance
 
-### Decisiones generales
+- Cubre: firmas públicas de `api/`; tipos de parámetros y retorno visibles al usuario; errores que ve el usuario
+- Excluye: contratos de dominio (ver `dominio.md`), adaptadores CSV (`infraestructura/`), casos de uso (`aplicacion/`)
+- Fuente de verdad: este archivo para firmas de `api/`; `dominio.md` para contratos de los tipos que se devuelven
+
+---
+
+## Decisiones generales
 
 - Distribución: pip + CLI. No exposición HTTP pública
 - Estilo: flat, pandas-like. `import replica_inpc as rep` → `rep.<func>(...)`
 - Sin clases fachada en superficie pública
+- Funciones libres = API principal; `Resultado*` exponen `.pipe(fn, *args, **kwargs)` para chain estilo pandas
 
 ### Estructura de módulos
 
@@ -21,12 +28,14 @@
 | `config.py` | configuración global |
 | `__init__.py` | re-export plano con `__all__` curado |
 
-### Convención de naming (módulos)
+### Convenciones de naming
 
-- Sustantivos en plural (excepto `config.py`).
-- Describen el dominio o el tipo de objeto que gestionan.
+#### Módulos
 
-### Convención de naming (funciones públicas)
+- Sustantivos en plural (excepto `config.py`)
+- Describen el dominio o el tipo de objeto que gestionan
+
+#### Funciones públicas
 
 - `verbo_objeto`: `cargar_canasta`, `calcular_indice`, `cargar_serie`
 - `objeto_modificador`: `variacion_periodica`, `incidencia_desde`
@@ -35,29 +44,12 @@
 - Español obligatorio
 - Prohibido: `obtener_*`, `crear_*`, `procesar_*`, inglés, sufijo `_csv` en pública
 
-### Encadenamiento
-
-- Funciones libres = API principal
-- `Resultado*` exponen método `.pipe(fn, *args, **kwargs)` para chain estilo pandas
-
-### Manejo de periodos — decisión v2
+### Manejo de periodos
 
 - Funciones públicas aceptan `str | PeriodoMensual | PeriodoQuincenal` en parámetros de periodo.
 - `api/` convierte strings con `periodo_desde_str` antes de pasar a dominio.
 - Dominio recibe solo objetos `Periodo*` — nunca strings.
 - Formatos válidos: `"1Q Ene 2015"`, `"2Q Jul 2018"`, `"Ene 2015"`, `"Dic 2024"`.
-
-### Acoplamiento — decisión v2
-
-- **Hoy:** `api/` llama `infraestructura/csv/` directo. Pragmático, suficiente para v2.
-- **Futuro:** migrar a puertos + DI (`aplicacion/puertos/`) cuando se agreguen fuentes distintas (SQL, HTTP, etc.). `config.py` inyectará el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se agrega el adaptador nuevo.
-
-### Pendientes generales (pre-discutir antes de cerrar api/)
-
-- `config.py`: env var vs singleton vs híbrido
-- Inyección de dependencias para tests
-- Re-export de errores tipados (`rep.errores`)
-- Re-export de `Periodo*` y factory `periodo_desde_str` — decisión: SÍ
 
 ---
 
@@ -102,16 +94,13 @@ Funciones públicas:
 - `cargar_canasta` — carga canasta desde archivo
 - `cargar_serie` — carga serie desde archivo
 
-Funciones diferidas (tal vez, no implementadas):
+Funciones diferidas:
 
 - `normalizar_ponderadores` — asegura que los ponderadores de una canasta sumen 100
 
 Notas:
 
-- Versión: explícita siempre. NO auto-detect (riesgo de cálculo silencioso
-  erróneo; ej. canastas 2010 y 2013 tienen genéricos idénticos)
-- Delega a `infraestructura/csv/`
-- Devuelve modelos de dominio
+- Versión: explícita siempre. NO auto-detect (riesgo de cálculo silencioso erróneo; ej. canastas 2010 y 2013 tienen genéricos idénticos)
 
 #### Ejemplos — notebook — insumos.py
 
@@ -134,7 +123,7 @@ Funciones públicas:
 - `rebasar` — reexpresa índices a nueva referencia (una función, dos usos: intra-canasta y cross-canasta)
 - `a_mensual` — conversión quincenal → mensual
 
-Funciones diferidas (tal vez, no implementadas):
+Funciones diferidas:
 
 - `desencadenar` — remoción de factores de encadenamiento para recuperar Laspeyres crudo
 
@@ -143,7 +132,6 @@ Notas:
 - `calcular_indice`: una canasta a la vez. Historia completa = varias llamadas + `empalmar`.
 - `empalmar`: solo une series de misma referencia base. NO hace rebase automático.
 - `rebasar`: mecánica idéntica para ambos usos — `valor / valor_en_periodo_base × 100`.
-- `empalmar` reemplaza a `combinar`.
 
 #### Ejemplos — notebook — indices.py
 
@@ -223,22 +211,22 @@ replica-inpc inflacion-acumulada --desde 2015-01 --hasta 2024-12 --indice result
 
 Funciones públicas (series):
 
-- `incidencia_periodica(resultado, frecuencia)` — incidencia periodo a periodo por genérico
-- `incidencia_acumulada_anual(resultado)` — acumulado ene→actual; suma de todos los genéricos = variación anual acumulada
-- `incidencia_desde(resultado, desde, hasta, incluir_parciales)` — incidencia entre dos periodos
-- `incidencia_en(resultado, periodo)` — incidencia de todos los genéricos en un periodo → Series
-- `incidencia_acumulada(resultado, desde, hasta)` — incidencia acumulada por genérico → Series
+- `incidencia_periodica(resultado, canastas, frecuencia)` — incidencia periodo a periodo por genérico
+- `incidencia_acumulada_anual(resultado, canastas)` — acumulado ene→actual; suma de todos los genéricos = variación anual acumulada
+- `incidencia_desde(resultado, canastas, desde, hasta)` — incidencia entre dos periodos
+- `incidencia_en(resultado, canastas, periodo)` — incidencia de todos los genéricos en un periodo → `pd.Series`
+- `incidencia_acumulada(resultado, canastas, desde, hasta)` — incidencia acumulada por genérico → `pd.Series`
 
 Funciones públicas (escalares):
 
-- `mayor_incidencia(resultado, periodo)` — → (genérico, float)
-- `menor_incidencia(resultado, periodo)` — → (genérico, float)
+- `mayor_incidencia(resultado, canastas, periodo)` — → `(str, float)`
+- `menor_incidencia(resultado, canastas, periodo)` — → `(str, float)`
 
 Notas:
 
-- Todas las funciones de serie reciben `canastas: dict[int, CanastaCanonica]` como parámetro explícito — la canasta no está embebida en el resultado.
+- Todas las funciones reciben `canastas: dict[int, CanastaCanonica]` como parámetro explícito — la canasta no está embebida en el resultado.
 - `incidencia_acumulada_anual`: propiedad matemática — suma de incidencias de todos los genéricos = variación anual acumulada del INPC.
-- `incidencia_acumulada` devuelve `pd.Series` (escalar por genérico), distinto de `incidencia_desde` que devuelve `ResultadoIncidencia`.
+- `incidencia_acumulada` devuelve `pd.Series` (un escalar por genérico); distinto de `incidencia_desde` que devuelve `ResultadoIncidencia`.
 - `incluir_parciales` en `incidencia_desde`: diferido.
 
 #### Ejemplos — notebook — incidencias.py
@@ -247,13 +235,13 @@ Notas:
 import replica_inpc as rep
 
 # serie de incidencias mensuales
-inc_mensual = rep.incidencia_periodica(indice, frecuencia="mensual")
+inc_mensual = rep.incidencia_periodica(indice, canastas, frecuencia="mensual")
 
 # genérico con mayor incidencia en un periodo
-generico, valor = rep.mayor_incidencia(indice, periodo="Dic 2024")
+generico, valor = rep.mayor_incidencia(indice, canastas, periodo="Dic 2024")
 
 # incidencia acumulada por genérico 2015–2024
-rep.incidencia_acumulada(indice, desde="Ene 2015", hasta="Dic 2024")
+rep.incidencia_acumulada(indice, canastas, desde="Ene 2015", hasta="Dic 2024")
 ```
 
 #### Ejemplos — CLI — incidencias.py
@@ -282,9 +270,9 @@ Notas:
 ```python
 import replica_inpc as rep
 
-val_indice    = rep.validar_indice(indice)       # → ValidacionIndice
-val_variacion = rep.validar_variacion(variacion)  # → ValidacionVariacion
-val_incidencia = rep.validar_incidencia(incidencia)  # → ValidacionIncidencia
+val_indice     = rep.validar_indice(indice)        # → ValidacionIndice
+val_variacion  = rep.validar_variacion(variacion)  # → ValidacionVariacion
+val_incidencia = rep.validar_incidencia(incidencia) # → ValidacionIncidencia
 ```
 
 #### Ejemplos — CLI — validaciones.py
@@ -329,3 +317,19 @@ historico = rep.calcular_historia(canastas, series)
 ```bash
 replica-inpc calcular-historia --config historia.toml
 ```
+
+---
+
+## Decisiones
+
+### §D1. Acoplamiento api/ → infraestructura/
+
+PENDIENTE: ver `transiscion.md` § "Origen: `## Capa api/` → `### Acoplamiento — decisión v2`".
+
+### §D2. Token híbrido en config.py
+
+PENDIENTE: documentar por qué `get_token()` busca env var primero y luego valor de `set_token`, no al revés.
+
+### §D3. Versión explícita en insumos
+
+PENDIENTE: documentar por qué `version` es parámetro obligatorio (no auto-detect) en `cargar_canasta` y `cargar_serie`.

@@ -2,6 +2,36 @@
 
 el objetivo de este archivo es meter toda la informacion que no vaya en los documentos de las secciones dedicadas, al final este documento debe de redistriburi la informacion en sus repsectivas secciones y se eliminara
 
+## Extraído de `api.md`
+
+### Origen: `## Capa api/` → `### Acoplamiento — decisión v2`
+
+Destino: `api.md ## Decisiones` (sección pendiente de crear).
+
+- **Hoy:** `api/` llama `infraestructura/csv/` directo. Pragmático, suficiente para v2.
+- **Futuro:** migrar a puertos + DI (`aplicacion/puertos/`) cuando se agreguen fuentes distintas (SQL, HTTP, etc.). `config.py` inyectará el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se agrega el adaptador nuevo.
+
+---
+
+### Origen: `## Capa api/` → `### Pendientes generales`
+
+Destino: resolver cada ítem y cerrar o descartar. No son documentación final.
+
+- `config.py`: env var vs singleton vs híbrido — **resuelto**: híbrido (`get_token()` busca env var primero, luego `set_token`)
+- Inyección de dependencias para tests — pendiente
+- Re-export de errores tipados (`rep.errores`) — pendiente
+- Re-export de `Periodo*` y factory `periodo_desde_str` — **resuelto**: SÍ
+
+---
+
+### Origen: `## Módulo por módulo` → `### indices.py` → nota histórica
+
+Destino: `api.md ## Decisiones` o `dominio.md ## Decisiones §D7`.
+
+- `empalmar` reemplaza a `combinar` de v1.
+
+---
+
 ## Extraido de `dominio.md`
 
 ### Origen: `## Capa dominio/` -> `### Decisiones generales`
