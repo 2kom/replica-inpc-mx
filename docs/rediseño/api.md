@@ -188,60 +188,185 @@ serie = rep.cargar_serie("data/serie_2018.csv", version=2018)
 
 - `normalizar_ponderadores(canasta)` — asegura que ponderadores sumen 100; diferida por baja prioridad en v2
 
-### indices.py — RESUELTO (firmas provisionales)
+### indices.py — RESUELTO (firmas completas)
 
-Funciones públicas:
+#### calcular_indice — RESUELTO
 
-- `calcular_indice` — cálculo de índices para una canasta
-- `empalmar` — une tramos de una misma referencia base
-- `rebasar` — reexpresa índices a nueva referencia (una función, dos usos: intra-canasta y cross-canasta)
-- `a_mensual` — conversión quincenal → mensual
-
-Funciones diferidas:
-
-- `desencadenar` — remoción de factores de encadenamiento para recuperar Laspeyres crudo
-
-Notas:
-
-- `calcular_indice`: una canasta a la vez. Historia completa = varias llamadas + `empalmar`.
-- `empalmar`: solo une series de misma referencia base. NO hace rebase automático.
-- `rebasar`: mecánica idéntica para ambos usos — `valor / valor_en_periodo_base × 100`.
-
-#### Ejemplos — notebook — indices.py
-
-Tramo único:
+##### Firma
 
 ```python
-import replica_inpc as rep
+def calcular_indice(
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+    referencia: ResultadoIndice | None = None,
+) -> ResultadoIndice:
+```
 
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
+| `serie` | `SerieNormalizada` | serie ya cargada; debe corresponder a la misma versión que `canasta` |
+| `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones 2010 y 2013 (LaspeyresEncadenado); `None` para 2018 y 2024 |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | índice calculado para el tramo de la canasta; `periodo_referencia = None` |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| genéricos de `canasta` sin correspondencia en `serie` | `CorrespondenciaInsuficiente` |
+| `canasta` sin genéricos utilizables | `CanastaSinGenericos` |
+| ponderador faltante para el cálculo | `PonderadorFaltante` |
+| `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
+
+##### Notas
+
+- una canasta a la vez; historia completa = varias llamadas + `empalmar`
+- `referencia` requerido para versiones 2010 y 2013; ignorado para 2018 y 2024
+
+##### Ejemplo
+
+```python
 canasta = rep.cargar_canasta("canasta_2018.csv", version=2018)
 serie   = rep.cargar_serie("serie_2018.csv", version=2018)
 indice  = rep.calcular_indice(canasta, serie)
+```
+
+#### empalmar — RESUELTO
+
+##### Firma
+
+```python
+def empalmar(
+    resultados: list[ResultadoIndice],
+    forzar: bool = False,
+) -> ResultadoIndice:
+```
+
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultados` | `list[ResultadoIndice]` | tramos a unir; orden cronológico; al menos dos elementos |
+| `forzar` | `bool` | si `True`, permite empalmar resultados con `periodo_referencia` distintos emitiendo `UserWarning` |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | resultado unificado; `manifiesto` concatenado; `reporte` y `diagnostico` mergeados |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| lista vacía o con un solo elemento | `InvarianteViolado` |
+| `tipo` distinto entre resultados | `InvarianteViolado` |
+| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
+| `periodo_referencia` distintos con `forzar=True` | `UserWarning` |
+
+##### Notas
+
+- solo une tramos del mismo `tipo`; no hace rebase automático
+- `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
+
+##### Ejemplo
+
+```python
+hist = rep.empalmar([indice_2010, indice_2013])
+```
+
+#### rebasar — RESUELTO
+
+##### Firma
+
+```python
+def rebasar(
+    resultado: ResultadoIndice,
+    periodo_referencia: str,
+    valor_referencia: float = 100.0,
+) -> ResultadoIndice:
+```
+
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIndice` | resultado a reexpresar |
+| `periodo_referencia` | `str` | periodo en el que los índices valdrán `valor_referencia`; ver §Manejo de periodos |
+| `valor_referencia` | `float` | valor al que se normaliza el periodo de referencia; default `100.0` |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | mismo contenido reescalado; `.periodo_referencia` seteado al periodo indicado |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| `periodo_referencia` con formato inválido | `PeriodoNoInterpretable` |
+| periodo no existe en `resultado` | `InvarianteViolado` |
+| índice en `periodo_referencia` es NaN (`sin_datos` o `fallida`) | `InvarianteViolado` |
+
+##### Notas
+
+- mecánica: `valor / valor_en_periodo_referencia × valor_referencia`
+- misma función para rebase intra-canasta y cross-canasta
+
+##### Ejemplo
+
+```python
+rebased = rep.rebasar(hist, periodo_referencia="2Q Jul 2018")
+```
+
+#### a_mensual — RESUELTO
+
+##### Firma
+
+```python
+def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
+```
+
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIndice` | resultado quincenal a convertir |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | resultado mensual; índice de periodos = `PeriodoMensual`; valor = promedio simple 1Q y 2Q |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| `resultado` ya tiene periodos mensuales | `InvarianteViolado` |
+
+##### Notas
+
+- promedio simple de 1Q y 2Q; si solo hay una quincena disponible en el mes, `estado_calculo = parcial`
+- único mecanismo para obtener datos mensuales — nunca cargar CSV mensuales directamente
+
+##### Ejemplo
+
+```python
 mensual = rep.a_mensual(indice)
 ```
 
-Historia completa (2Q Dic 2010 → actual, base 2018=100):
+#### Funciones diferidas
 
-```python
-import replica_inpc as rep
-
-versiones  = [2010, 2013, 2018, 2024]
-canastas   = [rep.cargar_canasta(f"c{v}.csv", version=v) for v in versiones]
-series     = [rep.cargar_serie(f"s{v}.csv",   version=v) for v in versiones]
-resultados = [rep.calcular_indice(c, s) for c, s in zip(canastas, series)]
-
-hist_2010    = rep.empalmar(resultados[:2])
-hist_rebased = rep.rebasar(hist_2010, periodo_base="2Q Jul 2018")
-historico    = rep.empalmar([hist_rebased] + resultados[2:])
-```
-
-#### Ejemplos — CLI — indices.py
-
-```bash
-replica-inpc calcular --version 2018 --canasta canasta_2018.csv --serie serie_2018.csv
-```
-
-Nota: historia completa vía CLI → ver `flujos.py`.
+- `desencadenar(resultado)` — remoción de factores de encadenamiento para recuperar Laspeyres crudo; diferida por baja prioridad en v2
 
 ### variaciones.py — RESUELTO (firmas provisionales)
 
