@@ -92,32 +92,101 @@ export INEGI_TOKEN="mi-token-inegi"
 replica-inpc validar --indice resultado.csv
 ```
 
-### insumos.py — RESUELTO (firmas provisionales)
+### insumos.py — RESUELTO (firmas completas)
 
-Funciones públicas:
+#### cargar_canasta — RESUELTO
 
-- `cargar_canasta` — carga canasta desde archivo
-- `cargar_serie` — carga serie desde archivo
-
-Funciones diferidas:
-
-- `normalizar_ponderadores` — asegura que los ponderadores de una canasta sumen 100
-
-Notas:
-
-- Versión: explícita siempre. NO auto-detect (riesgo de cálculo silencioso erróneo; ej. canastas 2010 y 2013 tienen genéricos idénticos)
-
-#### Ejemplos — notebook — insumos.py
+##### Firma
 
 ```python
-import replica_inpc as rep
-
-canasta = rep.cargar_canasta("canasta_2018.csv", version=2018)
-serie   = rep.cargar_serie("serie_2018.csv", version=2018)
+def cargar_canasta(
+    ruta: str,
+    version: Literal[2010, 2013, 2018, 2024],
+) -> CanastaCanonica:
 ```
 
-Nota: `cargar_canasta` y `cargar_serie` son funciones Python — no tienen comando CLI propio.
-Los insumos se pasan como argumentos al comando `calcular` de `indices.py`.
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `ruta` | `str` | ruta al CSV; relativa o absoluta |
+| `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta; explícita siempre — no auto-detect |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `CanastaCanonica` | índice = `generico`; columnas `ponderador` y `encadenamiento` como `str` |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo existe pero vacío | `ArchivoVacio` |
+| CSV no parseable | `ArchivoCorrupto` |
+| columnas requeridas ausentes | `ColumnasMinFaltantes` |
+| `version` fuera de `[2010, 2013, 2018, 2024]` | `InvarianteViolado` |
+
+##### Notas
+
+- versión siempre explícita — canastas 2010 y 2013 tienen genéricos idénticos; auto-detect arriesga cálculo silenciosamente erróneo
+
+##### Ejemplo
+
+```python
+canasta = rep.cargar_canasta("data/canasta_2018.csv", version=2018)
+```
+
+#### cargar_serie — RESUELTO
+
+##### Firma
+
+```python
+def cargar_serie(
+    ruta: str,
+    version: Literal[2010, 2013, 2018, 2024],
+) -> SerieNormalizada:
+```
+
+##### Parámetros
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `ruta` | `str` | ruta al CSV; relativa o absoluta |
+| `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta correspondiente |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `SerieNormalizada` | índice = `generico_limpio`; columnas = `PeriodoQuincenal` |
+
+##### Errores
+
+| condición | error |
+|---|---|
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo existe pero vacío | `ArchivoVacio` |
+| CSV no parseable | `ArchivoCorrupto` |
+| orientación de columnas no detectable | `OrientacionNoDetectable` |
+| ninguna fila útil tras normalización | `SerieVacia` |
+| `version` fuera de `[2010, 2013, 2018, 2024]` | `InvarianteViolado` |
+
+##### Notas
+
+- siempre quincenal — datos mensuales se obtienen vía `a_mensual(resultado)`, nunca cargando CSV mensuales
+- soporta formato BIE jerárquico (2010/2013) y formato estándar (2018/2024)
+
+##### Ejemplo
+
+```python
+serie = rep.cargar_serie("data/serie_2018.csv", version=2018)
+```
+
+#### Funciones diferidas
+
+- `normalizar_ponderadores(canasta)` — asegura que ponderadores sumen 100; diferida por baja prioridad en v2
 
 ### indices.py — RESUELTO (firmas provisionales)
 
