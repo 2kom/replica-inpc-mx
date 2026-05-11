@@ -198,6 +198,7 @@ serie = rep.cargar_serie("data/serie_2018.csv", version=2018)
 def calcular_indice(
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
+    tipo: str,
     referencia: ResultadoIndice | None = None,
 ) -> ResultadoIndice:
 ```
@@ -208,6 +209,7 @@ def calcular_indice(
 |---|---|---|
 | `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
 | `serie` | `SerieNormalizada` | serie ya cargada; debe corresponder a la misma versión que `canasta` |
+| `tipo` | `str` | tipo de índice a calcular; valores válidos en `INDICE_POR_TIPO` (ej. `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`) |
 | `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones 2010 y 2013 (LaspeyresEncadenado); `None` para 2018 y 2024 |
 
 ##### Retorno
@@ -224,6 +226,7 @@ def calcular_indice(
 | `canasta` sin genéricos utilizables | `CanastaSinGenericos` |
 | ponderador faltante para el cálculo | `PonderadorFaltante` |
 | `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
+| `tipo` no reconocido en `INDICE_POR_TIPO` | `InvarianteViolado` |
 
 ##### Notas
 
@@ -235,7 +238,7 @@ def calcular_indice(
 ```python
 canasta = rep.cargar_canasta("canasta_2018.csv", version=2018)
 serie   = rep.cargar_serie("serie_2018.csv", version=2018)
-indice  = rep.calcular_indice(canasta, serie)
+indice  = rep.calcular_indice(canasta, serie, tipo="inpc")
 ```
 
 #### empalmar — RESUELTO
@@ -246,6 +249,7 @@ indice  = rep.calcular_indice(canasta, serie)
 def empalmar(
     resultados: list[ResultadoIndice],
     forzar: bool = False,
+    version_nombres: Literal[2010, 2013, 2018, 2024] | None = None,
 ) -> ResultadoIndice:
 ```
 
@@ -255,12 +259,13 @@ def empalmar(
 |---|---|---|
 | `resultados` | `list[ResultadoIndice]` | tramos a unir; orden cronológico; al menos dos elementos |
 | `forzar` | `bool` | si `True`, permite empalmar resultados con `periodo_referencia` distintos emitiendo `UserWarning` |
+| `version_nombres` | `Literal[2010, 2013, 2018, 2024] \| None` | versión de referencia para nombres de categorías; si no está en los inputs, se usa la versión más cercana disponible; `None` = versión más reciente de los inputs |
 
 ##### Retorno
 
 | tipo | contrato |
 |---|---|
-| `ResultadoIndice` | resultado unificado; `manifiesto` concatenado; `reporte` y `diagnostico` mergeados |
+| `ResultadoIndice` | resultado unificado; `manifiesto` concatenado; `reporte` y `diagnostico` mergeados; nombres de categorías normalizados según `version_nombres` |
 
 ##### Errores
 
@@ -275,11 +280,21 @@ def empalmar(
 
 - solo une tramos del mismo `tipo`; no hace rebase automático
 - `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
+- renombrado de categorías se aplica en `api/` antes de pasar a dominio
+- `version_nombres=None` → versión más reciente de los inputs
+- `version_nombres=X` donde X no está en los inputs → se usa la versión disponible más cercana a X (ej. inputs 2018+2024, `version_nombres=2010` → usa 2018)
 
 ##### Ejemplo
 
 ```python
-hist = rep.empalmar([indice_2010, indice_2013])
+# inputs 2018+2024; nombres quedan con convención 2024 (más reciente)
+hist = rep.empalmar([indice_2018, indice_2024])
+
+# inputs 2018+2024; forzar convención 2018
+hist = rep.empalmar([indice_2018, indice_2024], version_nombres=2018)
+
+# inputs 2018+2024; version_nombres=2010 → usa 2018 (más cercana disponible)
+hist = rep.empalmar([indice_2018, indice_2024], version_nombres=2010)
 ```
 
 #### rebasar — RESUELTO
@@ -367,43 +382,110 @@ mensual = rep.a_mensual(indice)
 #### Funciones diferidas
 
 - `desencadenar(resultado)` — remoción de factores de encadenamiento para recuperar Laspeyres crudo; diferida por baja prioridad en v2
+- `normalizar_categorias(resultado, version_nombres)` — renombrado manual de categorías antes de empalmar; diferida; `empalmar` lo hace internamente vía `version_nombres`
 
-### variaciones.py — RESUELTO (firmas provisionales)
+### variaciones.py — RESUELTO (firmas completas)
 
-Funciones públicas (series):
+#### Grupo: variaciones (series) — RESUELTO
 
-- `variacion_periodica(resultado, frecuencia)` — variación periodo a periodo (quincenal/mensual/anual)
-- `variacion_acumulada_anual(resultado)` — acumulado ene→actual vs dic año anterior
-- `variacion_desde(resultado, desde, hasta, incluir_parciales)` — variación entre dos periodos
+##### Funciones (series)
 
-Funciones públicas (escalares):
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `variacion_periodica` | `variacion_periodica(resultado, frecuencia)` | `ResultadoVariacion` | una variación por periodo según `frecuencia` |
+| `variacion_acumulada_anual` | `variacion_acumulada_anual(resultado)` | `ResultadoVariacion` | ene→periodo_actual vs dic_año_anterior; una fila por periodo |
+| `variacion_desde` | `variacion_desde(resultado, desde, hasta, incluir_parciales)` | `ResultadoVariacion` | variación total del rango; una fila por índice |
 
-- `inflacion_acumulada(resultado, desde, hasta)` — acumulado entre dos periodos → float
-- `inflacion_promedio(resultado, desde, hasta)` — TCAC o promedio simple → float
-- `inflacion_en(resultado, periodo)` — variación puntual en un periodo (respecto al periodo anterior) → float
-- `inflacion_maxima(resultado)` — → (periodo, float)
-- `inflacion_minima(resultado)` — → (periodo, float)
+##### Parámetros comunes
 
-#### Ejemplos — notebook — variaciones.py
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIndice` | resultado de índices; quincenal o mensual |
+
+##### Diferencias por función
+
+| función | parámetro específico | tipo | contrato |
+|---|---|---|---|
+| `variacion_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "anual"]` | quincenal = vs quincena anterior; mensual = vs mes anterior; anual = vs mismo periodo año anterior |
+| `variacion_desde` | `desde` | `str` | periodo inicial del rango; ver §Manejo de periodos |
+| `variacion_desde` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
+| `variacion_desde` | `incluir_parciales` | `bool = True` | si `False`, excluye periodos con `estado_calculo = parcial` |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| `frecuencia` fuera de `["quincenal", "mensual", "anual"]` | `InvarianteViolado` |
+| `frecuencia="quincenal"` con resultado mensual | `InvarianteViolado` |
+| `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `InvarianteViolado` |
+
+##### Ejemplos
 
 ```python
-import replica_inpc as rep
-
-# serie de variaciones mensuales
 vars_mensual = rep.variacion_periodica(indice, frecuencia="mensual")
-
-# acumulado 2015–2024
-acum = rep.inflacion_acumulada(indice, desde="Ene 2015", hasta="Dic 2024")  # → float
-
-# máximo histórico
-periodo, valor = rep.inflacion_maxima(indice)
+acum_anual   = rep.variacion_acumulada_anual(indice)
+rango        = rep.variacion_desde(indice, desde="Ene 2015", hasta="Dic 2024")
 ```
 
-#### Ejemplos — CLI — variaciones.py
+#### Grupo: inflación (escalares) — RESUELTO
 
-```bash
-replica-inpc variacion --frecuencia mensual --indice resultado.csv
-replica-inpc inflacion-acumulada --desde 2015-01 --hasta 2024-12 --indice resultado.csv
+##### Funciones (escalares)
+
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `inflacion_acumulada` | `inflacion_acumulada(resultado, desde, hasta)` | `float` | variación total del rango en pp |
+| `inflacion_promedio` | `inflacion_promedio(resultado, desde, hasta, metodo)` | `float` | TCAC o promedio simple según `metodo` |
+| `inflacion_en` | `inflacion_en(resultado, periodo)` | `float` | extrae `variacion_pp` para el periodo dado; tipo de comparación depende de cómo se calculó el `ResultadoVariacion` |
+| `inflacion_maxima` | `inflacion_maxima(resultado, desde, hasta)` | `tuple[str, float]` | periodo + valor del máximo en el rango |
+| `inflacion_minima` | `inflacion_minima(resultado, desde, hasta)` | `tuple[str, float]` | periodo + valor del mínimo en el rango |
+
+##### Parámetros comunes
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoVariacion` | debe contener exactamente un índice; ver §Notas |
+
+##### Diferencias por función
+
+| función | parámetro específico | tipo | contrato |
+|---|---|---|---|
+| `inflacion_acumulada` | `desde` | `str` | periodo inicial; ver §Manejo de periodos |
+| `inflacion_acumulada` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
+| `inflacion_promedio` | `desde` | `str \| None` | periodo inicial; `None` = primer disponible |
+| `inflacion_promedio` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
+| `inflacion_promedio` | `metodo` | `Literal["tcac", "simple"] = "tcac"` | `tcac` = tasa de crecimiento anual compuesta; `simple` = media aritmética de variaciones anuales |
+| `inflacion_en` | `periodo` | `str` | ver §Manejo de periodos |
+| `inflacion_maxima` | `desde` | `str \| None` | `None` = sin límite inferior |
+| `inflacion_maxima` | `hasta` | `str \| None` | `None` = sin límite superior |
+| `inflacion_minima` | `desde` | `str \| None` | `None` = sin límite inferior |
+| `inflacion_minima` | `hasta` | `str \| None` | `None` = sin límite superior |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| `resultado` con más de un índice | `InvarianteViolado` |
+| `desde`/`hasta`/`periodo` con formato inválido | `PeriodoNoInterpretable` |
+| `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `InvarianteViolado` |
+| `periodo` no existe en resultado | `InvarianteViolado` |
+
+##### Notas
+
+- requieren `ResultadoVariacion` con un solo índice — típicamente calculado a partir de `ResultadoIndice` con `tipo="inpc"`
+
+##### Ejemplos
+
+```python
+variaciones = rep.variacion_periodica(indice, frecuencia="mensual")
+
+acum       = rep.inflacion_acumulada(variaciones, desde="Ene 2015", hasta="Dic 2024")
+prom       = rep.inflacion_promedio(variaciones, desde="Ene 2015", hasta="Dic 2024")
+en         = rep.inflacion_en(variaciones, periodo="Dic 2024")
+p_max, v_max = rep.inflacion_maxima(variaciones)
+p_min, v_min = rep.inflacion_minima(variaciones)
 ```
 
 ### incidencias.py — RESUELTO (firmas provisionales)
