@@ -146,7 +146,7 @@ class Vista:
 
 `ResultadoIndice` y los derivados NO comparten exactamente la misma semántica en `.resultado.largo`: `ResultadoIndice` conserva filas con NaN cuando `estado_calculo = sin_datos` o `fallida`; los derivados omiten esas combinaciones del largo. La asimetría está documentada en `Semántica compartida de resultados derivados`.
 
-### Semántica compartida de resultados derivados — PROVISIONAL
+### Semántica compartida de resultados derivados — CERRADO
 
 Comparte semántica entre `ResultadoVariacion` y `ResultadoIncidencia`.
 
@@ -810,7 +810,7 @@ class Validacion(ABC):
 | existencia | abstracta en la clase base |
 | semántica | cada subclase define qué propiedad expone en notebook |
 
-### ValidacionIndice — NUEVO — PROVISIONAL
+### ValidacionIndice — NUEVO — CERRADO
 
 Hereda de `Validacion`. Compara un `ResultadoIndice` contra series publicadas por INEGI.
 
@@ -933,7 +933,7 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | índice | entero |
 | cálculo | bajo demanda; no se almacena |
 
-### ValidacionVariacion — NUEVO — PROVISIONAL
+### ValidacionVariacion — NUEVO — CERRADO
 
 Hereda de `Validacion`. Compara un `ResultadoVariacion` contra series publicadas por INEGI.
 
@@ -1056,7 +1056,7 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | índice | entero |
 | cálculo | bajo demanda; no se almacena |
 
-### ValidacionIncidencia — NUEVO — PROVISIONAL
+### ValidacionIncidencia — NUEVO — CERRADO
 
 Hereda de `Validacion`. Compara un `ResultadoIncidencia` contra series publicadas por INEGI.
 

@@ -236,9 +236,9 @@ Funciones públicas (escalares):
 
 Notas:
 
-- Firmas provisionales — parámetro `canasta` pendiente hasta replanteo de contratos de dominio.
-- Incidencia requiere índice del genérico en `t` y `t-1` + ponderador. Si `ResultadoCalculo` no embebe la canasta, `canasta` será parámetro explícito.
-- `incidencia_acumulada_anual`: propiedad matemática — suma de incidencias de todos los genéricos = variación anual acumulada.
+- Todas las funciones de serie reciben `canastas: dict[int, CanastaCanonica]` como parámetro explícito — la canasta no está embebida en el resultado.
+- `incidencia_acumulada_anual`: propiedad matemática — suma de incidencias de todos los genéricos = variación anual acumulada del INPC.
+- `incidencia_acumulada` devuelve `pd.Series` (escalar por genérico), distinto de `incidencia_desde` que devuelve `ResultadoIncidencia`.
 - `incluir_parciales` en `incidencia_desde`: diferido.
 
 #### Ejemplos — notebook — incidencias.py
@@ -267,46 +267,53 @@ replica-inpc mayor-incidencia --periodo 2024-12 --indice resultado.csv
 
 Funciones públicas:
 
-- `validar_mensual(resultado)` — valida series + variaciones (periódica/interanual/acumulada) + incidencias contra INEGI
-- `validar_quincenal(resultado)` — valida series + variaciones (periódica/interanual/acumulada) contra INEGI; sin incidencias
+- `validar_indice(resultado)` — compara `ResultadoIndice` contra series INEGI → `ValidacionIndice`
+- `validar_variacion(variacion)` — compara `ResultadoVariacion` contra series INEGI → `ValidacionVariacion`
+- `validar_incidencia(incidencia)` — compara `ResultadoIncidencia` contra series INEGI → `ValidacionIncidencia`
 
 Notas:
 
-- Cada función itera los 3 tipos disponibles: `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`.
-- Delega a `FuenteValidacionApi` — auto-detecta frecuencia por tipo de periodo en `resultado`.
-- Devuelve `ResultadoValidacion` (estructura pendiente de replanteo de contratos de dominio).
-- Pendiente: parámetro `tipos` opcional para control granular de qué se valida (series/variaciones/incidencias).
+- Cada función acepta solo tipos con series INEGI comparables: `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`. Otros tipos → `InvarianteViolado`.
+- Auto-detecta frecuencia (quincenal/mensual) por tipo de periodo en el resultado de entrada.
+- Delega a `FuenteValidacionApi` para obtener series INEGI.
 
 #### Ejemplos — notebook — validaciones.py
 
 ```python
 import replica_inpc as rep
 
-reporte = rep.validar_mensual(indice)
-reporte = rep.validar_quincenal(indice)
+val_indice    = rep.validar_indice(indice)       # → ValidacionIndice
+val_variacion = rep.validar_variacion(variacion)  # → ValidacionVariacion
+val_incidencia = rep.validar_incidencia(incidencia)  # → ValidacionIncidencia
 ```
 
 #### Ejemplos — CLI — validaciones.py
 
 ```bash
-replica-inpc validar --indice resultado.csv
+replica-inpc validar-indice --resultado resultado.csv
+replica-inpc validar-variacion --resultado variaciones.csv
 ```
 
-### flujos.py — RESUELTO (firmas provisionales)
+### flujos.py — PROVISIONAL (firmas provisionales)
 
 Funciones públicas:
 
-- `calcular_historia(canastas, series)` — múltiples canastas → serie completa empalmada y rebased
-- `calcular_variacion(canastas, series, frecuencia)` — calcula índice + devuelve variaciones
-- `calcular_incidencia(canastas, series, frecuencia)` — calcula índice + devuelve incidencias
-- `verificar(canastas, series)` — calcula + variaciones + incidencias + valida contra INEGI (requiere token)
-- `exportar(resultado, path)` — guarda cualquier resultado a archivo
+- `calcular_historia(canastas, series)` — múltiples canastas → `ResultadoIndice` completo empalmado y rebased
+
+Funciones pendientes de decisión:
+
+- `calcular_variacion(canastas, series, frecuencia)` — PENDIENTE: determinar si agrega valor frente a `calcular_historia` + `variacion_periodica` manual
+- `calcular_incidencia(canastas, series, frecuencia)` — PENDIENTE: mismo argumento que `calcular_variacion`
+- `verificar(canastas, series)` — PENDIENTE: superfunción que orquesta cálculo + validación completa; evaluar utilidad real vs complejidad
+
+Funciones diferidas:
+
+- `exportar(resultado, path)` — diferida; pandas ya expone `to_csv`/`to_excel`; agregar solo si se requiere formato propio o CLI específico
 
 Notas:
 
 - Re-exporta desde `aplicacion/casos_uso/`. La lógica de orquestación vive ahí, no en `api/`.
-- `calcular_variacion` / `calcular_incidencia`: cálculo puro, sin token, sin INEGI.
-- `verificar`: requiere token INEGI configurado vía `config.set_token` o `INEGI_TOKEN` env var.
+- `calcular_historia`: único flujo confirmado para v2.
 
 #### Ejemplos — notebook — flujos.py
 
@@ -315,19 +322,10 @@ import replica_inpc as rep
 
 # historia completa de una vez
 historico = rep.calcular_historia(canastas, series)
-
-# calcula + variaciones directo
-variaciones = rep.calcular_variacion(canastas, series, frecuencia="mensual")
-
-# flujo completo con validación
-rep.set_token("mi-token")
-reporte = rep.verificar(canastas, series)
 ```
 
 #### Ejemplos — CLI — flujos.py
 
 ```bash
 replica-inpc calcular-historia --config historia.toml
-replica-inpc verificar --config historia.toml
-replica-inpc exportar --resultado resultado.csv --salida output.xlsx
 ```
