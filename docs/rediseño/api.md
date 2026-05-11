@@ -89,7 +89,7 @@ rep.tolerancia_validacion = 0.005  # opcional
 
 ```bash
 export INEGI_TOKEN="mi-token-inegi"
-replica-inpc validar --indice resultado.csv
+replica-inpc validar-indice --resultado resultado.csv
 ```
 
 ### insumos.py — RESUELTO (firmas completas)
@@ -280,7 +280,7 @@ def empalmar(
 
 - solo une tramos del mismo `tipo`; no hace rebase automático
 - `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
-- renombrado de categorías se aplica en `api/` antes de pasar a dominio
+- renombrado de categorías lo aplica `empalmar` de dominio vía `RENOMBRES_INDICES` en `correspondencia_canastas.py`; `version_nombres` selecciona qué convención usar
 - `version_nombres=None` → versión más reciente de los inputs
 - `version_nombres=X` donde X no está en los inputs → se usa la versión disponible más cercana a X (ej. inputs 2018+2024, `version_nombres=2010` → usa 2018)
 
@@ -429,107 +429,175 @@ acum_anual   = rep.variacion_acumulada_anual(indice)
 rango        = rep.variacion_desde(indice, desde="Ene 2015", hasta="Dic 2024")
 ```
 
-#### Grupo: inflación (escalares) — RESUELTO
+#### Grupo: inflación (análisis) — RESUELTO
 
-##### Funciones (escalares)
+##### Funciones de análisis
 
 | función | firma resumida | retorno | notas |
 |---|---|---|---|
-| `inflacion_acumulada` | `inflacion_acumulada(resultado, desde, hasta)` | `float` | variación total del rango en pp |
-| `inflacion_promedio` | `inflacion_promedio(resultado, desde, hasta, metodo)` | `float` | TCAC o promedio simple según `metodo` |
-| `inflacion_en` | `inflacion_en(resultado, periodo)` | `float` | extrae `variacion_pp` para el periodo dado; tipo de comparación depende de cómo se calculó el `ResultadoVariacion` |
-| `inflacion_maxima` | `inflacion_maxima(resultado, desde, hasta)` | `tuple[str, float]` | periodo + valor del máximo en el rango |
-| `inflacion_minima` | `inflacion_minima(resultado, desde, hasta)` | `tuple[str, float]` | periodo + valor del mínimo en el rango |
+| `inflacion_en` | `inflacion_en(resultado, periodo)` | `pd.DataFrame` | índice=indice, col=`variacion_pp`; todas las categorías en el periodo |
+| `inflacion_acumulada` | `inflacion_acumulada(resultado, desde, hasta, indice)` | `float` | variación total del rango para el índice especificado |
+| `inflacion_promedio` | `inflacion_promedio(resultado, desde, hasta, indice, metodo)` | `float` | TCAC o promedio simple para el índice especificado |
+| `inflacion_maxima` | `inflacion_maxima(resultado, desde, hasta, indice)` | `tuple[str, str, float]` | (periodo, indice, valor) del máximo en el rango |
+| `inflacion_minima` | `inflacion_minima(resultado, desde, hasta, indice)` | `tuple[str, str, float]` | (periodo, indice, valor) del mínimo en el rango |
 
 ##### Parámetros comunes
 
 | parámetro | tipo api | contrato |
 |---|---|---|
-| `resultado` | `ResultadoVariacion` | debe contener exactamente un índice; ver §Notas |
+| `resultado` | `ResultadoVariacion` | resultado de variaciones ya calculado |
 
 ##### Diferencias por función
 
 | función | parámetro específico | tipo | contrato |
 |---|---|---|---|
-| `inflacion_acumulada` | `desde` | `str` | periodo inicial; ver §Manejo de periodos |
-| `inflacion_acumulada` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
-| `inflacion_promedio` | `desde` | `str \| None` | periodo inicial; `None` = primer disponible |
-| `inflacion_promedio` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
-| `inflacion_promedio` | `metodo` | `Literal["tcac", "simple"] = "tcac"` | `tcac` = tasa de crecimiento anual compuesta; `simple` = media aritmética de variaciones anuales |
 | `inflacion_en` | `periodo` | `str` | ver §Manejo de periodos |
+| `inflacion_acumulada` | `desde` | `str` | periodo inicial; ver §Manejo de periodos |
+| `inflacion_acumulada` | `hasta` | `str \| None` | `None` = último disponible |
+| `inflacion_acumulada` | `indice` | `str` | índice a consultar; debe existir en resultado |
+| `inflacion_promedio` | `desde` | `str \| None` | `None` = primer disponible |
+| `inflacion_promedio` | `hasta` | `str \| None` | `None` = último disponible |
+| `inflacion_promedio` | `indice` | `str` | índice a consultar |
+| `inflacion_promedio` | `metodo` | `Literal["tcac", "simple"] = "tcac"` | `tcac` = tasa de crecimiento anual compuesta; `simple` = media aritmética |
 | `inflacion_maxima` | `desde` | `str \| None` | `None` = sin límite inferior |
 | `inflacion_maxima` | `hasta` | `str \| None` | `None` = sin límite superior |
+| `inflacion_maxima` | `indice` | `str \| None = None` | `None` = máximo global entre todos los índices y periodos |
 | `inflacion_minima` | `desde` | `str \| None` | `None` = sin límite inferior |
 | `inflacion_minima` | `hasta` | `str \| None` | `None` = sin límite superior |
+| `inflacion_minima` | `indice` | `str \| None = None` | `None` = mínimo global entre todos los índices y periodos |
 
 ##### Errores comunes
 
 | condición | error |
 |---|---|
-| `resultado` con más de un índice | `InvarianteViolado` |
-| `desde`/`hasta`/`periodo` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo`/`desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo` no existe en resultado | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
-| `periodo` no existe en resultado | `InvarianteViolado` |
+| `indice` no existe en resultado | `InvarianteViolado` |
 
 ##### Notas
 
-- requieren `ResultadoVariacion` con un solo índice — típicamente calculado a partir de `ResultadoIndice` con `tipo="inpc"`
+- `inflacion_acumulada` e `inflacion_promedio` operan sobre `variacion_pp` fila a fila; solo tienen sentido si `resultado` fue calculado con `variacion_periodica` — con `variacion_desde` o `variacion_acumulada_anual` los valores ya son totales y sumarlos sería incorrecto
 
 ##### Ejemplos
 
 ```python
 variaciones = rep.variacion_periodica(indice, frecuencia="mensual")
 
-acum       = rep.inflacion_acumulada(variaciones, desde="Ene 2015", hasta="Dic 2024")
-prom       = rep.inflacion_promedio(variaciones, desde="Ene 2015", hasta="Dic 2024")
-en         = rep.inflacion_en(variaciones, periodo="Dic 2024")
-p_max, v_max = rep.inflacion_maxima(variaciones)
-p_min, v_min = rep.inflacion_minima(variaciones)
+en          = rep.inflacion_en(variaciones, periodo="Dic 2024")
+acum        = rep.inflacion_acumulada(variaciones, desde="Ene 2015", hasta="Dic 2024", indice="inpc")
+prom        = rep.inflacion_promedio(variaciones, desde="Ene 2015", hasta="Dic 2024", indice="inpc")
+p, i, v     = rep.inflacion_maxima(variaciones)
+p, i, v     = rep.inflacion_maxima(variaciones, indice="Alimentos")
 ```
 
-### incidencias.py — RESUELTO (firmas provisionales)
+### incidencias.py — RESUELTO (firmas completas)
 
-Funciones públicas (series):
+#### Grupo: incidencias (series) — RESUELTO
 
-- `incidencia_periodica(resultado, canastas, frecuencia)` — incidencia periodo a periodo por genérico
-- `incidencia_acumulada_anual(resultado, canastas)` — acumulado ene→actual; suma de todos los genéricos = variación anual acumulada
-- `incidencia_desde(resultado, canastas, desde, hasta)` — incidencia entre dos periodos
-- `incidencia_en(resultado, canastas, periodo)` — incidencia de todos los genéricos en un periodo → `pd.Series`
-- `incidencia_acumulada(resultado, canastas, desde, hasta)` — incidencia acumulada por genérico → `pd.Series`
+##### Funciones (series)
 
-Funciones públicas (escalares):
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `incidencia_periodica` | `incidencia_periodica(inpc, clasificacion, canastas, frecuencia)` | `ResultadoIncidencia` | incidencia periodo a periodo por genérico |
+| `incidencia_acumulada_anual` | `incidencia_acumulada_anual(inpc, clasificacion, canastas)` | `ResultadoIncidencia` | ene→periodo_actual; propiedad: suma de genéricos = variación anual acumulada del INPC |
+| `incidencia_desde` | `incidencia_desde(inpc, clasificacion, canastas, desde, hasta, incluir_parciales)` | `ResultadoIncidencia` | incidencia total del rango; una fila por genérico |
 
-- `mayor_incidencia(resultado, canastas, periodo)` — → `(str, float)`
-- `menor_incidencia(resultado, canastas, periodo)` — → `(str, float)`
+##### Parámetros comunes
 
-Notas:
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `inpc` | `ResultadoIndice` | resultado de índice INPC global |
+| `clasificacion` | `ResultadoIndice` | resultado de clasificación (componentes o subcomponentes); mismo `periodo_referencia` que `inpc` |
+| `canastas` | `dict[int, CanastaCanonica]` | canastas por versión; claves = `VersionCanasta` |
 
-- Todas las funciones reciben `canastas: dict[int, CanastaCanonica]` como parámetro explícito — la canasta no está embebida en el resultado.
-- `incidencia_acumulada_anual`: propiedad matemática — suma de incidencias de todos los genéricos = variación anual acumulada del INPC.
-- `incidencia_acumulada` devuelve `pd.Series` (un escalar por genérico); distinto de `incidencia_desde` que devuelve `ResultadoIncidencia`.
-- `incluir_parciales` en `incidencia_desde`: diferido.
+##### Diferencias por función
 
-#### Ejemplos — notebook — incidencias.py
+| función | parámetro específico | tipo | contrato |
+|---|---|---|---|
+| `incidencia_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "anual"]` | quincenal = vs quincena anterior; mensual = vs mes anterior; anual = vs mismo periodo año anterior |
+| `incidencia_desde` | `desde` | `str \| None` | periodo inicial; `None` = primer disponible; ver §Manejo de periodos |
+| `incidencia_desde` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
+| `incidencia_desde` | `incluir_parciales` | `bool = True` | si `False`, excluye genéricos con `estado_calculo = parcial` |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| `inpc.periodo_referencia != clasificacion.periodo_referencia` | `InvarianteViolado` |
+| `frecuencia` fuera de `["quincenal", "mensual", "anual"]` | `InvarianteViolado` |
+| `frecuencia="quincenal"` con resultado mensual | `InvarianteViolado` |
+| `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `InvarianteViolado` |
+
+##### Ejemplos
 
 ```python
-import replica_inpc as rep
-
-# serie de incidencias mensuales
-inc_mensual = rep.incidencia_periodica(indice, canastas, frecuencia="mensual")
-
-# genérico con mayor incidencia en un periodo
-generico, valor = rep.mayor_incidencia(indice, canastas, periodo="Dic 2024")
-
-# incidencia acumulada por genérico 2015–2024
-rep.incidencia_acumulada(indice, canastas, desde="Ene 2015", hasta="Dic 2024")
+inc_mensual = rep.incidencia_periodica(inpc, clasificacion, canastas, frecuencia="mensual")
+inc_anual   = rep.incidencia_acumulada_anual(inpc, clasificacion, canastas)
+rango       = rep.incidencia_desde(inpc, clasificacion, canastas, desde="Ene 2015", hasta="Dic 2024")
 ```
 
-#### Ejemplos — CLI — incidencias.py
+#### Grupo: incidencias (análisis) — RESUELTO
 
-```bash
-replica-inpc incidencia --frecuencia mensual --indice resultado.csv
-replica-inpc mayor-incidencia --periodo 2024-12 --indice resultado.csv
+##### Funciones de análisis
+
+| función | firma resumida | retorno | notas |
+|---|---|---|---|
+| `incidencia_en` | `incidencia_en(resultado, periodo)` | `pd.DataFrame` | índice=indice, col=`incidencia_pp`; todas las categorías en el periodo |
+| `incidencia_acumulada` | `incidencia_acumulada(resultado, desde, hasta, indice)` | `float` | incidencia acumulada del rango para el índice especificado |
+| `incidencia_promedio` | `incidencia_promedio(resultado, desde, hasta, indice)` | `float` | promedio aritmético de `incidencia_pp` en el rango para el índice especificado |
+| `mayor_incidencia` | `mayor_incidencia(resultado, desde, hasta, indice)` | `tuple[str, str, float]` | (periodo, indice, valor) del máximo en el rango |
+| `menor_incidencia` | `menor_incidencia(resultado, desde, hasta, indice)` | `tuple[str, str, float]` | (periodo, indice, valor) del mínimo en el rango |
+
+##### Parámetros comunes
+
+| parámetro | tipo api | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIncidencia` | resultado de incidencias ya calculado |
+
+##### Diferencias por función
+
+| función | parámetro específico | tipo | contrato |
+|---|---|---|---|
+| `incidencia_en` | `periodo` | `str` | ver §Manejo de periodos |
+| `incidencia_acumulada` | `desde` | `str` | periodo inicial; ver §Manejo de periodos |
+| `incidencia_acumulada` | `hasta` | `str \| None` | `None` = último disponible |
+| `incidencia_acumulada` | `indice` | `str` | índice a consultar; debe existir en resultado |
+| `incidencia_promedio` | `desde` | `str \| None` | `None` = primer disponible |
+| `incidencia_promedio` | `hasta` | `str \| None` | `None` = último disponible |
+| `incidencia_promedio` | `indice` | `str` | índice a consultar |
+| `mayor_incidencia` | `desde` | `str \| None` | `None` = sin límite inferior |
+| `mayor_incidencia` | `hasta` | `str \| None` | `None` = sin límite superior |
+| `mayor_incidencia` | `indice` | `str \| None = None` | `None` = máximo global entre todos los índices y periodos |
+| `menor_incidencia` | `desde` | `str \| None` | `None` = sin límite inferior |
+| `menor_incidencia` | `hasta` | `str \| None` | `None` = sin límite superior |
+| `menor_incidencia` | `indice` | `str \| None = None` | `None` = mínimo global entre todos los índices y periodos |
+
+##### Errores comunes
+
+| condición | error |
+|---|---|
+| `periodo`/`desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo` no existe en resultado | `InvarianteViolado` |
+| `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `InvarianteViolado` |
+| `indice` no existe en resultado | `InvarianteViolado` |
+
+##### Notas
+
+- `incidencia_acumulada` e `incidencia_promedio` operan sobre `incidencia_pp` fila a fila; solo tienen sentido si `resultado` fue calculado con `incidencia_periodica` — con `incidencia_desde` o `incidencia_acumulada_anual` los valores ya son totales y sumarlos sería incorrecto
+
+##### Ejemplos
+
+```python
+en        = rep.incidencia_en(inc_mensual, periodo="Dic 2024")
+acum      = rep.incidencia_acumulada(inc_mensual, desde="Ene 2024", hasta="Dic 2024", indice="Alimentos")
+prom      = rep.incidencia_promedio(inc_mensual, desde="Ene 2024", hasta="Dic 2024", indice="Alimentos")
+p, i, v   = rep.mayor_incidencia(inc_mensual)
+p, i, v   = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
 ```
 
 ### validaciones.py — RESUELTO (firmas provisionales)

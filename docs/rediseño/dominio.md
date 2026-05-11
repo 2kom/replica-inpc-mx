@@ -1265,7 +1265,7 @@ Ambos deben estar en la misma escala de referencia. Si ambos son `None`, se asum
 |---|---|---|
 | `incidencia_periodica(inpc, clasificacion, canastas, frecuencia)` | incidencia periodo a periodo | diseño.md §5.17 |
 | `incidencia_acumulada_anual(inpc, clasificacion, canastas)` | acumulado ene→actual | diseño.md §5.17 |
-| `incidencia_desde(inpc, clasificacion, canastas, desde, hasta)` | incidencia entre dos periodos | diseño.md §5.17 |
+| `incidencia_desde(inpc, clasificacion, canastas, desde, hasta, incluir_parciales)` | incidencia entre dos periodos | diseño.md §5.17 |
 
 ---
 
