@@ -1,4 +1,4 @@
-# Rediseño api/
+    # Rediseño api/
 
 ## Alcance
 
@@ -209,7 +209,7 @@ def calcular_indice(
 |---|---|---|
 | `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
 | `serie` | `SerieNormalizada` | serie ya cargada; debe corresponder a la misma versión que `canasta` |
-| `tipo` | `str` | tipo de índice a calcular; valores válidos en `INDICE_POR_TIPO` (ej. `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`) |
+| `tipo` | `str` | tipo de índice a calcular; valores válidos en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` (ej. `"inpc"`, `"inflacion componente"`, `"durabilidad"`) |
 | `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones 2010 y 2013 (LaspeyresEncadenado); `None` para 2018 y 2024 |
 
 ##### Retorno
@@ -226,7 +226,7 @@ def calcular_indice(
 | `canasta` sin genéricos utilizables | `CanastaSinGenericos` |
 | ponderador faltante para el cálculo | `PonderadorFaltante` |
 | `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
-| `tipo` no reconocido en `INDICE_POR_TIPO` | `InvarianteViolado` |
+| `tipo` no en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` | `InvarianteViolado` |
 
 ##### Notas
 
@@ -663,41 +663,88 @@ replica-inpc validar-variacion  --resultado variaciones.csv
 replica-inpc validar-incidencia --resultado incidencias.csv
 ```
 
-### flujos.py — PROVISIONAL (firmas provisionales)
+### flujos.py — RESUELTO (firmas completas)
 
-Funciones públicas:
+#### calcular_historia — RESUELTO
 
-- `calcular_historia(canastas, series)` — múltiples canastas → `ResultadoIndice` completo empalmado y rebased
+##### Firma
 
-Funciones pendientes de decisión:
+```python
+def calcular_historia(
+    insumos: list[tuple[VersionCanasta, str, str]],
+    tipo: str = "inpc",
+    referencia: str = "2Q Jul 2018",
+    periodicidad: Literal["quincenal", "mensual"] = "mensual",
+) -> ResultadoIndice:
+```
 
-- `calcular_variacion(canastas, series, frecuencia)` — PENDIENTE: determinar si agrega valor frente a `calcular_historia` + `variacion_periodica` manual
-- `calcular_incidencia(canastas, series, frecuencia)` — PENDIENTE: mismo argumento que `calcular_variacion`
-- `verificar(canastas, series)` — PENDIENTE: superfunción que orquesta cálculo + validación completa; evaluar utilidad real vs complejidad
+##### Parámetros
 
-Funciones diferidas:
+| parámetro | tipo | contrato |
+|---|---|---|
+| `insumos` | `list[tuple[VersionCanasta, str, str]]` | orden cronológico; cada elemento = `(version, canasta_path, series_path)`; mínimo 1 elemento; sin versiones duplicadas; si contiene 2013 → debe contener 2010; si contiene 2024 → debe contener 2018 |
+| `tipo` | `str` | clasificación a calcular; debe existir en todas las canastas de `insumos`; default `"inpc"` |
+| `referencia` | `str` | periodo base para `rebasar`; formato `"NQ Mmm AAAA"` o `"Mmm AAAA"`; default `"2Q Jul 2018"` |
+| `periodicidad` | `Literal["quincenal", "mensual"]` | frecuencia del resultado final; default `"mensual"` |
 
-- `exportar(resultado, path)` — diferida; pandas ya expone `to_csv`/`to_excel`; agregar solo si se requiere formato propio o CLI específico
+##### Retorno
 
-Notas:
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | resultado empalmado, rebased a `referencia`, en `periodicidad` indicada; nombres de categorías de la versión más reciente en `insumos` |
 
-- Re-exporta desde `aplicacion/casos_uso/`. La lógica de orquestación vive ahí, no en `api/`.
-- `calcular_historia`: único flujo confirmado para v2.
+##### Orquestación interna
 
-#### Ejemplos — notebook — flujos.py
+Pasos en orden; el usuario no tiene acceso a resultados intermedios:
+
+1. Por cada `(version, canasta_path, series_path)` en `insumos`: `cargar_canasta` + `cargar_serie`
+2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
+3. Si `len(insumos) > 1`: `empalmar` con `version_nombres` de la versión más reciente en `insumos`
+4. `rebasar` al periodo `referencia`
+5. Si `periodicidad="mensual"`: `a_mensual`
+
+Para control granular sobre cualquier paso, usar las funciones manuales de `insumos.py`, `indices.py`.
+
+##### Errores
+
+| condición | error |
+|---|---|
+| `insumos` vacío | `InvarianteViolado` |
+| versión duplicada en `insumos` | `InvarianteViolado` |
+| versión encadenada (2013 o 2024) sin su versión base en `insumos` | `InvarianteViolado` |
+| `tipo` no presente en alguna canasta | `InvarianteViolado` |
+| path no encontrado | `ArchivoNoEncontrado` |
+| archivo vacío | `ArchivoVacio` |
+| archivo corrupto / formato inválido | `ArchivoCorrupto` |
+| encoding no legible | `EncodingNoLegible` |
+| columnas requeridas faltantes en canasta | `ColumnasMinFaltantes` |
+| orientación no detectable en serie | `OrientacionNoDetectable` |
+| sin genéricos en serie | `SerieVacia` |
+| `referencia` no parseable | `ErrorConfiguracion` |
+
+##### Ejemplo
 
 ```python
 import replica_inpc as rep
 
-# historia completa de una vez
-historico = rep.calcular_historia(canastas, series)
+insumos = [
+    (2010, "ponderadores_2010.csv", "series_2010.csv"),
+    (2018, "ponderadores_2018.csv", "series_2018.csv"),
+    (2024, "ponderadores_2024.csv", "series_2024.csv"),
+]
+historico = rep.calcular_historia(insumos)
 ```
-
-#### Ejemplos — CLI — flujos.py
 
 ```bash
 replica-inpc calcular-historia --config historia.toml
 ```
+
+#### Funciones diferidas
+
+- `calcular_variacion` — diferida; `calcular_historia` + `variacion_periodica` cubre el caso con una línea adicional
+- `calcular_incidencia` — diferida; mismo argumento que `calcular_variacion`
+- `verificar` — diferida; orquestación completa requiere más diseño (firma compleja por `clasificacion`)
+- `exportar` — diferida; pandas ya expone `to_csv`/`to_excel`
 
 ---
 
