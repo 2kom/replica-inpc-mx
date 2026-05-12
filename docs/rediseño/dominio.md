@@ -42,6 +42,15 @@ Comparte semántica entre `Resultado*` y `Validacion*`.
 
 #### Catálogos
 
+##### `VersionCanasta` — tipo de calculador
+
+| versión | tipo | calculador | requiere `referencia` |
+|---|---|---|---|
+| 2010 | base | `LaspeyresDirecto` | no |
+| 2013 | encadenada | `LaspeyresEncadenado*` | sí → versión 2010 |
+| 2018 | base | `LaspeyresDirecto` | no |
+| 2024 | encadenada | `LaspeyresEncadenado*` | sí → versión 2018 |
+
 ##### `estado_calculo` en `ResultadoIndice` — `.df`, `.resultado.largo`, `.reporte`
 
 | valor | significado |

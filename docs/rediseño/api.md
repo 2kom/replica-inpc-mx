@@ -1,4 +1,4 @@
-    # Rediseño api/
+# Rediseño api/
 
 ## Alcance
 
@@ -60,36 +60,86 @@
 
 ## Módulo por módulo
 
-### config.py — RESUELTO (firmas provisionales)
+### config.py — RESUELTO (firmas completas)
 
-Funciones públicas:
+#### set_token — RESUELTO
 
-- `set_token(token)` — establece token INEGI en memoria
-- `limpiar_cache()` — limpia cache de `FuenteValidacionApi` (útil en notebooks de larga duración)
-
-Variables configurables:
-
-- `tolerancia_validacion` — umbral de diferencia aceptable en validación (default: `0.001` INPC, `0.009` pp incidencias)
-- `timeout_api` — timeout en segundos para llamadas a INEGI (default: `10`)
-
-Notas:
-
-- Token: híbrido — `get_token()` (interno) busca `INEGI_TOKEN` en env var primero, luego valor seteado con `set_token`. Lanza `ErrorConfiguracion` si ninguno está presente.
-
-#### Ejemplos — notebook — config.py
+##### Firma
 
 ```python
-import replica_inpc as rep
-
-rep.set_token("mi-token-inegi")
-rep.tolerancia_validacion = 0.005  # opcional
+def set_token(token: str) -> None:
 ```
 
-#### Ejemplos — CLI — config.py
+##### Parámetros
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `token` | `str` | token INEGI; almacenado en memoria para la sesión; cualquier string aceptado |
+
+##### Retorno
+
+`None`
+
+##### Errores
+
+Ninguno. La validez del token se verifica al llamar `validar_*`, no aquí.
+
+##### Notas
+
+- Token híbrido: `get_token()` (interno) busca `INEGI_TOKEN` en env var primero, luego valor seteado con `set_token`. Lanza `ErrorConfiguracion` si ninguno está disponible.
+- CLI: usar env var `INEGI_TOKEN`; `set_token` no aplica en CLI.
+
+##### Ejemplo
+
+```python
+rep.set_token("mi-token-inegi")
+```
 
 ```bash
 export INEGI_TOKEN="mi-token-inegi"
-replica-inpc validar-indice --resultado resultado.csv
+```
+
+#### limpiar_cache — RESUELTO
+
+##### Firma
+
+```python
+def limpiar_cache() -> None:
+```
+
+##### Retorno
+
+`None`
+
+##### Errores
+
+Ninguno.
+
+##### Notas
+
+- Limpia el cache de respuestas INEGI (`FuenteValidacionApi._cache`). La siguiente llamada a `validar_*` vuelve a consultar la API.
+- Útil en notebooks de larga duración donde los datos INEGI pueden haber cambiado.
+
+##### Ejemplo
+
+```python
+rep.limpiar_cache()
+```
+
+#### Variables configurables — RESUELTO
+
+| variable | tipo | default | descripción |
+|---|---|---|---|
+| `tolerancia_indice` | `float` | `0.0009` | diferencia absoluta máxima aceptable en validación de índices; aplica a todas las versiones |
+| `tolerancia_derivados` | `float` | `0.009` | diferencia absoluta máxima aceptable en validación de variaciones e incidencias (pp) |
+| `timeout_api` | `int` | `10` | timeout en segundos para llamadas a la API INEGI |
+
+##### Ejemplo
+
+```python
+rep.tolerancia_indice = 0.001
+rep.tolerancia_derivados = 0.01
+rep.timeout_api = 30
 ```
 
 ### insumos.py — RESUELTO (firmas completas)
@@ -210,7 +260,7 @@ def calcular_indice(
 | `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
 | `serie` | `SerieNormalizada` | serie ya cargada; debe corresponder a la misma versión que `canasta` |
 | `tipo` | `str` | tipo de índice a calcular; valores válidos en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` (ej. `"inpc"`, `"inflacion componente"`, `"durabilidad"`) |
-| `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones 2010 y 2013 (LaspeyresEncadenado); `None` para 2018 y 2024 |
+| `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones encadenadas (2013 → base 2010, 2024 → base 2018); `None` para versiones base (2010, 2018); ver §`VersionCanasta` en `dominio.md` |
 
 ##### Retorno
 
@@ -231,7 +281,7 @@ def calcular_indice(
 ##### Notas
 
 - una canasta a la vez; historia completa = varias llamadas + `empalmar`
-- `referencia` requerido para versiones 2010 y 2013; ignorado para 2018 y 2024
+- `referencia` requerido para versiones encadenadas (2013, 2024); `None` para versiones base (2010, 2018)
 
 ##### Ejemplo
 
