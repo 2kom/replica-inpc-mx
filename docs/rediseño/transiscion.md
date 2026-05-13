@@ -137,3 +137,114 @@ Sin modificaciones en v2. Ver `docs/diseño.md` para esquema completo.
 ---
 
 ### Origen: `## Contratos de datos`
+
+---
+
+## Delta de implementación
+
+Cambios concretos v1→v2 para referencia rápida durante la implementación. Complementa el inventario de contratos de arriba.
+
+### `tipos.py` — corrección al inventario
+
+La fila `tipos.py → sin cambio` del inventario es incorrecta. Cambios reales:
+
+| v1 | v2 |
+|---|---|
+| `ManifestCorrida` | **eliminado** → reemplazado por `ManifestUnidad` + `ManifestDerivado` |
+| `ResultadoCorrida` | **eliminado** → absorbido por `ResultadoIndice` |
+| `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS` | sin cambio |
+| — | `ManifestUnidad` (nuevo) |
+| — | `ManifestDerivado` (nuevo, con campo `clase: str`) |
+
+---
+
+### `clase_variacion` / `clase_incidencia` — frecuencia embebida
+
+En v1, la frecuencia de una variación/incidencia periódica vivía en dos atributos separados:
+
+```python
+# v1
+rv.clase_variacion  # "periodica"
+rv.descripcion      # "mensual"  ← frecuencia aquí
+
+ri.clase_incidencia  # "periodica"
+ri.frecuencia        # "mensual"  ← atributo separado
+```
+
+En v2, la frecuencia está embebida en `clase_*`:
+
+```python
+# v2
+rv.clase_variacion   # "periodica_mensual"  ← sin descripcion ni frecuencia separados
+ri.clase_incidencia  # "periodica_mensual"
+```
+
+Atributos que **desaparecen**: `rv.descripcion` (como portador de frecuencia) y `ri.frecuencia`.
+
+Valores posibles en v2 para `clase_variacion` y `clase_incidencia`:
+`"periodica_quincenal"`, `"periodica_mensual"`, `"periodica_bimestral"`, `"periodica_trimestral"`, `"periodica_cuatrimestral"`, `"periodica_semestral"`, `"periodica_anual"`, `"acumulada_anual"`, `"desde"`.
+
+`"periodica_quincenal"` solo válido con resultados quincenales.
+
+---
+
+### `api/validacion.py` — colapso de funciones
+
+v1 tiene 5 funciones separadas por frecuencia de periodos. v2 colapsa a 3:
+
+| v1 | v2 |
+|---|---|
+| `validar_mensual(resultado, token)` | `validar_indice(resultado, token)` |
+| `validar_quincenal(resultado, token)` | ↑ misma función; detecta PeriodoMensual/Quincenal |
+| `validar_variaciones_mensual(rv, token)` | `validar_variacion(rv, token)` |
+| `validar_variaciones_quincenal(rv, token)` | ↑ misma función |
+| `validar_incidencias_mensual(ri, token)` | `validar_incidencia(ri, token)` |
+
+El dict `_FRECUENCIAS_INEGI = {"mensual": "periodica", "anual": "interanual"}` desaparece. En v2 el mapeo se deriva directamente de `clase_variacion`:
+
+```python
+# v2 — lógica de traducción en dominio/validacion/variaciones.py
+_MAPEO = {
+    "periodica_quincenal": "periodica",
+    "periodica_mensual":   "periodica",
+    "periodica_anual":     "interanual",
+    "acumulada_anual":     "acumulada_anual",
+}
+```
+
+Ver `aplicacion.md §Mapeo desde contratos de dominio` para el contrato completo.
+
+---
+
+### Eliminaciones en `infraestructura/`
+
+| archivo | motivo |
+|---|---|
+| `infraestructura/filesystem/almacen_artefactos_fs.py` | puerto `AlmacenArtefactos` eliminado |
+| `infraestructura/filesystem/repositorio_corridas_fs.py` | puerto `RepositorioCorridas` eliminado |
+| `infraestructura/filesystem/` (directorio) | vacío tras las eliminaciones |
+| `infraestructura/csv/escritor_resultados_csv.py` | puerto `EscritorResultados` eliminado |
+
+---
+
+### `aplicacion/puertos/fuente_validacion.py` — protocolo v2
+
+v1 declara un solo método `obtener`. v2 declara tres:
+
+```python
+# v2
+class FuenteValidacion(Protocol):
+    def obtener_indices(self, periodos): ...
+    def obtener_variaciones(self, periodos, tipo_variacion): ...
+    def obtener_incidencias(self, periodos, tipo_incidencia): ...
+```
+
+El archivo v1 debe reemplazarse completo. Ver `aplicacion.md §FuenteValidacion`.
+
+---
+
+### `infraestructura/inegi/fuente_validacion_api.py` — TODOs marcados
+
+Dos renombres pendientes (comentarios `# TODO v2` ya en el archivo):
+- `_VARIACIONES_POR_TIPO` → `_VARIACIONES_POR_TIPO_MENSUAL`
+- `def obtener` → `def obtener_indices`
