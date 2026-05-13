@@ -91,6 +91,7 @@ _VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
     },
 }
 
+# TODO v2: renombrar a _VARIACIONES_POR_TIPO_MENSUAL
 _VARIACIONES_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
     "periodica": _VARIACIONES_PERIODICA_MENSUAL,
     "interanual": _VARIACIONES_INTERANUAL_MENSUAL,
@@ -196,6 +197,7 @@ class FuenteValidacionApi:
         self._token = token
         self._tipo = tipo
 
+    # TODO v2: renombrar a obtener_indices
     def obtener(self, periodos: list[_Periodo]) -> dict[str, dict[_Periodo, float | None]]:
         """Devuelve el valor publicado por el INEGI por índice y por periodo.
 

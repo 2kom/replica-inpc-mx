@@ -437,6 +437,7 @@ Dataclass de manifiesto para `ResultadoVariacion` y `ResultadoIncidencia`. Resum
 class ManifestDerivado:
     id_corrida: list[str]
     tipo: str
+    clase: str
     descripcion: str
     fecha: datetime
     inpc_ids: list[str] | None = None
@@ -444,10 +445,11 @@ class ManifestDerivado:
 ```
 
 - `id_corrida` = IDs de todas las corridas origen; para incidencias = `inpc_ids + clasificacion_ids`.
+- `clase` no vacío → `InvarianteViolado` si no.
 - `(inpc_ids is None) == (clasificacion_ids is None)` → `InvarianteViolado` si no.
 - `inpc_ids` y `clasificacion_ids` solo se populan para `ResultadoIncidencia`; para variaciones quedan `None`.
 - no existe operación de `empalmar` sobre resultados derivados.
-- `descripcion` expresa la clase o rango analizado: `"mensual"`, `"desde Ene 2015 hasta Dic 2024"`, etc.
+- `descripcion` expresa información adicional del derivado; para `"desde"`: incluye el rango de periodos; para otros: puede quedar vacío.
 
 #### Campos
 
@@ -455,7 +457,8 @@ class ManifestDerivado:
 |---|---|---|
 | `id_corrida` | `list[str]` | ids de todas las corridas origen |
 | `tipo` | str | tipo de índice derivado |
-| `descripcion` | str | descripción legible del derivado |
+| `clase` | str | clase del derivado: `"periodica_quincenal"`, `"periodica_mensual"`, `"periodica_bimestral"`, `"periodica_trimestral"`, `"periodica_cuatrimestral"`, `"periodica_semestral"`, `"periodica_anual"`, `"acumulada_anual"`, `"desde"` |
+| `descripcion` | str | información adicional legible del derivado; para `"desde"`: incluye el rango de periodos |
 | `fecha` | `datetime` | marca temporal del derivado |
 | `inpc_ids` | `list[str] \| None` | IDs de corridas de `inpc`; solo para `ResultadoIncidencia` |
 | `clasificacion_ids` | `list[str] \| None` | IDs de corridas de `clasificacion`; solo para `ResultadoIncidencia` |
@@ -624,7 +627,7 @@ def __init__(
 ```
 
 - `df` contiene columnas `tipo`, `clase_variacion`, `variacion_pp`, `estado_calculo` -> `InvarianteViolado` si no.
-- `clase_variacion` es homogénea y pertenece a `{"periodica", "acumulada_anual", "desde"}` -> `InvarianteViolado` si no.
+- `clase_variacion` es homogénea y pertenece a `{"periodica_quincenal", "periodica_mensual", "periodica_bimestral", "periodica_trimestral", "periodica_cuatrimestral", "periodica_semestral", "periodica_anual", "acumulada_anual", "desde"}` -> `InvarianteViolado` si no.
 
 #### `.df`
 
@@ -647,7 +650,7 @@ def __init__(
 | columna | tipo | NaN cuando | notas |
 |---|---|---|---|
 | `tipo` | str | nunca | tipo de índice |
-| `clase_variacion` | str | nunca | `periodica`, `acumulada_anual`, `desde` |
+| `clase_variacion` | str | nunca | `periodica_quincenal`, `periodica_mensual`, `periodica_bimestral`, `periodica_trimestral`, `periodica_cuatrimestral`, `periodica_semestral`, `periodica_anual`, `acumulada_anual`, `desde` |
 | `variacion_pp` | float | nunca | siempre válido en filas presentes |
 | `estado_calculo` | str | nunca | `ok`, `parcial` |
 | `version_t` | int | nunca | versión de canasta del periodo `t` |
@@ -675,14 +678,14 @@ Invariante: `indices_parciales is not None` si y solo si `clase_variacion == "de
 
 #### `.resumen`
 
-| columna | tipo |
-|---|---|
-| `tipo` | str |
-| `clase_variacion` | str |
-| `descripcion` | str |
-| `estado_calculo` | str |
-| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
-| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+| columna | tipo | notas |
+|---|---|---|
+| `tipo` | str | — |
+| `clase_variacion` | str | — |
+| `descripcion` | str | no vacío solo cuando `clase_variacion = "desde"`; vacío en otros casos |
+| `estado_calculo` | str | — |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | — |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | — |
 
 #### `.reporte`
 
@@ -733,7 +736,7 @@ def __init__(
 ```
 
 - `df` contiene columnas `tipo`, `clase_incidencia`, `incidencia_pp`, `estado_calculo` -> `InvarianteViolado` si no.
-- `clase_incidencia` es homogénea y pertenece a `{"periodica", "acumulada_anual", "desde"}` -> `InvarianteViolado` si no.
+- `clase_incidencia` es homogénea y pertenece a `{"periodica_quincenal", "periodica_mensual", "periodica_bimestral", "periodica_trimestral", "periodica_cuatrimestral", "periodica_semestral", "periodica_anual", "acumulada_anual", "desde"}` -> `InvarianteViolado` si no.
 
 #### `.df`
 
@@ -756,7 +759,7 @@ def __init__(
 | columna | tipo | NaN cuando | notas |
 |---|---|---|---|
 | `tipo` | str | nunca | tipo de índice |
-| `clase_incidencia` | str | nunca | `periodica`, `acumulada_anual`, `desde` |
+| `clase_incidencia` | str | nunca | `periodica_quincenal`, `periodica_mensual`, `periodica_bimestral`, `periodica_trimestral`, `periodica_cuatrimestral`, `periodica_semestral`, `periodica_anual`, `acumulada_anual`, `desde` |
 | `incidencia_pp` | float | nunca | siempre válido en filas presentes |
 | `estado_calculo` | str | nunca | `ok`, `parcial` |
 | `version_t` | int | nunca | versión de canasta del periodo `t` |
@@ -784,14 +787,14 @@ Invariante: `indices_parciales is not None` si y solo si `clase_incidencia == "d
 
 #### `.resumen`
 
-| columna | tipo |
-|---|---|
-| `tipo` | str |
-| `clase_incidencia` | str |
-| `descripcion` | str |
-| `estado_calculo` | str |
-| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
-| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+| columna | tipo | notas |
+|---|---|---|
+| `tipo` | str | — |
+| `clase_incidencia` | str | — |
+| `descripcion` | str | no vacío solo cuando `clase_incidencia = "desde"`; vacío en otros casos |
+| `estado_calculo` | str | — |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` | — |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` | — |
 
 #### `.reporte`
 
@@ -1503,10 +1506,10 @@ Ninguno aplicable a todas las funciones. Ver errores en cada subfunción.
 
 | aspecto | contrato |
 |---|---|
-| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "anual"]` |
-| regla temporal | vs periodo anterior de la misma frecuencia |
+| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "bimestral", "trimestral", "cuatrimestral", "semestral", "anual"]` |
+| regla temporal | vs N periodos anteriores: quincenal=1Q, mensual=1M, bimestral=2M, trimestral=3M, cuatrimestral=4M, semestral=6M, anual=12M |
 | filas ausentes | periodos sin periodo anterior disponible en `resultado` |
-| error: `frecuencia` inválida | `frecuencia` fuera de `["quincenal", "mensual", "anual"]` → `InvarianteViolado` |
+| error: `frecuencia` inválida | `frecuencia` fuera del conjunto válido → `InvarianteViolado` |
 | error: frecuencia incompatible | `frecuencia="quincenal"` con resultado mensual → `InvarianteViolado` |
 
 ###### `variacion_acumulada_anual`
@@ -1589,9 +1592,9 @@ rango  = variacion_desde(indice, desde=PeriodoMensual(2015, 1), hasta=PeriodoMen
 
 | aspecto | contrato |
 |---|---|
-| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "anual"]` |
-| regla temporal | vs periodo anterior de la misma frecuencia |
-| error: `frecuencia` inválida | `frecuencia` fuera de `["quincenal", "mensual", "anual"]` → `InvarianteViolado` |
+| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "bimestral", "trimestral", "cuatrimestral", "semestral", "anual"]` |
+| regla temporal | vs N periodos anteriores: quincenal=1Q, mensual=1M, bimestral=2M, trimestral=3M, cuatrimestral=4M, semestral=6M, anual=12M |
+| error: `frecuencia` inválida | `frecuencia` fuera del conjunto válido → `InvarianteViolado` |
 | error: frecuencia incompatible | `frecuencia="quincenal"` con resultado mensual → `InvarianteViolado` |
 
 ###### `incidencia_acumulada_anual`

@@ -456,7 +456,7 @@ mensual = rep.a_mensual(indice)
 
 | función | parámetro específico | tipo | contrato |
 |---|---|---|---|
-| `variacion_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "anual"]` | quincenal = vs quincena anterior; mensual = vs mes anterior; anual = vs mismo periodo año anterior |
+| `variacion_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "bimestral", "trimestral", "cuatrimestral", "semestral", "anual"]` | quincenal=1Q, mensual=1M, bimestral=2M, trimestral=3M, cuatrimestral=4M, semestral=6M, anual=12M anteriores |
 | `variacion_desde` | `desde` | `str` | periodo inicial del rango; ver §Manejo de periodos |
 | `variacion_desde` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
 | `variacion_desde` | `incluir_parciales` | `bool = True` | si `False`, excluye periodos con `estado_calculo = parcial` |
@@ -465,7 +465,7 @@ mensual = rep.a_mensual(indice)
 
 | condición | error |
 |---|---|
-| `frecuencia` fuera de `["quincenal", "mensual", "anual"]` | `InvarianteViolado` |
+| `frecuencia` fuera del conjunto válido | `InvarianteViolado` |
 | `frecuencia="quincenal"` con resultado mensual | `InvarianteViolado` |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
@@ -566,7 +566,7 @@ p, i, v     = rep.inflacion_maxima(variaciones, indice="Alimentos")
 
 | función | parámetro específico | tipo | contrato |
 |---|---|---|---|
-| `incidencia_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "anual"]` | quincenal = vs quincena anterior; mensual = vs mes anterior; anual = vs mismo periodo año anterior |
+| `incidencia_periodica` | `frecuencia` | `Literal["quincenal", "mensual", "bimestral", "trimestral", "cuatrimestral", "semestral", "anual"]` | quincenal=1Q, mensual=1M, bimestral=2M, trimestral=3M, cuatrimestral=4M, semestral=6M, anual=12M anteriores |
 | `incidencia_desde` | `desde` | `str \| None` | periodo inicial; `None` = primer disponible; ver §Manejo de periodos |
 | `incidencia_desde` | `hasta` | `str \| None` | periodo final; `None` = último disponible |
 | `incidencia_desde` | `incluir_parciales` | `bool = True` | si `False`, excluye genéricos con `estado_calculo = parcial` |
@@ -576,7 +576,7 @@ p, i, v     = rep.inflacion_maxima(variaciones, indice="Alimentos")
 | condición | error |
 |---|---|
 | `inpc.periodo_referencia != clasificacion.periodo_referencia` | `InvarianteViolado` |
-| `frecuencia` fuera de `["quincenal", "mensual", "anual"]` | `InvarianteViolado` |
+| `frecuencia` fuera del conjunto válido | `InvarianteViolado` |
 | `frecuencia="quincenal"` con resultado mensual | `InvarianteViolado` |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
@@ -693,9 +693,9 @@ Cada función recibe un único parámetro `resultado` del tipo `ResultadoX` corr
 
 - `TIPOS_CON_VALIDACION = {"inpc", "inflacion componente", "inflacion subcomponente"}`.
 
-- `validar_variacion`: comparables contra INEGI son `clase_variacion = "periodica"` (frecuencias `"mensual"` y `"anual"` para periodos mensuales; `"quincenal"` y `"anual"` para quincenales) y `"acumulada_anual"`. `clase_variacion = "desde"` y frecuencias fuera del conjunto válido lanzan `ErrorConfiguracion`.
+- `validar_variacion`: comparables contra INEGI son `clase_variacion in {"periodica_mensual", "periodica_anual"}` para periodos mensuales y `{"periodica_quincenal", "periodica_anual"}` para quincenales; y `"acumulada_anual"`. `clase_variacion = "desde"` y valores fuera de los conjuntos válidos lanzan `ErrorConfiguracion`.
 
-- `validar_incidencia`: INEGI solo publica incidencia periódica mensual. Únicamente comparable: `clase_incidencia = "periodica"` con periodos mensuales. `clase_incidencia = "desde"` o `"acumulada_anual"` lanzan `ErrorConfiguracion`. Periodos quincenales lanzan `ErrorConfiguracion`.
+- `validar_incidencia`: INEGI solo publica incidencia periódica mensual. Únicamente comparable: `clase_incidencia = "periodica_mensual"`. Cualquier otro valor lanza `ErrorConfiguracion`.
 
 ##### Ejemplos
 
