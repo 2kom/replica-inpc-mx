@@ -6,7 +6,7 @@ el objetivo de este archivo es meter toda la informacion que no vaya en los docu
 
 ### Origen: `## Capa api/` → `### Acoplamiento — decisión v2`
 
-Destino: `api.md ## Decisiones` (sección pendiente de crear).
+Destino: `api.md ## Decisiones` (ya existe; ver `api.md §D1`).
 
 - **Hoy:** `api/` llama `infraestructura/csv/` directo. Pragmático, suficiente para v2.
 - **Futuro:** migrar a puertos + DI (`aplicacion/puertos/`) cuando se agreguen fuentes distintas (SQL, HTTP, etc.). `config.py` inyectará el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se agrega el adaptador nuevo.
@@ -47,7 +47,7 @@ Resultado  (base)
 ├── ResultadoVariacion    ← análisis; terminal
 └── ResultadoIncidencia   ← análisis; terminal
 
-ResultadoValidacion  (base)
+Validacion  (base)
 ├── ValidacionIndice      ← contiene ResultadoIndice
 ├── ValidacionVariacion   ← contiene ResultadoVariacion
 └── ValidacionIncidencia  ← contiene ResultadoIncidencia
@@ -66,13 +66,13 @@ ResultadoValidacion  (base)
 | `ResumenValidacion` | → `ResultadoIndice.resumen` (sin columnas INEGI) |
 | `ReporteDetalladoValidacion` | → `ResultadoIndice.reporte` (sin columnas INEGI) |
 | `DiagnosticoFaltantes` | → `ResultadoIndice.diagnostico` (sin cambio de esquema) |
-| `CalculadorBase` / `LaspeyresDirecto` / `LaspeyresEncadenado` | sin cambio (internos) |
+| `CalculadorBase` / `LaspeyresDirecto` / `LaspeyresEncadenadoT1` / `LaspeyresEncadenadoT2` | sin cambio (internos) |
 | `tipos.py` | sin cambio |
 | `correspondencia.py` | sin cambio |
-| `ResultadoVariacion` | sin cambio de clase; mueve a `dominio/calculo/`; agrega manifiesto + resumen/reporte/diagnostico propios |
+| `ResultadoVariacion` | sin cambio de clase; vive en `dominio/modelos/variacion.py`; agrega manifiesto + resumen/reporte/diagnostico propios |
 | `ResumenValidacionVariaciones` | **eliminado** |
 | `ReporteValidacionVariaciones` | → `ValidacionVariacion.reporte` |
-| `ResultadoIncidencia` | sin cambio de clase; mueve a `dominio/calculo/`; agrega manifiesto + resumen/reporte/diagnostico propios |
+| `ResultadoIncidencia` | sin cambio de clase; vive en `dominio/modelos/incidencia.py`; agrega manifiesto + resumen/reporte/diagnostico propios |
 | `ResumenValidacionIncidencias` | → `ValidacionIncidencia.resumen` |
 | `ReporteValidacionIncidencias` | → `ValidacionIncidencia.reporte` |
 | `validar_inpc.py` | sin cambio (interno — alimenta `ValidacionIndice`) |
@@ -81,10 +81,20 @@ ResultadoValidacion  (base)
 
 **Nuevos en v2:**
 - `Resultado` (base abstracta)
-- `ResultadoValidacion` (base) → `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia`
+- `Validacion` (base) → `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia`
 - `ManifestUnidad` — dataclass embebida en `ResultadoIndice.manifiesto`
 - `ManifestDerivado` — dataclass embebida en `ResultadoVariacion` / `ResultadoIncidencia`
 - `DiagnosticoValidacion` — cobertura temporal de API INEGI (propuesto §12.14)
+
+---
+
+### Origen: `## Funciones de dominio` → notas de migración (→ D6 / D7)
+
+Extraídas al reestructurar la sección para seguir la plantilla. Destino: D6 y D7 en `dominio.md ## Decisiones`.
+
+- **Reubicación de funciones a `dominio/calculo/`** (→ D6): las funciones `variacion_periodica/acumulada_anual/desde` e `incidencia_periodica/acumulada_anual/desde` se mueven de `dominio/variaciones.py` y `dominio/incidencias.py` → `dominio/calculo/variaciones.py` y `dominio/calculo/incidencias.py`. Nota: `ResultadoVariacion` y `ResultadoIncidencia` (las clases) permanecen en `dominio/modelos/`.
+- **`empalmar` reemplaza a `combinar`** (→ D7): renombre v1→v2.
+- **Migración de `validar_*.py`** (→ D7): lógica sin cambio; tipo de retorno actualizado: objetos sueltos → `ValidacionX` correspondiente.
 
 ---
 
@@ -96,7 +106,7 @@ ResultadoValidacion  (base)
    ResultadoIndice
    ResultadoVariacion
    ResultadoIncidencia
-   ResultadoValidacion (base)
+   Validacion (base)
    ValidacionIndice
    ValidacionVariacion
    ValidacionIncidencia
@@ -105,19 +115,10 @@ ResultadoValidacion  (base)
    transformaciones de ResultadoIndice  (empalmar, rebasar, a_mensual)
    cálculo de variaciones               (variacion_periodica, etc.)
    cálculo de incidencias               (incidencia_periodica, etc.)
-   validación interna                   (validar_inpc, validar_variaciones, validar_incidencias)
+   consulta de variaciones              (inflacion_en, inflacion_acumulada, etc.)
+   consulta de incidencias              (incidencia_en, incidencia_acumulada, etc.)
+   validación interna                   (validar_indices, validar_variaciones, validar_incidencias)
 ```
-
----
-
-### Origen: `## Capa dominio/` -> `### Pendientes — próxima sesión`
-
-- Esquemas nuevos de `ResultadoVariacion.resumen` / `.reporte` / `.diagnostico`
-- Esquemas nuevos de `ResultadoIncidencia.resumen` / `.reporte` / `.diagnostico`
-- Contratos completos: `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia`
-- Contrato de `empalmar`: compatibilidad `periodo_base=None` cross-version vs same-version
-- `ResultadoVariacion` — ¿agregar `estado_calculo` en df para consistencia con `ResultadoIncidencia`?
-- Actualizar `api.md`: parámetro `tipo` en `calcular_indice`; firmas completas de `api/incidencias.py`
 
 ---
 

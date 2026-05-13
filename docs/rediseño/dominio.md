@@ -1254,13 +1254,11 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 
 ## Funciones de dominio
 
-### Transformaciones de ResultadoIndice
+### Transformaciones de ResultadoIndice — `dominio/conversion.py`
 
-Archivo: `dominio/conversion.py`.
+#### empalmar — MODIFICADO — CERRADO
 
-#### empalmar — MODIFICADO
-
-Reemplaza a `combinar`.
+##### Firma
 
 ```python
 def empalmar(
@@ -1270,24 +1268,72 @@ def empalmar(
 ) -> ResultadoIndice:
 ```
 
-- Valida que todos los inputs tengan el mismo `tipo` (vía `manifiesto[i].tipo`) → `InvarianteViolado` si no
-- Regla de `periodo_referencia`:
+##### Responsabilidad
+
+Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, normalizando nombres de categorías entre versiones de canasta.
+
+##### Precondiciones
+
+| condición | si no se cumple |
+|---|---|
+| `len(resultados) >= 2` | `InvarianteViolado` |
+| todos los inputs tienen el mismo `manifiesto[i].tipo` | `InvarianteViolado` |
+| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
+
+##### Parámetros
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `resultados` | `list[ResultadoIndice]` | orden cronológico; al menos dos elementos; mismo `tipo` |
+| `forzar` | `bool` | si `True`, permite `periodo_referencia` distintos emitiendo `UserWarning` |
+| `version_nombres` | `VersionCanasta \| None` | versión de referencia para normalizar categorías; `None` = `max(versions)` de los inputs |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | `.manifiesto` = concatenación de todos los inputs; `.resumen`, `.reporte`, `.diagnostico` mergeados; `periodo_referencia` resuelto según postcondiciones |
+
+##### Postcondiciones
+
+- `periodo_referencia` resuelto:
   - todos `None` → resultado `None`
-  - mezcla `None` + un único valor explícito → resultado hereda ese valor explícito
-  - `forzar=False` (default): dos valores explícitos **distintos** → `InvarianteViolado`
-  - `forzar=True`: dos valores explícitos distintos → permitido + `UserWarning` describiendo qué `periodo_referencia` tiene cada input
-- Concatena `.manifiesto` de cada input
-- Regla de `version_nombres`:
-  - `None` → usa `max(versions de todos los inputs)` como versión canónica
-  - valor explícito → usa ese valor como versión canónica para `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, version)` en `RENOMBRES_INDICES`, no renombra
-- Aplica `RENOMBRES_INDICES` (`correspondencia_canastas.py`) para normalizar nombres de categorías entre versiones usando la versión canónica resuelta
-- Propaga `.resumen`, `.reporte`, `.diagnostico` (merge automático)
+  - mezcla `None` + un único valor explícito → hereda ese valor
+  - `forzar=True` + dos valores explícitos distintos → `UserWarning` describiendo cada `periodo_referencia`
+- `version_nombres` resuelto: `None` → `max(versions)` de inputs; si no existe mapa `(tipo, version)` en `RENOMBRES_INDICES`, los índices de ese tramo no se renombran
+- Entradas no mutadas
 
-> **Restricción:** solo para `ResultadoIndice`. No existe `empalmar` para `ResultadoVariacion` ni `ResultadoIncidencia` — siempre se empalma el `ResultadoIndice` fuente antes de calcular variaciones o incidencias.
+##### Errores y advertencias
 
-> **Nota:** para normalización manual de categorías antes de empalmar, ver `normalizar_categorias` en `api/indices.py` — pendiente de agregar.
+| condición | resultado |
+|---|---|
+| `len(resultados) < 2` | `InvarianteViolado` |
+| `tipo` distinto entre inputs | `InvarianteViolado` |
+| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
+| `periodo_referencia` distintos con `forzar=True` | `UserWarning` |
 
-#### rebasar
+##### Efectos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+> **Restricción:** solo para `ResultadoIndice`. No existe `empalmar` para `ResultadoVariacion` ni `ResultadoIncidencia` — siempre empalmar el `ResultadoIndice` fuente antes de calcular variaciones o incidencias.
+
+##### Ejemplo mínimo
+
+```python
+hist = empalmar([indice_2018, indice_2024])
+hist_2018 = empalmar([indice_2018, indice_2024], version_nombres=2018)
+```
+
+---
+
+#### rebasar — SIN CAMBIO — CERRADO
+
+##### Firma
 
 ```python
 def rebasar(
@@ -1297,62 +1343,507 @@ def rebasar(
 ) -> ResultadoIndice:
 ```
 
-Sin cambio de lógica respecto a v1. Setea `.periodo_referencia` en el `ResultadoIndice` devuelto. Ver diseño.md §5.13.1.
+##### Responsabilidad
 
-#### a_mensual
+Reexpresa todos los índices de `resultado` relativo a `periodo_referencia`: `valor / valor_en_ref × valor_base`.
+
+##### Precondiciones
+
+| condición | si no se cumple |
+|---|---|
+| `periodo_referencia` existe en `resultado` | `InvarianteViolado` |
+| valor de algún índice en `periodo_referencia` no es NaN (`sin_datos` o `fallida`) | `InvarianteViolado` |
+
+##### Parámetros
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `resultado` | `ResultadoIndice` | resultado a reexpresar; quincenal o mensual |
+| `periodo_referencia` | `PeriodoQuincenal \| PeriodoMensual` | periodo en que los índices valdrán `valor_base` |
+| `valor_base` | `float` | valor de referencia; default `100.0` |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | mismo contenido reescalado; `.periodo_referencia` seteado al periodo indicado |
+
+##### Postcondiciones
+
+- `resultado` original no mutado
+- salida mantiene invariantes de `ResultadoIndice`
+- `.periodo_referencia` del resultado = `periodo_referencia`
+
+##### Errores y advertencias
+
+| condición | resultado |
+|---|---|
+| `periodo_referencia` no existe en `resultado` | `InvarianteViolado` |
+| índice con `estado_calculo = sin_datos` o `fallida` en `periodo_referencia` | `InvarianteViolado` |
+
+##### Efectos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Ejemplo mínimo
+
+```python
+rebased = rebasar(hist, periodo_referencia=PeriodoQuincenal(2018, 7, 2))
+```
+
+---
+
+#### a_mensual — SIN CAMBIO — CERRADO
+
+##### Firma
 
 ```python
 def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
 ```
 
-Sin cambio de lógica. Tipo actualizado: `ResultadoCalculo` → `ResultadoIndice`. Ver diseño.md §5.13.
+##### Responsabilidad
 
----
+Convierte un `ResultadoIndice` quincenal a mensual promediando 1Q y 2Q de cada mes.
 
-### Cálculo de variaciones
+##### Precondiciones
 
-Mueven de `dominio/variaciones.py` → `dominio/calculo/variaciones.py`. Lógica sin cambio; tipo de `resultado` actualizado: `ResultadoCalculo` → `ResultadoIndice`.
+| condición | si no se cumple |
+|---|---|
+| `resultado` tiene periodos quincenales (`PeriodoQuincenal`) | `InvarianteViolado` |
 
-| Función | Descripción | Referencia |
+##### Parámetros
+
+| parámetro | tipo | contrato |
 |---|---|---|
-| `variacion_periodica(resultado, frecuencia)` | variación periodo a periodo | diseño.md §5.12 |
-| `variacion_acumulada_anual(resultado)` | acumulado ene→actual vs dic año anterior | diseño.md §5.12 |
-| `variacion_desde(resultado, desde, hasta, incluir_parciales)` | variación entre dos periodos | diseño.md §5.12 |
+| `resultado` | `ResultadoIndice` | resultado quincenal a convertir |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoIndice` | periodos = `PeriodoMensual`; valor = promedio simple 1Q y 2Q; si solo una quincena disponible → `estado_calculo = parcial` |
+
+##### Postcondiciones
+
+- `resultado` original no mutado
+- salida mantiene invariantes de `ResultadoIndice`
+- todos los periodos del resultado son `PeriodoMensual`
+
+##### Errores y advertencias
+
+| condición | resultado |
+|---|---|
+| `resultado` ya tiene periodos mensuales | `InvarianteViolado` |
+
+##### Efectos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Ejemplo mínimo
+
+```python
+mensual = a_mensual(indice)
+```
 
 ---
 
-### Cálculo de incidencias
+### Cálculo de variaciones — `dominio/calculo/variaciones.py`
 
-Mueven de `dominio/incidencias.py` → `dominio/calculo/incidencias.py`. Lógica sin cambio; tipos de `inpc` y `clasificacion` actualizados: `ResultadoCalculo` → `ResultadoIndice`.
+#### Grupo: variaciones — SIN CAMBIO — CERRADO
 
-#### Precondición compartida
+##### Semántica compartida
 
-`inpc.periodo_referencia == clasificacion.periodo_referencia` → `InvarianteViolado` si no.
+- Todas reciben `resultado: ResultadoIndice`
+- Todas devuelven `ResultadoVariacion`
+- Todas expresan variación en puntos porcentuales en columna `variacion_pp`
+- Sin IO; sin infraestructura; entradas no mutadas
 
-Ambos deben estar en la misma escala de referencia. Si ambos son `None`, se asume misma escala — responsabilidad del llamador.
+##### Funciones
 
-#### Proveniencia en `ManifestDerivado`
-
-`id_corrida` concatena IDs de los manifiestos de `inpc` y `clasificacion`:
-`inpc.manifiesto[*].id_corrida + clasificacion.manifiesto[*].id_corrida`.
-
-| Función | Descripción | Referencia |
-|---|---|---|
-| `incidencia_periodica(inpc, clasificacion, canastas, frecuencia)` | incidencia periodo a periodo | diseño.md §5.17 |
-| `incidencia_acumulada_anual(inpc, clasificacion, canastas)` | acumulado ene→actual | diseño.md §5.17 |
-| `incidencia_desde(inpc, clasificacion, canastas, desde, hasta, incluir_parciales)` | incidencia entre dos periodos | diseño.md §5.17 |
-
----
-
-### Validación interna
-
-Privadas — llamadas solo desde `api/validaciones.py`. Lógica sin cambio; tipo de retorno actualizado: objetos sueltos → `ValidacionX` correspondiente.
-
-| Función | Archivo | Devuelve | Referencia |
+| función | firma | retorno | contrato específico |
 |---|---|---|---|
-| `validar_inpc` | `dominio/validar_inpc.py` | `ValidacionIndice` | diseño.md §5.11 |
-| `validar_variaciones` | `dominio/validar_variaciones.py` | `ValidacionVariacion` | diseño.md §5.16 |
-| `validar_incidencias` | `dominio/validar_incidencias.py` | `ValidacionIncidencia` | diseño.md §5.20 |
+| `variacion_periodica` | `(resultado, frecuencia)` | `ResultadoVariacion` | una variación por periodo según `frecuencia` |
+| `variacion_acumulada_anual` | `(resultado)` | `ResultadoVariacion` | ene→periodo_actual vs dic_año_anterior; una fila por periodo |
+| `variacion_desde` | `(resultado, desde, hasta, incluir_parciales)` | `ResultadoVariacion` | variación total del rango; una fila por índice |
+
+##### Precondiciones compartidas
+
+| condición | si no se cumple |
+|---|---|
+| `resultado` con al menos un periodo computable | `InvarianteViolado` |
+
+##### Postcondiciones compartidas
+
+- `resultado` original no mutado
+- salida mantiene invariantes de `ResultadoVariacion`
+
+##### Errores y advertencias compartidos
+
+Ninguno aplicable a todas las funciones. Ver errores en cada subfunción.
+
+##### Efectos compartidos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Diferencias por función
+
+###### `variacion_periodica`
+
+| aspecto | contrato |
+|---|---|
+| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "anual"]` |
+| regla temporal | vs periodo anterior de la misma frecuencia |
+| filas ausentes | periodos sin periodo anterior disponible en `resultado` |
+| error: `frecuencia` inválida | `frecuencia` fuera de `["quincenal", "mensual", "anual"]` → `InvarianteViolado` |
+| error: frecuencia incompatible | `frecuencia="quincenal"` con resultado mensual → `InvarianteViolado` |
+
+###### `variacion_acumulada_anual`
+
+| aspecto | contrato |
+|---|---|
+| regla temporal | ene_año → periodo_actual vs dic_año_anterior |
+| filas ausentes | periodos donde dic_año_anterior no existe en `resultado` |
+
+###### `variacion_desde`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoQuincenal \| PeriodoMensual`, `hasta: PeriodoQuincenal \| PeriodoMensual \| None`, `incluir_parciales: bool = True` |
+| `hasta=None` | último periodo disponible en `resultado` |
+| `incluir_parciales=False` | excluye periodos con `estado_calculo = parcial` |
+| dimensión del resultado | una fila por índice (no por periodo) |
+| precondición: rango válido | `desde` no posterior a `hasta` → `InvarianteViolado` |
+| precondición: periodos existen | `desde`/`hasta` deben existir en `resultado` → `InvarianteViolado` |
+
+##### Ejemplo mínimo
+
+```python
+vars_m = variacion_periodica(indice, frecuencia="mensual")
+acum   = variacion_acumulada_anual(indice)
+rango  = variacion_desde(indice, desde=PeriodoMensual(2015, 1), hasta=PeriodoMensual(2024, 12))
+```
+
+---
+
+### Cálculo de incidencias — `dominio/calculo/incidencias.py`
+
+#### Grupo: incidencias — SIN CAMBIO — CERRADO
+
+##### Semántica compartida
+
+- Todas reciben `inpc: ResultadoIndice`, `clasificacion: ResultadoIndice`, `canastas: dict[int, CanastaCanonica]`
+- Todas devuelven `ResultadoIncidencia`
+- Todas expresan incidencia en puntos porcentuales en columna `incidencia_pp`
+- `id_corrida` del `ManifestDerivado` concatena IDs de los manifiestos de `inpc` y `clasificacion`
+- Sin IO; sin infraestructura; entradas no mutadas
+
+##### Funciones
+
+| función | firma | retorno | contrato específico |
+|---|---|---|---|
+| `incidencia_periodica` | `(inpc, clasificacion, canastas, frecuencia)` | `ResultadoIncidencia` | incidencia periodo a periodo por genérico |
+| `incidencia_acumulada_anual` | `(inpc, clasificacion, canastas)` | `ResultadoIncidencia` | ene→periodo_actual; suma de genéricos = variación anual acumulada del INPC |
+| `incidencia_desde` | `(inpc, clasificacion, canastas, desde, hasta, incluir_parciales)` | `ResultadoIncidencia` | incidencia total del rango; una fila por genérico |
+
+##### Precondiciones compartidas
+
+| condición | si no se cumple |
+|---|---|
+| `inpc.periodo_referencia == clasificacion.periodo_referencia` | `InvarianteViolado` |
+| ambos `periodo_referencia = None` → misma escala asumida; responsabilidad del llamador | — |
+
+##### Postcondiciones compartidas
+
+- entradas no mutadas
+- salida mantiene invariantes de `ResultadoIncidencia`
+
+##### Errores y advertencias compartidos
+
+| condición | resultado |
+|---|---|
+| `inpc.periodo_referencia != clasificacion.periodo_referencia` | `InvarianteViolado` |
+
+##### Efectos compartidos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Diferencias por función
+
+###### `incidencia_periodica`
+
+| aspecto | contrato |
+|---|---|
+| parámetro extra | `frecuencia: Literal["quincenal", "mensual", "anual"]` |
+| regla temporal | vs periodo anterior de la misma frecuencia |
+| error: `frecuencia` inválida | `frecuencia` fuera de `["quincenal", "mensual", "anual"]` → `InvarianteViolado` |
+| error: frecuencia incompatible | `frecuencia="quincenal"` con resultado mensual → `InvarianteViolado` |
+
+###### `incidencia_acumulada_anual`
+
+| aspecto | contrato |
+|---|---|
+| regla temporal | ene_año → periodo_actual vs dic_año_anterior |
+| propiedad clave | suma de `incidencia_pp` de todos los genéricos = variación anual acumulada del INPC en ese periodo |
+
+###### `incidencia_desde`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoQuincenal \| PeriodoMensual \| None`, `hasta: PeriodoQuincenal \| PeriodoMensual \| None`, `incluir_parciales: bool = True` |
+| `desde=None` | primer periodo disponible |
+| `hasta=None` | último periodo disponible |
+| `incluir_parciales=False` | excluye genéricos con `estado_calculo = parcial` |
+| precondición: rango válido | `desde` no posterior a `hasta` → `InvarianteViolado` |
+| precondición: periodos existen | `desde`/`hasta` deben existir en resultado cuando se especifican → `InvarianteViolado` |
+
+##### Ejemplo mínimo
+
+```python
+inc_m = incidencia_periodica(inpc, clasificacion, canastas, frecuencia="mensual")
+inc_a = incidencia_acumulada_anual(inpc, clasificacion, canastas)
+rango = incidencia_desde(inpc, clasificacion, canastas, desde=PeriodoMensual(2024, 1))
+```
+
+---
+
+### Consulta de variaciones — `dominio/consulta/variaciones.py`
+
+#### Grupo: inflación — NUEVO — CERRADO
+
+##### Semántica compartida
+
+- Todas reciben `resultado: ResultadoVariacion`
+- Devuelven escalares, pares o DataFrame — no `ResultadoX`
+- Operan sobre `variacion_pp`; sin IO; sin infraestructura; `resultado` no mutado
+- `inflacion_acumulada` e `inflacion_promedio` solo tienen sentido si `resultado` proviene de `variacion_periodica`; con `variacion_desde` o `variacion_acumulada_anual` los valores ya son totales
+
+##### Funciones
+
+| función | firma | retorno | contrato específico |
+|---|---|---|---|
+| `inflacion_en` | `(resultado, periodo)` | `pd.DataFrame` | índice=`indice`; col=`variacion_pp`; todas las categorías en el periodo |
+| `inflacion_acumulada` | `(resultado, desde, hasta, indice)` | `float` | suma de `variacion_pp` en `[desde, hasta]` para el `indice` |
+| `inflacion_promedio` | `(resultado, desde, hasta, indice, metodo)` | `float` | TCAC o media aritmética en el rango para el `indice` |
+| `inflacion_maxima` | `(resultado, desde, hasta, indice)` | `tuple[PeriodoX, str, float]` | `(periodo, indice, variacion_pp)` del máximo en el rango |
+| `inflacion_minima` | `(resultado, desde, hasta, indice)` | `tuple[PeriodoX, str, float]` | `(periodo, indice, variacion_pp)` del mínimo en el rango |
+
+##### Precondiciones compartidas
+
+| condición | si no se cumple |
+|---|---|
+| `periodo`/`desde`/`hasta` existen en `resultado` cuando se especifican | `InvarianteViolado` |
+| `indice` existe en `resultado` cuando se especifica | `InvarianteViolado` |
+
+##### Postcondiciones compartidas
+
+- `resultado` original no mutado
+- sin IO; sin infraestructura
+
+##### Errores y advertencias compartidos
+
+| condición | aplica a | resultado |
+|---|---|---|
+| `periodo` no existe en resultado | `inflacion_en` | `InvarianteViolado` |
+| `desde`/`hasta` no existe en resultado | `inflacion_acumulada`, `inflacion_promedio`, `inflacion_maxima`, `inflacion_minima` | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `inflacion_acumulada`, `inflacion_promedio`, `inflacion_maxima`, `inflacion_minima` | `InvarianteViolado` |
+| `indice` no existe en resultado | `inflacion_acumulada`, `inflacion_promedio`; `inflacion_maxima`/`minima` cuando se especifica | `InvarianteViolado` |
+
+##### Efectos compartidos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Diferencias por función
+
+###### `inflacion_en`
+
+| aspecto | contrato |
+|---|---|
+| parámetro extra | `periodo: PeriodoQuincenal \| PeriodoMensual` |
+| retorno | `pd.DataFrame`; índice=`indice`; col=`variacion_pp`; todas las categorías |
+
+###### `inflacion_acumulada`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX`, `hasta: PeriodoX \| None`, `indice: str` |
+| `hasta=None` | último periodo disponible |
+| retorno | `float` = suma de `variacion_pp` en el rango |
+
+###### `inflacion_promedio`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None`, `hasta: PeriodoX \| None`, `indice: str`, `metodo: Literal["tcac", "simple"] = "tcac"` |
+| `desde=None` | primer periodo disponible |
+| `hasta=None` | último periodo disponible |
+| `metodo="tcac"` | tasa de crecimiento anual compuesta |
+| `metodo="simple"` | media aritmética de `variacion_pp` |
+
+###### `inflacion_maxima`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None = None`, `hasta: PeriodoX \| None = None`, `indice: str \| None = None` |
+| `desde=None` | sin límite inferior |
+| `hasta=None` | sin límite superior |
+| `indice=None` | máximo global entre todos los índices y periodos del rango |
+| retorno | `tuple[PeriodoX, str, float]` = `(periodo, indice, variacion_pp)` |
+
+###### `inflacion_minima`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None = None`, `hasta: PeriodoX \| None = None`, `indice: str \| None = None` |
+| `desde=None` | sin límite inferior |
+| `hasta=None` | sin límite superior |
+| `indice=None` | mínimo global entre todos los índices y periodos del rango |
+| retorno | `tuple[PeriodoX, str, float]` = `(periodo, indice, variacion_pp)` |
+
+##### Ejemplo mínimo
+
+```python
+df      = inflacion_en(vars_m, periodo=PeriodoMensual(2024, 12))
+acum    = inflacion_acumulada(vars_m, desde=PeriodoMensual(2024, 1), hasta=PeriodoMensual(2024, 12), indice="inpc")
+p, i, v = inflacion_maxima(vars_m)
+```
+
+---
+
+### Consulta de incidencias — `dominio/consulta/incidencias.py`
+
+#### Grupo: consulta de incidencias — NUEVO — CERRADO
+
+##### Semántica compartida
+
+- Todas reciben `resultado: ResultadoIncidencia`
+- Devuelven escalares, pares o DataFrame — no `ResultadoX`
+- Operan sobre `incidencia_pp`; sin IO; sin infraestructura; `resultado` no mutado
+- `incidencia_acumulada` e `incidencia_promedio` solo tienen sentido si `resultado` proviene de `incidencia_periodica`; con `incidencia_desde` o `incidencia_acumulada_anual` los valores ya son totales
+
+##### Funciones
+
+| función | firma | retorno | contrato específico |
+|---|---|---|---|
+| `incidencia_en` | `(resultado, periodo)` | `pd.DataFrame` | índice=`indice`; col=`incidencia_pp`; todas las categorías en el periodo |
+| `incidencia_acumulada` | `(resultado, desde, hasta, indice)` | `float` | suma de `incidencia_pp` en `[desde, hasta]` para el `indice` |
+| `incidencia_promedio` | `(resultado, desde, hasta, indice)` | `float` | media aritmética de `incidencia_pp` en el rango para el `indice` |
+| `mayor_incidencia` | `(resultado, desde, hasta, indice)` | `tuple[PeriodoX, str, float]` | `(periodo, indice, incidencia_pp)` del máximo en el rango |
+| `menor_incidencia` | `(resultado, desde, hasta, indice)` | `tuple[PeriodoX, str, float]` | `(periodo, indice, incidencia_pp)` del mínimo en el rango |
+
+##### Precondiciones compartidas
+
+| condición | si no se cumple |
+|---|---|
+| `periodo`/`desde`/`hasta` existen en `resultado` cuando se especifican | `InvarianteViolado` |
+| `indice` existe en `resultado` cuando se especifica | `InvarianteViolado` |
+
+##### Postcondiciones compartidas
+
+- `resultado` original no mutado
+- sin IO; sin infraestructura
+
+##### Errores y advertencias compartidos
+
+| condición | aplica a | resultado |
+|---|---|---|
+| `periodo` no existe en resultado | `incidencia_en` | `InvarianteViolado` |
+| `desde`/`hasta` no existe en resultado | `incidencia_acumulada`, `incidencia_promedio`, `mayor_incidencia`, `menor_incidencia` | `InvarianteViolado` |
+| `desde` posterior a `hasta` | `incidencia_acumulada`, `incidencia_promedio`, `mayor_incidencia`, `menor_incidencia` | `InvarianteViolado` |
+| `indice` no existe en resultado | `incidencia_acumulada`, `incidencia_promedio`; `mayor_incidencia`/`menor_incidencia` cuando se especifica | `InvarianteViolado` |
+
+##### Efectos compartidos
+
+| efecto | contrato |
+|---|---|
+| IO | no |
+| muta entradas | no |
+| depende de infraestructura | no |
+
+##### Diferencias por función
+
+###### `incidencia_en`
+
+| aspecto | contrato |
+|---|---|
+| parámetro extra | `periodo: PeriodoQuincenal \| PeriodoMensual` |
+| retorno | `pd.DataFrame`; índice=`indice`; col=`incidencia_pp`; todas las categorías |
+
+###### `incidencia_acumulada`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX`, `hasta: PeriodoX \| None`, `indice: str` |
+| `hasta=None` | último periodo disponible |
+| retorno | `float` = suma de `incidencia_pp` en el rango |
+
+###### `incidencia_promedio`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None`, `hasta: PeriodoX \| None`, `indice: str` |
+| `desde=None` | primer periodo disponible |
+| `hasta=None` | último periodo disponible |
+| retorno | `float` = media aritmética de `incidencia_pp` en el rango |
+
+###### `mayor_incidencia`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None = None`, `hasta: PeriodoX \| None = None`, `indice: str \| None = None` |
+| `desde=None` | sin límite inferior |
+| `hasta=None` | sin límite superior |
+| `indice=None` | máximo global entre todos los índices y periodos del rango |
+| retorno | `tuple[PeriodoX, str, float]` = `(periodo, indice, incidencia_pp)` |
+
+###### `menor_incidencia`
+
+| aspecto | contrato |
+|---|---|
+| parámetros extra | `desde: PeriodoX \| None = None`, `hasta: PeriodoX \| None = None`, `indice: str \| None = None` |
+| `desde=None` | sin límite inferior |
+| `hasta=None` | sin límite superior |
+| `indice=None` | mínimo global entre todos los índices y periodos del rango |
+| retorno | `tuple[PeriodoX, str, float]` = `(periodo, indice, incidencia_pp)` |
+
+##### Ejemplo mínimo
+
+```python
+df      = incidencia_en(inc_m, periodo=PeriodoMensual(2024, 12))
+p, i, v = mayor_incidencia(inc_m)
+p, i, v = mayor_incidencia(inc_m, indice="Alimentos")
+```
+
+---
+
+### Validación interna — PENDIENTE
+
+Privadas — llamadas solo desde `api/validaciones.py`. Contratos completos pendientes; se documentarán al implementar.
+
+| Función | Archivo | Devuelve |
+|---|---|---|
+| `validar_indices` | `dominio/validacion/indices.py` | `ValidacionIndice` |
+| `validar_variaciones` | `dominio/validacion/variaciones.py` | `ValidacionVariacion` |
+| `validar_incidencias` | `dominio/validacion/incidencias.py` | `ValidacionIncidencia` |
 
 ---
 
