@@ -2,7 +2,7 @@
 
 ## Alcance
 
-- Cubre contratos de datos y funciones puras de `dominio/`.
+- Cubre contratos de datos, funciones puras y estructura de módulos de `dominio/`.
 - Excluye IO, infraestructura, orquestación y API pública.
 - Excluye strings de periodos; dominio recibe solo `Periodo*`.
 - Material transitorio removido de esta sección vive temporalmente en `transiscion.md`.
@@ -14,9 +14,70 @@
 - `ResultadoIndice` agrega atributo `periodo_referencia: PeriodoQuincenal | PeriodoMensual | None`.
 - `empalmar` verifica `periodo_referencia` compatible entre inputs y propaga `reporte`, `diagnostico` y `resumen`.
 - `ResumenValidacionVariaciones` eliminado — absorbido por `ValidacionVariacion`.
-- Jerarquía separada en dos bases: `Resultado` y `ResultadoValidacion`.
+- Jerarquía separada en dos bases: `Resultado` y `Validacion`.
 - `ValidacionX` contiene un `ResultadoX` vía composición; no hereda de `Resultado`.
 - Invariantes lanzan `InvarianteViolado`, nunca `ValueError`.
+
+---
+
+## Estructura de archivos
+
+### Raíz de `dominio/`
+
+| archivo | contiene | notas |
+|---|---|---|
+| `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` | sin cambio |
+| `errores.py` | jerarquía de excepciones; `InvarianteViolado` | sin cambio |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS`, `ManifestUnidad`, `ManifestDerivado` | agrega `ManifestUnidad` y `ManifestDerivado`; reemplaza `ManifestCorrida` y `ResultadoCorrida` de v1 |
+| `correspondencia.py` | matcheo canasta↔series por normalización de genéricos; `RENOMBRES_INDICES` | `RENOMBRES_INDICES` cubre todas las versiones: 2010↔2013↔2018↔2024 |
+| `conversion.py` | `empalmar`, `rebasar`, `a_mensual` | `combinar` renombrado a `empalmar`; lógica de `rebasar` y `a_mensual` sin cambio |
+
+### `modelos/`
+
+Contratos de datos del dominio. Sin IO, sin lógica de cálculo.
+
+| archivo | contiene | notas |
+|---|---|---|
+| `canasta.py` | `CanastaCanonica` | sin cambio |
+| `serie.py` | `SerieNormalizada` | sin cambio |
+| `base.py` | `Resultado` (ABC), `Validacion` (ABC), `Vista` | nuevo |
+| `indice.py` | `ResultadoIndice` | renombrado desde `resultado.py`; `ResultadoCalculo` → `ResultadoIndice` |
+| `variacion.py` | `ResultadoVariacion` | nuevo en v2 |
+| `incidencia.py` | `ResultadoIncidencia` | sin cambio de ubicación; clase modificada en v2 |
+| `validacion.py` | `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia` | reescrito; objetos sueltos v1 (`ResumenValidacion`, etc.) absorbidos por estas clases |
+
+### `calculo/`
+
+Funciones y calculadores que **producen** objetos `Resultado*`. Todo output es un objeto de dominio con invariantes y manifiesto.
+
+| archivo | contiene | notas |
+|---|---|---|
+| `base.py` | `CalculadorBase` (Strategy) | sin cambio |
+| `laspeyres_directo.py` | `LaspeyresDirecto` | sin cambio |
+| `laspeyres_encadenado.py` | `LaspeyresEncadenadoT1`, `LaspeyresEncadenadoT2` | sin cambio |
+| `variaciones.py` | `variacion_periodica`, `variacion_acumulada_anual`, `variacion_desde` | movido desde `dominio/variaciones.py`; tipo actualizado `ResultadoCalculo` → `ResultadoIndice` |
+| `incidencias.py` | `incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde` | movido desde `dominio/incidencias.py`; tipos actualizados |
+
+### `consulta/`
+
+Funciones que **extraen información** de objetos `Resultado*` ya calculados. Output: scalars, `pd.DataFrame`, tuplas. Punto de extensión natural para cualquier tipo de análisis sobre resultados.
+
+> **Separación de responsabilidades:** `calculo/` produce objetos de dominio. `consulta/` consulta objetos de dominio. Ambos son dominio puro — la separación es de responsabilidad, no de capa.
+
+| archivo | contiene |
+|---|---|
+| `variaciones.py` | `inflacion_en`, `inflacion_acumulada`, `inflacion_promedio`, `inflacion_maxima`, `inflacion_minima` |
+| `incidencias.py` | `incidencia_en`, `incidencia_acumulada`, `incidencia_promedio`, `mayor_incidencia`, `menor_incidencia` |
+
+### `validacion/`
+
+Privadas — llamadas solo desde `api/validaciones.py`. Cada función recibe un `ResultadoX` y una `FuenteValidacion` (Protocol definido en `aplicacion/`); devuelve el `ValidacionX` correspondiente. No tocan IO — reciben los datos INEGI ya descargados a través del puerto.
+
+| archivo | función principal | devuelve |
+|---|---|---|
+| `indices.py` | `validar_indices` | `ValidacionIndice` |
+| `variaciones.py` | `validar_variaciones` | `ValidacionVariacion` |
+| `incidencias.py` | `validar_incidencias` | `ValidacionIncidencia` |
 
 ---
 
@@ -79,6 +140,7 @@ Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` >
 |---|---|
 | `ResultadoIndice` | `ok`, `parcial`, `sin_datos`, `fallida` |
 | `ResultadoVariacion`, `ResultadoIncidencia` | `ok`, `parcial` |
+| `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia` | mismos valores que el `Resultado*` subyacente; propagado sin transformación |
 
 #### Contrato NaN global — CERRADO
 
@@ -542,9 +604,9 @@ def __init__(
 | `tipo_faltante` | str |
 | `detalle` | str |
 
-### ResultadoVariacion — MODIFICADO — CERRADO
+### ResultadoVariacion — NUEVO — CERRADO
 
-Hereda de `Resultado`. Mueve de `dominio/modelos/variacion.py` a `dominio/calculo/variacion.py`.
+Hereda de `Resultado`. Vive en `dominio/modelos/variacion.py`. En v1 no existía clase — variaciones retornaban `pd.DataFrame` plano.
 
 > **Asimetría respecto a `ResultadoIndice`:** `.resultado.largo` no contiene `motivo_error`. En derivados, `estado_calculo` solo admite `ok` y `parcial`; las combinaciones no computables del fuente quedan **ausentes** del largo. Si se requiere `motivo_error`, ver `.reporte`.
 
@@ -653,7 +715,7 @@ Invariante: `indices_parciales is not None` si y solo si `clase_variacion == "de
 
 ### ResultadoIncidencia — MODIFICADO — CERRADO
 
-Hereda de `Resultado`. Mueve de `dominio/modelos/incidencia.py` a `dominio/calculo/incidencia.py`.
+Hereda de `Resultado`. Permanece en `dominio/modelos/incidencia.py`.
 
 > **Asimetría respecto a `ResultadoIndice`:** `.resultado.largo` no contiene `motivo_error`. En derivados, `estado_calculo` solo admite `ok` y `parcial`; las combinaciones no computables del fuente quedan **ausentes** del largo. Si se requiere `motivo_error`, ver `.reporte`.
 
