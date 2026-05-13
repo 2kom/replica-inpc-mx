@@ -699,3 +699,119 @@ Sección al final del módulo. Identificadas pero no implementadas en v2.
 
 - `nombre` — qué haría; por qué se difiere
 ```
+
+---
+
+## Plantilla: aplicacion/ — puerto
+
+Esta plantilla aplica a `docs/rediseño/aplicacion.md`, sección `## Puertos`. Un puerto es un `Protocol` que define una capacidad que el dominio o los casos de uso necesitan de infraestructura. No documenta la implementación concreta — eso es `infraestructura/`.
+
+````
+### NombrePuerto — [NUEVO | MODIFICADO | SIN CAMBIO] — [CERRADO | PROVISIONAL | PENDIENTE]
+
+#### Responsabilidad
+
+Una frase. Qué capacidad abstrae; no cómo la implementa el adaptador.
+
+#### Protocolo
+
+```python
+class NombrePuerto(Protocol):
+    def metodo(self, ...) -> Tipo: ...
+```
+
+#### Métodos
+
+##### `metodo`
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `param` | `Tipo` | ... |
+
+| aspecto | contrato |
+|---|---|
+| retorno | `Tipo` — qué representa |
+| `None` en retorno | condición cuando aplica |
+
+| condición | lanza |
+|---|---|
+| ... | `ErrorX` |
+
+#### Invariantes del implementador
+
+- condición que todo adaptador debe garantizar
+- violación → `InvarianteViolado`
+
+#### Usado por
+
+- `X` — para qué propósito
+
+#### Implementado por
+
+- `infraestructura/X` — adaptador concreto en v2
+````
+
+---
+
+## Plantilla: aplicacion/ — caso de uso
+
+Esta plantilla aplica a `docs/rediseño/aplicacion.md`, sección `## Casos de uso`. Un caso de uso orquesta puertos y funciones de dominio para cumplir un objetivo de aplicación. No conoce formatos de archivo, HTTP ni notebooks — eso es `api/`.
+
+````
+### NombreCasoDeUso — [NUEVO | MODIFICADO | SIN CAMBIO] — [CERRADO | PROVISIONAL | PENDIENTE]
+
+#### Responsabilidad
+
+Una frase. Qué objetivo de aplicación cumple; no los pasos internos.
+
+#### Constructor
+
+```python
+class NombreCasoDeUso:
+    def __init__(
+        self,
+        puerto_a: PuertoA,
+        puerto_b: PuertoB,
+    ) -> None:
+```
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `puerto_a` | `PuertoA` | descripción del rol en la orquestación |
+| `puerto_b` | `PuertoB` | descripción del rol en la orquestación |
+
+#### `ejecutar`
+
+```python
+def ejecutar(self, ...) -> ResultadoX:
+```
+
+##### Parámetros
+
+| parámetro | tipo | contrato |
+|---|---|---|
+| `param` | `Tipo` | ... |
+
+##### Retorno
+
+| tipo | contrato |
+|---|---|
+| `ResultadoX` | qué representa el resultado |
+
+##### Orquestación interna
+
+Pasos en orden; el llamador no tiene acceso a resultados intermedios:
+
+1. ...
+2. ...
+
+##### Errores
+
+| condición | lanza |
+|---|---|
+| ... | `ErrorX` |
+
+#### Usado por
+
+- `api/X.py` — cómo lo instancia y llama
+````
