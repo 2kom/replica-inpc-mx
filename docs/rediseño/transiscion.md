@@ -257,6 +257,33 @@ Estrategia: big bang en rama `v2`, módulo por módulo. Tests por fase, no al fi
 
 Cada fase se detalla en un plan propio antes de iniciarla.
 
+### Snapshot operativo de tests v1
+
+Material temporal para Fase 0. Se elimina al consolidar `docs/rediseño/` en Fase 11.1.
+
+Total: 25 archivos `test_*.py` en `tests/` (capturado 2026-05-13 con `find tests -type f -name 'test_*.py'`).
+
+**Mueren completos — Fase 10.6:**
+- `tests/integration/test_almacen_artefactos_fs.py`
+- `tests/integration/test_repositorio_corridas_fs.py`
+- `tests/integration/test_escritor_resultados_csv.py`
+
+**Renombrar — Fase 4:**
+- `tests/unit/test_combinar.py` → `tests/unit/test_empalmar.py`
+
+**Migrar adaptando tipos v2:**
+- Fase 2 (modelos): `tests/unit/test_resultado.py` (split por modelo derivado).
+- Fase 3 (cálculo índices): `tests/unit/test_laspeyres.py`, `tests/unit/test_encadenado.py`, `tests/unit/test_estrategia.py`, `tests/unit/test_subindices.py`, `tests/unit/test_rellenar_faltantes.py`.
+- Fase 4 (conversión): `tests/unit/test_conversion.py`.
+- Fase 5 (derivados): `tests/unit/test_variaciones.py`, `tests/unit/test_incidencias.py`.
+- Fase 8 (validación): `tests/unit/test_validacion_inpc.py`, `tests/unit/test_validar_mensual.py`, `tests/unit/test_validar_quincenal_resultado.py`, `tests/unit/test_validar_variaciones.py`, `tests/unit/test_validar_incidencias.py`.
+- Fase 9 (api): `tests/unit/test_api_validacion.py`, `tests/unit/test_api_validacion_variaciones.py`.
+
+**Sin cambio probable:**
+- `tests/unit/test_periodos.py`, `tests/unit/test_correspondencia.py`.
+- `tests/integration/test_fuente_validacion_api.py` (solo rename `obtener` → `obtener_indices`).
+- `tests/integration/test_lector_canasta_csv.py`, `tests/integration/test_lector_series_csv.py`.
+
 ### Fases
 
 #### Fase 0 — Preparación
