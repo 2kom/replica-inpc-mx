@@ -251,6 +251,20 @@ Dos renombres pendientes (comentarios `# TODO v2` ya en el archivo):
 
 ---
 
+### `Validacion*` — pre-armado vs bajo demanda
+
+`dominio.md` documenta las propiedades `.resumen`, `.reporte` y `.diagnostico` de `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` con la nota "cálculo bajo demanda; no se almacena" (ver `dominio.md:951-955`, `:1072-1076`, `:1102-1106`, `:1127-1131`, `:1195-1199`).
+
+**Reinterpretación adoptada (Fase 2.4):** las tres propiedades se calculan **fuera** del `ResultadoX` subyacente — las funciones de Fase 8 (`validar_indices`, `validar_variaciones`, `validar_incidencias`) las arman y se las pasan al constructor de `Validacion*`. Las clases las **almacenan** como atributos privados y las exponen como properties.
+
+**Por qué:** los DataFrames extendidos (con cols INEGI: `indice_inegi`, `error_absoluto`, `estado_validacion`, etc.) no son derivables del `.df` minimal del `ResultadoX`. La función validadora es quien tiene acceso al puerto `FuenteValidacion` y al cálculo de comparación.
+
+**"Bajo demanda" se reinterpreta como:** "no se computan dentro del `ResultadoX` ni se derivan del `.df` minimal — viven en la función validadora y se pasan al `Validacion*` ya armados". El acceso vía `.resumen` etc. es directo (atributo), no recalculado.
+
+Este delta NO cambia los contratos de datos (esquemas de columnas, NaN, índices) — solo aclara el flujo de construcción.
+
+---
+
 ## Plan de implementación v1 → v2
 
 Estrategia: big bang en rama `v2`, módulo por módulo. Tests por fase, no al final. Borrado de código v1 solo cuando su reemplazo v2 está verde.
