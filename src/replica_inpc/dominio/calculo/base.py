@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
 
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
-from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
+from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.dominio.tipos import VersionCanasta
 
 
 class CalculadorBase(ABC):
-    """Contrato abstracto para las estrategias de cálculo del dominio.
+    """Contrato abstracto para estrategias de cálculo del dominio.
 
-    Este `ABC` define la interfaz común que implementan
-    `LaspeyresDirecto` y `LaspeyresEncadenado`. La selección concreta de la
-    estrategia ocurre fuera de esta clase, a partir de la canasta.
-
-    Ver: docs/diseño.md §1.2, §5.8, §11.12
+    Implementaciones: `LaspeyresDirecto`, `LaspeyresEncadenadoT1`,
+    `LaspeyresEncadenadoT2`. La selección concreta vive en
+    `estrategia.para_canasta`.
     """
 
     @abstractmethod
@@ -24,16 +27,100 @@ class CalculadorBase(ABC):
         serie: SerieNormalizada,
         id_corrida: str,
         tipo: str,
-    ) -> ResultadoCalculo:
-        """Calcula el resultado del índice para una canasta y una serie dadas.
+        ruta_canasta: Path | None = None,
+        ruta_series: Path | None = None,
+        fecha: datetime | None = None,
+    ) -> ResultadoIndice:
+        """Calcula `ResultadoIndice` para una canasta y serie dadas."""
 
-        Args:
-            tipo: Tipo lógico del cálculo. Si está en `INDICE_POR_TIPO` calcula
-                el índice agregado; si está en `COLUMNAS_CLASIFICACION` calcula
-                un subíndice por cada categoría del clasificador.
 
-        Returns:
-            El resultado del cálculo con la estructura de `ResultadoCalculo`.
+def _construir_reporte(
+    df_calculo: pd.DataFrame,
+    df_canasta: pd.DataFrame,
+    df_serie: pd.DataFrame,
+    version: VersionCanasta,
+) -> pd.DataFrame:
+    """Construye reporte de cobertura por (periodo, indice) para un subgrupo.
 
-        Ver: docs/diseño.md §5.8, §11.18
-        """
+    Para subíndices clasificados, `df_canasta` y `df_serie` deben ser los del
+    subgrupo (no la canasta entera) — `genericos_esperados` y
+    `ponderador_esperado` se derivan de su tamaño.
+    """
+    ponderadores = df_canasta["ponderador"].astype(float)
+    genericos_esperados = int(len(df_canasta))
+    ponderador_esperado = float(ponderadores.sum())
+
+    cubierto = df_serie.notna()
+    pond_cubierto_por_periodo = cubierto.multiply(ponderadores, axis=0).sum()
+    con_indice_por_periodo = cubierto.sum().astype(int)
+
+    filas = []
+    for (periodo, indice), fila in df_calculo.iterrows():
+        con_idx = int(con_indice_por_periodo[periodo])
+        pond_cub = float(pond_cubierto_por_periodo[periodo])
+        cobertura_pct = (
+            100.0 * con_idx / genericos_esperados if genericos_esperados else 0.0
+        )
+        filas.append(
+            {
+                "periodo": periodo,
+                "indice": indice,
+                "version": version,
+                "estado_calculo": fila["estado_calculo"],
+                "motivo_error": fila["motivo_error"],
+                "genericos_esperados": genericos_esperados,
+                "genericos_con_indice": con_idx,
+                "genericos_sin_indice": genericos_esperados - con_idx,
+                "cobertura_genericos_pct": cobertura_pct,
+                "ponderador_esperado": ponderador_esperado,
+                "ponderador_cubierto": pond_cub,
+            }
+        )
+    return pd.DataFrame(filas).set_index(["periodo", "indice"])
+
+
+def _construir_diagnostico(
+    df_canasta: pd.DataFrame,
+    df_serie: pd.DataFrame,
+    id_corrida: str,
+    version: VersionCanasta,
+    tipo: str,
+) -> pd.DataFrame:
+    """Lista (periodo, generico) faltantes con schema DiagnosticoFaltantes.
+
+    Para subíndices clasificados, `df_canasta` y `df_serie` deben ser los del
+    subgrupo. Una fila por celda NaN. Solo considera genéricos presentes en
+    `df_canasta.index` (los del subgrupo).
+    """
+    _ = df_canasta
+    filas = []
+    mascara_faltante = df_serie.isna()
+    for generico in mascara_faltante.index:
+        for periodo in mascara_faltante.columns:
+            if not mascara_faltante.at[generico, periodo]:
+                continue
+            filas.append(
+                {
+                    "id_corrida": id_corrida,
+                    "version": version,
+                    "tipo": tipo,
+                    "periodo": periodo,
+                    "generico": generico,
+                    "nivel_faltante": "periodo",
+                    "tipo_faltante": "indice",
+                    "detalle": "valor NaN en serie publicada",
+                }
+            )
+    columnas = [
+        "id_corrida",
+        "version",
+        "tipo",
+        "periodo",
+        "generico",
+        "nivel_faltante",
+        "tipo_faltante",
+        "detalle",
+    ]
+    if not filas:
+        return pd.DataFrame(columns=columnas)
+    return pd.DataFrame(filas, columns=columnas)

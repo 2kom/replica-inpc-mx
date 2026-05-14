@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -46,9 +46,9 @@ class ManifestUnidad:
     version: VersionCanasta
     tipo: str
     calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
-    ruta_canasta: Path
-    ruta_series: Path
-    fecha: datetime
+    ruta_canasta: Path | None = None
+    ruta_series: Path | None = None
+    fecha: datetime = field(default_factory=datetime.now)
 
 
 @dataclass

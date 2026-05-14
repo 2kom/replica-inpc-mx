@@ -265,6 +265,29 @@ Este delta NO cambia los contratos de datos (esquemas de columnas, NaN, índices
 
 ---
 
+### `ManifestUnidad` — rutas opcionales
+
+`dominio.md` y el inventario inicial declaraban `ManifestUnidad.ruta_canasta: Path` y `ruta_series: Path` como obligatorios. En la práctica, los calculadores de dominio (`LaspeyresDirecto`, `LaspeyresEncadenadoT1`, `LaspeyresEncadenadoT2`) operan sobre `CanastaCanonica` y `SerieNormalizada` ya cargadas en memoria — no conocen filesystem.
+
+**Decisión adoptada (Fase 3):** ambos campos se vuelven `Path | None` con default `None`. La capa I/O (lectores CSV, `cargar_canasta`, `cargar_serie`) los inyecta cuando los conoce; los cálculos in-memory los dejan en `None` sin inventar rutas falsas.
+
+```python
+# v2 (Fase 3)
+@dataclass
+class ManifestUnidad:
+    id_corrida: str
+    version: VersionCanasta
+    tipo: str
+    calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
+    ruta_canasta: Path | None = None
+    ruta_series: Path | None = None
+    fecha: datetime = field(default_factory=datetime.now)
+```
+
+`fecha` también pasa a `default_factory=datetime.now` (naive, por consistencia con tests Fase 2). La migración a timezone-aware es candidata a cleanup posterior.
+
+---
+
 ## Plan de implementación v1 → v2
 
 Estrategia: big bang en rama `v2`, módulo por módulo. Tests por fase, no al final. Borrado de código v1 solo cuando su reemplazo v2 está verde.
