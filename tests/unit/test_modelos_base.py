@@ -168,6 +168,14 @@ def test_resultado_df_multicolumna_falla() -> None:
         _ResultadoMinimo(df)
 
 
+def test_resultado_df_con_duplicados_falla() -> None:
+    p = PeriodoQuincenal(2024, 1, 1)
+    idx = pd.MultiIndex.from_tuples([(p, "001"), (p, "001")], names=["periodo", "indice"])
+    df = pd.DataFrame({"x": [1.0, 2.0]}, index=idx)
+    with pytest.raises(InvarianteViolado):
+        _ResultadoMinimo(df)
+
+
 def test_resultado_df_property_retorna_lo_guardado() -> None:
     df = _df_largo_1col()
     r = _ResultadoMinimo(df)

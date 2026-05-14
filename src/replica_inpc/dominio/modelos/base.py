@@ -44,6 +44,8 @@ class Resultado(ABC):
             raise InvarianteViolado(
                 "Resultado.df debe contener exactamente una columna calculada"
             )
+        if df.index.duplicated().any():
+            raise InvarianteViolado("Resultado.df no puede tener índices duplicados")
         self._df = df
 
     @property
