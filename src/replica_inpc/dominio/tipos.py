@@ -6,12 +6,6 @@ from pathlib import Path
 from typing import Literal
 
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
-from replica_inpc.dominio.modelos.validacion import (
-    DiagnosticoFaltantes,
-    ReporteDetalladoValidacion,
-    ResumenValidacion,
-)
 from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
@@ -74,33 +68,3 @@ class ManifestDerivado:
             raise InvarianteViolado(
                 "inpc_ids y clasificacion_ids deben ambos ser None o ambos estar presentes"
             )
-
-
-@dataclass
-class ManifestCorrida:
-    id_corrida: str
-    version: VersionCanasta
-    ruta_canasta: Path
-    ruta_series: Path
-    fecha: datetime
-
-
-@dataclass
-class ResultadoCorrida:
-    manifest: ManifestCorrida
-    resultado: ResultadoCalculo
-    resumen: ResumenValidacion
-    reporte: ReporteDetalladoValidacion
-    diagnostico: DiagnosticoFaltantes
-
-    def _repr_html_(self) -> str:
-        return (
-            "<h3>Resumen</h3>"
-            + self.resumen._repr_html_()
-            + "<h3>Reporte</h3>"
-            + self.reporte._repr_html_()
-            + "<h3>Diagnóstico</h3>"
-            + self.diagnostico._repr_html_()
-            + "<h3>Resultado</h3>"
-            + self.resultado._repr_html_()
-        )

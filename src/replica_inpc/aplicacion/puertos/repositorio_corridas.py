@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from replica_inpc.dominio.tipos import ManifestCorrida
+from replica_inpc.dominio._legacy import ManifestCorrida
 
 
 class RepositorioCorridas(Protocol):

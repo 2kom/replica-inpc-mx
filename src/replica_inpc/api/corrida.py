@@ -4,6 +4,7 @@ from pathlib import Path
 
 from replica_inpc.aplicacion.casos_uso.ejecutar_corrida import EjecutarCorrida
 from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
+from replica_inpc.dominio._legacy import ResultadoCorrida
 from replica_inpc.dominio.conversion import rebasar
 from replica_inpc.dominio.errores import ErrorConfiguracion, FuenteNoDisponible
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo, combinar
@@ -11,7 +12,6 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
-    ResultadoCorrida,
     VersionCanasta,
 )
 from replica_inpc.infraestructura.csv.escritor_resultados_csv import (

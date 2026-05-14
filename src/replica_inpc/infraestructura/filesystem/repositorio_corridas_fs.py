@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from replica_inpc.dominio._legacy import ManifestCorrida
 from replica_inpc.dominio.errores import ArtefactoNoEncontrado
-from replica_inpc.dominio.tipos import ManifestCorrida
 
 
 class RepositorioCorridasFs:

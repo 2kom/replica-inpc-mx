@@ -13,6 +13,7 @@ from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.aplicacion.puertos.lector_canasta import LectorCanasta
 from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.aplicacion.puertos.repositorio_corridas import RepositorioCorridas
+from replica_inpc.dominio._legacy import ManifestCorrida, ResultadoCorrida
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.correspondencia import alinear_genericos
 from replica_inpc.dominio.errores import (
@@ -27,8 +28,6 @@ from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
     RANGOS_VALIDOS,
-    ManifestCorrida,
-    ResultadoCorrida,
     VersionCanasta,
 )
 from replica_inpc.dominio.validar_inpc import validar

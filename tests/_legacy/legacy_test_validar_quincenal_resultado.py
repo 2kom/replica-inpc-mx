@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import uuid
 
+import pandas as pd
+
 from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
 from replica_inpc.dominio.modelos.validacion import ReporteValidacionIndices
 from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.validar_inpc import validar_quincenal_resultado
-
-import pandas as pd
 
 _ID = str(uuid.uuid4())
 

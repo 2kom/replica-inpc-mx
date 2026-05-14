@@ -301,6 +301,27 @@ Fundación de tipos v2 antes de tocar modelos derivados.
 - 1.2 `dominio/modelos/base.py`: clases `Resultado` (ABC), `Validacion` (ABC), `Vista`.
 - 1.3 Tests `modelos/base`: invariantes, `__repr__`, igualdad estructural.
 
+#### Fase 1.5 — Aislamiento de superficie v1
+
+Bloqueador descubierto antes de Fase 2: `dominio/tipos.py` importa `ResultadoCalculo`, `ResumenValidacion`, etc. desde `dominio/modelos/`. Si Fase 2 sobreescribe `modelos/validacion.py` y `resultado.py`, `tipos.py` rompe → `import replica_inpc` rompe → toda la suite falla en collection.
+
+**Política nueva (sustituye "v1 intacto"):** v1 queda aislado como legacy temporal — fuera de superficie pública y fuera de suite activa. Suite verde significa "superficie v2 activa + lo no migrado permitido importa/prueba bien", no "v1 sigue funcionando".
+
+- 1.5.1 Vaciar `src/replica_inpc/__init__.py`: dejar solo `PeriodoMensual`, `PeriodoQuincenal`, `periodo_desde_str`, `VersionCanasta`. Resto se reintroduce en Fase 9.
+- 1.5.2 Refactorizar `dominio/tipos.py`: eliminar imports runtime hacia `dominio/modelos/{resultado,validacion,variacion,incidencia}.py`. Verificable con `rg -n "from replica_inpc\.dominio\.modelos" src/replica_inpc/dominio/tipos.py` → sin matches.
+- 1.5.3 Mover `ManifestCorrida` y `ResultadoCorrida` a `dominio/_legacy.py` (archivo nuevo, prefijo `_` marca interno/temporal). Estos objetos se instancian en runtime, por lo que `TYPE_CHECKING` no aplica.
+- 1.5.4 Actualizar consumidores de `ManifestCorrida`/`ResultadoCorrida` para importar desde `dominio._legacy`. Inventario previo con `rg` antes del cambio.
+- 1.5.5 Borrar tests claramente muertos (persistencia v1, sin equivalente v2):
+  - `tests/integration/test_almacen_artefactos_fs.py`
+  - `tests/integration/test_repositorio_corridas_fs.py`
+  - `tests/integration/test_escritor_resultados_csv.py`
+- 1.5.6 Mover tests migrables a `tests/_legacy/legacy_test_*.py` (prefix `legacy_test_` no se colecciona por pytest default). Preservan especificación v1 para traducción a v2 por fase. Conteo y enumeración previa, no estimación.
+- 1.5.7 Verificación:
+  - `rg -n "from replica_inpc\.dominio\.modelos" src/replica_inpc/dominio/tipos.py` → sin matches.
+  - `conda run -n replica-inpc python -c "import replica_inpc; from replica_inpc.dominio.tipos import VersionCanasta"` → OK.
+  - `conda run -n replica-inpc pytest --collect-only -q` → solo recolecta tests activos; `_legacy/` ausente.
+  - `conda run -n replica-inpc pytest -q` → verde.
+
 #### Fase 2 — Modelos derivados
 
 Cuatro commits, uno por archivo. Sin lógica de cálculo todavía.
