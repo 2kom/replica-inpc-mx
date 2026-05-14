@@ -248,3 +248,132 @@ El archivo v1 debe reemplazarse completo. Ver `aplicacion.md §FuenteValidacion`
 Dos renombres pendientes (comentarios `# TODO v2` ya en el archivo):
 - `_VARIACIONES_POR_TIPO` → `_VARIACIONES_POR_TIPO_MENSUAL`
 - `def obtener` → `def obtener_indices`
+
+---
+
+## Plan de implementación v1 → v2
+
+Estrategia: big bang en rama `v2`, módulo por módulo. Tests por fase, no al final. Borrado de código v1 solo cuando su reemplazo v2 está verde.
+
+Cada fase se detalla en un plan propio antes de iniciarla.
+
+### Fases
+
+#### Fase 0 — Preparación
+
+Sin código productivo. Deja la rama lista para que las fases siguientes solo agreguen archivos.
+
+- 0.1 Scaffolding mínimo de paquetes: crear `__init__.py` en `dominio/modelos/`, `dominio/calculo/`, `dominio/consulta/`, `dominio/validacion/`, `aplicacion/casos_uso/` (carpetas vacías no se trackean en git).
+- 0.2 Snapshot mental: anotar qué tests v1 morirán vs migrarán.
+
+#### Fase 1 — Tipos y base abstracta
+
+Fundación de tipos v2 antes de tocar modelos derivados.
+
+- 1.1 `dominio/tipos.py`: agregar `ManifestUnidad`, `ManifestDerivado` (con campo `clase: str`).
+- 1.2 `dominio/modelos/base.py`: clases `Resultado` (ABC), `Validacion` (ABC), `Vista`.
+- 1.3 Tests `modelos/base`: invariantes, `__repr__`, igualdad estructural.
+
+#### Fase 2 — Modelos derivados
+
+Cuatro commits, uno por archivo. Sin lógica de cálculo todavía.
+
+- 2.1 `modelos/indice.py`: `ResultadoIndice` + tests.
+- 2.2 `modelos/variacion.py`: `ResultadoVariacion` + tests.
+- 2.3 `modelos/incidencia.py`: `ResultadoIncidencia` + tests.
+- 2.4 `modelos/validacion.py`: `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia` + tests.
+
+#### Fase 3 — Cálculo de índices
+
+Adaptar lógica v1 (sin reescribir matemática) para que retorne tipos v2.
+
+- 3.1 `calculo/base.py`: `CalculadorBase` con tipos v2.
+- 3.2 `calculo/laspeyres_directo.py`: retorno `ResultadoIndice`.
+- 3.3 `calculo/laspeyres_encadenado.py`: ídem (T1 + T2).
+- 3.4 Tests `calculo/`: migrar fixtures v1.
+
+#### Fase 4 — Conversión
+
+Transformaciones de `ResultadoIndice` → `ResultadoIndice`. Necesarias para construir fixtures realistas en Fase 5.
+
+- 4.1 `conversion.py`: rename `combinar` → `empalmar` + tests.
+- 4.2 `conversion.py`: `rebasar` (adaptar v1) + tests.
+- 4.3 `conversion.py`: `a_mensual` (adaptar v1) + tests.
+
+#### Fase 5 — Cálculo de derivados
+
+Funciones que producen `ResultadoVariacion` / `ResultadoIncidencia` a partir de `ResultadoIndice` (típicamente ya empalmado/rebasado/convertido por Fase 4).
+
+- 5.1 `calculo/variaciones.py`: `variacion_periodica`, `variacion_acumulada_anual`, `variacion_desde` + tests.
+- 5.2 `calculo/incidencias.py`: mover v1, adaptar tipos + tests.
+
+#### Fase 6 — Consulta
+
+Funciones thin sobre `ResultadoVariacion` / `ResultadoIncidencia`. Sin estado.
+
+- 6.1 `consulta/variaciones.py`: `inflacion_en`, `inflacion_acumulada`, `inflacion_promedio`, `inflacion_maxima`, `inflacion_minima` + tests.
+- 6.2 `consulta/incidencias.py`: `incidencia_en`, `incidencia_acumulada`, `incidencia_promedio`, `incidencia_mayor`, `incidencia_menor` + tests.
+
+#### Fase 7 — Aplicación
+
+Puerto v2 y único caso de uso. Bloqueante para Fase 8.
+
+- 7.1 `aplicacion/puertos/fuente_validacion.py` v2 (3 métodos: `obtener_indices`, `obtener_variaciones`, `obtener_incidencias`).
+- 7.2 Revisar `puertos/lector_canasta.py` y `lector_series.py` (probable sin cambio).
+- 7.3 `aplicacion/casos_uso/calcular_historia.py` + tests.
+
+#### Fase 8 — Validación
+
+Tres funciones puras que reciben `FuenteValidacion` por inyección.
+
+**Prerequisito bloqueante:** cerrar contratos en `dominio.md §Validación interna` (hoy marcada PENDIENTE). Sin contrato firmado, no iniciar.
+
+- 8.1 `validacion/indices.py`: `validar_indices` → `ValidacionIndice` + tests.
+- 8.2 `validacion/variaciones.py`: `validar_variaciones` → `ValidacionVariacion` + tests.
+- 8.3 `validacion/incidencias.py`: `validar_incidencias` → `ValidacionIncidencia` + tests.
+
+#### Fase 9 — API flat
+
+Superficie pública estilo pandas. Siete módulos + tests de integración end-to-end.
+
+- 9.1 `api/config.py`: `set_token`, `limpiar_cache`, tolerancias.
+- 9.2 `api/insumos.py`: `cargar_canasta`, `cargar_serie`.
+- 9.3 `api/indices.py`: `calcular_indice`, `empalmar`, `rebasar`, `a_mensual`.
+- 9.4 `api/variaciones.py`: series + análisis.
+- 9.5 `api/incidencias.py`: series + análisis.
+- 9.6 `api/validaciones.py`: `validar_indice/variacion/incidencia` + `TIPOS_CON_VALIDACION`.
+- 9.7 `api/flujos.py`: `calcular_historia`.
+- 9.8 Tests integración end-to-end.
+
+#### Fase 10 — Limpieza
+
+Borrar código v1 muerto. Cada eliminación con su commit. Lista conocida abajo.
+
+**Regla de scope:** si durante la barrida aparece un símbolo no listado, no se asume muerto. Parar y decidir explícitamente antes de borrar.
+
+- 10.1 Borrar `infraestructura/filesystem/` (incluye `almacen_artefactos_fs.py`, `repositorio_corridas_fs.py`).
+- 10.2 Borrar `infraestructura/csv/escritor_resultados_csv.py`.
+- 10.3 Borrar puntos de entrada v1: `api/corrida.py`, `aplicacion/casos_uso/ejecutar_corrida.py`.
+- 10.4 Borrar contratos v1 muertos: `AlmacenArtefactos`, `RepositorioCorridas`, `EscritorResultados`, `ManifestCorrida`, `ResultadoCorrida`.
+- 10.5 Borrar exports v1 muertos en `__init__.py` (raíz y subpaquetes): solo símbolos enumerados arriba — `Corrida`, `EjecutarCorrida`, `ResultadoCorrida`, `ManifestCorrida`, `combinar` (alias v1), `AlmacenArtefactos`, `RepositorioCorridas`, `EscritorResultados`. No tocar exports v2.
+- 10.6 Borrar tests v1 huérfanos existentes: `tests/integration/test_almacen_artefactos_fs.py`, `tests/integration/test_repositorio_corridas_fs.py`, `tests/integration/test_escritor_resultados_csv.py`. Más cualquier otro que referencie clases eliminadas y aparezca durante la migración.
+- 10.7 Verificación final:
+  - `ruff check --select F401 src/ tests/` (imports no usados locales).
+  - `pytest --collect-only` (detecta imports rotos cross-archivo que F401 ignora).
+  - `pytest` suite completa verde.
+
+#### Fase 11 — Cierre
+
+Consolidación documental y tag.
+
+- 11.1 Consolidar `docs/rediseño/` → `docs/diseño.md`.
+- 11.2 Actualizar `CLAUDE.md` (sección "Contratos del dominio implementados").
+- 11.3 Suite completa verde.
+- 11.4 Tag `v2.0.0` + entrada en `docs/requerimientos/tags.md`.
+
+### Política
+
+- No avanzar de fase con tests rojos.
+- Un módulo = un commit con su suite verde.
+- Si una fase desborda scope esperado (>5 commits extra), parar y replanear.
+- Plan detallado por fase se redacta antes de iniciarla; al cerrar la fase, su detalle se archiva o se elimina.
