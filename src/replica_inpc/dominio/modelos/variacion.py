@@ -1,91 +1,121 @@
 from __future__ import annotations
 
-from typing import Literal
-
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.modelos.base import Resultado, Vista
+from replica_inpc.dominio.tipos import ManifestDerivado
 
-_CLASES_VALIDAS = {"periodica", "acumulada_anual", "desde"}
+_CLASES_VALIDAS = frozenset(
+    {
+        "periodica_quincenal",
+        "periodica_mensual",
+        "periodica_bimestral",
+        "periodica_trimestral",
+        "periodica_cuatrimestral",
+        "periodica_semestral",
+        "periodica_anual",
+        "acumulada_anual",
+        "desde",
+    }
+)
+_COLUMNAS_MINIMAS = {"tipo", "clase_variacion", "variacion_pp", "estado_calculo"}
+_ESTADOS_VALIDOS = frozenset({"ok", "parcial"})
+_ORDEN_SEVERIDAD = {"ok": 0, "parcial": 1}
 
 
-class ResultadoVariacion:
+class ResultadoVariacion(Resultado):
     def __init__(
         self,
         df: pd.DataFrame,
-        tipo: str,
-        descripcion: str,
-        clase_variacion: Literal["periodica", "acumulada_anual", "desde"],
-        indices_parciales: dict[str, PeriodoQuincenal | PeriodoMensual] | None = None,
-        periodos_semiok: frozenset[PeriodoQuincenal | PeriodoMensual] | None = None,
+        manifiesto: ManifestDerivado,
+        reporte_df: pd.DataFrame,
+        diagnostico_df: pd.DataFrame,
+        indices_parciales: pd.DataFrame | None = None,
     ) -> None:
-        if df.empty:
-            raise InvarianteViolado("El DataFrame de ResultadoVariacion no puede estar vacío.")
-        if not isinstance(df.index, pd.MultiIndex) or list(df.index.names) != ["periodo", "indice"]:
+        faltantes = _COLUMNAS_MINIMAS - set(df.columns)
+        if faltantes:
             raise InvarianteViolado(
-                "El índice debe ser MultiIndex con niveles ['periodo', 'indice']."
+                f"ResultadoVariacion.df requiere columnas {sorted(faltantes)}"
             )
-        if "variacion" not in df.columns:
-            raise InvarianteViolado("El DataFrame debe contener la columna 'variacion'.")
-        if not tipo or not tipo.strip():
-            raise InvarianteViolado("'tipo' no puede ser vacío.")
-        if not descripcion or not descripcion.strip():
-            raise InvarianteViolado("'descripcion' no puede ser vacía.")
-        if clase_variacion not in _CLASES_VALIDAS:
+        clases = set(df["clase_variacion"].unique())
+        if len(clases) != 1:
             raise InvarianteViolado(
-                f"'clase_variacion' debe ser uno de {sorted(_CLASES_VALIDAS)}, "
-                f"se recibió '{clase_variacion}'."
+                "ResultadoVariacion.df.clase_variacion debe ser homogénea"
             )
-
-        self._df = df
-        self._tipo = tipo
-        self._descripcion = descripcion
-        self._clase_variacion = clase_variacion
-        self._indices_parciales = indices_parciales or {}
-        self._periodos_semiok: frozenset[PeriodoQuincenal | PeriodoMensual] = (
-            periodos_semiok or frozenset()
-        )
+        clase = clases.pop()
+        if clase not in _CLASES_VALIDAS:
+            raise InvarianteViolado(
+                f"clase_variacion '{clase}' no está en {sorted(_CLASES_VALIDAS)}"
+            )
+        if (clase == "desde") != (indices_parciales is not None):
+            raise InvarianteViolado(
+                "indices_parciales is not None ⇔ clase_variacion == 'desde'"
+            )
+        if manifiesto.clase != clase:
+            raise InvarianteViolado(
+                f"manifiesto.clase='{manifiesto.clase}' no coincide con "
+                f"df.clase_variacion='{clase}'"
+            )
+        tipos = set(df["tipo"].unique())
+        if len(tipos) != 1:
+            raise InvarianteViolado("ResultadoVariacion.df['tipo'] debe ser homogéneo")
+        tipo_df = tipos.pop()
+        if manifiesto.tipo != tipo_df:
+            raise InvarianteViolado(
+                f"manifiesto.tipo='{manifiesto.tipo}' no coincide con df['tipo']='{tipo_df}'"
+            )
+        estados_invalidos = set(df["estado_calculo"].unique()) - _ESTADOS_VALIDOS
+        if estados_invalidos:
+            raise InvarianteViolado(
+                f"ResultadoVariacion.df.estado_calculo solo admite 'ok'/'parcial'; "
+                f"recibió {sorted(estados_invalidos)}"
+            )
+        super().__init__(df[["variacion_pp"]])
+        self._df_completo = df
+        self._manifiesto = manifiesto
+        self._reporte_df = reporte_df
+        self._diagnostico_df = diagnostico_df
+        self._indices_parciales = indices_parciales
 
     @property
-    def tipo(self) -> str:
-        return self._tipo
+    def manifiesto(self) -> ManifestDerivado:
+        return self._manifiesto
 
     @property
-    def descripcion(self) -> str:
-        return self._descripcion
+    def resultado(self) -> Vista:
+        return Vista(self._df_completo, ["variacion_pp"])
 
     @property
-    def clase_variacion(self) -> str:
-        return self._clase_variacion
+    def reporte(self) -> pd.DataFrame:
+        return self._reporte_df
 
     @property
-    def periodos_semiok(self) -> frozenset[PeriodoQuincenal | PeriodoMensual]:
-        return self._periodos_semiok
+    def diagnostico(self) -> pd.DataFrame:
+        return self._diagnostico_df
 
     @property
-    def df(self) -> pd.DataFrame:
-        return self._df
-
-    @property
-    def indices_parciales(self) -> dict[str, PeriodoQuincenal | PeriodoMensual]:
+    def indices_parciales(self) -> pd.DataFrame | None:
         return self._indices_parciales
 
-    def como_tabla(self, ancho: bool = False, pct: bool = True) -> pd.DataFrame:
-        df_out = self._df.copy()
-        df_out["variacion"] = df_out["variacion"] * 100 if pct else df_out["variacion"]
-        if not ancho:
-            return df_out
-        return df_out["variacion"].unstack(level="periodo")  # type: ignore[operator]
+    @property
+    def resumen(self) -> pd.DataFrame:
+        df = self._df_completo
+        estados = df["estado_calculo"].unique()
+        estado = max(estados, key=lambda e: _ORDEN_SEVERIDAD[e])
+        periodos = df.index.get_level_values("periodo")
+        return pd.DataFrame(
+            [
+                {
+                    "tipo": self._manifiesto.tipo,
+                    "clase_variacion": self._manifiesto.clase,
+                    "descripcion": self._manifiesto.descripcion,
+                    "estado_calculo": estado,
+                    "periodo_inicio": min(periodos),
+                    "periodo_fin": max(periodos),
+                }
+            ]
+        )
 
     def _repr_html_(self) -> str:
-        header = f"<strong>{self._tipo} — {self._descripcion}</strong>"
-        tabla = self.como_tabla(ancho=False, pct=True)._repr_html_()  # type: ignore[operator]
-        parts = [header, tabla]
-        if self._indices_parciales:
-            items = "".join(
-                f"<li><code>{idx}</code>: base ajustada a {periodo}</li>"
-                for idx, periodo in sorted(self._indices_parciales.items())
-            )
-            parts.append(f"<p><em>Índices con base ajustada:</em><ul>{items}</ul></p>")
-        return "".join(parts)
+        return self.resumen._repr_html_()  # type: ignore[operator]
