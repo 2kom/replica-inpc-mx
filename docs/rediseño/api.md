@@ -309,7 +309,7 @@ def empalmar(
 |---|---|---|
 | `resultados` | `list[ResultadoIndice]` | tramos a unir; orden cronológico; al menos dos elementos |
 | `forzar` | `bool` | si `True`, permite empalmar resultados con `periodo_referencia` distintos emitiendo `UserWarning` |
-| `version_nombres` | `Literal[2010, 2013, 2018, 2024] \| None` | versión de referencia para nombres de categorías; si no está en los inputs, se usa la versión más cercana disponible; `None` = versión más reciente de los inputs |
+| `version_nombres` | `Literal[2010, 2013, 2018, 2024] \| None` | versión de referencia para nombres de categorías; debe estar en el rango de las nomenclaturas de los inputs (± 1 paso adyacente en `(2010, 2013, 2018, 2024)`); `None` = versión más reciente de los inputs (`max(versions)`) |
 
 ##### Retorno
 
@@ -325,6 +325,7 @@ def empalmar(
 | `tipo` distinto entre resultados | `InvarianteViolado` |
 | `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
 | `periodo_referencia` distintos con `forzar=True` | `UserWarning` |
+| nomenclaturas (inputs + `version_nombres`) con span > 1 paso adyacente en `(2010, 2013, 2018, 2024)` | `InvarianteViolado` |
 
 ##### Notas
 
@@ -332,7 +333,8 @@ def empalmar(
 - `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
 - renombrado de categorías lo aplica `empalmar` de dominio vía `RENOMBRES_INDICES` en `correspondencia_canastas.py`; `version_nombres` selecciona qué convención usar
 - `version_nombres=None` → versión más reciente de los inputs (`max(versions)`)
-- `version_nombres=X` → dominio usa X como versión canónica contra `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, X)`, los índices de ese tramo no se renombran
+- `version_nombres=X` → dominio usa X como versión canónica contra `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, X)`, los índices de ese tramo no se renombran (no-op silencioso a nivel de mapa faltante; el span entre nomenclaturas sigue restringido por la invariante de errores)
+- las correspondencias de nombres solo están catalogadas entre pares vecinos `2010↔2013`, `2013↔2018`, `2018↔2024`; saltos no contiguos no se pueden expresar en una sola llamada — el caller debe encadenar `empalmar` por pares vecinos
 
 ##### Ejemplo
 
@@ -340,11 +342,19 @@ def empalmar(
 # inputs 2018+2024; nombres quedan con convención 2024 (más reciente)
 hist = rep.empalmar([indice_2018, indice_2024])
 
-# inputs 2018+2024; forzar convención 2018
+# inputs 2018+2024; forzar convención 2018 (reverse del mapa 2018↔2024)
 hist = rep.empalmar([indice_2018, indice_2024], version_nombres=2018)
 
-# inputs 2018+2024; version_nombres=2010 → usa 2018 (más cercana disponible)
-hist = rep.empalmar([indice_2018, indice_2024], version_nombres=2010)
+# Cadena explícita 2010 → 2024 (encadenar por pares vecinos)
+intermedio_a = rep.empalmar([indice_2010, indice_2013])      # nomenclatura 2013
+intermedio_b = rep.empalmar([intermedio_a, indice_2018])     # nomenclatura 2018
+hist = rep.empalmar([intermedio_b, indice_2024])             # nomenclatura 2024
+
+# FALLA: salto 2010 → 2024 directo (span 3 pasos)
+rep.empalmar([indice_2010, indice_2024])  # InvarianteViolado
+
+# FALLA: version_nombres fuera del rango adyacente de los inputs
+rep.empalmar([indice_2018, indice_2024], version_nombres=2010)  # InvarianteViolado
 ```
 
 #### rebasar — RESUELTO
@@ -749,7 +759,7 @@ Pasos en orden; el usuario no tiene acceso a resultados intermedios:
 
 1. Por cada `(version, canasta_path, series_path)` en `insumos`: `cargar_canasta` + `cargar_serie`
 2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
-3. Si `len(insumos) > 1`: `empalmar` con `version_nombres` de la versión más reciente en `insumos`
+3. Si `len(insumos) > 1`: `empalmar` encadenado por pares vecinos en orden cronológico hasta llegar a la versión más reciente (cada llamada a `empalmar` admite span máximo de 1 paso adyacente en `(2010, 2013, 2018, 2024)`); nomenclatura final = `max(versions)` de `insumos`
 4. `rebasar` al periodo `referencia`
 5. Si `periodicidad="mensual"`: `a_mensual`
 

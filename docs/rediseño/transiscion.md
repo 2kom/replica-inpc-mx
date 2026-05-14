@@ -265,6 +265,57 @@ Este delta NO cambia los contratos de datos (esquemas de columnas, NaN, índices
 
 ---
 
+### `empalmar` — un solo paso adyacente por llamada
+
+Las correspondencias de nombres de categorías solo están definidas entre pares de canastas adyacentes en el orden cronológico `(2010, 2013, 2018, 2024)`:
+
+- 2010 ↔ 2013
+- 2013 ↔ 2018
+- 2018 ↔ 2024
+
+No existen mapeos directos para saltos no contiguos (`2010 ↔ 2018`, `2010 ↔ 2024`, `2013 ↔ 2024`). Reconstruirlos por composición transitiva puede perder información (categorías eliminadas, splits, fusiones intermedios).
+
+**Decisión adoptada (Fase 4):** `empalmar` impone que las **nomenclaturas** participantes (definidas como `max(manifest.versions)` de cada input, más `version_nombres` si se pasa explícito) abarquen a lo más un paso adyacente. Span > 1 → `InvarianteViolado`. El caller compone cadenas por pares vecinos; cada llamada aplica un único renombre (forward o reverse según `version_nombres`).
+
+```python
+# OK: paso único 2018 -> 2024
+hist = empalmar([r_2018, r_2024])
+
+# OK: caller selecciona nomenclatura destino
+hist_en_2024 = empalmar([r_2018, r_2024], version_nombres=2024)
+hist_en_2018 = empalmar([r_2018, r_2024], version_nombres=2018)  # reverse 2024->2018
+
+# OK encadenando por pares:
+intermedio_a = empalmar([r_2010, r_2013])         # nomenclatura 2013
+intermedio_b = empalmar([intermedio_a, r_2018])   # nomenclatura 2018
+final = empalmar([intermedio_b, r_2024])          # nomenclatura 2024
+
+# FALLA: salto 2010 -> 2024 (3 pasos)
+empalmar([r_2010, r_2024])  # InvarianteViolado
+
+# FALLA: tres versiones en una llamada (span 2 pasos)
+empalmar([r_2010, r_2013, r_2018])  # InvarianteViolado
+
+# FALLA: version_nombres fuera del rango adyacente de los inputs
+empalmar([r_2018, r_2024], version_nombres=2010)  # InvarianteViolado
+```
+
+**Nomenclatura por tramo:** `empalmar` calcula el mapa de renombre por input usando `max(manifest.versions)` como `version_origen`, NO la columna `version` por fila. Esto es correcto porque tras un empalmar previo todas las filas del índice quedan en la nomenclatura del max — la columna `version` por fila solo refleja origen del cálculo.
+
+`RENOMBRES_INDICES` hoy solo cataloga `2018 → 2024`. Pendiente extenderlo con `2010 → 2013` y `2013 → 2018` cuando se incorporen datos validados; mientras tanto, los empalmes con canastas 2010 y 2013 dejan los nombres de categorías sin renombrar (INPC y otros tipos no catalogados pasan sin cambio).
+
+---
+
+### `a_mensual` — filtrado de manifiestos huérfanos
+
+`a_mensual` colapsa 1Q+2Q a un valor mensual; cuando q1 y q2 tienen `version` distinta, el mensual hereda `version` de 2Q (regla v1 preservada). Una `ManifestUnidad` cuya `(version, tipo)` ya no aparece en ninguna fila del resultado queda huérfana y violaría el invariante de `ResultadoIndice` (cada manifest exige al menos una fila correspondiente).
+
+**Decisión adoptada (Fase 4):** `a_mensual` filtra la lista de manifestos a los pares `(version, tipo)` presentes en el df mensual. Si el filtrado dejaría la lista vacía (caso patológico), se preserva la lista original como fallback de provenance. Esto contradice literalmente el plan "preservar manifiesto íntegro", pero es necesario para satisfacer el invariante del contrato.
+
+`empalmar` y `rebasar` no requieren este filtrado porque no descartan filas por `(version, tipo)`.
+
+---
+
 ### `ManifestUnidad` — rutas opcionales
 
 `dominio.md` y el inventario inicial declaraban `ManifestUnidad.ruta_canasta: Path` y `ruta_series: Path` como obligatorios. En la práctica, los calculadores de dominio (`LaspeyresDirecto`, `LaspeyresEncadenadoT1`, `LaspeyresEncadenadoT2`) operan sobre `CanastaCanonica` y `SerieNormalizada` ya cargadas en memoria — no conocen filesystem.
