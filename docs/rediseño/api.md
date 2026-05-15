@@ -733,7 +733,7 @@ replica-inpc validar-incidencia --resultado incidencias.csv
 def calcular_historia(
     insumos: list[tuple[VersionCanasta, str, str]],
     tipo: str = "inpc",
-    referencia: str = "2Q Jul 2018",
+    referencia: str = "Jul 2018",
     periodicidad: Literal["quincenal", "mensual"] = "mensual",
 ) -> ResultadoIndice:
 ```
@@ -744,7 +744,7 @@ def calcular_historia(
 |---|---|---|
 | `insumos` | `list[tuple[VersionCanasta, str, str]]` | orden cronológico; cada elemento = `(version, canasta_path, series_path)`; mínimo 1 elemento; sin versiones duplicadas; si contiene 2013 → debe contener 2010; si contiene 2024 → debe contener 2018 |
 | `tipo` | `str` | clasificación a calcular; debe existir en todas las canastas de `insumos`; default `"inpc"` |
-| `referencia` | `str` | periodo base para `rebasar`; formato `"NQ Mmm AAAA"` o `"Mmm AAAA"`; default `"2Q Jul 2018"` |
+| `referencia` | `str` | periodo base para `rebasar`; formato `"NQ Mmm AAAA"` o `"Mmm AAAA"` — debe coincidir con `periodicidad` (el rebase se aplica tras convertir a la frecuencia final); default `"Jul 2018"` |
 | `periodicidad` | `Literal["quincenal", "mensual"]` | frecuencia del resultado final; default `"mensual"` |
 
 ##### Retorno
@@ -760,8 +760,10 @@ Pasos en orden; el usuario no tiene acceso a resultados intermedios:
 1. Por cada `(version, canasta_path, series_path)` en `insumos`: `cargar_canasta` + `cargar_serie`
 2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
 3. Si `len(insumos) > 1`: `empalmar` encadenado por pares vecinos en orden cronológico hasta llegar a la versión más reciente (cada llamada a `empalmar` admite span máximo de 1 paso adyacente en `(2010, 2013, 2018, 2024)`); nomenclatura final = `max(versions)` de `insumos`
-4. `rebasar` al periodo `referencia`
-5. Si `periodicidad="mensual"`: `a_mensual`
+4. Si `periodicidad="mensual"`: `a_mensual`
+5. `rebasar` al periodo `referencia`
+
+`a_mensual` precede a `rebasar`: `a_mensual` devuelve `periodo_referencia=None`, por lo que rebasear antes lo anularía; además, con `periodicidad="mensual"` el `referencia` resuelto es `PeriodoMensual` y `rebasar` exige que exista en el resultado, lo que solo ocurre tras `a_mensual` (ver `transiscion.md` §`CalcularHistoria — orden`).
 
 Para control granular sobre cualquier paso, usar las funciones manuales de `insumos.py`, `indices.py`.
 
@@ -812,15 +814,32 @@ replica-inpc calcular-historia --config historia.toml
 
 ### §D1. Acoplamiento api/ → infraestructura/
 
-PENDIENTE: ver `transiscion.md` § "Origen: `## Capa api/` → `### Acoplamiento — decisión v2`".
+`api/` llama directamente a `infraestructura/csv/` e `infraestructura/inegi/` —
+instancia `LectorCanastaCsv`, `LectorSeriesCsv` y `FuenteValidacionApi` sin
+inyección de dependencias. Pragmático y suficiente para v2: solo existe una
+fuente de cada tipo (CSV local, API INEGI).
+
+La migración a puertos + DI (`aplicacion/puertos/`) se difiere a cuando se
+agreguen fuentes alternativas (SQL, HTTP, etc.); entonces `config.py` inyectará
+el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se
+suma el adaptador nuevo.
 
 ### §D2. Token híbrido en config.py
 
-PENDIENTE: documentar por qué `get_token()` busca env var primero y luego valor de `set_token`, no al revés.
+`get_token()` busca la env var `INEGI_TOKEN` **primero** y solo después el valor
+de `set_token`. El orden no es arbitrario: en CI y en la CLI el token se fija por
+entorno sin escribir código, y ese contexto debe ganar sobre un `set_token`
+dejado por error en una celda de notebook. En un notebook interactivo, donde no
+hay env var, `set_token` sigue siendo el único mecanismo y funciona sin
+fricción. Si ninguno está disponible, `get_token()` lanza `ErrorConfiguracion`.
 
 ### §D3. Versión explícita en insumos
 
-PENDIENTE: documentar por qué `version` es parámetro obligatorio (no auto-detect) en `cargar_canasta` y `cargar_serie`.
+`version` es obligatorio (no auto-detect) en `cargar_canasta` y `cargar_serie`
+porque las canastas 2010 y 2013 tienen genéricos idénticos: un auto-detect no
+puede distinguirlas y elegiría mal en silencio, produciendo un cálculo
+erróneo sin error visible. Exigir la versión hace explícito el contrato y
+traslada la decisión al usuario, que sí conoce el origen del archivo.
 
 ### §D4. Re-export de errores en `__init__.py`
 
