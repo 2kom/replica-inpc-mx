@@ -349,9 +349,11 @@ Pasos en orden; el llamador no tiene acceso a resultados intermedios:
 
 1. Por cada `(version, ruta_canasta, ruta_series)` en `insumos`: `lector_canasta.leer` + `lector_series.leer`
 2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
-3. Si `len(insumos) > 1`: `empalmar` con `version_nombres` de la versión más reciente
-4. `rebasar` al `periodo_referencia`
-5. Si `periodicidad="mensual"`: `a_mensual`
+3. Si `len(insumos) > 1`: `empalmar` por pares vecinos (fold-left), `version_nombres` de la versión más reciente de cada par
+4. Si `periodicidad="mensual"`: `a_mensual`
+5. `rebasar` al `periodo_referencia` — sobre el resultado ya en la periodicidad final
+
+> **Orden `a_mensual` → `rebasar`:** `a_mensual` devuelve `periodo_referencia=None`; si se rebaseara antes, la conversión a mensual anularía el rebase. Además, con `periodicidad="mensual"` el `periodo_referencia` es `PeriodoMensual` y `rebasar` requiere que exista en el resultado, lo que solo ocurre tras `a_mensual`.
 
 ##### Errores
 

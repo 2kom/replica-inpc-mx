@@ -339,6 +339,14 @@ class ManifestUnidad:
 
 ---
 
+### `CalcularHistoria` — orden `a_mensual` → `rebasar`
+
+La orquestación documentada en `aplicacion.md` ponía `rebasar` (paso 4) antes de `a_mensual` (paso 5). `a_mensual` devuelve `periodo_referencia=None`, por lo que rebasear antes de convertir a mensual anularía el rebase; además, con `periodicidad="mensual"` el `periodo_referencia` es `PeriodoMensual` y `rebasar` exige que exista en el resultado, lo que solo ocurre tras `a_mensual`.
+
+**Decisión adoptada (Fase 7):** se invierte el orden — `a_mensual` (si `periodicidad="mensual"`) y luego `rebasar` sobre el resultado ya en la periodicidad final. `aplicacion.md` actualizado. El empalme se hace por pares vecinos (fold-left) para respetar el invariante de span de `empalmar`.
+
+---
+
 ## Plan de implementación v1 → v2
 
 Estrategia: big bang en rama `v2`, módulo por módulo. Tests por fase, no al final. Borrado de código v1 solo cuando su reemplazo v2 está verde.
