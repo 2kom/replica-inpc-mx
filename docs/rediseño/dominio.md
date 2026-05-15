@@ -913,8 +913,8 @@ Hereda columnas de `ResultadoIndice.resultado.largo` y agrega columnas de compar
 | `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
 | `estado_calculo` | str | nunca |
 | `motivo_error` | str/NaN | `estado_calculo = ok` o `parcial` |
-| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
-| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}`; en `sin_calculo` conserva el valor INEGI si existe |
+| `error_absoluto` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 | `estado_validacion` | str | nunca |
 
 ##### `.resultado.ancho`
@@ -970,8 +970,8 @@ Extiende `ResultadoIndice.reporte`. Mismo índice `(periodo, indice)`. Agrega co
 | `ponderador_esperado` | float | nunca |
 | `ponderador_cubierto` | float | nunca |
 | `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
-| `indice_inegi` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible, sin_calculo}` |
-| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+| `indice_inegi` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible}`; en `sin_calculo` conserva el valor INEGI si existe |
+| `error_absoluto` | float/NaN | `estado_validacion in {fuera_rango_inegi, no_disponible, sin_calculo}` |
 | `estado_validacion` | str | nunca |
 
 Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible`, `fuera_rango_inegi`.
@@ -996,8 +996,8 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | `estado_validacion` | str | nunca |
 | `estado_calculo` | str | nunca |
 | `indice_replicado` | float/NaN | `estado_calculo = sin_datos` o `fallida` |
-| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
-| `error_absoluto` | float/NaN | mismo que `indice_inegi` |
+| `indice_inegi` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}`; en `sin_calculo` conserva el valor INEGI si existe |
+| `error_absoluto` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 
 `estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
@@ -1090,12 +1090,12 @@ Extiende `ResultadoVariacion.reporte`. Mismo índice `(periodo, indice)`. Agrega
 | `version_lag` | int/NaN | base no existe |
 | `cobertura_pct_t` | float/NaN | base no existe |
 | `cobertura_pct_lag` | float/NaN | base no existe |
-| `variacion_pp` | float | nunca en filas presentes |
+| `variacion_pp` | float/NaN | `NaN` cuando `estado_validacion = sin_calculo` (fila no computable) |
 | `variacion_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
-| `error_absoluto_pp` | float/NaN | mismo que `variacion_inegi_pp` |
+| `error_absoluto_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 | `estado_validacion` | str | nunca |
 
-Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible`, `fuera_rango_inegi`. `sin_calculo` solo aparece en filas no computables — presentes en `.reporte`/`.diagnostico` pero ausentes de `.resultado.largo`.
 
 `estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
@@ -1107,7 +1107,7 @@ Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_pa
 
 #### `.diagnostico`
 
-Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible` y `fuera_rango_inegi`.
 
 | columna | tipo | NaN cuando |
 |---|---|---|
@@ -1118,9 +1118,9 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | `version_t` | int | nunca |
 | `estado_validacion` | str | nunca |
 | `estado_calculo` | str | nunca |
-| `variacion_pp` | float | nunca en filas presentes |
+| `variacion_pp` | float/NaN | `NaN` cuando `estado_validacion = sin_calculo` (fila no computable) |
 | `variacion_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
-| `error_absoluto_pp` | float/NaN | mismo que `variacion_inegi_pp` |
+| `error_absoluto_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 
 `estado_calculo` da contexto para `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
@@ -1215,12 +1215,12 @@ Extiende `ResultadoIncidencia.reporte`. Mismo índice `(periodo, indice)`. Agreg
 | `version_lag` | int/NaN | base no existe |
 | `cobertura_pct_t` | float/NaN | base no existe |
 | `cobertura_pct_lag` | float/NaN | base no existe |
-| `incidencia_pp` | float | nunca en filas presentes |
+| `incidencia_pp` | float/NaN | `NaN` cuando `estado_validacion = sin_calculo` (fila no computable) |
 | `incidencia_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
-| `error_absoluto_pp` | float/NaN | mismo que `incidencia_inegi_pp` |
+| `error_absoluto_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 | `estado_validacion` | str | nunca |
 
-Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible`, `fuera_rango_inegi`.
+Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible`, `fuera_rango_inegi`. `sin_calculo` solo aparece en filas no computables — presentes en `.reporte`/`.diagnostico` pero ausentes de `.resultado.largo`.
 
 `estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
@@ -1232,7 +1232,7 @@ Valores de `estado_validacion`: `ok`, `diferencia_detectada`, `diferencia_por_pa
 
 #### `.diagnostico`
 
-Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` y `fuera_rango_inegi`.
+Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible` y `fuera_rango_inegi`.
 
 | columna | tipo | NaN cuando |
 |---|---|---|
@@ -1243,9 +1243,9 @@ Subconjunto de `.reporte` donde `estado_validacion != ok`: incluye `diferencia_d
 | `version_t` | int | nunca |
 | `estado_validacion` | str | nunca |
 | `estado_calculo` | str | nunca |
-| `incidencia_pp` | float | nunca en filas presentes |
+| `incidencia_pp` | float/NaN | `NaN` cuando `estado_validacion = sin_calculo` (fila no computable) |
 | `incidencia_inegi_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi}` |
-| `error_absoluto_pp` | float/NaN | mismo que `incidencia_inegi_pp` |
+| `error_absoluto_pp` | float/NaN | `estado_validacion in {no_disponible, fuera_rango_inegi, sin_calculo}` |
 
 `estado_calculo` da contexto para `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
 
@@ -1838,15 +1838,61 @@ p, i, v = mayor_incidencia(inc_m, indice="Alimentos")
 
 ---
 
-### Validación interna — PENDIENTE
+### Validación interna — CERRADO
 
-Privadas — llamadas solo desde `api/validaciones.py`. Contratos completos pendientes; se documentarán al implementar.
+Tres funciones privadas — llamadas solo desde `api/validaciones.py`. Comparan un resultado replicado contra series publicadas por INEGI y devuelven el `Validacion*` correspondiente. Son puras: sin IO propio; reciben `FuenteValidacion` por inyección.
 
-| Función | Archivo | Devuelve |
-|---|---|---|
-| `validar_indices` | `dominio/validacion/indices.py` | `ValidacionIndice` |
-| `validar_variaciones` | `dominio/validacion/variaciones.py` | `ValidacionVariacion` |
-| `validar_incidencias` | `dominio/validacion/incidencias.py` | `ValidacionIncidencia` |
+| Función | Archivo | Firma | Devuelve |
+|---|---|---|---|
+| `validar_indices` | `dominio/validacion/indices.py` | `(resultado: ResultadoIndice, fuente: FuenteValidacion, tolerancia: float = 0.0009)` | `ValidacionIndice` |
+| `validar_variaciones` | `dominio/validacion/variaciones.py` | `(resultado: ResultadoVariacion, fuente: FuenteValidacion, tolerancia_pp: float = 0.009)` | `ValidacionVariacion` |
+| `validar_incidencias` | `dominio/validacion/incidencias.py` | `(resultado: ResultadoIncidencia, fuente: FuenteValidacion, tolerancia_pp: float = 0.009)` | `ValidacionIncidencia` |
+
+#### Esquema de salida
+
+Los esquemas de `.resultado.largo`, `.resumen`, `.reporte` y `.diagnostico` quedan fijados por los contratos de `ValidacionIndice`/`ValidacionVariacion`/`ValidacionIncidencia` (arriba). Las funciones construyen esas cuatro DataFrames y las pasan al constructor del modelo.
+
+#### Consulta a `FuenteValidacion`
+
+- `validar_indices` → `fuente.obtener_indices(periodos)`.
+- `validar_variaciones` → `fuente.obtener_variaciones(periodos, tipo_variacion)`.
+- `validar_incidencias` → `fuente.obtener_incidencias(periodos, tipo_incidencia)`.
+
+`periodos` son los periodos únicos del resultado. `tipo_variacion`/`tipo_incidencia` se derivan de `manifiesto.clase` (ver `aplicacion.md §Mapeo desde contratos de dominio`):
+
+| `clase` | `tipo_variacion` |
+|---|---|
+| `periodica_quincenal`, `periodica_mensual` | `periodica` |
+| `periodica_anual` | `interanual` |
+| `acumulada_anual` | `acumulada_anual` |
+| `periodica_{bi,tri,cuatri,semes}tral`, `desde` | → `ErrorConfiguracion` (INEGI no publica) |
+
+Incidencias: `periodica_mensual` → `periodica`; cualquier otra `clase` → `ErrorConfiguracion`.
+
+#### `estado_validacion` por fila `(periodo, indice)`
+
+En orden:
+
+1. `indice` ausente del dict de INEGI, o `periodo` ausente del dict interior → `fuera_rango_inegi`.
+2. valor INEGI es `None` → `no_disponible`.
+3. `estado_calculo ∈ {sin_datos, fallida}` → `sin_calculo`. El valor INEGI se conserva si existe; `error_absoluto = NaN` (el faltante está del lado replicado).
+4. comparables → `error = abs(replicado − inegi)`; `error ≤ tolerancia` → `ok`; si no y `estado_calculo == "parcial"` → `diferencia_por_parcial`; si no → `diferencia_detectada`.
+
+En `validar_indices` la regla 3 se aplica al `.resultado.largo` (conserva filas no computables). En `validar_variaciones`/`validar_incidencias` el `.resultado.largo` derivado solo tiene filas computables, pero el `.reporte` heredado de `Resultado*` incluye combinaciones no computables: esas filas del `.reporte`/`.diagnostico` se clasifican y obtienen `sin_calculo`. El `.resumen` de los derivados se calcula solo sobre las filas computables (`.resultado.largo`), por lo que su `estado_validacion_global` nunca es `sin_calculo`.
+
+`variacion_pp`/`incidencia_pp` ya están en pp → comparación directa con la serie INEGI.
+
+#### `estado_validacion_global` (en `.resumen`)
+
+Por prioridad descendente: `diferencia_detectada` > `diferencia_por_parcial` > `sin_calculo` > `no_disponible` (cuando no hay ninguna fila comparable) > `ok`. `fuera_rango_inegi` nunca afecta el estado global.
+
+#### Errores
+
+| condición | resultado |
+|---|---|
+| `tipo` fuera de `TIPOS_CON_VALIDACION` | `InvarianteViolado` — fail-fast, antes de tocar `fuente` |
+| `clase` no mapeable a `tipo_variacion`/`tipo_incidencia` | `ErrorConfiguracion` — fail-fast |
+| `FuenteValidacion` no responde / formato inesperado | propaga `FuenteNoDisponible` / `RespuestaInvalida` |
 
 ---
 
