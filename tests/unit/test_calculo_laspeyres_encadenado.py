@@ -165,3 +165,41 @@ def test_t1_tipo_invalido_lanza_invariante_violado() -> None:
 def test_t2_tipo_invalido_lanza_invariante_violado() -> None:
     with pytest.raises(InvarianteViolado):
         LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "no_existe")
+
+
+def test_periodos_fuera_de_rango_2024_se_recortan() -> None:
+    # Serie con periodos antes de 2Q Jul 2024 (inicio del rango válido de v2024)
+    pre_traslape = PeriodoQuincenal(2024, 1, 1)
+    periodos_con_extra = [pre_traslape, _traslape_t2, _post_t2]
+    df = pd.DataFrame(
+        {"arroz": [140.0, 150.0, 151.5], "frijol": [130.0, 140.0, 144.2],
+         "leche": [150.0, 160.0, 168.0], "huevo": [120.0, 130.0, 132.6]},
+        index=periodos_con_extra,
+    ).T
+    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie_extra, "c1", "inpc")
+
+    periodos_resultado = r.df.index.get_level_values("periodo").tolist()
+    assert pre_traslape not in periodos_resultado
+    assert _traslape_t2 in periodos_resultado
+    assert _post_t2 in periodos_resultado
+
+
+def test_periodos_fuera_de_rango_2013_se_recortan() -> None:
+    # Serie con periodos antes de 2Q Mar 2013 (inicio del rango válido de v2013)
+    pre_traslape = PeriodoQuincenal(2013, 1, 1)
+    periodos_con_extra = [pre_traslape, _traslape_t1, _post_t1]
+    df = pd.DataFrame(
+        {"arroz": [110.0, 120.0, 123.0], "frijol": [70.0, 80.0, 82.0],
+         "leche": [100.0, 110.0, 113.0], "huevo": [80.0, 90.0, 91.5]},
+        index=periodos_con_extra,
+    ).T
+    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie_extra, "c1", "inpc")
+
+    periodos_resultado = r.df.index.get_level_values("periodo").tolist()
+    assert pre_traslape not in periodos_resultado
+    assert _traslape_t1 in periodos_resultado
+    assert _post_t1 in periodos_resultado

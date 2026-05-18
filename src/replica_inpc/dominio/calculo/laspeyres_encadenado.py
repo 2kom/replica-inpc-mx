@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 import pandas as pd
 
@@ -11,6 +11,7 @@ from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
     _construir_reporte,
+    _recortar_al_rango,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -40,7 +41,7 @@ def _obtener_f_k(
                 f"PeriodoQuincenal de traslape {traslape} no está en la serie "
                 "y falta encadenamiento en canasta"
             )
-        f_k_serie: pd.Series = df_serie[traslape] / 100
+        f_k_serie: pd.Series = df_serie[cast(Any, traslape)] / 100
         f_k = enc_raw.astype(float)
         f_k = f_k.where(~necesita_fallback, f_k_serie)
     else:
@@ -106,7 +107,7 @@ def _calcular_df_t1(
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
     if referencia_empalme is not None:
-        factor_h = referencia_empalme / float(i_tramo[traslape])
+        factor_h = referencia_empalme / float(i_tramo[cast(Any, traslape)])
     else:
         factor_h = 1.0
     resultado = i_tramo * factor_h
@@ -173,22 +174,22 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
 
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]
+            df_s = _recortar_al_rango(serie.df, canasta.version)
             df_calc = self._calcular_df_para(
                 canasta.df,
-                serie.df,
+                df_s,
                 indice,
                 tipo,
                 self._referencia_empalme.get(indice),
             )
-            df_reporte = _construir_reporte(df_calc, canasta.df, serie.df, canasta.version)
-            df_diag = _construir_diagnostico(
-                canasta.df, serie.df, id_corrida, canasta.version, tipo
-            )
+            df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
+            df_diag = _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo)
         else:
             dfs_calc: list[pd.DataFrame] = []
             dfs_reporte: list[pd.DataFrame] = []
             dfs_diag: list[pd.DataFrame] = []
-            for cat, df_c, df_s in grupos_por_clasificacion(canasta, serie, tipo):
+            for cat, df_c, df_s_all in grupos_por_clasificacion(canasta, serie, tipo):
+                df_s = _recortar_al_rango(df_s_all, canasta.version)
                 df_calc_g = self._calcular_df_para(
                     df_c, df_s, cat, tipo, self._referencia_empalme.get(cat)
                 )
