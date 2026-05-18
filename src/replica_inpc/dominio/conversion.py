@@ -45,7 +45,8 @@ def empalmar(
     """Concatena tramos del mismo `tipo` en un único `ResultadoIndice`.
 
     Normaliza nombres de categorías entre versiones de canasta. En traslapes,
-    las filas del input posterior (cronológico) prevalecen.
+    las filas del input anterior (cronológico) prevalecen — el valor del tramo
+    posterior en el traslape es derivado del anterior por construcción.
     """
     if len(resultados) < 2:
         raise InvarianteViolado("empalmar requiere al menos 2 ResultadoIndice.")
@@ -104,22 +105,20 @@ def empalmar(
 
     tipo_unico = next(iter(tipos))
 
-    periodos_posteriores: set[object] = set()
+    periodos_anteriores: set[object] = set()
     dfs_indice: list[pd.DataFrame] = []
     dfs_reporte: list[pd.DataFrame] = []
     dfs_diag: list[pd.DataFrame] = []
-    for r in reversed(ordenados):
+    for r in ordenados:
         df_completo = r._df_completo
         reporte = r.reporte
         periodos_propios = set(df_completo.index.get_level_values("periodo"))
-        periodos_a_incluir = periodos_propios - periodos_posteriores
+        periodos_a_incluir = periodos_propios - periodos_anteriores
 
         df_filtrado = df_completo[
             df_completo.index.get_level_values("periodo").isin(periodos_a_incluir)
         ]
-        rep_filtrado = reporte[
-            reporte.index.get_level_values("periodo").isin(periodos_a_incluir)
-        ]
+        rep_filtrado = reporte[reporte.index.get_level_values("periodo").isin(periodos_a_incluir)]
 
         # Nomenclatura del tramo = max(manifest.versions). Para inputs
         # ya-empalmados con múltiples versions a nivel de fila, la nomenclatura
@@ -130,12 +129,12 @@ def empalmar(
         dfs_indice.append(_aplicar_renombre(df_filtrado, mapa))
         dfs_reporte.append(_aplicar_renombre(rep_filtrado, mapa))
         dfs_diag.append(r.diagnostico)
-        periodos_posteriores |= periodos_propios
+        periodos_anteriores |= periodos_propios
 
-    df_combinado = pd.concat(reversed(dfs_indice))
+    df_combinado = pd.concat(dfs_indice)
     df_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
-    reporte_combinado = pd.concat(reversed(dfs_reporte))
+    reporte_combinado = pd.concat(dfs_reporte)
     reporte_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
     diag_combinado = pd.concat(dfs_diag, ignore_index=True)
@@ -206,9 +205,7 @@ def rebasar(
         mask_indice = df.index.get_level_values("indice") == indice
         mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
         df.loc[mask_indice & mask_valor, "indice_replicado"] = (
-            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)
-            * valor_base
-            / base
+            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float) * valor_base / base
         )
 
     return ResultadoIndice(
@@ -292,9 +289,7 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
             "estado_calculo": estado_calculo.values,
             "motivo_error": motivo_error.values,
         },
-        index=pd.MultiIndex.from_arrays(
-            [periodos_mensuales, indices], names=["periodo", "indice"]
-        ),
+        index=pd.MultiIndex.from_arrays([periodos_mensuales, indices], names=["periodo", "indice"]),
     )
 
     df_result.sort_index(level="periodo", sort_remaining=False, inplace=True)

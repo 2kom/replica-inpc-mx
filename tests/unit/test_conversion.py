@@ -193,7 +193,7 @@ def test_empalmar_ordena_cronologicamente() -> None:
     assert periodos == sorted(periodos)
 
 
-def test_empalmar_traslape_queda_en_posterior() -> None:
+def test_empalmar_traslape_queda_en_anterior() -> None:
     r_2018 = _resultado(
         [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 105.0, "ok", None)], version=2018
     )
@@ -201,10 +201,11 @@ def test_empalmar_traslape_queda_en_posterior() -> None:
         [(_p3, "INPC", 999.0, "ok", None), (_p4, "INPC", 110.0, "ok", None)], version=2024
     )
     out = empalmar([r_2018, r_2024])
-    # En _p3 prevalece r_2024 (valor 999, version 2024)
+    # En _p3 prevalece r_2018 (valor 105, version 2018) — el valor de r_2024
+    # en el traslape es derivado de r_2018 por construcción.
     fila_largo = out.resultado.largo.loc[(_p3, "INPC")]
-    assert fila_largo["version"] == 2024
-    assert fila_largo["indice_replicado"] == 999.0
+    assert fila_largo["version"] == 2018
+    assert fila_largo["indice_replicado"] == 105.0
 
 
 def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
