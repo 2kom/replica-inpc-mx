@@ -160,12 +160,12 @@ class _ReplicaModule(ModuleType):
     _PROXY = ("tolerancia_indice", "tolerancia_derivados", "timeout_api")
 
     def __getattr__(self, name: str) -> object:
-        if name in _ReplicaModule._PROXY:
+        if name in type(self)._PROXY:
             return getattr(_config, name)
         raise AttributeError(f"module 'replica_inpc' has no attribute '{name}'")
 
     def __setattr__(self, name: str, value: object) -> None:
-        if name in _ReplicaModule._PROXY:
+        if name in type(self)._PROXY:
             setattr(_config, name, value)
         else:
             super().__setattr__(name, value)
