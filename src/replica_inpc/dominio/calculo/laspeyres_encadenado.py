@@ -122,9 +122,7 @@ def _calcular_df_t2(
 ) -> pd.DataFrame:
     """T2 — v2024: factor_h = ref / 100 | sum(pond * f_k) / sum(pond)."""
     version: VersionCanasta = 2024
-    i_tramo, f_k, ponderadores, periodos_null = _i_tramo_y_metadata(
-        df_canasta, df_serie, version
-    )
+    i_tramo, f_k, ponderadores, periodos_null = _i_tramo_y_metadata(df_canasta, df_serie, version)
     traslape = RANGOS_VALIDOS[version][0]
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
@@ -140,9 +138,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
     _VERSION_ESPERADA: VersionCanasta
     _CALCULADOR_NOMBRE: Literal["LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]
 
-    def __init__(
-        self, referencia_empalme_por_indice: dict[str, float] | None = None
-    ) -> None:
+    def __init__(self, referencia_empalme_por_indice: dict[str, float] | None = None) -> None:
         self._referencia_empalme = referencia_empalme_por_indice or {}
 
     def _calcular_df_para(
@@ -197,9 +193,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                     df_c, df_s, cat, tipo, self._referencia_empalme.get(cat)
                 )
                 dfs_calc.append(df_calc_g)
-                dfs_reporte.append(
-                    _construir_reporte(df_calc_g, df_c, df_s, canasta.version)
-                )
+                dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
                 dfs_diag.append(
                     _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo)
                 )

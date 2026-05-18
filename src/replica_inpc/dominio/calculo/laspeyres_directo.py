@@ -10,6 +10,7 @@ from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
     _construir_reporte,
+    _recortar_al_rango,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -74,21 +75,19 @@ class LaspeyresDirecto(CalculadorBase):
 
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]
-            df_calc = _calcular_df(canasta.df, serie.df, indice, tipo, canasta.version)
-            df_reporte = _construir_reporte(df_calc, canasta.df, serie.df, canasta.version)
-            df_diag = _construir_diagnostico(
-                canasta.df, serie.df, id_corrida, canasta.version, tipo
-            )
+            df_s = _recortar_al_rango(serie.df, canasta.version)
+            df_calc = _calcular_df(canasta.df, df_s, indice, tipo, canasta.version)
+            df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
+            df_diag = _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo)
         else:
             dfs_calc: list[pd.DataFrame] = []
             dfs_reporte: list[pd.DataFrame] = []
             dfs_diag: list[pd.DataFrame] = []
-            for cat, df_c, df_s in grupos_por_clasificacion(canasta, serie, tipo):
+            for cat, df_c, df_s_all in grupos_por_clasificacion(canasta, serie, tipo):
+                df_s = _recortar_al_rango(df_s_all, canasta.version)
                 df_calc_g = _calcular_df(df_c, df_s, cat, tipo, canasta.version)
                 dfs_calc.append(df_calc_g)
-                dfs_reporte.append(
-                    _construir_reporte(df_calc_g, df_c, df_s, canasta.version)
-                )
+                dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
                 dfs_diag.append(
                     _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo)
                 )

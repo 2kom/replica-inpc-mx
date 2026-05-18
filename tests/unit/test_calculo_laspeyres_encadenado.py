@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from replica_inpc.dominio.calculo.laspeyres_directo import LaspeyresDirecto
 from replica_inpc.dominio.calculo.laspeyres_encadenado import (
     LaspeyresEncadenadoT1,
     LaspeyresEncadenadoT2,
@@ -52,31 +51,18 @@ def test_t2_traslape_es_fh_por_100_sin_referencia() -> None:
 
 def test_t2_difiere_de_directo() -> None:
     enc = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
-    directo = LaspeyresDirecto().calcular(
-        CanastaCanonica(
-            pd.DataFrame(
-                {
-                    "ponderador": ["10.0", "20.0", "30.0", "40.0"],
-                    "encadenamiento": [None, None, None, None],
-                },
-                index=["arroz", "frijol", "leche", "huevo"],
-            ),
-            2018,
-        ),
-        _serie_t2(),
-        "c2",
-        "inpc",
-    )
     val_enc = enc.df.at[(_post_t2, "INPC"), "indice_replicado"]
-    val_dir = directo.df.at[(_post_t2, "INPC"), "indice_replicado"]
-    assert val_enc != pytest.approx(val_dir)
+    # Laspeyres naive (sin de-encadenamiento) para el mismo periodo
+    serie_df = _serie_t2().df
+    pond = [10.0, 20.0, 30.0, 40.0]
+    vals = [float(serie_df.at[g, _post_t2]) for g in ["arroz", "frijol", "leche", "huevo"]]
+    val_naive = sum(v * p for v, p in zip(vals, pond)) / sum(pond)
+    assert val_enc != pytest.approx(val_naive)
 
 
 def test_t2_con_referencia_ancla_traslape_en_ref() -> None:
     ref = 134.471
-    r = LaspeyresEncadenadoT2({"INPC": ref}).calcular(
-        _canasta_t2(), _serie_t2(), "c1", "inpc"
-    )
+    r = LaspeyresEncadenadoT2({"INPC": ref}).calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
     # factor_h = ref/100, i_tramo[traslape] = 100 (porque serie/f_k = 100 en traslape)
     valor = r.df.at[(_traslape_t2, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(ref)
@@ -154,9 +140,7 @@ def test_t1_sin_referencia_factor_h_es_1() -> None:
 
 def test_t1_con_referencia_ancla_traslape() -> None:
     ref = 109.172
-    r = LaspeyresEncadenadoT1({"INPC": ref}).calcular(
-        _canasta_t1(), _serie_t1(), "c1", "inpc"
-    )
+    r = LaspeyresEncadenadoT1({"INPC": ref}).calcular(_canasta_t1(), _serie_t1(), "c1", "inpc")
     valor = r.df.at[(_traslape_t1, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(ref)
 

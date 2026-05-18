@@ -75,3 +75,31 @@ def test_manifiesto_calculador_y_version() -> None:
 def test_tipo_invalido_lanza_invariante_violado() -> None:
     with pytest.raises(InvarianteViolado):
         LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "tipo_inventado")
+
+
+def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
+    # Serie con periodos antes de 2Q Jul 2018 (inicio del rango válido de v2018)
+    periodos_con_extra = [
+        PeriodoQuincenal(2018, 1, 1),
+        PeriodoQuincenal(2018, 7, 1),
+        PeriodoQuincenal(2018, 7, 2),  # inicio válido
+        PeriodoQuincenal(2018, 8, 1),
+    ]
+    df = pd.DataFrame(
+        {
+            "arroz": [99, 99, 100, 101],
+            "frijol": [99, 99, 100, 102],
+            "leche": [99, 99, 100, 103],
+            "huevo": [99, 99, 100, 104],
+        },
+        index=periodos_con_extra,
+    ).T
+    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresDirecto().calcular(_canasta(), serie_extra, "c1", "inpc")
+
+    periodos_resultado = r.df.index.get_level_values("periodo").tolist()
+    assert PeriodoQuincenal(2018, 1, 1) not in periodos_resultado
+    assert PeriodoQuincenal(2018, 7, 1) not in periodos_resultado
+    assert PeriodoQuincenal(2018, 7, 2) in periodos_resultado
+    assert PeriodoQuincenal(2018, 8, 1) in periodos_resultado

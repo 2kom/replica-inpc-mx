@@ -3,13 +3,25 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
-from replica_inpc.dominio.tipos import VersionCanasta
+from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
+
+
+def _recortar_al_rango(df_serie: pd.DataFrame, version: VersionCanasta) -> pd.DataFrame:
+    inicio, fin = RANGOS_VALIDOS[version]
+    cols = [
+        p
+        for p in df_serie.columns
+        if isinstance(p, PeriodoQuincenal) and p >= inicio and (fin is None or p <= fin)
+    ]
+    return df_serie[cols]
 
 
 class CalculadorBase(ABC):
@@ -55,12 +67,11 @@ def _construir_reporte(
     con_indice_por_periodo = cubierto.sum().astype(int)
 
     filas = []
-    for (periodo, indice), fila in df_calculo.iterrows():
+    for _key, fila in df_calculo.iterrows():
+        periodo, indice = cast(tuple[Any, Any], _key)
         con_idx = int(con_indice_por_periodo[periodo])
         pond_cub = float(pond_cubierto_por_periodo[periodo])
-        cobertura_pct = (
-            100.0 * con_idx / genericos_esperados if genericos_esperados else 0.0
-        )
+        cobertura_pct = 100.0 * con_idx / genericos_esperados if genericos_esperados else 0.0
         filas.append(
             {
                 "periodo": periodo,
