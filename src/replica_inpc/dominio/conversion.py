@@ -13,6 +13,10 @@ from replica_inpc.dominio.tipos import VersionCanasta
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 _ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
 
+_COLS_REPORTE_STRUCT = ("genericos_esperados", "ponderador_esperado")
+_COLS_REPORTE_MIN = ("genericos_con_indice", "cobertura_genericos_pct", "ponderador_cubierto")
+_COLS_REPORTE_MAX = ("genericos_sin_indice",)
+
 
 def _construir_mapa_renombre(
     tipo: str, version_origen: int, version_canonica: int
@@ -64,7 +68,7 @@ def empalmar(
     # no se puede pedir destino fuera del rango de un paso adyacente.
     nomenclaturas_set = {max(m.version for m in r.manifiesto) for r in resultados}
     if version_nombres is not None:
-        nomenclaturas_set.add(int(version_nombres))
+        nomenclaturas_set.add(version_nombres)
     nomenclaturas = sorted(nomenclaturas_set)
     idx_min = _ORDEN_VERSIONES.index(nomenclaturas[0])
     idx_max = _ORDEN_VERSIONES.index(nomenclaturas[-1])
@@ -183,7 +187,7 @@ def rebasar(
             raise InvarianteViolado(
                 f"periodo_referencia {periodo_referencia} no existe para índice '{indice}'."
             )
-        fila_base = df.loc[key]
+        fila_base: pd.Series = df.loc[key]  # type: ignore[index, assignment]
         estado_base = fila_base["estado_calculo"]
         if estado_base not in _ESTADOS_CON_VALOR:
             raise InvarianteViolado(
@@ -196,7 +200,7 @@ def rebasar(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es NaN; "
                 f"estado_calculo='{estado_base}' es inconsistente."
             )
-        base = float(base_raw)
+        base = float(base_raw)  # type: ignore[arg-type]
         if base == 0:
             raise InvarianteViolado(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es 0; no rebasable."
@@ -204,8 +208,10 @@ def rebasar(
 
         mask_indice = df.index.get_level_values("indice") == indice
         mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
-        df.loc[mask_indice & mask_valor, "indice_replicado"] = (
-            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float) * valor_base / base
+        df.loc[mask_indice & mask_valor, "indice_replicado"] = (  # type: ignore[index]
+            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
+            * valor_base
+            / base
         )
 
     return ResultadoIndice(
@@ -215,6 +221,51 @@ def rebasar(
         resultado.diagnostico,
         periodo_referencia=periodo_referencia,
     )
+
+
+def _reporte_a_mensual(df_result: pd.DataFrame, reporte_q: pd.DataFrame) -> pd.DataFrame:
+    """Construye reporte con índice PeriodoMensual a partir del reporte quincenal.
+
+    version/estado_calculo/motivo_error vienen de df_result (ya agregados).
+    Columnas de cobertura: peor caso entre Q1 y Q2 del mismo mes.
+    """
+    rq = reporte_q.reset_index()
+    periodos = rq["periodo"]
+    rq["_año"] = [p.año for p in periodos]
+    rq["_mes"] = [p.mes for p in periodos]
+    rq["_quincena"] = [p.quincena for p in periodos]
+    rq = rq.drop(columns="periodo").set_index(["_año", "_mes", "indice"])
+
+    q1 = rq[rq["_quincena"] == 1].drop(columns="_quincena")
+    q2 = rq[rq["_quincena"] == 2].drop(columns="_quincena")
+    all_groups = q1.index.union(q2.index)
+    q1_r = q1.reindex(all_groups)
+    q2_r = q2.reindex(all_groups)
+
+    años = all_groups.get_level_values("_año")
+    meses = all_groups.get_level_values("_mes")
+    idx_vals = all_groups.get_level_values("indice")
+    periodos_m = [PeriodoMensual(int(a), int(m)) for a, m in zip(años, meses)]
+    m_idx = pd.MultiIndex.from_arrays([periodos_m, idx_vals], names=["periodo", "indice"])
+
+    cols_result = [
+        c for c in ("version", "estado_calculo", "motivo_error") if c in reporte_q.columns
+    ]
+    df_rep = df_result[cols_result].reindex(m_idx)
+
+    for col in _COLS_REPORTE_STRUCT:
+        if col in reporte_q.columns:
+            df_rep[col] = q2_r[col].fillna(q1_r[col]).values
+
+    for col in _COLS_REPORTE_MIN:
+        if col in reporte_q.columns:
+            df_rep[col] = pd.concat([q1_r[col], q2_r[col]], axis=1).min(axis=1).values
+
+    for col in _COLS_REPORTE_MAX:
+        if col in reporte_q.columns:
+            df_rep[col] = pd.concat([q1_r[col], q2_r[col]], axis=1).max(axis=1).values
+
+    return df_rep[list(reporte_q.columns)]
 
 
 def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
@@ -313,7 +364,7 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     return ResultadoIndice(
         df_result,
         manifiesto_filtrado,
-        resultado.reporte,
+        _reporte_a_mensual(df_result, resultado.reporte),
         resultado.diagnostico,
         periodo_referencia=None,
     )

@@ -286,9 +286,7 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
     intermedio = empalmar([r_2018, r_2024])
     # Después de empalmar, nomenclatura=2024. Todas las filas tienen índice
     # "informacion y comunicacion" (las del tramo 2018 fueron renombradas).
-    assert set(intermedio.df.index.get_level_values("indice")) == {
-        "informacion y comunicacion"
-    }
+    assert set(intermedio.df.index.get_level_values("indice")) == {"informacion y comunicacion"}
     # El manifiesto tiene dos versions (2018, 2024) pero la nomenclatura es max=2024.
     assert {m.version for m in intermedio.manifiesto} == {2018, 2024}
 
@@ -335,12 +333,8 @@ def test_rebasar_proporcional() -> None:
         ]
     )
     rb = rebasar(r, _r2)
-    assert rb.df.at[(_r1, "INPC"), "indice_replicado"] == pytest.approx(
-        120.0 * 100.0 / 133.112
-    )
-    assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(
-        135.0 * 100.0 / 133.112
-    )
+    assert rb.df.at[(_r1, "INPC"), "indice_replicado"] == pytest.approx(120.0 * 100.0 / 133.112)
+    assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(135.0 * 100.0 / 133.112)
 
 
 def test_rebasar_periodo_inexistente_falla() -> None:
@@ -519,7 +513,9 @@ def test_a_mensual_version_de_2q_preferida() -> None:
     df.index = pd.MultiIndex.from_arrays(
         [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
     )
-    reporte = pd.DataFrame({"version": [2018, 2024], "estado_calculo": ["ok", "ok"]}, index=df.index)
+    reporte = pd.DataFrame(
+        {"version": [2018, 2024], "estado_calculo": ["ok", "ok"]}, index=df.index
+    )
     diag = pd.DataFrame(
         columns=[
             "id_corrida",
@@ -575,7 +571,10 @@ def test_a_mensual_periodo_referencia_es_none() -> None:
 
 
 def test_a_mensual_ambas_rellenado_produce_rellenado() -> None:
-    r = _resultado([(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "rellenado", None)], version=2024)
+    r = _resultado(
+        [(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "rellenado", None)],
+        version=2024,
+    )
     rm = a_mensual(r)
     fila = rm.resultado.largo.iloc[0]
     assert fila["estado_calculo"] == "rellenado"
@@ -584,11 +583,22 @@ def test_a_mensual_ambas_rellenado_produce_rellenado() -> None:
 
 def test_a_mensual_una_rellenado_produce_rellenado() -> None:
     # 1Q rellenado + 2Q ok → mensual rellenado (dato aproximado presente)
-    r = _resultado([(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "ok", None)], version=2024)
+    r = _resultado(
+        [(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "ok", None)], version=2024
+    )
     rm = a_mensual(r)
     fila = rm.resultado.largo.iloc[0]
     assert fila["estado_calculo"] == "rellenado"
     assert fila["indice_replicado"] == pytest.approx(101.0)
+
+
+def test_a_mensual_reporte_tiene_periodo_mensual() -> None:
+    r = _resultado([(_q1, "INPC", 100.0, "ok", None), (_q2, "INPC", 102.0, "ok", None)])
+    rm = a_mensual(r)
+    periodos_rep = rm.reporte.index.get_level_values("periodo")
+    assert all(isinstance(p, PeriodoMensual) for p in periodos_rep)
+    assert rm.reporte["version"].iloc[0] == 2018
+    assert rm.reporte["estado_calculo"].iloc[0] == "ok"
 
 
 def test_rebasar_acepta_referencia_rellenado() -> None:
