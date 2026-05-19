@@ -15,7 +15,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestUnidad, VersionCanasta
 
 # -- fixtures: canastas y series sintéticas ------------------------------------
 
@@ -42,7 +42,7 @@ class _LectorCanastaFake:
     def __init__(self, mapa: dict[Path, CanastaCanonica]) -> None:
         self._mapa = mapa
 
-    def leer(self, ruta: Path, version: int) -> CanastaCanonica:
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanonica:
         return self._mapa[ruta]
 
 
@@ -89,9 +89,7 @@ _INSUMOS_3 = [
 
 def test_una_version_directo() -> None:
     historia = _historia_3_versiones()
-    r = historia.ejecutar(
-        [(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2018, 7, 2), "quincenal"
-    )
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2018, 7, 2), "quincenal")
     assert isinstance(r, ResultadoIndice)
     assert r.periodo_referencia == PeriodoQuincenal(2018, 7, 2)
     assert {m.version for m in r.manifiesto} == {2018}
@@ -124,14 +122,9 @@ def test_tres_versiones_propagacion_referencia_empalme() -> None:
 
 def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
     historia = _historia_3_versiones()
-    r = historia.ejecutar(
-        [(2018, _RC18, _RS18)], "inpc", PeriodoMensual(2018, 8), "mensual"
-    )
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoMensual(2018, 8), "mensual")
     assert r.periodo_referencia == PeriodoMensual(2018, 8)
-    assert all(
-        isinstance(p, PeriodoMensual)
-        for p in r.df.index.get_level_values("periodo")
-    )
+    assert all(isinstance(p, PeriodoMensual) for p in r.df.index.get_level_values("periodo"))
 
 
 # -- errores -------------------------------------------------------------------
@@ -144,12 +137,8 @@ def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
         pytest.param(
             [(2018, _RC18, _RS18), (2018, _RC18, _RS18)], "quincenal", id="version_duplicada"
         ),
-        pytest.param(
-            [(2010, _RC10, _RS10), (2018, _RC18, _RS18)], "quincenal", id="no_contiguas"
-        ),
-        pytest.param(
-            [(2013, _RC13, _RS13), (2018, _RC18, _RS18)], "quincenal", id="2013_sin_2010"
-        ),
+        pytest.param([(2010, _RC10, _RS10), (2018, _RC18, _RS18)], "quincenal", id="no_contiguas"),
+        pytest.param([(2013, _RC13, _RS13), (2018, _RC18, _RS18)], "quincenal", id="2013_sin_2010"),
         pytest.param([(2024, _RC18, _RS18)], "quincenal", id="2024_sin_2018"),
         pytest.param([(2018, _RC18, _RS18)], "semanal", id="periodicidad_invalida"),
     ],
@@ -163,9 +152,7 @@ def test_validaciones_fallan(insumos: list, periodicidad: str) -> None:
 def test_periodo_referencia_inexistente_falla() -> None:
     historia = _historia_3_versiones()
     with pytest.raises(InvarianteViolado):
-        historia.ejecutar(
-            [(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2099, 1, 1), "quincenal"
-        )
+        historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2099, 1, 1), "quincenal")
 
 
 # -- _referencias_normalizadas -------------------------------------------------
@@ -180,9 +167,7 @@ def test_referencias_inpc_identidad() -> None:
             "indice_replicado": [123.4],
             "estado_calculo": ["ok"],
         },
-        index=pd.MultiIndex.from_tuples(
-            [(traslape, "INPC")], names=["periodo", "indice"]
-        ),
+        index=pd.MultiIndex.from_tuples([(traslape, "INPC")], names=["periodo", "indice"]),
     )
     prev = ResultadoIndice(
         df,
@@ -206,9 +191,7 @@ def test_referencias_normaliza_clave_renombrada() -> None:
             "indice_replicado": [55.5],
             "estado_calculo": ["ok"],
         },
-        index=pd.MultiIndex.from_tuples(
-            [(traslape, old)], names=["periodo", "indice"]
-        ),
+        index=pd.MultiIndex.from_tuples([(traslape, old)], names=["periodo", "indice"]),
     )
     prev = ResultadoIndice(
         df,

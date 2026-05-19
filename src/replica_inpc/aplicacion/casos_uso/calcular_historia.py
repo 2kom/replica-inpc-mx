@@ -47,18 +47,18 @@ def _referencias_normalizadas(
     vocabulario de `version_destino` (vía `RENOMBRES_INDICES`) — el calculador
     encadenado busca la referencia con el nombre de la canasta actual.
     """
-    traslape = RANGOS_VALIDOS[version_destino][0]
+    traslape = RANGOS_VALIDOS[version_destino][0]  # type: ignore[index]
     mapa = _construir_mapa_renombre(tipo, version_origen, version_destino)
     df = resultado_prev.df
     refs: dict[str, float] = {}
     for indice in df.index.get_level_values("indice").unique():
         try:
-            valor = df.loc[(traslape, indice), "indice_replicado"]
+            valor = df.loc[(traslape, indice), "indice_replicado"]  # type: ignore[index]
         except KeyError:
             continue
         if pd.isna(valor):
             continue
-        refs[mapa.get(indice, indice)] = float(valor)
+        refs[mapa.get(str(indice), str(indice))] = float(valor)  # type: ignore[arg-type]
     return refs
 
 
@@ -66,9 +66,7 @@ class CalcularHistoria:
     """Produce un `ResultadoIndice` histórico empalmado, rebased y en la
     periodicidad indicada."""
 
-    def __init__(
-        self, lector_canasta: LectorCanasta, lector_series: LectorSeries
-    ) -> None:
+    def __init__(self, lector_canasta: LectorCanasta, lector_series: LectorSeries) -> None:
         self._lector_canasta = lector_canasta
         self._lector_series = lector_series
 
@@ -82,7 +80,7 @@ class CalcularHistoria:
         self._validar(insumos, periodicidad)
         ordenados = sorted(insumos, key=lambda insumo: insumo[0])
 
-        resultados: list[tuple[int, ResultadoIndice]] = []
+        resultados: list[tuple[VersionCanasta, ResultadoIndice]] = []
         previo: ResultadoIndice | None = None
         for version, ruta_canasta, ruta_series in ordenados:
             canasta = self._lector_canasta.leer(ruta_canasta, version)
@@ -90,9 +88,7 @@ class CalcularHistoria:
             referencias: dict[str, float] | None = None
             if previo is not None:
                 version_origen = max(m.version for m in previo.manifiesto)
-                referencias = _referencias_normalizadas(
-                    previo, tipo, version_origen, version
-                )
+                referencias = _referencias_normalizadas(previo, tipo, version_origen, version)
             resultado = para_canasta(canasta, referencias).calcular(
                 canasta, serie, f"{tipo}:{version}", tipo, ruta_canasta, ruta_series
             )
@@ -108,9 +104,7 @@ class CalcularHistoria:
         return rebasar(acc, periodo_referencia)
 
     @staticmethod
-    def _validar(
-        insumos: list[tuple[VersionCanasta, Path, Path]], periodicidad: str
-    ) -> None:
+    def _validar(insumos: list[tuple[VersionCanasta, Path, Path]], periodicidad: str) -> None:
         if not insumos:
             raise InvarianteViolado("insumos no puede estar vacío.")
         if periodicidad not in _PERIODICIDADES:
@@ -120,14 +114,10 @@ class CalcularHistoria:
 
         versiones = [insumo[0] for insumo in insumos]
         if len(versiones) != len(set(versiones)):
-            raise InvarianteViolado(
-                f"insumos tiene versiones duplicadas: {sorted(versiones)}."
-            )
+            raise InvarianteViolado(f"insumos tiene versiones duplicadas: {sorted(versiones)}.")
         desconocidas = [v for v in versiones if v not in _ORDEN_VERSIONES]
         if desconocidas:
-            raise InvarianteViolado(
-                f"versiones fuera de {_ORDEN_VERSIONES}: {desconocidas}."
-            )
+            raise InvarianteViolado(f"versiones fuera de {_ORDEN_VERSIONES}: {desconocidas}.")
 
         posiciones = sorted(_ORDEN_VERSIONES.index(v) for v in versiones)
         contiguas = list(range(posiciones[0], posiciones[0] + len(posiciones)))

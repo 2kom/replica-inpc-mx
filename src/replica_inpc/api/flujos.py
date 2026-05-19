@@ -38,7 +38,7 @@ def calcular_historia(
             f"referencia '{referencia}' no es un periodo interpretable."
         ) from exc
 
-    insumos_path = [
+    insumos_path: list[tuple[VersionCanasta, Path, Path]] = [
         (version, Path(ruta_canasta), Path(ruta_series))
         for version, ruta_canasta, ruta_series in insumos
     ]
