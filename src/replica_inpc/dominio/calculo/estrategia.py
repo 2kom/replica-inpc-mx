@@ -15,7 +15,7 @@ def para_canasta(
     referencia_empalme_por_indice: dict[str, float] | None = None,
 ) -> CalculadorBase:
     if canasta.version in (2010, 2018):
-        return LaspeyresDirecto()
+        return LaspeyresDirecto(referencia_empalme_por_indice)
     if canasta.version == 2013:
         return LaspeyresEncadenadoT1(referencia_empalme_por_indice)
     if canasta.version == 2024:

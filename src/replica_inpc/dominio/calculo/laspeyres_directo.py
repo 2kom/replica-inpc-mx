@@ -13,13 +13,14 @@ from replica_inpc.dominio.calculo.base import (
     _recortar_al_rango,
     _rellenar_faltantes,
 )
-from replica_inpc.dominio.errores import InvarianteViolado
+from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
+    RANGOS_VALIDOS,
     ManifestUnidad,
     VersionCanasta,
 )
@@ -32,12 +33,21 @@ def _calcular_df(
     tipo: str,
     version: VersionCanasta,
     periodos_rellenados: set[object] | None = None,
+    referencia_empalme: float | None = None,
 ) -> pd.DataFrame:
     if periodos_rellenados is None:
         periodos_rellenados = set()
     periodos_null = df_serie.isnull().any(axis=0)
     ponderadores = df_canasta["ponderador"].astype(float)
     resultado = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+    if referencia_empalme is not None:
+        traslape = RANGOS_VALIDOS[version][0]
+        if traslape not in resultado.index:
+            raise ErrorCalculo(
+                f"PeriodoQuincenal de traslape {traslape} no está en la serie."
+            )
+        factor_h = referencia_empalme / float(resultado[traslape])
+        resultado = resultado * factor_h
 
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
@@ -70,6 +80,9 @@ def _calcular_df(
 
 
 class LaspeyresDirecto(CalculadorBase):
+    def __init__(self, referencia_empalme_por_indice: dict[str, float] | None = None) -> None:
+        self._referencia_empalme = referencia_empalme_por_indice or {}
+
     def calcular(
         self,
         canasta: CanastaCanonica,
@@ -91,7 +104,10 @@ class LaspeyresDirecto(CalculadorBase):
             df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
                 df_s_raw, id_corrida, canasta.version, tipo
             )
-            df_calc = _calcular_df(canasta.df, df_s, indice, tipo, canasta.version, periodos_rel)
+            df_calc = _calcular_df(
+                canasta.df, df_s, indice, tipo, canasta.version, periodos_rel,
+                self._referencia_empalme.get(indice),
+            )
             df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
             df_diag = pd.concat(
                 [
@@ -109,7 +125,10 @@ class LaspeyresDirecto(CalculadorBase):
                 df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
                     df_s_raw, id_corrida, canasta.version, tipo
                 )
-                df_calc_g = _calcular_df(df_c, df_s, cat, tipo, canasta.version, periodos_rel)
+                df_calc_g = _calcular_df(
+                    df_c, df_s, cat, tipo, canasta.version, periodos_rel,
+                    self._referencia_empalme.get(cat),
+                )
                 dfs_calc.append(df_calc_g)
                 dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
                 dfs_diag.append(
