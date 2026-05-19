@@ -103,3 +103,46 @@ def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
     assert PeriodoQuincenal(2018, 7, 1) not in periodos_resultado
     assert PeriodoQuincenal(2018, 7, 2) in periodos_resultado
     assert PeriodoQuincenal(2018, 8, 1) in periodos_resultado
+
+
+def test_nan_parcial_produce_estado_rellenado() -> None:
+    # arroz sin dato en 2Q Aug 2018 — otros genéricos sí tienen dato
+    periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1), PeriodoQuincenal(2018, 8, 2)]
+    df = pd.DataFrame(
+        {"arroz": [100.0, None, 102.0], "frijol": [100.0, 102.0, 104.0],
+         "leche": [100.0, 103.0, 106.0], "huevo": [100.0, 104.0, 108.0]},
+        index=periodos,
+    ).T
+    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
+
+    largo = r.resultado.largo
+    estados = dict(zip(largo.index.get_level_values("periodo"), largo["estado_calculo"]))
+    assert estados[PeriodoQuincenal(2018, 8, 1)] == "rellenado"
+    assert estados[PeriodoQuincenal(2018, 7, 2)] == "ok"
+    assert estados[PeriodoQuincenal(2018, 8, 2)] == "ok"
+    assert r.df.loc[(PeriodoQuincenal(2018, 8, 1), "INPC"), "indice_replicado"] is not None
+
+
+def test_nan_total_generico_produce_sin_datos() -> None:
+    # arroz con NaN en TODOS los periodos — no hay valor adyacente con qué rellenar
+    periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
+    df = pd.DataFrame(
+        {"arroz": [None, None], "frijol": [100.0, 102.0],
+         "leche": [100.0, 103.0], "huevo": [100.0, 104.0]},
+        index=periodos,
+    ).T
+    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
+
+    # Ningún periodo queda "rellenado" — arroz all-NaN no puede rellenarse
+    assert "rellenado" not in r.resultado.largo["estado_calculo"].values
+
+
+def test_sin_nan_no_produce_estado_rellenado() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    largo = r.resultado.largo
+    assert "rellenado" not in largo["estado_calculo"].values
+    assert (largo["estado_calculo"] == "ok").all()

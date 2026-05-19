@@ -14,6 +14,64 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
 
 
+def _rellenar_faltantes(
+    df_serie: pd.DataFrame,
+    id_corrida: str,
+    version: VersionCanasta,
+    tipo: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, set[object]]:
+    """Rellena NaN via bfill→ffill por fila. Retorna (df_rellenado, df_corr_relleno, periodos_rellenados)."""
+    columnas = [
+        "id_corrida",
+        "version",
+        "tipo",
+        "periodo",
+        "generico",
+        "nivel_faltante",
+        "tipo_faltante",
+        "detalle",
+    ]
+    mask_antes = df_serie.isna()
+    if not mask_antes.any(axis=None):
+        return df_serie, pd.DataFrame(columns=columnas), set()
+
+    df_rel = df_serie.bfill(axis=1).ffill(axis=1).infer_objects(copy=False)
+    mask_rel = mask_antes & df_rel.notna()
+    periodos_rellenados: set[object] = set(df_rel.columns[mask_rel.any(axis=0)])
+
+    cols_list = list(df_serie.columns)
+    filas = []
+    for generico in mask_rel.index:
+        for periodo in mask_rel.columns:
+            if not mask_rel.at[generico, periodo]:
+                continue
+            idx = cols_list.index(periodo)
+            fuente = None
+            for j in range(idx + 1, len(cols_list)):
+                if pd.notna(df_serie.at[generico, cols_list[j]]):
+                    fuente = cols_list[j]
+                    break
+            if fuente is None:
+                for j in range(idx - 1, -1, -1):
+                    if pd.notna(df_serie.at[generico, cols_list[j]]):
+                        fuente = cols_list[j]
+                        break
+            filas.append(
+                {
+                    "id_corrida": id_corrida,
+                    "version": version,
+                    "tipo": tipo,
+                    "periodo": periodo,
+                    "generico": generico,
+                    "nivel_faltante": "periodo",
+                    "tipo_faltante": "rellenado",
+                    "detalle": f"NaN sustituido con valor de {fuente}",
+                }
+            )
+
+    return df_rel, pd.DataFrame(filas, columns=columnas), periodos_rellenados
+
+
 def _recortar_al_rango(df_serie: pd.DataFrame, version: VersionCanasta) -> pd.DataFrame:
     inicio, fin = RANGOS_VALIDOS[version]
     cols = [

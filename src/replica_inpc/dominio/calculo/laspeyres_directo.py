@@ -11,6 +11,7 @@ from replica_inpc.dominio.calculo.base import (
     _construir_diagnostico,
     _construir_reporte,
     _recortar_al_rango,
+    _rellenar_faltantes,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -30,7 +31,10 @@ def _calcular_df(
     indice: str,
     tipo: str,
     version: VersionCanasta,
+    periodos_rellenados: set[object] | None = None,
 ) -> pd.DataFrame:
+    if periodos_rellenados is None:
+        periodos_rellenados = set()
     periodos_null = df_serie.isnull().any(axis=0)
     ponderadores = df_canasta["ponderador"].astype(float)
     resultado = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
@@ -54,6 +58,14 @@ def _calcular_df(
         df.loc[periodos_null_idx, "estado_calculo"] = "sin_datos"
         df.loc[periodos_null_idx, "indice_replicado"] = None
         df.loc[periodos_null_idx, "motivo_error"] = "faltantes en serie"
+    periodos_null_set = {p for p, _ in periodos_null_idx}
+    periodos_rel_idx = [
+        (p, indice)
+        for p in resultado.index
+        if p in periodos_rellenados and p not in periodos_null_set
+    ]
+    if periodos_rel_idx:
+        df.loc[periodos_rel_idx, "estado_calculo"] = "rellenado"
     return df
 
 
@@ -75,21 +87,39 @@ class LaspeyresDirecto(CalculadorBase):
 
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]
-            df_s = _recortar_al_rango(serie.df, canasta.version)
-            df_calc = _calcular_df(canasta.df, df_s, indice, tipo, canasta.version)
+            df_s_raw = _recortar_al_rango(serie.df, canasta.version)
+            df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
+                df_s_raw, id_corrida, canasta.version, tipo
+            )
+            df_calc = _calcular_df(canasta.df, df_s, indice, tipo, canasta.version, periodos_rel)
             df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
-            df_diag = _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo)
+            df_diag = pd.concat(
+                [
+                    _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo),
+                    df_corr_relleno,
+                ],
+                ignore_index=True,
+            )
         else:
             dfs_calc: list[pd.DataFrame] = []
             dfs_reporte: list[pd.DataFrame] = []
             dfs_diag: list[pd.DataFrame] = []
             for cat, df_c, df_s_all in grupos_por_clasificacion(canasta, serie, tipo):
-                df_s = _recortar_al_rango(df_s_all, canasta.version)
-                df_calc_g = _calcular_df(df_c, df_s, cat, tipo, canasta.version)
+                df_s_raw = _recortar_al_rango(df_s_all, canasta.version)
+                df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
+                    df_s_raw, id_corrida, canasta.version, tipo
+                )
+                df_calc_g = _calcular_df(df_c, df_s, cat, tipo, canasta.version, periodos_rel)
                 dfs_calc.append(df_calc_g)
                 dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
                 dfs_diag.append(
-                    _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo)
+                    pd.concat(
+                        [
+                            _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo),
+                            df_corr_relleno,
+                        ],
+                        ignore_index=True,
+                    )
                 )
             df_calc = pd.concat(dfs_calc)
             df_reporte = pd.concat(dfs_reporte)

@@ -8,7 +8,7 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestUnidad
 
 _COLUMNAS_MINIMAS = {"version", "tipo", "indice_replicado", "estado_calculo"}
-_ORDEN_SEVERIDAD = {"ok": 0, "parcial": 1, "sin_datos": 2, "fallida": 3}
+_ORDEN_SEVERIDAD = {"ok": 0, "rellenado": 1, "parcial": 2, "sin_datos": 3, "fallida": 4}
 _ESTADOS_VALIDOS = frozenset(_ORDEN_SEVERIDAD)
 
 

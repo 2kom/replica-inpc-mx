@@ -30,12 +30,13 @@ def _serie_con_nan() -> SerieNormalizada:
     return SerieNormalizada(df, {"arroz": "Arroz", "frijol": "Frijol"})
 
 
-def test_periodo_con_nan_marca_sin_datos() -> None:
+def test_periodo_con_nan_rellenable_marca_rellenado() -> None:
+    # arroz NaN en 1Q Aug — fillable via ffill desde 2Q Jul
     r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "c1", "inpc")
     p_nan = _periodos[1]
     fila = r.resultado.largo.loc[(p_nan, "INPC")]
-    assert fila["estado_calculo"] == "sin_datos"
-    assert math.isnan(fila["indice_replicado"])
+    assert fila["estado_calculo"] == "rellenado"
+    assert not math.isnan(fila["indice_replicado"])
 
 
 def test_periodo_sin_nan_es_ok() -> None:
@@ -47,18 +48,20 @@ def test_periodo_sin_nan_es_ok() -> None:
 
 
 def test_reporte_cobertura_correcta() -> None:
+    # Después de relleno, arroz tiene dato → cobertura 100%
     r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "c1", "inpc")
     p_nan = _periodos[1]
     fila_rep = r.reporte.loc[(p_nan, "INPC")]
     assert fila_rep["genericos_esperados"] == 2
-    assert fila_rep["genericos_con_indice"] == 1
-    assert fila_rep["genericos_sin_indice"] == 1
-    assert fila_rep["cobertura_genericos_pct"] == 50.0
+    assert fila_rep["genericos_con_indice"] == 2
+    assert fila_rep["genericos_sin_indice"] == 0
+    assert fila_rep["cobertura_genericos_pct"] == 100.0
     assert fila_rep["ponderador_esperado"] == 100.0
-    assert fila_rep["ponderador_cubierto"] == 60.0
+    assert fila_rep["ponderador_cubierto"] == 100.0
 
 
 def test_diagnostico_lista_faltante() -> None:
+    # NaN rellenado → tipo_faltante="rellenado", no "indice"
     r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "c1", "inpc")
     diag = r.diagnostico
     assert len(diag) == 1
@@ -68,7 +71,7 @@ def test_diagnostico_lista_faltante() -> None:
     assert fila["tipo"] == "inpc"
     assert fila["generico"] == "arroz"
     assert fila["periodo"] == _periodos[1]
-    assert fila["tipo_faltante"] == "indice"
+    assert fila["tipo_faltante"] == "rellenado"
 
 
 def test_diagnostico_vacio_cuando_serie_completa() -> None:

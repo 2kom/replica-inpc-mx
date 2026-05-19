@@ -117,6 +117,7 @@ Comparte semántica entre `Resultado*` y `Validacion*`.
 | valor | significado |
 |---|---|
 | `ok` | todas las quincenas disponibles; cálculo completo |
+| `rellenado` | ≥1 genérico tenía NaN en el periodo; sustituido por bfill→ffill; cálculo procede con dato aproximado |
 | `parcial` | solo una quincena disponible para el periodo; cálculo procede con calidad reducida |
 | `sin_datos` | sin datos de entrada para esta combinación `(periodo, indice)` |
 | `fallida` | cálculo intentado y fallido por error interno |
@@ -128,13 +129,13 @@ Aplica en `ResultadoVariacion` y `ResultadoIncidencia`.
 | valor | significado |
 |---|---|
 | `ok` | todos los periodos fuente tenían `estado_calculo = ok` |
-| `parcial` | al menos un periodo fuente tenía `estado_calculo = parcial`; hereda degradación de calidad |
+| `parcial` | al menos un periodo fuente tenía `estado_calculo = parcial` o `rellenado`; hereda degradación de calidad |
 
 Invariante: `sin_datos` y `fallida` del fuente producen filas **ausentes** en el derivado — el NaN es implícito en `.resultado.ancho`.
 
 ##### `estado_calculo` en `.resumen` de cualquier contrato
 
-Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` > `sin_datos` > `parcial` > `ok`.
+Peor estado entre todas las filas del resultado. Orden de severidad: `fallida` > `sin_datos` > `parcial` > `rellenado` > `ok`.
 
 | clase | valores posibles |
 |---|---|

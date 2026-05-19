@@ -10,7 +10,7 @@ from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import VersionCanasta
 
-_ESTADOS_CON_VALOR = frozenset({"ok", "parcial"})
+_ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 _ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
 
 
@@ -257,9 +257,14 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     any_fallida = fallida_q1 | fallida_q2
     null_mask = ~any_fallida & ~both_ok & ~one_ok
 
+    rellenado_q1 = (q1_r["estado_calculo"] == "rellenado").fillna(False)
+    rellenado_q2 = (q2_r["estado_calculo"] == "rellenado").fillna(False)
+    any_rellenado = rellenado_q1 | rellenado_q2
+
     estado_calculo = pd.Series("sin_datos", index=all_groups, dtype=object)
     estado_calculo[any_fallida] = "fallida"
     estado_calculo[~any_fallida & both_ok] = "ok"
+    estado_calculo[~any_fallida & both_ok & any_rellenado] = "rellenado"
     estado_calculo[~any_fallida & one_ok] = "parcial"
 
     val_avg = (v1 + v2) / 2

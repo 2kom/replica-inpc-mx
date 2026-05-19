@@ -12,6 +12,7 @@ from replica_inpc.dominio.calculo.base import (
     _construir_diagnostico,
     _construir_reporte,
     _recortar_al_rango,
+    _rellenar_faltantes,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -70,7 +71,10 @@ def _construir_df_resultado(
     tipo: str,
     version: VersionCanasta,
     periodos_null: pd.Series,
+    periodos_rellenados: set[object] | None = None,
 ) -> pd.DataFrame:
+    if periodos_rellenados is None:
+        periodos_rellenados = set()
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
         names=["periodo", "indice"],
@@ -90,6 +94,14 @@ def _construir_df_resultado(
         df.loc[periodos_null_idx, "estado_calculo"] = "sin_datos"
         df.loc[periodos_null_idx, "indice_replicado"] = None
         df.loc[periodos_null_idx, "motivo_error"] = "faltantes en serie"
+    periodos_null_set = {p for p, _ in periodos_null_idx}
+    periodos_rel_idx = [
+        (p, indice)
+        for p in resultado.index
+        if p in periodos_rellenados and p not in periodos_null_set
+    ]
+    if periodos_rel_idx:
+        df.loc[periodos_rel_idx, "estado_calculo"] = "rellenado"
     return df
 
 
@@ -99,6 +111,7 @@ def _calcular_df_t1(
     indice: str,
     tipo: str,
     referencia_empalme: float | None,
+    periodos_rellenados: set[object] | None = None,
 ) -> pd.DataFrame:
     """T1 — v2013: factor_h = ref / i_tramo[traslape] | 1.0."""
     version: VersionCanasta = 2013
@@ -111,7 +124,9 @@ def _calcular_df_t1(
     else:
         factor_h = 1.0
     resultado = i_tramo * factor_h
-    return _construir_df_resultado(resultado, indice, tipo, version, periodos_null)
+    return _construir_df_resultado(
+        resultado, indice, tipo, version, periodos_null, periodos_rellenados
+    )
 
 
 def _calcular_df_t2(
@@ -120,6 +135,7 @@ def _calcular_df_t2(
     indice: str,
     tipo: str,
     referencia_empalme: float | None,
+    periodos_rellenados: set[object] | None = None,
 ) -> pd.DataFrame:
     """T2 — v2024: factor_h = ref / 100 | sum(pond * f_k) / sum(pond)."""
     version: VersionCanasta = 2024
@@ -132,7 +148,9 @@ def _calcular_df_t2(
     else:
         factor_h = float((ponderadores * f_k).sum() / ponderadores.sum())
     resultado = i_tramo * factor_h
-    return _construir_df_resultado(resultado, indice, tipo, version, periodos_null)
+    return _construir_df_resultado(
+        resultado, indice, tipo, version, periodos_null, periodos_rellenados
+    )
 
 
 class _LaspeyresEncadenadoBase(CalculadorBase):
@@ -149,6 +167,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         indice: str,
         tipo: str,
         referencia_empalme: float | None,
+        periodos_rellenados: set[object] | None = None,
     ) -> pd.DataFrame:
         raise NotImplementedError
 
@@ -174,29 +193,53 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
 
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]
-            df_s = _recortar_al_rango(serie.df, canasta.version)
+            df_s_raw = _recortar_al_rango(serie.df, canasta.version)
+            df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
+                df_s_raw, id_corrida, canasta.version, tipo
+            )
             df_calc = self._calcular_df_para(
                 canasta.df,
                 df_s,
                 indice,
                 tipo,
                 self._referencia_empalme.get(indice),
+                periodos_rel,
             )
             df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
-            df_diag = _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo)
+            df_diag = pd.concat(
+                [
+                    _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo),
+                    df_corr_relleno,
+                ],
+                ignore_index=True,
+            )
         else:
             dfs_calc: list[pd.DataFrame] = []
             dfs_reporte: list[pd.DataFrame] = []
             dfs_diag: list[pd.DataFrame] = []
             for cat, df_c, df_s_all in grupos_por_clasificacion(canasta, serie, tipo):
-                df_s = _recortar_al_rango(df_s_all, canasta.version)
+                df_s_raw = _recortar_al_rango(df_s_all, canasta.version)
+                df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
+                    df_s_raw, id_corrida, canasta.version, tipo
+                )
                 df_calc_g = self._calcular_df_para(
-                    df_c, df_s, cat, tipo, self._referencia_empalme.get(cat)
+                    df_c,
+                    df_s,
+                    cat,
+                    tipo,
+                    self._referencia_empalme.get(cat),
+                    periodos_rel,
                 )
                 dfs_calc.append(df_calc_g)
                 dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
                 dfs_diag.append(
-                    _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo)
+                    pd.concat(
+                        [
+                            _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo),
+                            df_corr_relleno,
+                        ],
+                        ignore_index=True,
+                    )
                 )
             df_calc = pd.concat(dfs_calc)
             df_reporte = pd.concat(dfs_reporte)
@@ -225,8 +268,11 @@ class LaspeyresEncadenadoT1(_LaspeyresEncadenadoBase):
         indice: str,
         tipo: str,
         referencia_empalme: float | None,
+        periodos_rellenados: set[object] | None = None,
     ) -> pd.DataFrame:
-        return _calcular_df_t1(df_canasta, df_serie, indice, tipo, referencia_empalme)
+        return _calcular_df_t1(
+            df_canasta, df_serie, indice, tipo, referencia_empalme, periodos_rellenados
+        )
 
 
 class LaspeyresEncadenadoT2(_LaspeyresEncadenadoBase):
@@ -240,5 +286,8 @@ class LaspeyresEncadenadoT2(_LaspeyresEncadenadoBase):
         indice: str,
         tipo: str,
         referencia_empalme: float | None,
+        periodos_rellenados: set[object] | None = None,
     ) -> pd.DataFrame:
-        return _calcular_df_t2(df_canasta, df_serie, indice, tipo, referencia_empalme)
+        return _calcular_df_t2(
+            df_canasta, df_serie, indice, tipo, referencia_empalme, periodos_rellenados
+        )

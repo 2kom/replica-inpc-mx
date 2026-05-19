@@ -203,3 +203,25 @@ def test_periodos_fuera_de_rango_2013_se_recortan() -> None:
     assert pre_traslape not in periodos_resultado
     assert _traslape_t1 in periodos_resultado
     assert _post_t1 in periodos_resultado
+
+
+def test_nan_parcial_t2_produce_estado_rellenado() -> None:
+    # arroz sin dato en _post_t2 — otros genéricos sí tienen dato
+    df = pd.DataFrame(
+        {"arroz": [150.0, None], "frijol": [140.0, 144.2],
+         "leche": [160.0, 168.0], "huevo": [130.0, 132.6]},
+        index=[_traslape_t2, _post_t2],
+    ).T
+    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie, "c1", "inpc")
+
+    largo = r.resultado.largo
+    estados = dict(zip(largo.index.get_level_values("periodo"), largo["estado_calculo"]))
+    assert estados[_post_t2] == "rellenado"
+    assert estados[_traslape_t2] == "ok"
+
+
+def test_sin_nan_encadenado_no_produce_estado_rellenado() -> None:
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    assert "rellenado" not in r.resultado.largo["estado_calculo"].values

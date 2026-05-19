@@ -572,3 +572,36 @@ def test_a_mensual_periodo_referencia_es_none() -> None:
     )
     rm = a_mensual(r)
     assert rm.periodo_referencia is None
+
+
+def test_a_mensual_ambas_rellenado_produce_rellenado() -> None:
+    r = _resultado([(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "rellenado", None)], version=2024)
+    rm = a_mensual(r)
+    fila = rm.resultado.largo.iloc[0]
+    assert fila["estado_calculo"] == "rellenado"
+    assert fila["indice_replicado"] == pytest.approx(101.0)
+
+
+def test_a_mensual_una_rellenado_produce_rellenado() -> None:
+    # 1Q rellenado + 2Q ok → mensual rellenado (dato aproximado presente)
+    r = _resultado([(_q1, "INPC", 100.0, "rellenado", None), (_q2, "INPC", 102.0, "ok", None)], version=2024)
+    rm = a_mensual(r)
+    fila = rm.resultado.largo.iloc[0]
+    assert fila["estado_calculo"] == "rellenado"
+    assert fila["indice_replicado"] == pytest.approx(101.0)
+
+
+def test_rebasar_acepta_referencia_rellenado() -> None:
+    # periodo_referencia con estado "rellenado" tiene valor → debe rebasar sin error
+    r = _resultado(
+        [
+            (_p1, "INPC", 120.0, "ok", None),
+            (_p2, "INPC", 125.0, "rellenado", None),
+            (_p3, "INPC", 130.0, "ok", None),
+        ],
+        version=2024,
+    )
+    rb = rebasar(r, _p2)
+    fila = rb.resultado.largo.loc[(_p2, "INPC")]
+    assert fila["indice_replicado"] == pytest.approx(100.0)
+    assert fila["estado_calculo"] == "rellenado"
