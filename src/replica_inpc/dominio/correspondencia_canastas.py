@@ -306,15 +306,33 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     },
     "SCIAN rama": {
         2013: {
-            # Pendiente 2013 -> 2018: revisar si conviene rescatar casos con traslape
-            # parcial de genericos como 3118, 3119, 3399, 5171, 5172, 5412, 7221 y 7222.
+            # Renombres 2013 -> 2018 incluidos solo cuando pasan tres filtros:
+            # 1) nombre/codigo compatible entre versiones SCIAN oficiales,
+            # 2) genericos identicos despues de aplicar RENOMBRES_GENERICOS[2013],
+            # 3) sin depender de fusiones, desagregaciones, nuevos o eliminados.
+            #
+            # Incluidos:
+            # - 2211 y 2221/2213: cambio oficial SCIAN de nombre/codigo; los
+            #   genericos INPC son exactamente electricidad y derechos por agua.
+            # - 5241 y 6112: cambio oficial de titulo; cada rama contiene un
+            #   unico generico, igual entre canastas.
+            # - 8122, 8123, 8124 y 9312: solo normalizan punto final en la
+            #   canasta 2013; el contenido de genericos es identico.
+            #
+            # No se incluyen casos con traslape parcial de genericos. Por ejemplo:
+            # 3118, 3119 y 3399 mezclan genericos comunes con genericos nuevos,
+            # eliminados o reasignados; no son renombres 1:1 de rama.
+            # 3114 separa "chiles envasados, moles y salsas" y agrega genericos;
+            # 3116 agrega "manteca de cerdo"; 8121 requiere la fusion de
+            # "sala de belleza" en "sala de belleza y masajes"; 5171/5172 se
+            # reestructura hacia 5173; 7221/7222 se reestructura hacia 7223/7225.
+            # Tampoco se incluyen falsos positivos por genericidad del INPC:
+            # 3272 -> 3271 y 5412 -> 5411 comparten un generico, pero no son
+            # renombres SCIAN oficiales 1:1.
             "2211 generacion, transmision y distribucion de energia electrica.": "2211 generacion, transmision, distribucion y comercializacion de energia electrica",
             "2221 captacion, tratamiento y suministro de agua.": "2213 captacion, tratamiento y suministro de agua",
-            "3114 conservacion de frutas, verduras y alimentos preparados": "3114 conservacion de frutas, verduras, guisos y otros alimentos preparados",
-            "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales",
             "5241 instituciones de seguros y fianzas": "5241 compañias de seguros y fianzas",
             "6112 escuelas de educacion post bachillerato": "6112 escuelas de educacion tecnica superior",
-            "8121 salones y clinicas de belleza, baños publicos y bolerias.": "8121 salones y clinicas de belleza, baños publicos y bolerias",
             "8122 lavanderias y tintorerias.": "8122 lavanderias y tintorerias",
             "8123 servicios funerarios y administracion de cementerios.": "8123 servicios funerarios y administracion de cementerios",
             "8124 estacionamientos y pensiones para vehiculos automotores.": "8124 estacionamientos y pensiones para vehiculos automotores",
