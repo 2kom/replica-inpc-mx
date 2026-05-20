@@ -17,6 +17,9 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     # Renombres 1:1 validados contra CSVs de ponderadores (reciprocidad de genericos).
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
     "CCIF grupo": {
+        2013: {
+            "educacion terciaria": "educacion terciaria (universitaria)",
+        },
         2018: {
             "agua y otros servicios referentes a la vivienda": "suministro de agua y servicios diversos relacionados con la vivienda",
             "articulos de cristal, vajillas y utensilios para el hogar": "cristaleria, vajillas y utensilios para el hogar",
@@ -37,12 +40,15 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "servicios de suministro de comidas": "servicios de alimentos y bebidas",
             "servicios de transporte": "servicios de transporte de pasajeros",
             "vivienda propia": "alquileres imputados para vivienda",
-        }
+        },
     },
     # Renombres 1:1 validados contra CSVs de ponderadores (reciprocidad de genericos)
     # y contra COICOP 2018 (UN Statistics Division) para confirmar cambios oficiales.
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
     "CCIF clase": {
+        2013: {
+            "seguro relacionado con el transporte": "seguros",
+        },
         2018: {
             "animales domesticos y productos relacionados": "mascotas y productos relacionados",
             "artefactos y equipos terapeuticos": "productos de apoyo",
@@ -96,19 +102,41 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "veterinaria y otros servicios para animales domesticos": "veterinarios y otros servicios para mascotas",
             "vivienda propia": "alquileres imputados de propietarios-ocupantes para residencia principal",
             "zapatos y otros calzados": "calzado y otros tipos de calzado",
-        }
+        },
     },
     # SCIAN sector: no se agrega mapeo 2018 -> 2024.
     # En 2018 existe "49 transportes, correos y almacenamiento" solo por el
     # generico "paqueteria"; en 2024 no existe ese generico ni rama 4921.
     # Aunque el sector cercano en 2024 es "48 transportes, correos y almacenamiento",
     # esto se trata como categoria eliminada, no como renombre 1:1 confirmado.
+    "SCIAN sector": {
+        2013: {
+            "22 generacion, transmision y distribucion de energia electrica, suministro de agua y de gas por ductos al consumidor final": "22 generacion, transmision, distribucion y comercializacion de energia electrica, suministro de agua y de gas natural por ductos al consumidor final",
+            "56 servicios de apoyo a los negocios y manejo de desechos y servicios de remediacion": "56 servicios de apoyo a los negocios y manejo de residuos, y servicios de remediacion",
+            "93 actividades legislativas, gubernamentales, de imparticion de justicia y de organismos internacionales y extraterritorial": "93 actividades legislativas, gubernamentales, de imparticion de justicia y de organismos internacionales y extraterritoriales",
+        }
+    },
     "SCIAN rama": {
+        2013: {
+            # Pendiente 2013 -> 2018: revisar si conviene rescatar casos con traslape
+            # parcial de genericos como 3118, 3119, 3399, 5171, 5172, 5412, 7221 y 7222.
+            "2211 generacion, transmision y distribucion de energia electrica.": "2211 generacion, transmision, distribucion y comercializacion de energia electrica",
+            "2221 captacion, tratamiento y suministro de agua.": "2213 captacion, tratamiento y suministro de agua",
+            "3114 conservacion de frutas, verduras y alimentos preparados": "3114 conservacion de frutas, verduras, guisos y otros alimentos preparados",
+            "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales",
+            "5241 instituciones de seguros y fianzas": "5241 compañias de seguros y fianzas",
+            "6112 escuelas de educacion post bachillerato": "6112 escuelas de educacion tecnica superior",
+            "8121 salones y clinicas de belleza, baños publicos y bolerias.": "8121 salones y clinicas de belleza, baños publicos y bolerias",
+            "8122 lavanderias y tintorerias.": "8122 lavanderias y tintorerias",
+            "8123 servicios funerarios y administracion de cementerios.": "8123 servicios funerarios y administracion de cementerios",
+            "8124 estacionamientos y pensiones para vehiculos automotores.": "8124 estacionamientos y pensiones para vehiculos automotores",
+            "9312 administracion publica en general.": "9312 administracion publica en general",
+        },
         2018: {
             "3111 elaboracion de alimentos para animales": "3111 elaboracion de alimentos balanceados para animales",
             "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles",
             "3253 fabricacion de fertilizantes, pesticidas y otros agroquimicos": "3253 fabricacion de fertilizantes, plaguicidas y otros agroquimicos",
             "5111 edicion de periodicos, revistas, libros y similares, y edicion de estas publicaciones integrada con la impresion": "5131 edicion de periodicos, revistas, libros, directorios y otros materiales",
-        }
+        },
     },
 }
