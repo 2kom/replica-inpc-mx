@@ -1,5 +1,196 @@
 from __future__ import annotations
 
+# version_origen -> {nombre_viejo: nombre_destino}
+RENOMBRES_GENERICOS: dict[int, dict[str, str]] = {
+    2013: {
+        "calcetines": "calcetines y calcetas para niños",
+        "camisas": "camisas y playeras para hombre",
+        "carnes secas y otros embutidos": "carnes secas, procesadas y otros embutidos",
+        "crema de leche": "crema y otros productos a base de leche",
+        "frutas y legumbres preparadas para bebes": "alimentos para bebe",
+        "helados": "helados, nieves y paletas de hielo",
+        "instrumentos musicales y otros": "instrumentos musicales",
+        "juguetes": "juguetes y juegos de mesa",
+        "medias y pantimedias": "calcetas, medias y pantimedias",
+        "otras diversiones y espectaculos deportivos": "otros servicios culturales, diversiones y espectaculos deportivos",
+        "otras prendas para hombre": "otras prendas de vestir para hombre",
+        "otras prendas para mujer": "otras prendas de vestir para mujer",
+        "otras refacciones": "partes, accesorios y otras refacciones para vehiculos",
+        "otros gastos del calzado": "servicios y articulos para el calzado",
+        "papas fritas y similares": "papas fritas",
+        "pasta dental": "crema y productos para higiene dental",
+        "queso manchego o chihuahua": "queso manchego y chihuahua",
+        "queso oaxaca o asadero": "queso oaxaca y asadero",
+        "trajes": "traje para hombre",
+    },
+    2018: {
+        "leche de soya": "leches de origen vegetal",
+        "ropa interior para infantes": "ropa interior para niños, niñas y adolescentes",
+        "zapatos de material sintetico": "sandalias y huaraches",
+    },
+}
+
+# version_origen -> {generico_viejo: (genericos_destino, ...)}
+DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
+    2013: {
+        "bicicletas y motocicletas": ("motocicletas", "bicicletas"),
+        "chiles envasados, moles y salsas": ("chiles envasados", "moles y salsas"),
+        "chocolate": (
+            "chocolate y productos de confiteria",
+            "chocolate liquido y para preparar bebida",
+        ),
+        "dulces, cajetas y miel": (
+            "chocolate y productos de confiteria",
+            "gelatina, miel y mermeladas",
+        ),
+        "estudios medicos de gabinete": (
+            "analisis clinicos",
+            "atencion medica durante el parto",
+        ),
+        "otros aparatos electricos": (
+            "aspiradoras y otros aparatos para el hogar",
+            "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños",
+            "aparatos electricos para el cuidado personal",
+        ),
+        "otros textiles para el hogar": (
+            "blancos y otros textiles para el hogar",
+            "articulos desechables y no duraderos",
+        ),
+        "otros utensilios de cocina": (
+            "articulos y utensilios para el hogar",
+            "articulos desechables y no duraderos",
+        ),
+        "peliculas, musica y videojuegos": (
+            "peliculas y musica",
+            "juegos electronicos; consola, cartuchos y discos para videojuegos",
+        ),
+    },
+    2018: {
+        "alimentos para bebe": ("leche maternizada y alimentos para bebe",),
+        "articulos desechables y no duraderos": ("articulos desechables y no duraderos",),
+        "aspiradoras y otros aparatos para el hogar": (
+            "aspiradoras y otros aparatos para el hogar",
+        ),
+        "blancos y otros textiles para el hogar": (
+            "complementos de vestir",
+            "toallas, cortinas y otros blancos",
+        ),
+        "bolsas, maletas y cinturones": (
+            "complementos de vestir",
+            "bolsas y mochilas",
+        ),
+        "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños": (
+            "aspiradoras y otros aparatos para el hogar",
+            "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños",
+        ),
+        "cine": ("cine", "servicios recreativos y centros nocturnos"),
+        "instrumentos musicales": ("instrumentos musicales y descargas de audio y video",),
+        "juegos electronicos; consola, cartuchos y discos para videojuegos": (
+            "consolas, discos y descargas de videojuegos",
+            "servicios recreativos y centros nocturnos",
+        ),
+        "otras prendas de vestir para hombre": (
+            "otras prendas de vestir para hombre",
+            "complementos de vestir",
+        ),
+        "otras prendas de vestir para mujer": (
+            "otras prendas de vestir para mujer",
+            "complementos de vestir",
+        ),
+        "otros servicios culturales, diversiones y espectaculos deportivos": (
+            "cine",
+            "museos y sitios culturales",
+            "paquetes para fiesta",
+        ),
+        "otros servicios para el hogar": (
+            "servicios para el mantenimiento, reparacion y seguridad de la vivienda",
+            "otros servicios relacionados con la vivienda",
+            "servicio domestico",
+        ),
+        "leche evaporada, condensada y maternizada": (
+            "leche evaporada y condensada",
+            "leche maternizada y alimentos para bebe",
+        ),
+        "peliculas y musica": (
+            "streaming de peliculas y musica",
+            "instrumentos musicales y descargas de audio y video",
+        ),
+        "platanos": ("platanos", "otras verduras y legumbres"),
+        "refrescos envasados": ("refrescos envasados", "bebidas energeticas"),
+        "otras verduras y legumbres": (
+            "otras verduras y legumbres",
+            "cilantro, epazote y perejil",
+        ),
+        "ropa de abrigo": ("ropa de abrigo", "complementos de vestir"),
+        "servicio domestico": ("servicio domestico",),
+        "servicios y articulos para el calzado": ("articulos desechables y no duraderos",),
+    },
+}
+
+# version_origen -> {generico_destino: (genericos_viejos, ...)}
+FUSIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
+    2013: {
+        "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños": ("ventiladores",),
+        "equipo terminal de comunicacion": ("aparatos de telefonia fija",),
+        "otras verduras y legumbres": ("otras legumbres", "chicharo"),
+        "sala de belleza y masajes": ("sala de belleza",),
+        "servicios de telefonia fija": (
+            "servicio telefonico local fijo",
+            "larga distancia internacional",
+        ),
+    },
+    2018: {
+        "autobus foraneo": ("autobus foraneo", "paqueteria"),
+        "camaron": ("camaron", "otros mariscos"),
+        "herramientas y equipo para el hogar": (
+            "herramientas y equipo grande para el hogar",
+            "herramientas pequeñas y accesorios diversos",
+        ),
+        "muebles diversos para el hogar": (
+            "lamparas",
+            "muebles diversos para el hogar",
+            "alfombras y otros materiales para pisos",
+            "objetos ornamentales y decorativos",
+        ),
+        "periodicos y revistas": ("periodicos", "revistas"),
+        "reproductores de audio y video, y sus accesorios": (
+            "equipos y reproductores de audio",
+            "reproductores de video",
+        ),
+        "ropa para bebes": ("camisetas para bebes", "ropa para bebes"),
+        "servicios recreativos y centros nocturnos": (
+            "centro nocturno",
+            "otros servicios culturales, diversiones y espectaculos deportivos",
+        ),
+        "toallas, cortinas y otros blancos": ("cortinas", "toallas"),
+    },
+}
+
+# version_origen -> {version_destino: (genericos_nuevos, ...)}
+NUEVOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
+    2013: {
+        2018: (
+            "alfombras y otros materiales para pisos",
+            "herramientas pequeñas y accesorios diversos",
+            "herramientas y equipo grande para el hogar",
+            "lamparas",
+            "leche de soya",
+            "paqueteria",
+            "productos para reparacion menor de la vivienda",
+            "servicios para mascotas",
+            "te",
+            "transporte escolar",
+        ),
+    },
+}
+
+# version_origen -> {version_destino: (genericos_eliminados, ...)}
+ELIMINADOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
+    2013: {
+        2018: ("calentadores para agua", "larga distancia nacional"),
+    },
+}
+
 # tipo → version_origen → {nombre_viejo: nombre_canonico_2024}
 RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     "CCIF division": {
@@ -17,9 +208,6 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     # Renombres 1:1 validados contra CSVs de ponderadores (reciprocidad de genericos).
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
     "CCIF grupo": {
-        2013: {
-            "educacion terciaria": "educacion terciaria (universitaria)",
-        },
         2018: {
             "agua y otros servicios referentes a la vivienda": "suministro de agua y servicios diversos relacionados con la vivienda",
             "articulos de cristal, vajillas y utensilios para el hogar": "cristaleria, vajillas y utensilios para el hogar",
