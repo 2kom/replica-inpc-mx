@@ -770,3 +770,305 @@ Propiedades abstractas (cada subclase define su esquema):
 | `_repr_html_()` | `str` |
 
 ---
+
+## 5.6 Calculadores de índice
+
+`calculo/` produce `ResultadoIndice`. Las implementaciones concretas son privadas a `calculo/`; el punto de entrada público es `para_canasta`.
+
+**`CalculadorBase`**
+
+Clase abstracta. Contrato único:
+
+```python
+def calcular(
+    self,
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+    id_corrida: str,
+    tipo: str,
+    ruta_canasta: Path | None = None,
+    ruta_series: Path | None = None,
+    fecha: datetime | None = None,
+) -> ResultadoIndice:
+```
+
+`tipo` debe estar en `INDICE_POR_TIPO` o `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`).
+
+**`para_canasta`**
+
+Factory. Selecciona calculador según `canasta.version`:
+
+| `version` | Calculador | Requiere `referencia_empalme_por_indice` |
+| --- | --- | --- |
+| 2010 | `LaspeyresDirecto` | no |
+| 2013 | `LaspeyresEncadenadoT1` | sí — tramo anterior = 2010 |
+| 2018 | `LaspeyresDirecto` | no |
+| 2024 | `LaspeyresEncadenadoT2` | sí — tramo anterior = 2018 |
+
+```python
+para_canasta(canasta, referencia_empalme_por_indice={"INPC": 100.0, ...})
+```
+
+`referencia_empalme_por_indice` mapea nombre de índice → valor en el periodo de traslape. `None` = sin escalado (escala natural del cálculo).
+
+**`LaspeyresDirecto`** (versiones 2010 y 2018)
+
+Media ponderada simple por periodo:
+
+```
+resultado[t] = Σ(serie[t] · ponderador) / Σ(ponderador)
+```
+
+Si hay referencia de empalme:
+
+```
+factor_h = referencia / resultado[traslape]
+resultado_final = resultado * factor_h
+```
+
+**`LaspeyresEncadenadoT1`** (versión 2013)
+
+`f_k[i]`: factor de encadenamiento del genérico `i` — normaliza su serie al periodo de traslape. Fuente: columna `encadenamiento` de la canasta. Si `encadenamiento[i]` es NaN, se deriva de la propia serie: `serie[i, 2Q Mar 2013] / 100`.
+
+```
+i_tramo  = Σ(serie[t] / f_k · ponderador) / Σ(ponderador)
+factor_h = referencia / i_tramo[2Q Mar 2013]   si hay referencia
+         = 1.0                                  si no
+resultado = i_tramo * factor_h
+```
+
+**`LaspeyresEncadenadoT2`** (versión 2024)
+
+`f_k[i]`: igual que T1 pero con traslape 2Q Jul 2024. La columna `encadenamiento` de la canasta 2024 ya contiene `I_k^{2Q Jul 2024} / 100`. Fallback si NaN: `serie[i, 2Q Jul 2024] / 100`.
+
+```
+i_tramo  = Σ(serie[t] / f_k · ponderador) / Σ(ponderador)   [igual a T1]
+factor_h = referencia / 100                                   si hay referencia
+         = Σ(ponderador · f_k) / Σ(ponderador)               si no
+resultado = i_tramo * factor_h
+```
+
+**Preparación de la serie (compartida entre calculadores)**
+
+Antes del cálculo cada calculador aplica en orden:
+
+1. Recorta la `SerieNormalizada` al rango válido de la versión (`RANGOS_VALIDOS`).
+2. Rellena NaN via `bfill→ffill` por fila; periodos afectados → `estado_calculo = "rellenado"`.
+3. Periodos con NaN irrellenable → `estado_calculo = "sin_datos"`, `indice_replicado = NaN`.
+
+Catálogo `estado_calculo` completo en [5.1](#51-semántica-compartida).
+
+---
+
+## 5.7 ResultadoIndice
+
+Resultado de un cálculo elemental sobre una sola canasta, o de un empalme entre tramos. Hereda de `Resultado` (ver [5.5](#55-modelo-base)).
+
+**Constructor**
+
+```python
+ResultadoIndice(
+    df: pd.DataFrame,
+    manifiesto: list[ManifestUnidad],
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
+)
+```
+
+Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
+
+| Invariante | Condición | Error |
+| --- | --- | --- |
+| `manifiesto` no vacío | `len(manifiesto) >= 1` | `InvarianteViolado` |
+| Columnas mínimas | `df` contiene `version`, `tipo`, `indice_replicado`, `estado_calculo` | `InvarianteViolado` |
+| `estado_calculo` válido | valores ⊆ `{"ok", "rellenado", "parcial", "sin_datos", "fallida"}` | `InvarianteViolado` |
+| Coherencia manifiesto↔df | cada `ManifestUnidad` tiene ≥1 fila en `df` con su `version` y `tipo` | `InvarianteViolado` |
+
+**`.manifiesto`**
+
+`list[ManifestUnidad]`. Un elemento por corrida elemental; `empalmar` concatena listas sin colapsar. Ver campos de `ManifestUnidad` en [5.2](#52-tipos-compartidos).
+
+**`.periodo_referencia`**
+
+`PeriodoQuincenal | PeriodoMensual | None`. Periodo en el que los valores del índice son `valor_base` (default 100). `None` = resultado en escala natural del cálculo. `rebasar()` devuelve un nuevo `ResultadoIndice` con este campo seteado.
+
+**`.resultado.largo` — columnas**
+
+| Columna | Tipo | NaN cuando |
+| --- | --- | --- |
+| `version` | `int` | nunca |
+| `tipo` | `str` | nunca |
+| `indice_replicado` | `float` | `estado_calculo` = `sin_datos` o `fallida` |
+| `estado_calculo` | `str` | nunca |
+| `motivo_error` | `str` | `estado_calculo` = `ok`, `parcial` o `rellenado` |
+
+**`.resumen` — esquema**
+
+Índice: `id_corrida`. Una fila por `ManifestUnidad`. `estado_calculo` = peor estado del tramo.
+
+| Columna | Tipo |
+| --- | --- |
+| `version` | `int` |
+| `tipo` | `str` |
+| `estado_calculo` | `str` |
+| `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
+| `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+
+**`.reporte` — esquema**
+
+Índice: MultiIndex `(periodo, indice)`. Cobertura de genéricos por periodo.
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `version` | `int` | |
+| `estado_calculo` | `str` | |
+| `motivo_error` | `str/NaN` | |
+| `genericos_esperados` | `int` | total de genéricos en la canasta (o subgrupo) |
+| `genericos_con_indice` | `int` | genéricos con valor no-NaN en el periodo |
+| `genericos_sin_indice` | `int` | genéricos con NaN |
+| `cobertura_genericos_pct` | `float` | `genericos_con_indice / genericos_esperados * 100` |
+| `ponderador_esperado` | `float` | suma de ponderadores del grupo |
+| `ponderador_cubierto` | `float` | suma de ponderadores de genéricos con valor |
+
+**`.diagnostico` — esquema**
+
+Índice: entero. Una fila por celda NaN o por celda rellenada en la serie.
+
+| Columna | Tipo |
+| --- | --- |
+| `id_corrida` | `str` |
+| `version` | `int` |
+| `tipo` | `str` |
+| `periodo` | `PeriodoQuincenal` |
+| `generico` | `str` |
+| `nivel_faltante` | `str` |
+| `tipo_faltante` | `str` (`"indice"` o `"rellenado"`) |
+| `detalle` | `str` |
+
+---
+
+## 5.8 Resultados derivados
+
+`ResultadoVariacion` y `ResultadoIncidencia` encapsulan variaciones e incidencias calculadas sobre un `ResultadoIndice`. Ambos heredan de `Resultado` ([5.5](#55-modelo-base)). Estructura simétrica; las diferencias están en el nombre de la columna calculada y el nombre del campo de clase.
+
+**Constructores**
+
+```python
+ResultadoVariacion(
+    df: pd.DataFrame,
+    manifiesto: ManifestDerivado,
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    indices_parciales: pd.DataFrame | None = None,
+)
+
+ResultadoIncidencia(
+    df: pd.DataFrame,
+    manifiesto: ManifestDerivado,
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+    indices_parciales: pd.DataFrame | None = None,
+)
+```
+
+Invariantes adicionales a los de `Resultado`:
+
+| Invariante | Condición | Error |
+| --- | --- | --- |
+| Columnas mínimas | `df` contiene `tipo`, `clase_X`, columna calculada, `estado_calculo` | `InvarianteViolado` |
+| `clase_X` homogénea | todas las filas tienen el mismo valor de `clase_variacion`/`clase_incidencia` | `InvarianteViolado` |
+| `clase_X` en catálogo | ver catálogo abajo | `InvarianteViolado` |
+| `tipo` homogéneo | todas las filas tienen el mismo `tipo` | `InvarianteViolado` |
+| Coherencia manifiesto | `manifiesto.clase == clase` y `manifiesto.tipo == tipo` | `InvarianteViolado` |
+| `estado_calculo` válido | valores ⊆ `{"ok", "parcial"}` | `InvarianteViolado` |
+| `indices_parciales` ↔ `clase` | `indices_parciales is not None` si y solo si `clase == "desde"` | `InvarianteViolado` |
+
+**Diferencias entre subclases**
+
+| Aspecto | `ResultadoVariacion` | `ResultadoIncidencia` |
+| --- | --- | --- |
+| Columna calculada | `variacion_pp` | `incidencia_pp` |
+| Campo de clase | `clase_variacion` | `clase_incidencia` |
+
+**Catálogo de clases** (compartido por ambas):
+
+`"periodica_quincenal"`, `"periodica_mensual"`, `"periodica_bimestral"`, `"periodica_trimestral"`, `"periodica_cuatrimestral"`, `"periodica_semestral"`, `"periodica_anual"`, `"acumulada_anual"`, `"desde"`.
+
+`estado_calculo` y contrato NaN en [5.1](#51-semántica-compartida). `ManifestDerivado` en [5.2](#52-tipos-compartidos).
+
+**`.resultado.largo` — columnas**
+
+| Columna | `ResultadoVariacion` | `ResultadoIncidencia` |
+| --- | --- | --- |
+| `tipo` | `str` | `str` |
+| `clase_variacion` | `str` | — |
+| `clase_incidencia` | — | `str` |
+| `variacion_pp` / `incidencia_pp` | `float` | `float` |
+| `estado_calculo` | `str` (`ok`, `parcial`) | `str` (`ok`, `parcial`) |
+| `version_t` | `int` | `int` |
+
+Solo filas computables — sin filas `sin_datos`/`fallida`.
+
+**`.resumen` — esquema**
+
+Índice: entero (una sola fila).
+
+| Columna | `ResultadoVariacion` | `ResultadoIncidencia` |
+| --- | --- | --- |
+| `tipo` | `str` | `str` |
+| `clase_variacion` | `str` | — |
+| `clase_incidencia` | — | `str` |
+| `descripcion` | `str` | `str` |
+| `estado_calculo` | `str` | `str` |
+| `periodo_inicio` | `Periodo*` | `Periodo*` |
+| `periodo_fin` | `Periodo*` | `Periodo*` |
+
+**`.reporte` — esquema**
+
+Índice: MultiIndex `(periodo, indice)`. Incluye combinaciones computables y no computables (contrario a `.diagnostico`).
+
+| Columna | Variacion | Incidencia |
+| --- | --- | --- |
+| `estado_calculo` | ✓ | ✓ |
+| `motivo_error` | ✓ | ✓ |
+| `periodo_lag` | ✓ | ✓ |
+| `indice_t` | ✓ | ✓ |
+| `indice_lag` | ✓ | ✓ |
+| `ponderador_t` | — | ✓ |
+| `ponderador_lag` | — | ✓ |
+| `version_t` | ✓ | ✓ |
+| `version_lag` | ✓ | ✓ |
+| `cobertura_pct_t` | ✓ | ✓ |
+| `cobertura_pct_lag` | ✓ | ✓ |
+
+**`.diagnostico` — esquema**
+
+Índice: entero. Solo combinaciones no computables.
+
+| Columna | Variacion | Incidencia |
+| --- | --- | --- |
+| `id_corrida` | ✓ | ✓ |
+| `tipo` | ✓ | ✓ |
+| `clase_variacion` | ✓ | — |
+| `clase_incidencia` | — | ✓ |
+| `periodo` | ✓ | ✓ |
+| `indice` | ✓ | ✓ |
+| `estado_calculo` | ✓ | ✓ |
+| `motivo_error` | ✓ | ✓ |
+| `periodo_lag` | ✓ | ✓ |
+| `version_t` | ✓ | ✓ |
+| `version_lag` | ✓ | ✓ |
+
+**`.indices_parciales`**
+
+`pd.DataFrame | None`. Existe solo cuando `clase == "desde"`. Índice: `indice`.
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `periodo_desde_real` | `Periodo*` | primer periodo válido usado como base |
+| `periodo_hasta_real` | `Periodo*` | último periodo válido usado como tope |
+
+DataFrame vacío si todos los índices tuvieron dato exacto en ambos extremos; de lo contrario, una fila por índice ajustado.
+
+---
