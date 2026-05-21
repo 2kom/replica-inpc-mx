@@ -215,7 +215,6 @@ replica-inpc-mx/
 │       │   │   └── calcular_historia.py
 │       │   └── puertos/
 │       │       ├── __init__.py
-│       │       ├── fuente_validacion.py
 │       │       ├── lector_canasta.py
 │       │       └── lector_series.py
 │       ├── dominio/
@@ -239,6 +238,7 @@ replica-inpc-mx/
 │       │   ├── correspondencia.py
 │       │   ├── correspondencia_canastas.py
 │       │   ├── errores.py
+│       │   ├── fuente_validacion.py
 │       │   ├── modelos/
 │       │   │   ├── __init__.py
 │       │   │   ├── base.py
@@ -285,30 +285,28 @@ replica-inpc-mx/
 
 ## 3. Stack técnico
 
-| Componente      | Decisión                    | Razón                                              |
-| --------------- | --------------------------- | -------------------------------------------------- |
-| Python          | 3.10                        | `match/case` disponible, compatible con el entorno |
-| DataFrames      | pandas                      | Notebook-first, display automático en Jupyter      |
-| Numérico        | numpy                       | Operaciones vectorizadas en el cálculo             |
-| Correspondencia | unicodedata (stdlib)        | Normalización exacta genérico↔genérico             |
-| HTTP            | requests                    | Simple, sin necesidad de async en v1               |
-| CLI             | argparse                    | Stdlib, sin dependencia extra para CLI secundario  |
-| Testing         | pytest                      | Estándar de facto en Python                        |
-| Visualización   | plotnine                    | Presente en el proyecto de referencia              |
-| Columnar        | pyarrow                     | Presente en el proyecto de referencia              |
-| Empaquetado     | setuptools + pyproject.toml | Estándar moderno, src layout                       |
+| Componente      | Decisión                    | Razón                                                        |
+| --------------- | --------------------------- | ------------------------------------------------------------ |
+| Python          | >=3.10                      | Union syntax `X \| Y` en type hints requiere 3.10            |
+| DataFrames      | pandas                      | Notebook-first, display automático en Jupyter                |
+| Numérico        | numpy                       | Operaciones vectorizadas en el cálculo                       |
+| Correspondencia | unicodedata (stdlib)        | Normalización exacta genérico↔genérico                       |
+| HTTP            | requests                    | Simple, sin necesidad de async                               |
+| Testing         | pytest                      | Estándar de facto en Python                                  |
+| Linting         | ruff                        | Rápido, reemplaza flake8 + isort + pyupgrade en un solo tool |
+| Tipos           | mypy + pandas-stubs         | Type checking estático; stubs cubren la API de pandas        |
+| Visualización   | plotnine                    | Presente en el proyecto de referencia                        |
+| Columnar        | pyarrow                     | Presente en el proyecto de referencia                        |
+| Empaquetado     | setuptools + pyproject.toml | Estándar moderno, src layout                                 |
 
 **Dependencias runtime** (`[project.dependencies]` en `pyproject.toml`):
-pandas, numpy, requests, python-dateutil, plotnine, pyarrow
+pandas, numpy, requests, python-dateutil, plotnine, pyarrow, ipython, jupyter, ipykernel
 
 **Dependencias de desarrollo** (`[project.optional-dependencies.dev]`):
-pytest, pytest-mock, ipython, jupyter, ipykernel
+pytest, pytest-mock, ruff, mypy, pandas-stubs, types-requests
 
-Instalación:
-
-```bash
-pip install -e ".[dev]"
-```
+**Dependencias de ponderadores** (`[project.optional-dependencies.ponderadores]`):
+openpyxl, pdfplumber
 
 ---
 
@@ -327,20 +325,20 @@ flowchart TD
 
     CC & SN --> CORR["correspondencia.py<br/>vincula genérico↔genérico<br/>normalización exacta"]
 
-    CORR --> CALC["laspeyres.py<br/>INPC = Σ ωₖ · Iₖ por periodo"]
+    CORR --> EST["estrategia.py<br/>LaspeyresDirecto o LaspeyresEncadenado<br/>INPC = Σ ωₖ · Iₖ por periodo"]
 
-    CALC --> RC[ResultadoCalculo]
+    EST --> RI[ResultadoIndice]
 
-    RC --> FVAPI["fuente_validacion_api<br/>descarga INPC INEGI<br/>si falla → no_disponible"]
+    RI -->|opcional| FVAPI["fuente_validacion_api<br/>descarga INPC INEGI<br/>si falla → no_disponible"]
 
-    FVAPI --> VAL["ResumenValidacion<br/>ReporteDetalladoValidacion<br/>DiagnosticoFaltantes"]
+    FVAPI --> VAL[ValidacionIndice]
 
-    VAL --> RUNS["data/runs/id_corrida/<br/>trazabilidad interna"]
-    VAL --> OUT["output/<br/>exportación del usuario"]
-
-    NB["api/corrida.py<br/>notebook"]
-    CLI["interfaces/cli.py<br/>terminal"]
-    NB & CLI -.->|interfaz| RC
+    NB["import replica_inpc as rep<br/>notebook Jupyter"]
+    NB -.->|calcular_indice| CC
+    NB -.->|calcular_historia| EST
+    NB -.->|validar_indice| VAL
 ```
+
+`calcular_historia` orquesta internamente carga → cálculo por versión → empalme → conversión de frecuencia → rebase en una sola llamada. `calcular_indice` expone cada paso por separado.
 
 ---
