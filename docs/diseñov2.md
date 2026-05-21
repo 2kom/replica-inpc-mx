@@ -67,21 +67,21 @@ El historial de cambios vive en git.
   - [11.10 Detección de null_por_faltantes](#1110-detección-de-null_por_faltantes)
   - [11.11 Firma de validacion/indices.py](#1111-firma-de-validacionindicespy)
   - [11.12 id_corrida en ResultadoIndice](#1112-id_corrida-en-resultadoindice)
-  - [11.13 Loop de subíndices — OBSOLETA v2](#1113-loop-de-subíndices--obsoleta-v2)
-  - [11.14 Schema condicional en ReporteDetalladoValidacion](#1114-schema-condicional-en-reportedetalladovalidacion)
-  - [11.15 TIPOS_CON_VALIDACION en el dominio](#1115-tipos_con_validacion-en-el-dominio)
-  - [11.16 Cache de clase en FuenteValidacionApi](#1116-cache-de-clase-en-fuentevalidacionapi)
-  - [11.17 UTF-8 como primer encoding en LectorSeriesCsv](#1117-utf-8-como-primer-encoding-en-lectorseriescsv)
-  - [11.18 Dispatch interno en CalculadorBase](#1118-dispatch-interno-en-calculadorbase)
-  - [11.19 Vectorización del loop de validar_inpc](#1119-vectorización-del-loop-de-validar_inpc)
-  - [11.20 LaspeyresEncadenado — derivación de f_h](#1120-laspeyresencadenado--derivación-de-f_h)
-  - [11.21 Imputación de faltantes en series](#1121-imputación-de-faltantes-en-series)
-  - [11.22 empalmar — combinación histórica](#1122-empalmar--combinación-histórica)
-  - [11.23 RENOMBRES_INDICES y normalización cross-versión](#1123-renombres_indices-y-normalización-cross-versión)
-  - [11.24 empalmar — topología PATH](#1124-empalmar--topología-path)
-  - [11.25 rebasar — huérfanos con UserWarning](#1125-rebasar--huérfanos-con-userwarning)
-  - [11.26 bfill→ffill y estado "rellenado"](#1126-bfillffill-y-estado-rellenado)
-  - [11.27 Autoreload IPython — type(self)._PROXY](#1127-autoreload-ipython--typeself_proxy)
+  - [11.13 Schema condicional en ReporteDetalladoValidacion](#1113-schema-condicional-en-reportedetalladovalidacion)
+  - [11.14 TIPOS_CON_VALIDACION en el dominio](#1114-tipos_con_validacion-en-el-dominio)
+  - [11.15 Cache de clase en FuenteValidacionApi](#1115-cache-de-clase-en-fuentevalidacionapi)
+  - [11.16 UTF-8 como primer encoding en LectorSeriesCsv](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
+  - [11.17 Dispatch interno en CalculadorBase](#1117-dispatch-interno-en-calculadorbase)
+  - [11.18 Vectorización del loop de validar_inpc](#1118-vectorización-del-loop-de-validar_inpc)
+  - [11.19 LaspeyresEncadenado — derivación de f_h](#1119-laspeyresencadenado--derivación-de-f_h)
+  - [11.20 Imputación de faltantes en series](#1120-imputación-de-faltantes-en-series)
+  - [11.21 empalmar — combinación histórica](#1121-empalmar--combinación-histórica)
+  - [11.22 RENOMBRES_INDICES y normalización cross-versión](#1122-renombres_indices-y-normalización-cross-versión)
+  - [11.23 empalmar — topología PATH](#1123-empalmar--topología-path)
+  - [11.24 rebasar — huérfanos con UserWarning](#1124-rebasar--huérfanos-con-userwarning)
+  - [11.25 bfill→ffill y estado "rellenado"](#1125-bfillffill-y-estado-rellenado)
+  - [11.26 Autoreload IPython — type(self)._PROXY](#1126-autoreload-ipython--typeself_proxy)
+  - [11.27 FuenteValidacion en dominio/, no en aplicacion/](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
 - [12. Gaps conocidos](#12-gaps-conocidos)
 
 ---
@@ -111,10 +111,10 @@ graph TD
     end
     subgraph APP["aplicacion/"]
         B["calcular_historia"]
-        C["LectorCanasta · LectorSeries · FuenteValidacion"]
+        C["LectorCanasta · LectorSeries"]
     end
     subgraph DOM["dominio/"]
-        D["modelos · calculo · consulta · validacion · conversion · correspondencia"]
+        D["modelos · calculo · consulta · validacion · conversion · correspondencia · FuenteValidacion"]
     end
     subgraph INFRA["infraestructura/"]
         E["lector_canasta_csv · lector_series_csv · fuente_validacion_api"]
@@ -124,7 +124,6 @@ graph TD
     API --> APP
     API --> INFRA
     APP --> DOM
-    INFRA --> APP
     INFRA --> DOM
 ```
 
@@ -175,7 +174,7 @@ Las dependencias apuntan siempre hacia el dominio. El dominio nunca importa de c
 | ------------------ | ---------------------------------------------- |
 | `dominio/`         | stdlib, pandas, numpy — nada más               |
 | `aplicacion/`      | `dominio/`                                     |
-| `infraestructura/` | `dominio/`, `aplicacion/` (puertos)            |
+| `infraestructura/` | `dominio/`                                     |
 | `api/`             | `dominio/`, `aplicacion/`, `infraestructura/`  |
 
 Violar esta regla rompe el aislamiento del dominio y hace que los contratos dependan de detalles de implementación.
