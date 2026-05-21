@@ -22,7 +22,7 @@ class Vista:
     def ancho(self) -> pd.DataFrame:
         if len(self._columnas) == 1:
             return self._df[self._columnas[0]].unstack("periodo")
-        return self._df[self._columnas].stack().unstack("periodo")
+        return self._df[self._columnas].stack().unstack("periodo")  # type: ignore
 
     def _repr_html_(self) -> str:
         return self._df._repr_html_()  # type: ignore[operator]
@@ -41,9 +41,7 @@ class Resultado(ABC):
                 "Resultado.df requiere MultiIndex exacto con niveles ('periodo', 'indice')"
             )
         if df.shape[1] != 1:
-            raise InvarianteViolado(
-                "Resultado.df debe contener exactamente una columna calculada"
-            )
+            raise InvarianteViolado("Resultado.df debe contener exactamente una columna calculada")
         if df.index.duplicated().any():
             raise InvarianteViolado("Resultado.df no puede tener índices duplicados")
         self._df = df

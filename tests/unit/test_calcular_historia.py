@@ -55,8 +55,9 @@ class _LectorSeriesFake:
 
 
 # Periodos: traslape 2013 = Q(2013,3,2); traslape 2018 = Q(2018,7,2).
+# _P13 incluye Q(2018,7,2) para compartir frontera con _P18 (requisito topología PATH).
 _P10 = [PeriodoQuincenal(2013, 2, 2), PeriodoQuincenal(2013, 3, 1), PeriodoQuincenal(2013, 3, 2)]
-_P13 = [PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2013, 4, 1), PeriodoQuincenal(2013, 4, 2)]
+_P13 = [PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2013, 4, 1), PeriodoQuincenal(2013, 4, 2), PeriodoQuincenal(2018, 7, 2)]
 _P18 = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
 
 _RC10, _RC13, _RC18 = Path("c2010"), Path("c2013"), Path("c2018")
@@ -71,7 +72,7 @@ def _historia_3_versiones() -> CalcularHistoria:
     }
     series = {
         _RS10: _serie(_P10, [100.0, 101.0, 102.0], [100.0, 103.0, 104.0]),
-        _RS13: _serie(_P13, [110.0, 111.0, 112.0], [110.0, 113.0, 114.0]),
+        _RS13: _serie(_P13, [110.0, 111.0, 112.0, 115.0], [110.0, 113.0, 114.0, 116.0]),
         _RS18: _serie(_P18, [200.0, 201.0], [200.0, 203.0]),
     }
     return CalcularHistoria(_LectorCanastaFake(canastas), _LectorSeriesFake(series))
@@ -96,8 +97,8 @@ def test_una_version_directo() -> None:
 
 
 def test_tres_versiones_contiguas_fold_left() -> None:
-    # 3 versiones obligan al fold-left de empalmar; una sola llamada
-    # empalmar([r1, r2, r3]) violaría el invariante de span y fallaría.
+    # calcular_historia encadena versiones vía fold-left con forzar=True;
+    # cada par consecutivo comparte exactamente 1 periodo (frontera).
     historia = _historia_3_versiones()
     r = historia.ejecutar(_INSUMOS_3, "inpc", PeriodoQuincenal(2013, 4, 1), "quincenal")
     assert isinstance(r, ResultadoIndice)
@@ -149,9 +150,10 @@ def test_validaciones_fallan(insumos: list, periodicidad: str) -> None:
         historia.ejecutar(insumos, "inpc", PeriodoQuincenal(2018, 7, 2), periodicidad)  # type: ignore[arg-type]
 
 
-def test_periodo_referencia_inexistente_falla() -> None:
+def test_periodo_referencia_inexistente_emite_warning() -> None:
+    # Periodo de referencia fuera de rango → todos los índices huérfanos → warning.
     historia = _historia_3_versiones()
-    with pytest.raises(InvarianteViolado):
+    with pytest.warns(UserWarning, match="sin dato"):
         historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2099, 1, 1), "quincenal")
 
 

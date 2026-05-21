@@ -41,6 +41,35 @@ def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
     return df_nuevo
 
 
+def _validar_topologia(ordenados: list[ResultadoIndice]) -> list[object]:
+    """Valida topología PATH y devuelve lista de periodos frontera entre pares consecutivos."""
+    conjuntos = [
+        set(r._df_completo.index.get_level_values("periodo")) for r in ordenados
+    ]
+    fronteras: list[object] = []
+    for i in range(len(ordenados) - 1):
+        compartidos = conjuntos[i] & conjuntos[i + 1]
+        if len(compartidos) == 0:
+            raise InvarianteViolado(
+                f"empalmar: par consecutivo [{i}, {i+1}] no comparte ningún periodo — "
+                "no hay frontera válida para empalmar."
+            )
+        if len(compartidos) > 1:
+            raise InvarianteViolado(
+                f"empalmar: par consecutivo [{i}, {i+1}] comparte {len(compartidos)} periodos "
+                f"({sorted(map(str, compartidos))}); se requiere exactamente 1 (topología PATH)."
+            )
+        fronteras.append(next(iter(compartidos)))
+        for j in range(i + 2, len(ordenados)):
+            no_consecutivos = conjuntos[i] & conjuntos[j]
+            if no_consecutivos:
+                raise InvarianteViolado(
+                    f"empalmar: par no-consecutivo [{i}, {j}] comparte periodos "
+                    f"({sorted(map(str, no_consecutivos))}); topología debe ser PATH lineal."
+                )
+    return fronteras
+
+
 def empalmar(
     resultados: list[ResultadoIndice],
     forzar: bool = False,
@@ -48,9 +77,9 @@ def empalmar(
 ) -> ResultadoIndice:
     """Concatena tramos del mismo `tipo` en un único `ResultadoIndice`.
 
-    Normaliza nombres de categorías entre versiones de canasta. En traslapes,
-    las filas del input anterior (cronológico) prevalecen — el valor del tramo
-    posterior en el traslape es derivado del anterior por construcción.
+    Normaliza nomenclatura de categorías entre versiones. En la frontera entre
+    tramos consecutivos, el tramo anterior posee (frontera, indice) si ese
+    indice existe en él; si no, el tramo posterior lo aporta.
     """
     if len(resultados) < 2:
         raise InvarianteViolado("empalmar requiere al menos 2 ResultadoIndice.")
@@ -59,33 +88,6 @@ def empalmar(
     if len(tipos) != 1:
         raise InvarianteViolado(
             f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
-        )
-
-    # Nomenclatura por input = max(manifest.versions). Tras un empalmar previo,
-    # todas las filas quedan en la nomenclatura del max de versiones; las
-    # versions de cada fila reflejan origen de cálculo, no nomenclatura.
-    # version_nombres (si se pasa explícito) también participa del span check:
-    # no se puede pedir destino fuera del rango de un paso adyacente.
-    nomenclaturas_set = {max(m.version for m in r.manifiesto) for r in resultados}
-    if version_nombres is not None:
-        nomenclaturas_set.add(version_nombres)
-    nomenclaturas = sorted(nomenclaturas_set)
-    idx_min = _ORDEN_VERSIONES.index(nomenclaturas[0])
-    idx_max = _ORDEN_VERSIONES.index(nomenclaturas[-1])
-    if idx_max - idx_min > 1:
-        raise InvarianteViolado(
-            f"empalmar admite a lo más un paso adyacente en {list(_ORDEN_VERSIONES)}; "
-            f"nomenclaturas (inputs + version_nombres) = {nomenclaturas} "
-            f"(span {idx_max - idx_min} pasos). Encadenar empalmar por pares vecinos."
-        )
-
-    refs = [r.periodo_referencia for r in resultados]
-    refs_explicitas = [r for r in refs if r is not None]
-    refs_distintas = set(refs_explicitas)
-    if len(refs_distintas) > 1 and not forzar:
-        raise InvarianteViolado(
-            f"empalmar recibió periodo_referencia distintos {sorted(map(str, refs_distintas))} "
-            "y forzar=False"
         )
 
     primer_periodo = resultados[0]._df_completo.index.get_level_values("periodo")[0]
@@ -102,38 +104,92 @@ def empalmar(
         key=lambda r: r._df_completo.index.get_level_values("periodo").min(),
     )
 
+    fronteras = _validar_topologia(ordenados)
+
+    for i, frontera in enumerate(fronteras):
+        ref_i = ordenados[i].periodo_referencia
+        if ref_i is not None and ref_i != frontera:
+            msg = (
+                f"empalmar: tramo {i} tiene periodo_referencia={ref_i} "
+                f"pero la frontera con el siguiente tramo es {frontera}; "
+                "la juntura puede ser discontinua — usa rebasar() antes o forzar=True."
+            )
+            if not forzar:
+                raise InvarianteViolado(msg)
+            warnings.warn(msg, UserWarning, stacklevel=2)
+
     if version_nombres is None:
         vc = max(int(v) for r in ordenados for v in r._df_completo["version"].unique())
     else:
         vc = int(version_nombres)
 
+    vers_labels = {max(m.version for m in r.manifiesto) for r in ordenados}
+    if version_nombres is not None:
+        vers_labels.add(vc)
+    idx_labels = [_ORDEN_VERSIONES.index(v) for v in vers_labels if v in _ORDEN_VERSIONES]
+    if idx_labels and max(idx_labels) - min(idx_labels) > 1:
+        raise InvarianteViolado(
+            f"empalmar: nomenclaturas {sorted(vers_labels)} abarcan más de un paso adyacente "
+            f"en {list(_ORDEN_VERSIONES)}; componer por pares vecinos en su lugar."
+        )
+
     tipo_unico = next(iter(tipos))
 
-    periodos_anteriores: set[object] = set()
+    indices_acumulados: set[object] = set()
+    periodos_acumulados: set[object] = set()
     dfs_indice: list[pd.DataFrame] = []
     dfs_reporte: list[pd.DataFrame] = []
     dfs_diag: list[pd.DataFrame] = []
-    for r in ordenados:
-        df_completo = r._df_completo
-        reporte = r.reporte
-        periodos_propios = set(df_completo.index.get_level_values("periodo"))
-        periodos_a_incluir = periodos_propios - periodos_anteriores
 
-        df_filtrado = df_completo[
-            df_completo.index.get_level_values("periodo").isin(periodos_a_incluir)
-        ]
-        rep_filtrado = reporte[reporte.index.get_level_values("periodo").isin(periodos_a_incluir)]
-
-        # Nomenclatura del tramo = max(manifest.versions). Para inputs
-        # ya-empalmados con múltiples versions a nivel de fila, la nomenclatura
-        # del índice es uniforme (último renombre aplicado al empalmar previo).
+    for i, r in enumerate(ordenados):
         version_origen = max(m.version for m in r.manifiesto)
         mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
 
-        dfs_indice.append(_aplicar_renombre(df_filtrado, mapa))
-        dfs_reporte.append(_aplicar_renombre(rep_filtrado, mapa))
+        df_completo = _aplicar_renombre(r._df_completo, mapa)
+        reporte = _aplicar_renombre(r.reporte, mapa)
+        # El renombre puede colapsar dos variantes del mismo índice cuando el
+        # catálogo 2010→2013 está incompleto y acc acumula ambas formas. Se
+        # preserva la primera aparición (orden cronológico = tramo anterior
+        # prevalece), coherente con el contrato de empalmar.
+        if df_completo.index.duplicated().any():
+            df_completo = df_completo[~df_completo.index.duplicated(keep="first")]
+        if reporte.index.duplicated().any():
+            reporte = reporte[~reporte.index.duplicated(keep="first")]
+        periodos_propios = set(df_completo.index.get_level_values("periodo"))
+        frontera = fronteras[i - 1] if i > 0 else None
+
+        if frontera is not None:
+            # Periodos normales: excluir los ya acumulados (excepto la frontera)
+            periodos_normales = periodos_propios - periodos_acumulados - {frontera}
+            # Frontera: solo índices que el acumulado no tiene (nombres canónicos)
+            mask_frontera = df_completo.index.get_level_values("periodo") == frontera
+            df_frontera_todos = df_completo[mask_frontera]
+            indices_frontera_nuevos = ~df_frontera_todos.index.get_level_values("indice").isin(
+                indices_acumulados
+            )
+            df_frontera_nuevos = df_frontera_todos[indices_frontera_nuevos]
+
+            rep_frontera_todos = reporte[reporte.index.get_level_values("periodo") == frontera]
+            rep_frontera_nuevos = rep_frontera_todos[
+                ~rep_frontera_todos.index.get_level_values("indice").isin(indices_acumulados)
+            ]
+
+            mask_normales = df_completo.index.get_level_values("periodo").isin(periodos_normales)
+            df_filtrado = pd.concat([df_completo[mask_normales], df_frontera_nuevos])
+            rep_filtrado = pd.concat([
+                reporte[reporte.index.get_level_values("periodo").isin(periodos_normales)],
+                rep_frontera_nuevos,
+            ])
+        else:
+            df_filtrado = df_completo
+            rep_filtrado = reporte
+
+        dfs_indice.append(df_filtrado)
+        dfs_reporte.append(rep_filtrado)
         dfs_diag.append(r.diagnostico)
-        periodos_anteriores |= periodos_propios
+
+        periodos_acumulados |= periodos_propios
+        indices_acumulados |= set(df_completo.index.get_level_values("indice"))
 
     df_combinado = pd.concat(dfs_indice)
     df_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
@@ -142,22 +198,10 @@ def empalmar(
     reporte_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
     diag_combinado = pd.concat(dfs_diag, ignore_index=True)
-
     manifiesto_combinado = [m for r in ordenados for m in r.manifiesto]
 
-    if len(refs_distintas) == 0:
-        periodo_referencia_out = None
-    elif len(refs_distintas) == 1:
-        periodo_referencia_out = next(iter(refs_distintas))
-    else:
-        elegido = ordenados[-1].periodo_referencia
-        warnings.warn(
-            f"empalmar recibió periodo_referencia distintos {sorted(map(str, refs_distintas))}; "
-            f"forzar=True activo; prevalece el del último input cronológico: {elegido}",
-            UserWarning,
-            stacklevel=2,
-        )
-        periodo_referencia_out = elegido
+    refs_explicitas = [r.periodo_referencia for r in ordenados if r.periodo_referencia is not None]
+    periodo_referencia_out = refs_explicitas[-1] if refs_explicitas else None
 
     return ResultadoIndice(
         df_combinado,
@@ -180,13 +224,13 @@ def rebasar(
     """
     df = resultado._df_completo.copy()
     indices_unicos = df.index.get_level_values("indice").unique()
+    huerfanos: list[str] = []
 
     for indice in indices_unicos:
         key = (periodo_referencia, indice)
         if key not in df.index:
-            raise InvarianteViolado(
-                f"periodo_referencia {periodo_referencia} no existe para índice '{indice}'."
-            )
+            huerfanos.append(str(indice))
+            continue
         fila_base: pd.Series = df.loc[key]  # type: ignore[index, assignment]
         estado_base = fila_base["estado_calculo"]
         if estado_base not in _ESTADOS_CON_VALOR:
@@ -212,6 +256,14 @@ def rebasar(
             df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
             * valor_base
             / base
+        )
+
+    if huerfanos:
+        warnings.warn(
+            f"rebasar: {len(huerfanos)} índice(s) sin dato en {periodo_referencia} "
+            f"quedan sin rebasar (base original): {huerfanos}",
+            UserWarning,
+            stacklevel=2,
         )
 
     return ResultadoIndice(

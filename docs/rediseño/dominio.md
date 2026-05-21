@@ -1274,7 +1274,7 @@ def empalmar(
 
 ##### Responsabilidad
 
-Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, normalizando nombres de categorías entre versiones de canasta.
+Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, resolviendo la propiedad de la frontera por `(periodo, indice)` y normalizando nomenclatura de categorías entre versiones de canasta.
 
 ##### Precondiciones
 
@@ -1282,29 +1282,40 @@ Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, normalizando n
 |---|---|
 | `len(resultados) >= 2` | `InvarianteViolado` |
 | todos los inputs tienen el mismo `manifiesto[i].tipo` | `InvarianteViolado` |
-| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
+| topología PATH: cada par consecutivo comparte exactamente 1 periodo; ningún par no-consecutivo comparte periodos | `InvarianteViolado` |
+| para cada frontera: `tramo_i.periodo_referencia ∈ {None, periodo_frontera}` | `InvarianteViolado` si `forzar=False` |
 
 ##### Parámetros
 
 | parámetro | tipo | contrato |
 |---|---|---|
-| `resultados` | `list[ResultadoIndice]` | orden cronológico; al menos dos elementos; mismo `tipo` |
-| `forzar` | `bool` | si `True`, permite `periodo_referencia` distintos emitiendo `UserWarning` |
-| `version_nombres` | `VersionCanasta \| None` | versión de referencia para normalizar categorías; `None` = `max(versions)` de los inputs |
+| `resultados` | `list[ResultadoIndice]` | al menos dos elementos; mismo `tipo` |
+| `forzar` | `bool` | si `True`, permite junturas desalineadas (`tramo_i.ref ∉ {None, frontera}`) emitiendo `UserWarning` |
+| `version_nombres` | `VersionCanasta \| None` | vocabulario de nombres del output; `None` = `max(versions)` de los inputs |
 
 ##### Retorno
 
 | tipo | contrato |
 |---|---|
-| `ResultadoIndice` | `.manifiesto` = concatenación de todos los inputs; `.resumen`, `.reporte`, `.diagnostico` mergeados; `periodo_referencia` resuelto según postcondiciones |
+| `ResultadoIndice` | `.manifiesto` = concatenación de todos los inputs; `.reporte`, `.diagnostico` mergeados con la misma lógica de frontera; `periodo_referencia` del último tramo con ref explícita, o `None` si todos son `None` |
+
+##### Regla de propiedad de frontera
+
+Para cada par consecutivo (tramo_anterior, tramo_posterior):
+
+| periodo | índice | quién aporta |
+|---|---|---|
+| antes de frontera | cualquiera | tramo anterior |
+| frontera | existe en tramo anterior | tramo anterior |
+| frontera | solo existe en tramo posterior | tramo posterior |
+| después de frontera | cualquiera | tramo posterior |
+
+Garantiza que índices versión-específicos del tramo posterior tengan cobertura desde su primer periodo (la frontera), sin sobreescribir valores del tramo anterior para índices compartidos.
 
 ##### Postcondiciones
 
-- `periodo_referencia` resuelto:
-  - todos `None` → resultado `None`
-  - mezcla `None` + un único valor explícito → hereda ese valor
-  - `forzar=True` + dos valores explícitos distintos → `UserWarning` describiendo cada `periodo_referencia`
-- `version_nombres` resuelto: `None` → `max(versions)` de inputs; si no existe mapa `(tipo, version)` en `RENOMBRES_INDICES`, los índices de ese tramo no se renombran
+- `periodo_referencia` output = ref del último tramo (cronológico) con valor explícito; `None` si todos son `None`
+- `version_nombres` resuelto: `None` → `max(versions)` de inputs; si no existe mapa `(tipo, version_origen)` en `RENOMBRES_INDICES`, los índices de ese tramo no se renombran (no-op silencioso)
 - Entradas no mutadas
 
 ##### Errores y advertencias
@@ -1313,8 +1324,12 @@ Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, normalizando n
 |---|---|
 | `len(resultados) < 2` | `InvarianteViolado` |
 | `tipo` distinto entre inputs | `InvarianteViolado` |
-| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
-| `periodo_referencia` distintos con `forzar=True` | `UserWarning` |
+| topología no-PATH (sin frontera compartida entre consecutivos) | `InvarianteViolado` |
+| topología no-PATH (periodos compartidos entre no-consecutivos) | `InvarianteViolado` |
+| nomenclaturas de inputs + `version_nombres` abarcan > 1 paso adyacente | `InvarianteViolado` |
+| `tramo_i.ref ∉ {None, frontera}` con `forzar=False` | `InvarianteViolado` |
+| `tramo_i.ref ∉ {None, frontera}` con `forzar=True` | `UserWarning` |
+| input mensual | `UserWarning` |
 
 ##### Efectos
 
@@ -1330,7 +1345,7 @@ Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, normalizando n
 
 ```python
 hist = empalmar([indice_2018, indice_2024])
-hist_2018 = empalmar([indice_2018, indice_2024], version_nombres=2018)
+hist = empalmar([indice_2010, indice_2013, indice_2018, indice_2024], forzar=True)
 ```
 
 ---

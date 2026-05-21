@@ -95,53 +95,54 @@ def test_empalmar_requiere_minimo_dos() -> None:
 
 
 def test_empalmar_construccion_valida_concatena_manifiestos() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     out = empalmar([r_2018, r_2024])
     assert len(out.manifiesto) == 2
 
 
-def test_empalmar_salto_no_contiguo_falla() -> None:
-    # 2010 y 2024 no son canastas vecinas; flujo correcto: 2010->2013->2018->2024
+def test_empalmar_sin_frontera_compartida_falla() -> None:
+    # r_2010 y r_2024 no comparten ningún periodo — sin frontera válida.
     r_2010 = _resultado([(_p1, "INPC", 100.0, "ok", None)], version=2010)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
-    with pytest.raises(InvarianteViolado, match="paso adyacente"):
+    r_2024 = _resultado([(_p4, "INPC", 110.0, "ok", None)], version=2024)
+    with pytest.raises(InvarianteViolado, match="no comparte ningún periodo"):
         empalmar([r_2010, r_2024])
 
 
-def test_empalmar_pares_vecinos_aceptados() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+def test_empalmar_pares_con_frontera_aceptados() -> None:
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     out = empalmar([r_2018, r_2024])
     assert len(out.manifiesto) == 2
 
 
 def test_empalmar_tres_versiones_en_una_llamada_falla() -> None:
-    # Span 2 pasos (2010 -> 2013 -> 2018): excede el paso único permitido.
+    # Tres versiones en una sola llamada: span {2010, 2013, 2018} = 2 pasos > 1.
     pa = PeriodoQuincenal(2010, 12, 2)
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
-    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None)], version=2010)
-    r_2013 = _resultado([(pb, "INPC", 105.0, "ok", None)], version=2013)
+    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
+    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
     r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None)], version=2018)
     with pytest.raises(InvarianteViolado, match="paso adyacente"):
-        empalmar([r_2010, r_2013, r_2018])
+        empalmar([r_2010, r_2013, r_2018], forzar=True)
 
 
-def test_empalmar_cadena_via_composicion_explicita() -> None:
-    # Caller compone por pares vecinos: 2010+2013 -> intermedio (nom=2013), luego con 2018, luego con 2024.
+def test_empalmar_cadena_pares_con_fronteras() -> None:
+    # Cada tramo incluye la frontera con el siguiente para formar topología PATH.
     pa = PeriodoQuincenal(2010, 12, 2)
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
     pd_ = PeriodoQuincenal(2024, 7, 2)
-    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None)], version=2010)
-    r_2013 = _resultado([(pb, "INPC", 105.0, "ok", None)], version=2013)
-    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(pd_, "INPC", 120.0, "ok", None)], version=2024)
+    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
+    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
+    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018)
+    pe = PeriodoQuincenal(2024, 8, 1)
+    r_2024 = _resultado([(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024)
 
-    intermedio_a = empalmar([r_2010, r_2013])  # nomenclatura 2013
-    intermedio_b = empalmar([intermedio_a, r_2018])  # nomenclatura 2018
-    final = empalmar([intermedio_b, r_2024])  # nomenclatura 2024
+    intermedio_a = empalmar([r_2010, r_2013])
+    intermedio_b = empalmar([intermedio_a, r_2018], forzar=True)
+    final = empalmar([intermedio_b, r_2024])
 
     assert len(final.manifiesto) == 4
     periodos = list(final.df.index.get_level_values("periodo"))
@@ -163,8 +164,8 @@ def test_empalmar_periodo_referencia_distintos_sin_forzar_falla() -> None:
 
 
 def test_empalmar_periodo_referencia_distintos_con_forzar_warning() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], periodo_referencia=_p1)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], periodo_referencia=_p3)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], periodo_referencia=_p1)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3)
     with pytest.warns(UserWarning):
         out = empalmar([r_2018, r_2024], forzar=True)
     # último cronológico es r_2024 con _p3
@@ -172,22 +173,22 @@ def test_empalmar_periodo_referencia_distintos_con_forzar_warning() -> None:
 
 
 def test_empalmar_mezcla_none_con_valor_hereda_valor() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], periodo_referencia=None)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], periodo_referencia=_p3)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], periodo_referencia=None)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3)
     out = empalmar([r_2018, r_2024])
     assert out.periodo_referencia == _p3
 
 
 def test_empalmar_todos_none_resulta_none() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)])
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)])
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     out = empalmar([r_2018, r_2024])
     assert out.periodo_referencia is None
 
 
 def test_empalmar_ordena_cronologicamente() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p2, "INPC", 101.0, "ok", None)])
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p2, "INPC", 101.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)])
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     out = empalmar([r_2024, r_2018])  # orden inverso
     periodos = list(out.df.index.get_level_values("periodo"))
     assert periodos == sorted(periodos)
@@ -211,12 +212,12 @@ def test_empalmar_traslape_queda_en_anterior() -> None:
 def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
     # CCIF division: "comunicaciones" (2018) → "informacion y comunicacion" (2024)
     r_2018 = _resultado(
-        [(_p1, "comunicaciones", 100.0, "ok", None)],
+        [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
         tipo="CCIF division",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None)],
+        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
         tipo="CCIF division",
     )
@@ -230,12 +231,12 @@ def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
 def test_empalmar_version_nombres_explicito_2024() -> None:
     # Caller pide nomenclatura 2024 explícita.
     r_2018 = _resultado(
-        [(_p1, "comunicaciones", 100.0, "ok", None)],
+        [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
         tipo="CCIF division",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None)],
+        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
         tipo="CCIF division",
     )
@@ -246,12 +247,12 @@ def test_empalmar_version_nombres_explicito_2024() -> None:
 def test_empalmar_version_nombres_explicito_2018_invierte() -> None:
     # version_nombres=2018: r_2024 tramo se invierte (2024 -> 2018).
     r_2018 = _resultado(
-        [(_p1, "comunicaciones", 100.0, "ok", None)],
+        [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
         tipo="CCIF division",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None)],
+        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
         tipo="CCIF division",
     )
@@ -260,9 +261,9 @@ def test_empalmar_version_nombres_explicito_2018_invierte() -> None:
 
 
 def test_empalmar_version_nombres_fuera_de_rango_falla() -> None:
-    # inputs 2018+2024, pero pide 2010 como destino: span = 3 pasos, no permitido.
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    # inputs 2018+2024, pide 2010 como destino: span {2010,2018,2024} = 3 pasos > 1.
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     with pytest.raises(InvarianteViolado, match="paso adyacente"):
         empalmar([r_2018, r_2024], version_nombres=2010)
 
@@ -274,12 +275,12 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
     # Como no hay mapa 2010<->2013 catalogado, simulamos con tipo cuyo mapa
     # actualizado 2018->2024 existe. Construimos input ya-empalmado entre 2018 y 2024:
     r_2018 = _resultado(
-        [(_p1, "comunicaciones", 100.0, "ok", None)],
+        [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
         tipo="CCIF division",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None)],
+        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
         tipo="CCIF division",
     )
@@ -292,15 +293,15 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
 
 
 def test_empalmar_inpc_no_afectado_por_normalizacion() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
+    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
     out = empalmar([r_2018, r_2024])
     assert set(out.df.index.get_level_values("indice")) == {"INPC"}
 
 
 def test_empalmar_mensual_emite_warning() -> None:
-    r1 = _resultado([(PeriodoMensual(2024, 1), "INPC", 100.0, "ok", None)], version=2018)
-    r2 = _resultado([(PeriodoMensual(2024, 2), "INPC", 101.0, "ok", None)], version=2024)
+    r1 = _resultado([(PeriodoMensual(2024, 1), "INPC", 100.0, "ok", None), (PeriodoMensual(2024, 2), "INPC", 101.0, "ok", None)], version=2018)
+    r2 = _resultado([(PeriodoMensual(2024, 2), "INPC", 101.5, "ok", None), (PeriodoMensual(2024, 3), "INPC", 102.0, "ok", None)], version=2024)
     with pytest.warns(UserWarning):
         empalmar([r1, r2])
 
@@ -337,10 +338,13 @@ def test_rebasar_proporcional() -> None:
     assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(135.0 * 100.0 / 133.112)
 
 
-def test_rebasar_periodo_inexistente_falla() -> None:
+def test_rebasar_periodo_inexistente_emite_warning_y_no_rebase() -> None:
+    # Índice sin dato en periodo_referencia → warning + valores originales intactos.
     r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r3, "INPC", 135.0, "ok", None)])
-    with pytest.raises(InvarianteViolado):
-        rebasar(r, _r2)
+    with pytest.warns(UserWarning, match="sin dato"):
+        rb = rebasar(r, _r2)
+    assert rb.df.at[(_r1, "INPC"), "indice_replicado"] == pytest.approx(120.0)
+    assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(135.0)
 
 
 def test_rebasar_sin_datos_en_referencia_falla() -> None:

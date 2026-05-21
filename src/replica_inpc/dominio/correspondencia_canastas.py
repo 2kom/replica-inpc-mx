@@ -305,6 +305,19 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
         }
     },
     "SCIAN rama": {
+        2010: {
+            # El CSV de la canasta 2010 exporta estos 6 índices sin punto final.
+            # El CSV de la canasta 2013 tiene punto final en los mismos índices
+            # (artefacto de exportación; el contenido de genéricos es idéntico).
+            # Sin este mapa, empalmar([r_2010, r_2013]) trata ambas variantes como
+            # índices distintos → duplicado al aplicar el mapa 2013→2018.
+            "2211 generacion, transmision y distribucion de energia electrica": "2211 generacion, transmision y distribucion de energia electrica.",
+            "2221 captacion, tratamiento y suministro de agua": "2221 captacion, tratamiento y suministro de agua.",
+            "8122 lavanderias y tintorerias": "8122 lavanderias y tintorerias.",
+            "8123 servicios funerarios y administracion de cementerios": "8123 servicios funerarios y administracion de cementerios.",
+            "8124 estacionamientos y pensiones para vehiculos automotores": "8124 estacionamientos y pensiones para vehiculos automotores.",
+            "9312 administracion publica en general": "9312 administracion publica en general.",
+        },
         2013: {
             # Renombres 2013 -> 2018 incluidos solo cuando pasan tres filtros:
             # 1) nombre/codigo compatible entre versiones SCIAN oficiales,

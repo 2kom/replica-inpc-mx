@@ -307,9 +307,9 @@ def empalmar(
 
 | parámetro | tipo api | contrato |
 |---|---|---|
-| `resultados` | `list[ResultadoIndice]` | tramos a unir; orden cronológico; al menos dos elementos |
-| `forzar` | `bool` | si `True`, permite empalmar resultados con `periodo_referencia` distintos emitiendo `UserWarning` |
-| `version_nombres` | `Literal[2010, 2013, 2018, 2024] \| None` | versión de referencia para nombres de categorías; debe estar en el rango de las nomenclaturas de los inputs (± 1 paso adyacente en `(2010, 2013, 2018, 2024)`); `None` = versión más reciente de los inputs (`max(versions)`) |
+| `resultados` | `list[ResultadoIndice]` | tramos a unir; al menos dos elementos; mismo `tipo` |
+| `forzar` | `bool` | si `True`, permite junturas desalineadas emitiendo `UserWarning`; ver semántica abajo |
+| `version_nombres` | `Literal[2010, 2013, 2018, 2024] \| None` | vocabulario de nombres de categorías en el output; `None` = `max(versions)` de los inputs |
 
 ##### Retorno
 
@@ -323,38 +323,39 @@ def empalmar(
 |---|---|
 | lista vacía o con un solo elemento | `InvarianteViolado` |
 | `tipo` distinto entre resultados | `InvarianteViolado` |
-| `periodo_referencia` distintos con `forzar=False` | `InvarianteViolado` |
-| `periodo_referencia` distintos con `forzar=True` | `UserWarning` |
-| nomenclaturas (inputs + `version_nombres`) con span > 1 paso adyacente en `(2010, 2013, 2018, 2024)` | `InvarianteViolado` |
+| topología no-PATH: par consecutivo sin periodo compartido | `InvarianteViolado` |
+| topología no-PATH: par no-consecutivo con periodos compartidos | `InvarianteViolado` |
+| nomenclaturas de inputs + `version_nombres` abarcan > 1 paso adyacente | `InvarianteViolado` |
+| `tramo_i.periodo_referencia ∉ {None, periodo_frontera}` con `forzar=False` | `InvarianteViolado` |
+| `tramo_i.periodo_referencia ∉ {None, periodo_frontera}` con `forzar=True` | `UserWarning` |
 
 ##### Notas
 
 - solo une tramos del mismo `tipo`; no hace rebase automático
-- `None` + valor explícito → resultado hereda el valor explícito (no requiere `forzar`)
-- renombrado de categorías lo aplica `empalmar` de dominio vía `RENOMBRES_INDICES` en `correspondencia_canastas.py`; `version_nombres` selecciona qué convención usar
-- `version_nombres=None` → versión más reciente de los inputs (`max(versions)`)
-- `version_nombres=X` → dominio usa X como versión canónica contra `RENOMBRES_INDICES`; si no existe mapa para ese `(tipo, X)`, los índices de ese tramo no se renombran (no-op silencioso a nivel de mapa faltante; el span entre nomenclaturas sigue restringido por la invariante de errores)
-- las correspondencias de nombres solo están catalogadas entre pares vecinos `2010↔2013`, `2013↔2018`, `2018↔2024`; saltos no contiguos no se pueden expresar en una sola llamada — el caller debe encadenar `empalmar` por pares vecinos
+- **topología PATH**: ordenados cronológicamente, cada par consecutivo comparte exactamente 1 periodo (la frontera); ningún par no-consecutivo comparte periodos
+- **propiedad de la frontera**: el tramo anterior posee `(frontera, indice)` si ese índice existe en él; si no existe, el tramo posterior lo aporta — garantiza cobertura completa de índices versión-específicos
+- **semántica de `forzar`**: `forzar=False` requiere que para cada frontera entre tramos consecutivos, `tramo_i.periodo_referencia ∈ {None, periodo_frontera}` — es decir, el tramo precedente fue rebasado exactamente en la juntura (valores alineados) o no tiene base explícita; `forzar=True` omite esa verificación permitiendo junturas con escala discontinua
+- renombrado de categorías vía `RENOMBRES_INDICES` en `correspondencia_canastas.py`; si no existe mapa para `(tipo, version_origen)`, los índices de ese tramo no se renombran (no-op silencioso)
+- `version_nombres=None` → `max(versions)` de inputs; `version_nombres=X` → X como vocabulario canónico
 
 ##### Ejemplo
 
 ```python
-# inputs 2018+2024; nombres quedan con convención 2024 (más reciente)
+# par básico 2018+2024
 hist = rep.empalmar([indice_2018, indice_2024])
 
-# inputs 2018+2024; forzar convención 2018 (reverse del mapa 2018↔2024)
-hist = rep.empalmar([indice_2018, indice_2024], version_nombres=2018)
+# historia completa en una sola llamada
+hist = rep.empalmar([indice_2010, indice_2013, indice_2018, indice_2024], forzar=True)
 
-# Cadena explícita 2010 → 2024 (encadenar por pares vecinos)
-intermedio_a = rep.empalmar([indice_2010, indice_2013])      # nomenclatura 2013
-intermedio_b = rep.empalmar([intermedio_a, indice_2018])     # nomenclatura 2018
-hist = rep.empalmar([intermedio_b, indice_2024])             # nomenclatura 2024
+# pre-era rebased + pos-era: juntura alineada, forzar=False OK
+inpc_pre_r = rep.rebasar(rep.empalmar([indice_2010, indice_2013]), "2Q Jul 2018")
+hist = rep.empalmar([inpc_pre_r, indice_2018, indice_2024])
 
-# FALLA: salto 2010 → 2024 directo (span 3 pasos)
-rep.empalmar([indice_2010, indice_2024])  # InvarianteViolado
+# FALLA: par no-consecutivo sin periodo compartido
+rep.empalmar([indice_2010, indice_2018])  # InvarianteViolado (sin frontera compartida)
 
-# FALLA: version_nombres fuera del rango adyacente de los inputs
-rep.empalmar([indice_2018, indice_2024], version_nombres=2010)  # InvarianteViolado
+# FALLA: juntura desalineada sin forzar
+rep.empalmar([indice_2013, indice_2018])  # InvarianteViolado — indice_2013.ref=2Q Mar 2013 ≠ 2Q Jul 2018
 ```
 
 #### rebasar — RESUELTO

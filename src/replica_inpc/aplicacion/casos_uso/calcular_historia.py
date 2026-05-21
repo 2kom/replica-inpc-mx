@@ -97,7 +97,7 @@ class CalcularHistoria:
 
         acc = resultados[0][1]
         for version, resultado in resultados[1:]:
-            acc = empalmar([acc, resultado], version_nombres=version)
+            acc = empalmar([acc, resultado], forzar=True, version_nombres=version)
 
         if periodicidad == "mensual":
             acc = a_mensual(acc)
