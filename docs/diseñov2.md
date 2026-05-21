@@ -1072,3 +1072,590 @@ Solo filas computables — sin filas `sin_datos`/`fallida`.
 DataFrame vacío si todos los índices tuvieron dato exacto en ambos extremos; de lo contrario, una fila por índice ajustado.
 
 ---
+
+## 5.9 Modelos de validación
+
+`ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` encapsulan la comparación entre un resultado replicado y las series publicadas por INEGI. Todas heredan de `Validacion` (ver [5.5](#55-modelo-base)).
+
+Sin `.df` ni `.pipe()` — las validaciones son terminales. `_repr_html_()` expone `.resumen` en notebooks. El `Resultado*` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`. `TIPOS_CON_VALIDACION` en [5.2](#52-tipos-compartidos). `estado_validacion` en [5.1](#51-semántica-compartida).
+
+**ValidacionIndice — constructor**
+
+Compara un `ResultadoIndice` contra series de nivel publicadas por INEGI.
+
+```python
+ValidacionIndice(
+    resultado: ResultadoIndice,
+    resultado_largo_df: pd.DataFrame,
+    resumen_df: pd.DataFrame,
+    reporte_df: pd.DataFrame,
+    diagnostico_df: pd.DataFrame,
+)
+```
+
+| Invariante | Condición | Error |
+| --- | --- | --- |
+| Tipos validables | todos `manifiesto[i].tipo` ∈ `TIPOS_CON_VALIDACION` | `InvarianteViolado` |
+| Columnas Vista | `resultado_largo_df` contiene `indice_replicado`, `indice_inegi`, `error_absoluto`, `estado_validacion` | `InvarianteViolado` |
+
+**`.resultado`** — `Vista(resultado_largo_df, ["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"])`.
+
+**`.resultado.largo` — columnas**
+
+Hereda columnas de `ResultadoIndice.resultado.largo` y agrega columnas de comparación INEGI:
+
+| Columna | Tipo | NaN cuando |
+| --- | --- | --- |
+| `version` | `int` | nunca |
+| `tipo` | `str` | nunca |
+| `indice_replicado` | `float` | `estado_calculo` = `sin_datos` o `fallida` |
+| `estado_calculo` | `str` | nunca |
+| `motivo_error` | `str` | `estado_calculo` = `ok` o `parcial` |
+| `indice_inegi` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi}`; en `sin_calculo` conserva el valor INEGI si existe |
+| `error_absoluto` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi, sin_calculo}` |
+| `estado_validacion` | `str` | nunca |
+
+**`.resultado.ancho`** — pivota las cuatro columnas de Vista por periodo. Índice: MultiIndex `(indice, metrica)`. Columnas: periodos.
+
+**`.resumen` — esquema**
+
+Extiende `ResultadoIndice.resumen`. Índice: `id_corrida`. Una fila por `ManifestUnidad`. Agrega columnas de validación:
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `n_comparables` | `int` | filas con comparación INEGI disponible (`ok`, `diferencia_detectada`, `diferencia_por_parcial`) |
+| `n_fuera_rango_inegi` | `int` | periodos sin publicación INEGI para ese indicador |
+| `n_no_disponibles` | `int` | periodos en rango publicado pero sin valor |
+| `n_diferencia_por_parcial` | `int` | diferencias atribuibles a datos parciales; `0` para resultados quincenales |
+| `n_sin_calculo` | `int` | filas con `estado_calculo` = `sin_datos` o `fallida`; comparación imposible desde el lado replicado |
+| `error_absoluto_max` | `float` | `NaN` si `n_comparables == 0` |
+| `estado_validacion_global` | `str` | `ok`, `diferencia_detectada`, `sin_calculo`, `diferencia_por_parcial`, `no_disponible`; `fuera_rango_inegi` no afecta el estado global |
+
+**`.reporte` — esquema**
+
+Extiende `ResultadoIndice.reporte`. Índice: MultiIndex `(periodo, indice)`. Agrega:
+
+| Columna | Tipo | NaN cuando |
+| --- | --- | --- |
+| `indice_replicado` | `float` | `estado_calculo` = `sin_datos` o `fallida` |
+| `indice_inegi` | `float` | `estado_validacion` ∈ `{fuera_rango_inegi, no_disponible}` |
+| `error_absoluto` | `float` | `estado_validacion` ∈ `{fuera_rango_inegi, no_disponible, sin_calculo}` |
+| `estado_validacion` | `str` | nunca |
+
+**`.diagnostico` — esquema**
+
+Índice: entero. Filas donde `estado_validacion != ok` (`diferencia_detectada`, `diferencia_por_parcial`, `sin_calculo`, `no_disponible`, `fuera_rango_inegi`).
+
+| Columna | Tipo | NaN cuando |
+| --- | --- | --- |
+| `id_corrida` | `str` | nunca |
+| `version` | `int` | nunca |
+| `tipo` | `str` | nunca |
+| `periodo` | `PeriodoQuincenal \| PeriodoMensual` | nunca |
+| `indice` | `str` | nunca |
+| `estado_validacion` | `str` | nunca |
+| `estado_calculo` | `str` | nunca |
+| `indice_replicado` | `float` | `estado_calculo` = `sin_datos` o `fallida` |
+| `indice_inegi` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi}` |
+| `error_absoluto` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi, sin_calculo}` |
+
+`estado_calculo` da contexto adicional para filas `diferencia_detectada`: si `estado_calculo = ok`, la diferencia no tiene causa conocida y merece mayor atención.
+
+**ValidacionVariacion y ValidacionIncidencia**
+
+Misma estructura que `ValidacionIndice`. Diferencias:
+
+| Aspecto | `ValidacionVariacion` | `ValidacionIncidencia` |
+| --- | --- | --- |
+| Input | `ResultadoVariacion` | `ResultadoIncidencia` |
+| Columnas Vista | `variacion_pp`, `variacion_inegi_pp`, `error_absoluto_pp`, `estado_validacion` | `incidencia_pp`, `incidencia_inegi_pp`, `error_absoluto_pp`, `estado_validacion` |
+| Invariante de tipo | `manifiesto.tipo` ∈ `TIPOS_CON_VALIDACION` | idem |
+| `.resumen` base | extiende `ResultadoVariacion.resumen` (índice `0`, una fila) | extiende `ResultadoIncidencia.resumen` (índice `0`, una fila) |
+
+**Asimetría respecto a `ValidacionIndice`:** el `.resultado.largo` de derivados solo contiene filas computables — sin filas `sin_datos`/`fallida`. Las combinaciones no computables aparecen en `.reporte`/`.diagnostico` con `estado_validacion = sin_calculo`, pero no en `.resultado.largo`. Por esto, el `.resumen` de derivados no incluye `n_sin_calculo` y `estado_validacion_global` nunca vale `sin_calculo`.
+
+**`.resultado.largo` de derivados — columnas adicionales sobre la base derivada**
+
+| Columna | `ValidacionVariacion` | `ValidacionIncidencia` |
+| --- | --- | --- |
+| `variacion_pp` / `incidencia_pp` | `float` (nunca NaN en filas presentes) | `float` (nunca NaN en filas presentes) |
+| `variacion_inegi_pp` / `incidencia_inegi_pp` | `float` / NaN cuando `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi}` | idem |
+| `error_absoluto_pp` | `float` / NaN cuando `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi, sin_calculo}` | idem |
+| `estado_validacion` | `str`, nunca NaN | idem |
+
+**`.resumen` de derivados — columnas de validación**
+
+| Columna | Tipo | Descripción |
+| --- | --- | --- |
+| `n_comparables` | `int` | filas con comparación INEGI disponible |
+| `n_fuera_rango_inegi` | `int` | filas sin publicación INEGI para ese indicador/periodo |
+| `n_no_disponibles` | `int` | filas en rango pero sin valor INEGI |
+| `n_diferencia_por_parcial` | `int` | diferencias atribuibles a datos parciales; `0` para quincenales |
+| `error_absoluto_max_pp` | `float` | `NaN` si `n_comparables == 0` |
+| `estado_validacion_global` | `str` | `ok`, `diferencia_detectada`, `diferencia_por_parcial`, `no_disponible` |
+
+**`.reporte` de derivados — columnas adicionales**
+
+Extiende `ResultadoVariacion.reporte` / `ResultadoIncidencia.reporte`. Índice: MultiIndex `(periodo, indice)`. Agrega:
+
+| Columna | `ValidacionVariacion` | `ValidacionIncidencia` | NaN cuando |
+| --- | --- | --- | --- |
+| `variacion_pp` / `incidencia_pp` | `float` | `float` | `estado_validacion = sin_calculo` |
+| `variacion_inegi_pp` / `incidencia_inegi_pp` | `float` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi}` |
+| `error_absoluto_pp` | `float` | `float` | `estado_validacion` ∈ `{no_disponible, fuera_rango_inegi, sin_calculo}` |
+| `estado_validacion` | `str` | `str` | nunca |
+
+`sin_calculo` aparece solo en filas no computables — presentes en `.reporte`/`.diagnostico` pero ausentes de `.resultado.largo`.
+
+**`.diagnostico` de derivados — columnas**
+
+| Columna | `ValidacionVariacion` | `ValidacionIncidencia` |
+| --- | --- | --- |
+| `tipo` | `str` | `str` |
+| `clase_variacion` | `str` | — |
+| `clase_incidencia` | — | `str` |
+| `periodo` | `PeriodoX` | `PeriodoX` |
+| `indice` | `str` | `str` |
+| `version_t` | `int` | `int` |
+| `estado_validacion` | `str` | `str` |
+| `estado_calculo` | `str` | `str` |
+| `variacion_pp` / `incidencia_pp` | `float` / NaN en `sin_calculo` | `float` / NaN en `sin_calculo` |
+| `variacion_inegi_pp` / `incidencia_inegi_pp` | `float` / NaN | idem |
+| `error_absoluto_pp` | `float` / NaN | idem |
+
+---
+
+## 5.10 Conversión y combinación
+
+Funciones puras en `dominio/conversion.py`. Sin IO; sin infraestructura; entradas no mutadas.
+
+**empalmar**
+
+```python
+empalmar(
+    resultados: list[ResultadoIndice],
+    forzar: bool = False,
+    version_nombres: VersionCanasta | None = None,
+) -> ResultadoIndice
+```
+
+Concatena tramos del mismo `tipo` en un único `ResultadoIndice`, resolviendo la propiedad de la frontera por `(periodo, indice)` y normalizando nomenclatura de categorías entre versiones. Los tramos se ordenan automáticamente por periodo mínimo; no es necesario pasarlos en orden.
+
+| Condición | Error |
+| --- | --- |
+| `len(resultados) < 2` | `InvarianteViolado` |
+| `tipo` distinto entre inputs | `InvarianteViolado` |
+| par consecutivo sin periodo compartido | `InvarianteViolado` |
+| par consecutivo con más de 1 periodo compartido | `InvarianteViolado` |
+| par no-consecutivo con periodos compartidos | `InvarianteViolado` |
+| nomenclaturas de inputs + `version_nombres` abarcan > 1 paso adyacente en `(2010, 2013, 2018, 2024)` | `InvarianteViolado` |
+| `tramo_i.periodo_referencia ∉ {None, frontera}` con `forzar=False` | `InvarianteViolado` |
+| `tramo_i.periodo_referencia ∉ {None, frontera}` con `forzar=True` | `UserWarning` |
+| inputs con periodos mensuales | `UserWarning` |
+
+**Regla de propiedad de la frontera:**
+
+| Periodo | Índice | Quién aporta |
+| --- | --- | --- |
+| antes de frontera | cualquiera | tramo anterior |
+| frontera | existe en tramo anterior | tramo anterior |
+| frontera | solo existe en tramo posterior | tramo posterior |
+| después de frontera | cualquiera | tramo posterior |
+
+Garantiza cobertura completa de índices versión-específicos desde su primer periodo.
+
+Retorno: `ResultadoIndice` con `.manifiesto` = concatenación de todos los inputs; `.periodo_referencia` = del último tramo con ref explícita, o `None` si todos son `None`; nombres de categorías normalizados según `version_nombres` (default: `max(versions)` de inputs) vía `RENOMBRES_INDICES` ([5.13](#513-correspondencia)). Si el renombre colapsa dos variantes del mismo índice, se preserva la primera aparición (dedup silencioso, `keep="first"`).
+
+Solo opera sobre `ResultadoIndice`. No existe `empalmar` para derivados — siempre empalmar el índice fuente antes de calcular variaciones o incidencias.
+
+```python
+hist = empalmar([indice_2018, indice_2024])
+hist = empalmar([indice_2010, indice_2013, indice_2018, indice_2024], forzar=True)
+```
+
+---
+
+**rebasar**
+
+```python
+rebasar(
+    resultado: ResultadoIndice,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual,
+    valor_base: float = 100.0,
+) -> ResultadoIndice
+```
+
+Reexpresa cada índice como `valor / valor_en_ref × valor_base`. Endógeno: el denominador es el valor replicado propio del resultado en `periodo_referencia`.
+
+Comportamiento por índice:
+
+| Condición | Resultado |
+| --- | --- |
+| `(periodo_referencia, indice)` no existe en el df | `UserWarning` + skip (huérfano; conserva escala original) |
+| `estado_calculo ∉ {ok, parcial, rellenado}` en `periodo_referencia` | `InvarianteViolado` |
+| `indice_replicado` es NaN en `periodo_referencia` | `InvarianteViolado` |
+| `indice_replicado == 0` en `periodo_referencia` | `InvarianteViolado` |
+
+Solo reescala filas con `estado_calculo ∈ {ok, parcial, rellenado}`; filas `sin_datos`/`fallida` en otros periodos no se modifican.
+
+Retorno: nuevo `ResultadoIndice` con `.periodo_referencia` seteado al periodo indicado. Mismo mecanismo para rebase intra-canasta y cross-canasta.
+
+```python
+rebased = rebasar(hist, periodo_referencia=PeriodoQuincenal(2018, 7, 2))
+```
+
+---
+
+**a_mensual**
+
+```python
+a_mensual(resultado: ResultadoIndice) -> ResultadoIndice
+```
+
+Convierte un resultado quincenal a mensual promediando 1Q y 2Q de cada mes.
+
+| Condición | Error |
+| --- | --- |
+| `resultado` con periodos mensuales | `InvarianteViolado` |
+
+Reglas de agregación por `(mes, indice)` (prioridad descendente):
+
+| Condición | `indice_replicado` | `estado_calculo` |
+| --- | --- | --- |
+| alguna quincena es `fallida` | `NaN` | `fallida` |
+| ninguna `fallida`, ambas con valor, alguna `rellenado` | promedio simple 1Q + 2Q | `rellenado` |
+| ninguna `fallida`, ambas con valor, ninguna `rellenado` | promedio simple 1Q + 2Q | `ok` |
+| ninguna `fallida`, solo una con valor | valor de la quincena disponible | `parcial` |
+| ninguna `fallida`, ninguna con valor | `NaN` | `sin_datos` |
+
+Retorno: `ResultadoIndice` con periodos `PeriodoMensual` y `.periodo_referencia = None`. El `None` es invariante — el promedio destruye la escala del rebase original; usar siempre `a_mensual` antes de `rebasar` cuando se necesitan datos mensuales rebased.
+
+Único mecanismo para obtener datos mensuales — nunca cargar CSV mensuales directamente.
+
+```python
+mensual = a_mensual(indice)
+mensual_rebased = rebasar(a_mensual(indice), periodo_referencia=PeriodoMensual(2018, 7))
+```
+
+---
+
+## 5.11 Cálculo de variaciones e incidencias
+
+Funciones puras en `dominio/calculo/variaciones.py` y `dominio/calculo/incidencias.py`. Sin IO; sin infraestructura; entradas no mutadas.
+
+**Frecuencia**
+
+```python
+Frecuencia = Literal[
+    "quincenal", "mensual", "bimestral", "trimestral",
+    "cuatrimestral", "semestral", "anual",
+]
+```
+
+Lags válidos por tipo de periodo:
+
+| Frecuencia | Lag quincenal | Lag mensual |
+| --- | --- | --- |
+| quincenal | 1 | — |
+| mensual | 2 | 1 |
+| bimestral | 4 | 2 |
+| trimestral | 6 | 3 |
+| cuatrimestral | 8 | 4 |
+| semestral | 12 | 6 |
+| anual | 24 | 12 |
+
+---
+
+**Variaciones** (`dominio/calculo/variaciones.py`)
+
+```python
+variacion_periodica(
+    resultado: ResultadoIndice,
+    frecuencia: Frecuencia,
+) -> ResultadoVariacion
+
+variacion_acumulada_anual(
+    resultado: ResultadoIndice,
+) -> ResultadoVariacion
+
+variacion_desde(
+    resultado: ResultadoIndice,
+    desde: PeriodoQuincenal | PeriodoMensual,
+    hasta: PeriodoQuincenal | PeriodoMensual | None = None,
+    incluir_parciales: bool = True,
+) -> ResultadoVariacion
+```
+
+`variacion_periodica` — variación `(I_t / I_base − 1) × 100` de cada `(periodo, indice)` contra N periodos anteriores según `frecuencia`. `clase_variacion = "periodica_<frecuencia>"`.
+
+`variacion_acumulada_anual` — variación de cada periodo contra el cierre del año anterior: `PeriodoQuincenal(año − 1, 12, 2)` o `PeriodoMensual(año − 1, 12)`. `clase_variacion = "acumulada_anual"`.
+
+`variacion_desde` — variación total del rango `[desde, hasta]`; una fila por índice. `hasta = None` usa el último periodo disponible. `clase_variacion = "desde"`.
+
+Con `incluir_parciales = True`, un índice sin dato exacto en `desde`/`hasta` usa el primer/último periodo válido del rango; el periodo real utilizado queda en `ResultadoVariacion.indices_parciales`. Con `incluir_parciales = False`, los índices con estado derivado `parcial` se descartan de `.df`.
+
+`estado_calculo` en `ResultadoVariacion.df` solo puede ser `ok` o `parcial`. El estado `rellenado` del fuente se absorbe como `ok` en derivados — variaciones no propagan `rellenado`.
+
+| Condición | Función | Error |
+| --- | --- | --- |
+| `frecuencia` inválida para el tipo de periodo | `variacion_periodica` | `InvarianteViolado` |
+| `desde` no existe en el resultado | `variacion_desde` | `InvarianteViolado` |
+| `hasta` no existe en el resultado | `variacion_desde` | `InvarianteViolado` |
+| `hasta < desde` | `variacion_desde` | `InvarianteViolado` |
+| sin periodos computables | todas | `InvarianteViolado` |
+
+---
+
+**Incidencias** (`dominio/calculo/incidencias.py`)
+
+```python
+incidencia_periodica(
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
+    frecuencia: Frecuencia,
+) -> ResultadoIncidencia
+
+incidencia_acumulada_anual(
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
+) -> ResultadoIncidencia
+
+incidencia_desde(
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
+    desde: PeriodoQuincenal | PeriodoMensual | None = None,
+    hasta: PeriodoQuincenal | PeriodoMensual | None = None,
+    incluir_parciales: bool = True,
+) -> ResultadoIncidencia
+```
+
+Combinan un resultado `tipo = "inpc"` con un resultado de clasificación (`COG`, `CCIF division`, etc.) para calcular la contribución de cada categoría a la variación del INPC. Propiedad clave de `incidencia_acumulada_anual`: la suma de `incidencia_pp` de todos los genéricos en un periodo es igual a la variación acumulada anual del INPC en ese periodo.
+
+Fórmula: `inc_i = w_i × (I_t / f_h_i − I_base / f_h_i) / (INPC_base / f_h_INPC)`
+
+Dos correcciones vs. la fórmula naive:
+
+- **Fix 1** — `w_i` usa los ponderadores de la canasta del **periodo base**, no del periodo `t`.
+- **Fix 2** — de-encadenamiento: cuando `t` y `base` son de la misma versión y esa versión usa `LaspeyresEncadenado`, se divide por `f_h_i` (valor replicado en el traslape ÷ 100). Versiones con `LaspeyresDirecto` tienen `f_h_i = 1`.
+
+| Condición | Función | Error |
+| --- | --- | --- |
+| `inpc.periodo_referencia ≠ clasificacion.periodo_referencia` | todas | `InvarianteViolado` |
+| `inpc.tipo ≠ "inpc"` | todas | `ErrorConfiguracion` |
+| `clasificacion.tipo ∉ COLUMNAS_CLASIFICACION` | todas | `ErrorConfiguracion` |
+| falta `canastas[v]` para alguna versión en `clasificacion` | todas | `ErrorConfiguracion` |
+| `frecuencia` inválida para el tipo de periodo | `incidencia_periodica` | `InvarianteViolado` |
+| `desde` o `hasta` no existen en el resultado | `incidencia_desde` | `InvarianteViolado` |
+| `hasta < desde` | `incidencia_desde` | `InvarianteViolado` |
+| sin genéricos computables | todas | `InvarianteViolado` |
+
+`incidencia_desde` con `desde = None` usa el primer periodo de `clasificacion`; con `hasta = None` usa el último. Comportamiento de `incluir_parciales` análogo a `variacion_desde`; el periodo real queda en `ResultadoIncidencia.indices_parciales`. Estado `rellenado` del fuente se absorbe como `ok` en derivados.
+
+```python
+inc = incidencia_periodica(inpc_hist, cog, {2018: c2018, 2024: c2024}, "mensual")
+inc = incidencia_desde(inpc, cog, canastas, desde=PeriodoMensual(2024, 1))
+```
+
+---
+
+## 5.12 Funciones de consulta
+
+Funciones thin en `dominio/consulta/variaciones.py` y `dominio/consulta/incidencias.py`. Sin estado ni IO. Devuelven escalares, tuplas o `DataFrame` — nunca un `ResultadoX`. La lógica común vive en `dominio/consulta/_comun.py`; los módulos son envoltorios parametrizados por columna (`variacion_pp` / `incidencia_pp`).
+
+Todas lanzan `InvarianteViolado` si `periodo`, `desde`, `hasta` o `indice` no existen en el resultado, o si `hasta < desde`.
+
+**Variaciones** (`consulta/variaciones.py`)
+
+```python
+inflacion_en(resultado: ResultadoVariacion, periodo: Periodo) -> pd.DataFrame
+```
+Todas las categorías en `periodo`; índice del DataFrame = `indice`.
+
+```python
+inflacion_acumulada(resultado, desde, hasta=None, *, indice) -> float
+```
+Suma de `variacion_pp` en `[desde, hasta]` para `indice`.
+
+```python
+inflacion_promedio(resultado, desde=None, hasta=None, *, indice, metodo="tcac") -> float
+```
+`metodo = "simple"` → media aritmética. `metodo = "tcac"` → tasa de crecimiento anual compuesta: `Π(1 + v/100)` anualizado con `ppy = 24` (quincenal) o `12` (mensual). Lanza `InvarianteViolado` para `metodo` distinto de `"tcac"` o `"simple"`.
+
+```python
+inflacion_maxima(resultado, desde=None, hasta=None, indice=None) -> tuple[Periodo, str, float]
+inflacion_minima(resultado, desde=None, hasta=None, indice=None) -> tuple[Periodo, str, float]
+```
+`(periodo, indice, variacion_pp)` del máximo/mínimo en el rango. `indice = None` busca entre todos. Desempate: primer `(periodo, indice)` en orden del índice.
+
+---
+
+**Incidencias** (`consulta/incidencias.py`)
+
+```python
+incidencia_en(resultado: ResultadoIncidencia, periodo: Periodo) -> pd.DataFrame
+incidencia_acumulada(resultado, desde, hasta=None, *, indice) -> float
+incidencia_promedio(resultado, desde=None, hasta=None, *, indice) -> float
+mayor_incidencia(resultado, desde=None, hasta=None, indice=None) -> tuple[Periodo, str, float]
+menor_incidencia(resultado, desde=None, hasta=None, indice=None) -> tuple[Periodo, str, float]
+```
+
+Análogas a las de variaciones sobre `incidencia_pp`. `incidencia_promedio` no tiene parámetro `metodo` — siempre media aritmética; TCAC no aplica a incidencias.
+
+---
+
+## 5.13 Correspondencia
+
+**alinear_genericos** (`dominio/correspondencia.py`)
+
+```python
+alinear_genericos(
+    canasta: CanastaCanonica,
+    serie: SerieNormalizada,
+) -> SerieNormalizada
+```
+
+Verifica que todos los genéricos de `canasta` estén en `serie` (por igualdad exacta de `generico_limpio`) y devuelve una `SerieNormalizada` filtrada y reordenada al orden de `canasta.df.index`. El `mapeo` resultante se filtra al mismo subconjunto.
+
+| Condición | Error |
+| --- | --- |
+| algún genérico de `canasta` no existe en `serie` | `CorrespondenciaInsuficiente` |
+
+---
+
+**RENOMBRES_INDICES** (`dominio/correspondencia_canastas.py`)
+
+```python
+RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]]
+# tipo → version_origen → {nombre_viejo: nombre_canonico}
+```
+
+Mapas de renombre 1:1 validados para `"CCIF division"`, `"CCIF grupo"`, `"CCIF clase"`, `"SCIAN sector"` y `"SCIAN rama"`. `empalmar` los consume para normalizar nomenclatura entre versiones ([5.10](#510-conversión-y-combinación)).
+
+El mismo archivo contiene tablas de cambios de cobertura entre versiones de canasta (`RENOMBRES_GENERICOS`, `DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`). Son datos de referencia — ninguna función del dominio las consume en tiempo de ejecución.
+
+---
+
+## 5.14 Validación — validacion/
+
+Tres funciones en `dominio/validacion/`. Privadas — llamadas solo desde `api/validaciones.py`. Comparan resultados replicados contra datos publicados por INEGI mediante `FuenteValidacion` ([5.5](#55-modelo-base)). La fuente es una dependencia inyectada; sin IO directo.
+
+**validar_indices** (`validacion/indices.py`)
+
+```python
+validar_indices(
+    resultado: ResultadoIndice,
+    fuente: FuenteValidacion,
+    tolerancia: float = 0.0009,
+) -> ValidacionIndice
+```
+
+Solo admite tipos en `TIPOS_CON_VALIDACION` ([5.2](#52-tipos-compartidos)). Lanza `InvarianteViolado` para otros tipos.
+
+---
+
+**validar_variaciones** (`validacion/variaciones.py`)
+
+```python
+validar_variaciones(
+    resultado: ResultadoVariacion,
+    fuente: FuenteValidacion,
+    tolerancia_pp: float = 0.009,
+) -> ValidacionVariacion
+```
+
+Solo admite `resultado.manifiesto.tipo ∈ TIPOS_CON_VALIDACION`. Solo las clases siguientes son comparables contra INEGI:
+
+| `clase_variacion` | `tipo_variacion` en `FuenteValidacion` |
+| --- | --- |
+| `periodica_quincenal` | `periodica` |
+| `periodica_mensual` | `periodica` |
+| `periodica_anual` | `interanual` |
+| `acumulada_anual` | `acumulada_anual` |
+
+Cualquier otra clase lanza `ErrorConfiguracion`.
+
+---
+
+**validar_incidencias** (`validacion/incidencias.py`)
+
+```python
+validar_incidencias(
+    resultado: ResultadoIncidencia,
+    fuente: FuenteValidacion,
+    tolerancia_pp: float = 0.009,
+) -> ValidacionIncidencia
+```
+
+Solo admite `resultado.manifiesto.tipo ∈ TIPOS_CON_VALIDACION`. Solo `clase_incidencia = "periodica_mensual"` es comparable; INEGI únicamente publica incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
+
+---
+
+**Estados de validación y rollup**
+
+| `estado_validacion` | Cuando |
+| --- | --- |
+| `ok` | error ≤ tolerancia |
+| `diferencia_detectada` | error > tolerancia y `estado_calculo ∈ {ok, rellenado}` |
+| `diferencia_por_parcial` | error > tolerancia y `estado_calculo = parcial` |
+| `sin_calculo` | `estado_calculo ∈ {sin_datos, fallida}` — sin valor replicado |
+| `fuera_rango_inegi` | periodo no cubierto por la fuente |
+| `no_disponible` | INEGI no publicó valor para ese `(periodo, indice)` |
+
+`rollup_global` por prioridad descendente: `diferencia_detectada` > `diferencia_por_parcial` > `sin_calculo` > `no_disponible` (solo cuando no hay ninguna fila comparable) > `ok`. `fuera_rango_inegi` nunca afecta el estado global.
+
+`estado_validacion_global` en `.resumen` de `ValidacionVariacion` y `ValidacionIncidencia` nunca toma el valor `sin_calculo` — su `.resumen` se calcula solo sobre filas computables de `.resultado.largo`. Las filas `sin_calculo` aparecen en `.reporte` y `.diagnostico`, pero no afectan el resumen de derivados.
+
+---
+
+**Modelos de salida**
+
+`ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` heredan de `Validacion` (abstract). Exponen `.resultado`, `.resumen`, `.reporte` y `.diagnostico`; sin `.df` ni `.pipe()`.
+
+| Propiedad | Contenido |
+| --- | --- |
+| `.resultado.largo` | DataFrame con columna calculada, valor INEGI, `error_absoluto[_pp]` y `estado_validacion` |
+| `.resultado.ancho` | mismo transpuesto, columnas = periodo |
+| `.resumen` | una fila por corrida (`ValidacionIndice`, índice = `id_corrida`) o una fila global (variación/incidencia) |
+| `.reporte` | todas las filas, incluyendo no computables (`fuera_rango_inegi`, `no_disponible`, `sin_calculo`) |
+| `.diagnostico` | solo filas con `estado_validacion ≠ ok` |
+
+---
+
+## 5.15 Errores
+
+Jerarquía completa en `dominio/errores.py`. Todas heredan de `ReplicaInpcError`; las capas internas nunca importan excepciones de librerías externas.
+
+```
+ReplicaInpcError
+├── ErrorImportacion          # falla la corrida inmediatamente al leer datos
+│   ├── ArchivoNoEncontrado
+│   ├── ArchivoVacio
+│   ├── ArchivoCorrupto
+│   ├── EncodingNoLegible
+│   ├── OrientacionNoDetectable
+│   ├── ColumnasMinFaltantes
+│   ├── CanastaNoSoportada
+│   ├── PeriodoNoInterpretable
+│   ├── VersionNoCoincide
+│   ├── SerieVacia
+│   └── PeriodosInsuficientes
+├── ErrorDominio              # contrato interno del dominio violado
+│   └── InvarianteViolado
+├── ErrorCalculo              # falla el cálculo de la corrida
+│   ├── CorrespondenciaInsuficiente
+│   ├── PonderadorFaltante
+│   └── CanastaSinGenericos
+├── ErrorValidacion           # no falla la corrida
+│   ├── FuenteNoDisponible
+│   └── RespuestaInvalida
+├── ErrorConfiguracion        # ensamblado o invocación inválida
+└── ErrorPersistencia         # lectura/escritura de artefactos
+    └── ArtefactoNoEncontrado
+```
+
+Excepciones conscientes documentadas en §1.4:
+- `periodos.py` lanza `ValueError` (no `InvarianteViolado`) para entradas de construcción inválidas.
+- `conversion.py` usa `warnings.warn` (no excepciones) para huérfanos en `rebasar` y para inputs mensuales en `empalmar`.
