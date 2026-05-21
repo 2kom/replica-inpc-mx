@@ -90,70 +90,105 @@ El historial de cambios vive en git.
 
 ### 1.1 Patrón principal: Hexagonal (Ports & Adapters)
 
-El dominio y los casos de uso no conocen CSV, filesystem, APIs ni bases de datos.
+El dominio y los casos de uso no conocen CSV, filesystem ni APIs.
 Solo conocen contratos (puertos). La infraestructura implementa esos contratos mediante adaptadores.
 
-Esto permite agregar nuevas fuentes de entrada, formatos de salida o interfaces
-sin modificar la lógica de negocio.
+Esto permite agregar nuevas fuentes de entrada o formatos de salida sin modificar la lógica de negocio.
 
 **Capas:**
 
-| Capa               | Responsabilidad                                         |
-| ------------------ | ------------------------------------------------------- |
-| `api/`             | Fachada para notebooks — punto de entrada del usuario   |
-| `dominio/`         | Lógica de negocio pura, sin dependencias externas       |
-| `aplicacion/`      | Casos de uso y contratos de puertos                     |
-| `infraestructura/` | Adaptadores concretos (CSV, filesystem, API INEGI, SQL) |
-| `interfaces/`      | CLI                                                     |
+| Capa               | Responsabilidad                                     |
+| ------------------ | --------------------------------------------------- |
+| `api/`             | Fachada pública — punto de entrada desde notebooks  |
+| `dominio/`         | Lógica de negocio pura, sin dependencias externas   |
+| `aplicacion/`      | Casos de uso y contratos de puertos (Protocols)     |
+| `infraestructura/` | Adaptadores concretos (CSV, API INEGI)              |
+
+```mermaid
+graph TD
+    subgraph API["api/"]
+        A["indices · flujos · variaciones · incidencias · validaciones · insumos · config"]
+    end
+    subgraph APP["aplicacion/"]
+        B["calcular_historia"]
+        C["LectorCanasta · LectorSeries · FuenteValidacion"]
+    end
+    subgraph DOM["dominio/"]
+        D["modelos · calculo · consulta · validacion · conversion · correspondencia"]
+    end
+    subgraph INFRA["infraestructura/"]
+        E["lector_canasta_csv · lector_series_csv · fuente_validacion_api"]
+    end
+
+    API --> DOM
+    API --> APP
+    API --> INFRA
+    APP --> DOM
+    INFRA --> APP
+    INFRA --> DOM
+```
 
 ### 1.2 Patrones de diseño
 
 #### Strategy — cálculo del INPC
 
-`laspeyres.py` y `encadenado.py` implementan la misma interfaz `CalculadorBase`.
-El sistema selecciona la estrategia según la versión de canasta:
+`laspeyres_directo.py` y `laspeyres_encadenado.py` implementan la misma interfaz `CalculadorBase`.
+`estrategia.py` selecciona el calculador exclusivamente por `canasta.version`:
 
-- versiones 2010 y 2018 → `LaspeyresDirecto` — $INPC = \sum_j w_j \cdot I_j$
-- versiones 2013 y 2024 → `LaspeyresEncadenado` — $INPC = f \cdot \sum_j w_j \cdot \theta_j \cdot I_j$
+| Versión | Calculador |
+| ------- | ---------- |
+| 2010, 2018 | `LaspeyresDirecto` |
+| 2013 | `LaspeyresEncadenadoT1` |
+| 2024 | `LaspeyresEncadenadoT2` |
 
-Para 2013 y 2024, $\theta_j = \frac{1}{f_{k,j}}$ donde $f_{k,j}$ es el valor de la
-columna `encadenamiento` del genérico $j$: en 2013 actúa como factor de alineación
-dentro de la escala vieja `2Q Dic 2010 = 100`; en 2024 equivale a
-$I_j^{2Q\,\text{Jul}\,2024} / 100$ (nivel publicado en el traslape dividido entre 100).
-
-La canasta codifica qué estrategia usar: `encadenamiento` vacío → directo,
-`encadenamiento` con valores → encadenado.
+Las versiones encadenadas normalizan cada índice por `f_k` (columna `encadenamiento` de la canasta) y aplican un `factor_h` de empalme al resultado. Las fórmulas exactas y la derivación de `f_k` están en §5.6 y §11.20.
 
 Agregar una nueva variante de cálculo no requiere modificar el código existente.
 
-#### Facade — api/corrida.py
+#### Facade — api/
 
-`api/corrida.py` expone una interfaz simple al usuario del notebook,
-ocultando la orquestación interna de casos de uso:
+`api/` expone funciones flat estilo pandas. Toda la superficie pública se importa
+directamente desde `replica_inpc` — los submódulos (`api/indices.py`, etc.) son
+implementación interna:
 
 ```python
-corrida = Corrida(token_inegi="mi_token")
-resultado = corrida.ejecutar(canasta="data/canasta_2018.csv", series="data/series_2018.csv", version=2018)
+import replica_inpc as rep
+
+canasta   = rep.cargar_canasta("data/canasta_2018.csv", version=2018)
+serie     = rep.cargar_serie("data/series_2018.csv", version=2018)
+resultado = rep.calcular_indice(canasta, serie, tipo="INPC")
 ```
-
-#### Repository — persistencia de corridas y artefactos
-
-`RepositorioCorridas` y `AlmacenArtefactos` son puertos que abstraen
-dónde y cómo se persiste cada corrida.
-En v1 se implementan sobre filesystem. Si se agrega SQL, se implementa
-el mismo puerto sin tocar el dominio.
-
-La persistencia es opcional por corrida — ver §7.2. Cuando `persistir=False`,
-estos puertos no se invocan y pueden ser `None`.
 
 #### Adapter — infraestructura
 
-Cada módulo en `infraestructura/` adapta una tecnología concreta al contrato
-del puerto correspondiente:
+Cada módulo en `infraestructura/` adapta una tecnología concreta al contrato del puerto correspondiente:
 
 - `lector_canasta_csv.py` implementa `LectorCanasta`
 - `lector_series_csv.py` implementa `LectorSeries`
 - `fuente_validacion_api.py` implementa `FuenteValidacion`
+
+### 1.3 Dirección de dependencias
+
+Las dependencias apuntan siempre hacia el dominio. El dominio nunca importa de capas externas.
+
+| Capa               | Puede importar de                              |
+| ------------------ | ---------------------------------------------- |
+| `dominio/`         | stdlib, pandas, numpy — nada más               |
+| `aplicacion/`      | `dominio/`                                     |
+| `infraestructura/` | `dominio/`, `aplicacion/` (puertos)            |
+| `api/`             | `dominio/`, `aplicacion/`, `infraestructura/`  |
+
+Violar esta regla rompe el aislamiento del dominio y hace que los contratos dependan de detalles de implementación.
+
+### 1.4 Convenciones de código
+
+| Convención | Regla |
+| --- | --- |
+| Errores de dominio | `InvarianteViolado`, nunca `ValueError` |
+| `ponderador`, `encadenamiento` | `str` en `CanastaCanonica`; `astype(float)` solo al calcular |
+| `_repr_html_` | siempre `# type: ignore[operator]` (bug en stubs de pandas) |
+| Warnings al usuario | `print(f"[replica_inpc] ...")`, nunca `warnings.warn` (rompe Jupyter con `filterwarnings("error")`) |
+| Módulos privados (`_*.py`) | internos a su paquete; no importar desde fuera |
 
 ---
 
