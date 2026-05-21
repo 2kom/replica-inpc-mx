@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import InvarianteViolado
+from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import ValidacionIndice
 from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
