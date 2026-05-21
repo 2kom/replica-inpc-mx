@@ -540,3 +540,233 @@ Invariantes:
 - `(inpc_ids is None) == (clasificacion_ids is None)` → `InvarianteViolado` si no
 
 ---
+
+## 5.3 Periodos
+
+Definidos en `periodos.py`. Value objects sortables, hashables y convertibles a `pd.Timestamp`. Usados como claves del MultiIndex en `ResultadoIndice`, como columnas de `SerieNormalizada` y como argumentos en funciones de variación e incidencia.
+
+El dominio recibe siempre objetos `Periodo*` — nunca strings. La conversión de strings a periodos ocurre en la API pública.
+
+**`PeriodoQuincenal`**
+
+Tripleta `(año, mes, quincena)`. Orden natural: `(año, mes, quincena)`.
+
+```python
+PeriodoQuincenal(2024, 7, 2)  # → "2Q Jul 2024"
+```
+
+| Atributo / método | Tipo | Notas |
+| --- | --- | --- |
+| `año`, `mes`, `quincena` | `int` | atributos de instancia |
+| `__str__` | `str` | `"1Q Ene 2024"` |
+| `__repr__` | `str` | `"PeriodoQuincenal(2024, 1, 1)"` |
+| `.desde_str(texto)` | classmethod → `PeriodoQuincenal` | texto en formato `"1Q Mes AAAA"`; lanza `PeriodoNoInterpretable` si falla |
+| `.to_timestamp()` | `pd.Timestamp` | 1Q → día 15 del mes; 2Q → último día del mes |
+
+Constructor lanza `ValueError` si `quincena ∉ {1, 2}`, `mes ∉ 1–12` o `año ≤ 0`. (Excepción consciente — ver §1.4.)
+
+**`PeriodoMensual`**
+
+Par `(año, mes)`. Orden natural: `(año, mes)`. Producido exclusivamente por `a_mensual()` — nunca es input del calculador ni de `LectorSeriesCsv`.
+
+```python
+PeriodoMensual(2024, 7)  # → "Jul 2024"
+```
+
+| Atributo / método | Tipo | Notas |
+| --- | --- | --- |
+| `año`, `mes` | `int` | atributos de instancia |
+| `__str__` | `str` | `"Jul 2024"` |
+| `__repr__` | `str` | `"PeriodoMensual(2024, 7)"` |
+| `.desde_str(texto)` | classmethod → `PeriodoMensual` | texto en formato `"Mes AAAA"`; lanza `PeriodoNoInterpretable` si falla |
+| `.to_timestamp()` | `pd.Timestamp` | último día del mes |
+
+Constructor lanza `ValueError` si `mes ∉ 1–12` o `año ≤ 0`.
+
+Comparación cross-type (`PeriodoQuincenal` vs `PeriodoMensual`) → `NotImplemented` → `TypeError` en runtime. Un `ResultadoIndice` nunca mezcla los dos tipos en su índice.
+
+**`periodo_desde_str`**
+
+```python
+def periodo_desde_str(texto: str) -> PeriodoQuincenal | PeriodoMensual: ...
+```
+
+Detecta el formato por número de palabras: 3 palabras → `PeriodoQuincenal`; 2 palabras → `PeriodoMensual`. Lanza `PeriodoNoInterpretable` si el texto no encaja en ninguno.
+
+```python
+periodo_desde_str("1Q Ene 2024")  # → PeriodoQuincenal(2024, 1, 1)
+periodo_desde_str("Ene 2024")     # → PeriodoMensual(2024, 1)
+```
+
+**Convención `to_timestamp()`**
+
+| Tipo | Regla | Ejemplo |
+| ---- | ----- | ------- |
+| `PeriodoQuincenal(año, mes, 1)` | día 15 del mes | `1Q Ene 2024` → 15 Ene 2024 |
+| `PeriodoQuincenal(año, mes, 2)` | último día del mes | `2Q Ene 2024` → 31 Ene 2024 |
+| `PeriodoMensual(año, mes)` | último día del mes | `Ene 2024` → 31 Ene 2024 |
+
+Regla unificada: "último día del periodo". Que `2Q` y mensual del mismo mes coincidan en timestamp no es problema — `ResultadoIndice` es siempre homogéneo y nunca mezcla los dos tipos.
+
+---
+
+## 5.4 Modelos de entrada
+
+Contratos de datos que alimentan el calculador. Sin lógica de cálculo — solo representación y validación estructural.
+
+**`CanastaCanonica`**
+
+DataFrame-backed. Índice: `generico` (str). Encapsula la tabla de genéricos con sus ponderadores y metadatos de clasificación. `ponderador` y `encadenamiento` se conservan como `str` — se convierten con `astype(float)` solo al calcular (ver §1.4).
+
+```python
+CanastaCanonica(df, version=2018)
+```
+
+Propiedades:
+
+| Propiedad | Tipo | Notas |
+| --- | --- | --- |
+| `.df` | `pd.DataFrame` | DataFrame interno; índice = `generico` |
+| `.version` | `VersionCanasta` | solo lectura |
+| `_repr_html_()` | HTML | display automático en Jupyter |
+
+Esquema del DataFrame (índice: `generico`):
+
+| Columna | dtype | Notas |
+| --- | --- | --- |
+| `ponderador` | `object` (str) | texto decimal exacto del archivo fuente |
+| `encadenamiento` | `object` (str / NaN) | texto decimal exacto; NaN cuando no aplica |
+| `COG` | `object` (str) | |
+| `CCIF division` | `object` (str) | |
+| `CCIF grupo` | `object` (str) | |
+| `CCIF clase` | `object` (str) | |
+| `inflacion componente` | `object` (str) | |
+| `inflacion subcomponente` | `object` (str) | |
+| `inflacion agrupacion` | `object` (str) | |
+| `SCIAN sector` | `object` (str) | número + nombre, ej. `"32 Industrias manufactureras"` |
+| `SCIAN rama` | `object` (str) | código + nombre, ej. `"3241 Fabricación de..."` |
+| `durabilidad` | `object` (str) | vacío cuando no aplica a la versión |
+| `canasta basica` | `object` (str) | `"X"` si pertenece; `""` si no |
+| `canasta consumo minimo` | `object` (str) | `"X"` si pertenece; `""` o NaN si no aplica |
+
+Invariantes — validados al construir (lanza `InvarianteViolado`):
+
+| Invariante | Regla |
+| --- | --- |
+| Versión válida | `version in {2010, 2013, 2018, 2024}` |
+| Sin duplicados | índice sin valores repetidos |
+| Genérico no vacío | ningún valor del índice es `""` |
+| Ponderador positivo | `float(ponderador) > 0` para cada fila |
+| Suma de ponderadores | `abs(sum(ponderadores) - 100) <= 1e-5` |
+| Encadenamiento positivo | cuando no nulo: `float(encadenamiento) > 0` |
+
+**`SerieNormalizada`**
+
+DataFrame-backed, formato ancho. Índice: `generico_limpio` (str). Columnas: objetos `PeriodoQuincenal`. Valores: `float64` o NaN. Las series de entrada son siempre quincenales — datos mensuales se obtienen solo vía `a_mensual(resultado)`, nunca cargando CSVs mensuales.
+
+```python
+SerieNormalizada(df, mapeo={"arroz": "Arroz", ...})
+```
+
+Propiedades:
+
+| Propiedad | Tipo | Notas |
+| --- | --- | --- |
+| `.df` | `pd.DataFrame` | DataFrame interno |
+| `.mapeo` | `dict[str, str]` | trazabilidad `generico_limpio → generico_original`; vacío si se omite en construcción |
+| `_repr_html_()` | HTML | display automático en Jupyter |
+
+Esquema del DataFrame:
+
+| Dimensión | Tipo | Notas |
+| --- | --- | --- |
+| Índice | `str` | `generico_limpio` |
+| Columnas | `PeriodoQuincenal` | una columna por quincena |
+| Valores | `float64` / NaN | NaN cuando falta el índice del genérico en ese periodo |
+
+Invariantes — validados al construir (lanza `InvarianteViolado`):
+
+| Invariante | Regla |
+| --- | --- |
+| Sin duplicados | índice sin valores repetidos |
+| Genérico no vacío | ningún valor del índice es `""` |
+| Al menos un periodo | al menos una columna |
+| Columnas son `PeriodoQuincenal` | todas las columnas son instancias de `PeriodoQuincenal` |
+| Valores no negativos | todo valor numérico es ≥ 0 |
+
+---
+
+## 5.5 Modelo base
+
+Clases abstractas en `modelos/base.py`. Definen el contrato compartido por todos los contratos de resultado y validación.
+
+**`Vista`**
+
+Envuelve un `pd.DataFrame` con MultiIndex `(periodo, indice)` y expone formato largo y ancho bajo demanda.
+
+```python
+Vista(df, columnas=["indice_replicado"])
+```
+
+| Propiedad | Tipo | Comportamiento |
+| --- | --- | --- |
+| `.largo` | `pd.DataFrame` | DataFrame completo con metadata |
+| `.ancho` | `pd.DataFrame` | columna(s) pivoteadas por `periodo`; filas = `indice` si 1 columna; filas = MultiIndex `(indice, metrica)` si N columnas |
+| `_repr_html_()` | HTML | muestra `.largo` |
+
+Sin invariantes en construcción.
+
+**`Resultado` (ABC)**
+
+Base de `ResultadoIndice`, `ResultadoVariacion` y `ResultadoIncidencia`. El constructor valida la estructura mínima del `df`; la subclase pasa solo la columna calculada.
+
+```python
+class MiResultado(Resultado):
+    def __init__(self, df_completo, ...):
+        super().__init__(df_completo[["columna_calculada"]])
+        ...
+```
+
+Invariantes del constructor (lanza `InvarianteViolado`):
+
+| Invariante | Regla |
+| --- | --- |
+| No vacío | `df` no puede estar vacío |
+| MultiIndex exacto | `df.index` es MultiIndex de 2 niveles con nombres `["periodo", "indice"]` |
+| Una sola columna | `df.shape[1] == 1` |
+| Sin duplicados | `df.index` sin combinaciones repetidas |
+
+Propiedades y métodos concretos:
+
+| Miembro | Tipo | Notas |
+| --- | --- | --- |
+| `.df` | `pd.DataFrame` | resultado mínimo; solo columna calculada |
+| `.pipe(fn, *args, **kwargs)` | `Any` | llama `fn(self, *args, **kwargs)`; encadenamiento estilo pandas |
+
+Propiedades abstractas (cada subclase define su esquema):
+
+| Miembro | Tipo |
+| --- | --- |
+| `.resultado` | `Vista` |
+| `.resumen` | `pd.DataFrame` |
+| `.reporte` | `pd.DataFrame` |
+| `.diagnostico` | `pd.DataFrame` |
+| `_repr_html_()` | `str` |
+
+**`Validacion` (ABC)**
+
+Base de `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia`. Sin constructor propio — no hay invariantes de base.
+
+Sin `.df` y sin `.pipe()` — validaciones son terminales; no se encadenan.
+
+Propiedades abstractas (cada subclase define su esquema):
+
+| Miembro | Tipo |
+| --- | --- |
+| `.resultado` | `Vista` |
+| `.resumen` | `pd.DataFrame` |
+| `.reporte` | `pd.DataFrame` |
+| `.diagnostico` | `pd.DataFrame` |
+| `_repr_html_()` | `str` |
+
+---
