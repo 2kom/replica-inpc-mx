@@ -22,13 +22,16 @@ El historial de cambios vive en git.
   - [5.3 Periodos](#53-periodos)
   - [5.4 Modelos de entrada](#54-modelos-de-entrada)
   - [5.5 Modelo base](#55-modelo-base)
-  - [5.6 Calculadores](#56-calculadores)
-  - [5.7 Modelos de resultado](#57-modelos-de-resultado)
-  - [5.8 Conversión y combinación](#58-conversión-y-combinación)
-  - [5.9 Correspondencia](#59-correspondencia)
-  - [5.10 Derivados — consulta/](#510-derivados--consulta)
-  - [5.11 Validación — validacion/](#511-validación--validacion)
-  - [5.12 Errores](#512-errores)
+  - [5.6 Calculadores de índice](#56-calculadores-de-índice)
+  - [5.7 ResultadoIndice](#57-resultadoindice)
+  - [5.8 Resultados derivados](#58-resultados-derivados)
+  - [5.9 Modelos de validación](#59-modelos-de-validación)
+  - [5.10 Conversión y combinación](#510-conversión-y-combinación)
+  - [5.11 Cálculo de variaciones e incidencias](#511-cálculo-de-variaciones-e-incidencias)
+  - [5.12 Funciones de consulta](#512-funciones-de-consulta)
+  - [5.13 Correspondencia](#513-correspondencia)
+  - [5.14 Validación — validacion/](#514-validación--validacion)
+  - [5.15 Errores](#515-errores)
 - [6. API pública](#6-api-pública)
   - [6.0 Diseño de la API](#60-diseño-de-la-api)
   - [6.1 config.py](#61-configpy)
@@ -340,5 +343,109 @@ flowchart TD
 ```
 
 `calcular_historia` orquesta internamente carga → cálculo por versión → empalme → conversión de frecuencia → rebase en una sola llamada. `calcular_indice` expone cada paso por separado.
+
+---
+
+## 5. Dominio
+
+`dominio/` contiene lógica de negocio pura: sin IO, sin infraestructura, sin orquestación. El dominio recibe `Periodo*` — nunca strings de periodo.
+
+Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparación contra INEGI). `ValidacionX` compone un `ResultadoX`; no hereda de `Resultado`. Invariantes lanzan `InvarianteViolado`, nunca `ValueError`.
+
+---
+
+## 5.0 Mapa del dominio
+
+| Módulo | Exporta |
+| ------ | ------- |
+| `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
+| `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS`, `ManifestUnidad`, `ManifestDerivado` |
+| `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
+| `correspondencia.py` | `alinear_genericos` |
+| `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
+| `conversion.py` | `empalmar`, `rebasar`, `a_mensual` |
+| `modelos/base.py` | `Resultado` (ABC), `Validacion` (ABC), `Vista` |
+| `modelos/canasta.py` | `CanastaCanonica` |
+| `modelos/serie.py` | `SerieNormalizada` |
+| `modelos/indice.py` | `ResultadoIndice` |
+| `modelos/variacion.py` | `ResultadoVariacion` |
+| `modelos/incidencia.py` | `ResultadoIncidencia` |
+| `modelos/validacion.py` | `ValidacionIndice`, `ValidacionVariacion`, `ValidacionIncidencia` |
+| `calculo/base.py` | `CalculadorBase` |
+| `calculo/estrategia.py` | `para_canasta` |
+| `calculo/laspeyres_directo.py` | `LaspeyresDirecto` |
+| `calculo/laspeyres_encadenado.py` | `LaspeyresEncadenadoT1`, `LaspeyresEncadenadoT2` |
+| `calculo/variaciones.py` | `variacion_periodica`, `variacion_acumulada_anual`, `variacion_desde` |
+| `calculo/incidencias.py` | `incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde` |
+| `consulta/variaciones.py` | `inflacion_en`, `inflacion_acumulada`, `inflacion_promedio`, `inflacion_maxima`, `inflacion_minima` |
+| `consulta/incidencias.py` | `incidencia_en`, `incidencia_acumulada`, `incidencia_promedio`, `mayor_incidencia`, `menor_incidencia` |
+| `validacion/indices.py` | `validar_indices` — privada; llamada desde `api/validaciones.py` |
+| `validacion/variaciones.py` | `validar_variaciones` — privada; llamada desde `api/validaciones.py` |
+| `validacion/incidencias.py` | `validar_incidencias` — privada; llamada desde `api/validaciones.py` |
+
+---
+
+## 5.1 Semántica compartida
+
+**Propiedades compartidas por `Resultado*` y `Validacion*`**
+
+| Propiedad | Semántica |
+| --------- | --------- |
+| `.resumen` | vista agregada; inspección rápida del estado del contrato |
+| `.reporte` | detalle de la unidad de análisis relevante |
+| `.diagnostico` | anomalías, faltantes o combinaciones no verificables |
+
+**Propiedades de `Resultado`**
+
+| Propiedad | Tipo | Semántica |
+| --------- | ---- | --------- |
+| `.df` | `pd.DataFrame` | resultado mínimo; solo columna calculada en formato largo |
+| `.resultado` | `Vista` | resultado completo con metadata; expone `.largo` y `.ancho` |
+| `.resultado.largo` | `pd.DataFrame` | DataFrame completo con metadata en formato largo |
+| `.resultado.ancho` | `pd.DataFrame` | columna calculada pivoteada por periodo; filas = índice, columnas = periodo |
+| `.pipe(fn, *args, **kwargs)` | callable | encadenamiento estilo pandas sobre el objeto resultado |
+| `_repr_html_()` | HTML | representación rica en notebooks |
+
+`Vista` envuelve un DataFrame con MultiIndex `(periodo, indice)` y materializa `.largo` y `.ancho` bajo demanda. `.resultado.ancho` usa `unstack("periodo")`.
+
+**Propiedades de `Validacion`**
+
+Sin `.df` y sin `.pipe()` — validaciones son terminales; no se encadenan.
+
+| Propiedad | Tipo | Semántica |
+| --------- | ---- | --------- |
+| `.resultado` | `Vista` | comparación replicado vs INEGI; columnas covariantes por subclase |
+| `.resultado.ancho` | `pd.DataFrame` | filas = MultiIndex `(indice, metrica)`, columnas = periodo |
+
+**Catálogo `estado_calculo` — `ResultadoIndice`**
+
+| Valor | Significado |
+| ----- | ----------- |
+| `ok` | todas las quincenas disponibles; cálculo completo |
+| `rellenado` | ≥1 genérico con NaN sustituido por bfill→ffill; cálculo procede con dato aproximado |
+| `parcial` | solo una quincena disponible en el mes; cálculo procede con calidad reducida |
+| `sin_datos` | sin datos de entrada para `(periodo, indice)`; columna calculada = NaN |
+| `fallida` | cálculo intentado y fallido por error interno; columna calculada = NaN |
+
+Severidad en `.resumen`: `fallida` > `sin_datos` > `parcial` > `rellenado` > `ok`.
+
+**Catálogo `estado_calculo` — derivados (`ResultadoVariacion`, `ResultadoIncidencia`)**
+
+| Valor | Significado |
+| ----- | ----------- |
+| `ok` | todos los periodos fuente tenían `estado_calculo != parcial` |
+| `parcial` | ≥1 periodo fuente tenía `estado_calculo = parcial` |
+
+Fuentes con `sin_datos` o `fallida` producen combinaciones **ausentes** del derivado — NaN implícito en `.resultado.ancho`. Fuentes con `rellenado` producen `ok` en el derivado (la degradación queda trazada en el fuente, no propagada).
+
+**Contrato NaN**
+
+| Clase | Filas con `sin_datos`/`fallida` en `.df` | NaN en columna calculada |
+| ----- | ---------------------------------------- | ------------------------ |
+| `ResultadoIndice` | sí — todas las combinaciones intentadas | explícito |
+| `ResultadoVariacion`, `ResultadoIncidencia` | no — solo combinaciones computables | implícito en `.resultado.ancho` |
+
+`ResultadoIndice` conserva trazabilidad de intentos fallidos. Los derivados no tienen fila para combinaciones no computables.
 
 ---
