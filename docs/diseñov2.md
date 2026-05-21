@@ -360,7 +360,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | ------ | ------- |
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
-| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `RANGOS_VALIDOS`, `ManifestUnidad`, `ManifestDerivado` |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `TIPOS_CON_VALIDACION`, `RANGOS_VALIDOS`, `ManifestUnidad`, `ManifestDerivado` |
 | `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia.py` | `alinear_genericos` |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
@@ -447,5 +447,96 @@ Fuentes con `sin_datos` o `fallida` producen combinaciones **ausentes** del deri
 | `ResultadoVariacion`, `ResultadoIncidencia` | no — solo combinaciones computables | implícito en `.resultado.ancho` |
 
 `ResultadoIndice` conserva trazabilidad de intentos fallidos. Los derivados no tienen fila para combinaciones no computables.
+
+---
+
+## 5.2 Tipos compartidos
+
+Definidos en `tipos.py`. Sin lógica de negocio — estructuras puras compartidas entre dominio, aplicación y API.
+
+**`VersionCanasta`**
+
+```python
+VersionCanasta = Literal[2010, 2013, 2018, 2024]
+```
+
+Alias de tipo. Reemplaza `int` en todos los contratos que aceptan versión de canasta.
+
+**`INDICE_POR_TIPO`**
+
+```python
+INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
+```
+
+Mapeo `tipo` → nombre del nivel `indice` en el MultiIndex. Aplica cuando `tipo` representa un índice agregado. El string `"INPC"` es el valor que aparece en `.df.index.get_level_values("indice")`.
+
+**`COLUMNAS_CLASIFICACION`**
+
+```python
+COLUMNAS_CLASIFICACION: frozenset[str] = frozenset({
+    "COG", "CCIF division", "CCIF grupo", "CCIF clase",
+    "inflacion componente", "inflacion subcomponente", "inflacion agrupacion",
+    "SCIAN sector", "SCIAN rama", "durabilidad", "canasta basica",
+})
+```
+
+Columnas de `CanastaCanonica` válidas como `tipo` para calcular subíndices. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador hace split por categoría; el nivel `indice` de cada fila = valor de la categoría (ej. `"subyacente"`).
+
+**`TIPOS_CON_VALIDACION`**
+
+```python
+TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
+    {"inpc", "inflacion componente", "inflacion subcomponente"}
+)
+```
+
+Tipos con series publicadas por el INEGI comparables directamente. Solo estos pueden pasarse a `validar_indices`, `validar_variaciones`, `validar_incidencias`.
+
+**`RANGOS_VALIDOS`**
+
+```python
+RANGOS_VALIDOS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {
+    2010: (PeriodoQuincenal(2010, 12, 2), PeriodoQuincenal(2013, 3, 2)),
+    2013: (PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2018, 7, 2)),
+    2018: (PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2024, 7, 2)),
+    2024: (PeriodoQuincenal(2024, 7, 2), None),
+}
+```
+
+Periodos válidos por versión de canasta. `None` como fin = hasta el último periodo disponible. Usado en `calculo/base.py` para recortar `SerieNormalizada` antes del cálculo.
+
+**`ManifestUnidad`**
+
+Trazabilidad de una corrida elemental sobre una sola canasta. `empalmar` concatena listas de `ManifestUnidad` sin colapsarlas.
+
+| Campo | Tipo | Notas |
+| ----- | ---- | ----- |
+| `id_corrida` | `str` | identificador único de la corrida elemental |
+| `version` | `VersionCanasta` | versión de canasta usada en el tramo |
+| `tipo` | `str` | tipo de índice calculado |
+| `calculador` | `Literal[...]` | `"LaspeyresDirecto"`, `"LaspeyresEncadenadoT1"`, `"LaspeyresEncadenadoT2"` |
+| `ruta_canasta` | `Path \| None` | origen físico; `None` cuando construido desde memoria |
+| `ruta_series` | `Path \| None` | origen físico; `None` cuando construido desde memoria |
+| `fecha` | `datetime` | marca temporal; default `datetime.now()` |
+
+Sin invariantes en construcción.
+
+**`ManifestDerivado`**
+
+Trazabilidad de un resultado derivado. Terminal — no combinable vía `empalmar`.
+
+| Campo | Tipo | Notas |
+| ----- | ---- | ----- |
+| `id_corrida` | `list[str]` | IDs de todas las corridas origen |
+| `tipo` | `str` | tipo de índice derivado |
+| `clase` | `str` | clase del derivado; ver catálogo en secciones 5.8 y 5.9 |
+| `descripcion` | `str` | no vacío cuando `clase = "desde"`; vacío en otros casos |
+| `fecha` | `datetime` | marca temporal |
+| `inpc_ids` | `list[str] \| None` | IDs corridas INPC; solo para `ResultadoIncidencia` |
+| `clasificacion_ids` | `list[str] \| None` | IDs corridas clasificación; solo para `ResultadoIncidencia` |
+
+Invariantes:
+- `clase` no vacío → `InvarianteViolado` si no
+- `(inpc_ids is None) == (clasificacion_ids is None)` → `InvarianteViolado` si no
 
 ---
