@@ -7,85 +7,94 @@ El historial de cambios vive en git.
 
 ## Índice
 
-- [1. Arquitectura](#1-arquitectura)
-  - [1.1 Patrón principal: Hexagonal (Ports & Adapters)](#11-patrón-principal-hexagonal-ports--adapters)
-  - [1.2 Patrones de diseño](#12-patrones-de-diseño)
-  - [1.3 Dirección de dependencias](#13-dirección-de-dependencias)
-  - [1.4 Convenciones de código](#14-convenciones-de-código)
-- [2. Estructura del proyecto](#2-estructura-del-proyecto)
-- [3. Stack técnico](#3-stack-técnico)
-- [4. Flujo de datos](#4-flujo-de-datos)
-- [5. Dominio](#5-dominio)
-  - [5.0 Mapa del dominio](#50-mapa-del-dominio)
-  - [5.1 Semántica compartida](#51-semántica-compartida)
-  - [5.2 Tipos compartidos](#52-tipos-compartidos)
-  - [5.3 Periodos](#53-periodos)
-  - [5.4 Modelos de entrada](#54-modelos-de-entrada)
-  - [5.5 Modelo base](#55-modelo-base)
-  - [5.6 Calculadores de índice](#56-calculadores-de-índice)
-  - [5.7 ResultadoIndice](#57-resultadoindice)
-  - [5.8 Resultados derivados](#58-resultados-derivados)
-  - [5.9 Modelos de validación](#59-modelos-de-validación)
-  - [5.10 Conversión y combinación](#510-conversión-y-combinación)
-  - [5.11 Cálculo de variaciones e incidencias](#511-cálculo-de-variaciones-e-incidencias)
-  - [5.12 Funciones de consulta](#512-funciones-de-consulta)
-  - [5.13 Correspondencia](#513-correspondencia)
-  - [5.14 Validación — validacion/](#514-validación--validacion)
-  - [5.15 Errores](#515-errores)
-- [6. API pública](#6-api-pública)
-  - [6.0 Diseño de la API](#60-diseño-de-la-api)
-  - [6.1 config.py](#61-configpy)
-  - [6.2 insumos.py](#62-insumospy)
-  - [6.3 indices.py](#63-indicespy)
-  - [6.4 flujos.py](#64-flujospy)
-  - [6.5 variaciones.py](#65-variacionespy)
-  - [6.6 incidencias.py](#66-incidenciaspy)
-  - [6.7 validaciones.py](#67-validacionespy)
-- [7. Aplicación](#7-aplicación)
-  - [7.1 Puertos](#71-puertos)
-  - [7.2 Casos de uso](#72-casos-de-uso)
-- [8. Infraestructura](#8-infraestructura)
-  - [8.1 lector_canasta_csv](#81-lector_canasta_csv)
-  - [8.2 lector_series_csv](#82-lector_series_csv)
-  - [8.3 fuente_validacion_api](#83-fuente_validacion_api)
-- [9. Estrategia de errores](#9-estrategia-de-errores)
-  - [9.1 Jerarquía de excepciones](#91-jerarquía-de-excepciones)
-  - [9.2 Propagación](#92-propagación)
-  - [9.3 Traducción en adaptadores](#93-traducción-en-adaptadores)
-- [10. Estrategia de testing](#10-estrategia-de-testing)
-  - [10.1 Tipos de test](#101-tipos-de-test)
-  - [10.2 Fixtures](#102-fixtures)
-  - [10.3 Mock de la API del INEGI](#103-mock-de-la-api-del-inegi)
-  - [10.4 Criterio de suficiencia](#104-criterio-de-suficiencia)
-- [11. Decisiones de diseño](#11-decisiones-de-diseño)
-  - [11.1 SerieNormalizada en formato ancho](#111-serienormalizada-en-formato-ancho)
-  - [11.2 generico_original como diccionario](#112-generico_original-como-diccionario)
-  - [11.3 Correspondencia por normalización exacta](#113-correspondencia-por-normalización-exacta)
-  - [11.4 pandas en el dominio](#114-pandas-en-el-dominio)
-  - [11.5 ponderador y encadenamiento como str](#115-ponderador-y-encadenamiento-como-str)
-  - [11.6 Periodo como tipo propio](#116-periodo-como-tipo-propio)
-  - [11.7 Categorías de clasificación version-específicas](#117-categorías-de-clasificación-version-específicas)
-  - [11.8 Tolerancia numérica por versión](#118-tolerancia-numérica-por-versión)
-  - [11.9 Reglas de estado_calculo](#119-reglas-de-estado_calculo)
-  - [11.10 Detección de null_por_faltantes](#1110-detección-de-null_por_faltantes)
-  - [11.11 Firma de validacion/indices.py](#1111-firma-de-validacionindicespy)
-  - [11.12 id_corrida en ResultadoIndice](#1112-id_corrida-en-resultadoindice)
-  - [11.13 Schema condicional en ReporteDetalladoValidacion](#1113-schema-condicional-en-reportedetalladovalidacion)
-  - [11.14 TIPOS_CON_VALIDACION en el dominio](#1114-tipos_con_validacion-en-el-dominio)
-  - [11.15 Cache de clase en FuenteValidacionApi](#1115-cache-de-clase-en-fuentevalidacionapi)
-  - [11.16 UTF-8 como primer encoding en LectorSeriesCsv](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
-  - [11.17 Dispatch interno en CalculadorBase](#1117-dispatch-interno-en-calculadorbase)
-  - [11.18 Vectorización del loop de validar_inpc](#1118-vectorización-del-loop-de-validar_inpc)
-  - [11.19 LaspeyresEncadenado — derivación de f_h](#1119-laspeyresencadenado--derivación-de-f_h)
-  - [11.20 Imputación de faltantes en series](#1120-imputación-de-faltantes-en-series)
-  - [11.21 empalmar — combinación histórica](#1121-empalmar--combinación-histórica)
-  - [11.22 RENOMBRES_INDICES y normalización cross-versión](#1122-renombres_indices-y-normalización-cross-versión)
-  - [11.23 empalmar — topología PATH](#1123-empalmar--topología-path)
-  - [11.24 rebasar — huérfanos con UserWarning](#1124-rebasar--huérfanos-con-userwarning)
-  - [11.25 bfill→ffill y estado "rellenado"](#1125-bfillffill-y-estado-rellenado)
-  - [11.26 Autoreload IPython — type(self)._PROXY](#1126-autoreload-ipython--typeself_proxy)
-  - [11.27 FuenteValidacion en dominio/, no en aplicacion/](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
-- [12. Gaps conocidos](#12-gaps-conocidos)
+- [Diseño del sistema — replica-inpc-mx](#diseño-del-sistema--replica-inpc-mx)
+  - [Índice](#índice)
+  - [1. Arquitectura](#1-arquitectura)
+    - [1.1 Patrón principal: Hexagonal (Ports \& Adapters)](#11-patrón-principal-hexagonal-ports--adapters)
+    - [1.2 Patrones de diseño](#12-patrones-de-diseño)
+      - [Strategy — cálculo del INPC](#strategy--cálculo-del-inpc)
+      - [Facade — api/](#facade--api)
+      - [Adapter — infraestructura](#adapter--infraestructura)
+    - [1.3 Dirección de dependencias](#13-dirección-de-dependencias)
+    - [1.4 Convenciones de código](#14-convenciones-de-código)
+  - [2. Estructura del proyecto](#2-estructura-del-proyecto)
+  - [3. Stack técnico](#3-stack-técnico)
+  - [4. Flujo de datos](#4-flujo-de-datos)
+  - [5. Dominio](#5-dominio)
+    - [5.0 Mapa del dominio](#50-mapa-del-dominio)
+    - [5.1 Semántica compartida](#51-semántica-compartida)
+    - [5.2 Tipos compartidos](#52-tipos-compartidos)
+    - [5.3 Periodos](#53-periodos)
+    - [5.4 Modelos de entrada](#54-modelos-de-entrada)
+    - [5.5 Modelo base](#55-modelo-base)
+    - [5.6 Calculadores de índice](#56-calculadores-de-índice)
+    - [5.7 ResultadoIndice](#57-resultadoindice)
+    - [5.8 Resultados derivados](#58-resultados-derivados)
+    - [5.9 Modelos de validación](#59-modelos-de-validación)
+    - [5.10 Conversión y combinación](#510-conversión-y-combinación)
+    - [5.11 Cálculo de variaciones e incidencias](#511-cálculo-de-variaciones-e-incidencias)
+    - [5.12 Funciones de consulta](#512-funciones-de-consulta)
+    - [5.13 Correspondencia](#513-correspondencia)
+    - [5.14 Validación — validacion/](#514-validación--validacion)
+    - [5.15 Errores](#515-errores)
+  - [6. Fachada — api/](#6-fachada--api)
+    - [6.1 config.py](#61-configpy)
+    - [6.2 insumos.py](#62-insumospy)
+    - [6.3 indices.py](#63-indicespy)
+    - [6.4 variaciones.py](#64-variacionespy)
+    - [6.5 incidencias.py](#65-incidenciaspy)
+    - [6.6 validaciones.py](#66-validacionespy)
+    - [6.7 flujos.py](#67-flujospy)
+  - [7. Aplicación](#7-aplicación)
+    - [7.1 Puertos](#71-puertos)
+    - [7.2 Casos de uso](#72-casos-de-uso)
+  - [8. Infraestructura](#8-infraestructura)
+    - [8.1 lector\_canasta\_csv](#81-lector_canasta_csv)
+    - [8.2 lector\_series\_csv](#82-lector_series_csv)
+    - [8.3 fuente\_validacion\_api](#83-fuente_validacion_api)
+  - [9. Estrategia de errores](#9-estrategia-de-errores)
+    - [9.1 Jerarquía de excepciones](#91-jerarquía-de-excepciones)
+    - [9.2 Propagación](#92-propagación)
+    - [9.3 Traducción en adaptadores](#93-traducción-en-adaptadores)
+  - [10. Estrategia de testing](#10-estrategia-de-testing)
+    - [10.1 Tipos de test](#101-tipos-de-test)
+    - [10.2 Fixtures](#102-fixtures)
+    - [10.3 Mock de la API del INEGI](#103-mock-de-la-api-del-inegi)
+    - [10.4 Criterio de suficiencia](#104-criterio-de-suficiencia)
+  - [11. Decisiones de diseño](#11-decisiones-de-diseño)
+    - [11.1 SerieNormalizada en formato ancho](#111-serienormalizada-en-formato-ancho)
+    - [11.2 generico_original como diccionario](#112-generico_original-como-diccionario)
+    - [11.3 Correspondencia por normalización exacta](#113-correspondencia-por-normalización-exacta)
+    - [11.4 pandas en el dominio](#114-pandas-en-el-dominio)
+    - [11.5 ponderador y encadenamiento como str](#115-ponderador-y-encadenamiento-como-str)
+    - [11.6 Periodo como tipo propio](#116-periodo-como-tipo-propio)
+    - [11.7 Categorías de clasificación version-específicas](#117-categorías-de-clasificación-version-específicas)
+    - [11.8 Tolerancia numérica por versión](#118-tolerancia-numérica-por-versión)
+    - [11.9 Reglas de estado_calculo](#119-reglas-de-estado_calculo)
+    - [11.10 Detección de null_por_faltantes](#1110-detección-de-null_por_faltantes)
+    - [11.11 Firma de validacion/indices.py](#1111-firma-de-validacionindicespy)
+    - [11.12 id_corrida en ResultadoIndice](#1112-id_corrida-en-resultadoindice)
+    - [11.13 Schema condicional en ReporteDetalladoValidacion](#1113-schema-condicional-en-reportedetalladovalidacion)
+    - [11.14 TIPOS_CON_VALIDACION en el dominio](#1114-tipos_con_validacion-en-el-dominio)
+    - [11.15 Cache de clase en FuenteValidacionApi](#1115-cache-de-clase-en-fuentevalidacionapi)
+    - [11.16 UTF-8 como primer encoding en LectorSeriesCsv](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
+    - [11.17 Dispatch interno en CalculadorBase](#1117-dispatch-interno-en-calculadorbase)
+    - [11.18 Vectorización del loop de validacion/indices.py](#1118-vectorización-del-loop-de-validacionindicespy)
+    - [11.19 LaspeyresEncadenado — derivación de f_h](#1119-laspeyresencadenado--derivación-de-f_h)
+    - [11.20 Imputación de faltantes en series](#1120-imputación-de-faltantes-en-series)
+    - [11.21 empalmar — combinación histórica](#1121-empalmar--combinación-histórica)
+    - [11.22 RENOMBRES_INDICES y normalización cross-versión](#1122-renombres_indices-y-normalización-cross-versión)
+    - [11.23 empalmar — topología PATH](#1123-empalmar--topología-path)
+    - [11.24 rebasar — huérfanos con UserWarning](#1124-rebasar--huérfanos-con-userwarning)
+    - [11.25 bfill→ffill y estado "rellenado"](#1125-bfillffill-y-estado-rellenado)
+    - [11.26 Autoreload IPython — type(self)._PROXY](#1126-autoreload-ipython--typeself_proxy)
+    - [11.27 FuenteValidacion en dominio/, no en aplicacion/](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
+  - [12. Gaps conocidos](#12-gaps-conocidos)
+    - [12.1 Validación por niveles en LectorCanastaCsv](#121-validación-por-niveles-en-lectorcanastacsvs)
+    - [12.2 Detección dinámica del header en LectorSeriesCsv](#122-detección-dinámica-del-header-en-lectorseriescsv)
+    - [12.3 Catalogación incompleta de RENOMBRES_INDICES para 2010 y 2013](#123-catalogación-incompleta-de-renombres_indices-para-2010-y-2013)
+    - [12.4 DiagnosticoValidacion — cobertura temporal de la API INEGI](#124-diagnosticovalidacion--cobertura-temporal-de-la-api-inegi)
+    - [12.5 Tool de ponderadores — bugs propios pendientes](#125-tool-de-ponderadores--bugs-propios-pendientes)
 
 ---
 
@@ -354,7 +363,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 
 ---
 
-## 5.0 Mapa del dominio
+### 5.0 Mapa del dominio
 
 | Módulo | Exporta |
 | ------ | ------- |
@@ -386,7 +395,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 
 ---
 
-## 5.1 Semántica compartida
+### 5.1 Semántica compartida
 
 **Propiedades compartidas por `Resultado*` y `Validacion*`**
 
@@ -450,7 +459,7 @@ Fuentes con `sin_datos` o `fallida` producen combinaciones **ausentes** del deri
 
 ---
 
-## 5.2 Tipos compartidos
+### 5.2 Tipos compartidos
 
 Definidos en `tipos.py`. Sin lógica de negocio — estructuras puras compartidas entre dominio, aplicación y API.
 
@@ -541,7 +550,7 @@ Invariantes:
 
 ---
 
-## 5.3 Periodos
+### 5.3 Periodos
 
 Definidos en `periodos.py`. Value objects sortables, hashables y convertibles a `pd.Timestamp`. Usados como claves del MultiIndex en `ResultadoIndice`, como columnas de `SerieNormalizada` y como argumentos en funciones de variación e incidencia.
 
@@ -610,7 +619,7 @@ Regla unificada: "último día del periodo". Que `2Q` y mensual del mismo mes co
 
 ---
 
-## 5.4 Modelos de entrada
+### 5.4 Modelos de entrada
 
 Contratos de datos que alimentan el calculador. Sin lógica de cálculo — solo representación y validación estructural.
 
@@ -696,7 +705,7 @@ Invariantes — validados al construir (lanza `InvarianteViolado`):
 
 ---
 
-## 5.5 Modelo base
+### 5.5 Modelo base
 
 Clases abstractas en `modelos/base.py`. Definen el contrato compartido por todos los contratos de resultado y validación.
 
@@ -771,7 +780,7 @@ Propiedades abstractas (cada subclase define su esquema):
 
 ---
 
-## 5.6 Calculadores de índice
+### 5.6 Calculadores de índice
 
 `calculo/` produce `ResultadoIndice`. Las implementaciones concretas son privadas a `calculo/`; el punto de entrada público es `para_canasta`.
 
@@ -860,7 +869,7 @@ Catálogo `estado_calculo` completo en [5.1](#51-semántica-compartida).
 
 ---
 
-## 5.7 ResultadoIndice
+### 5.7 ResultadoIndice
 
 Resultado de un cálculo elemental sobre una sola canasta, o de un empalme entre tramos. Hereda de `Resultado` (ver [5.5](#55-modelo-base)).
 
@@ -948,7 +957,7 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 
 ---
 
-## 5.8 Resultados derivados
+### 5.8 Resultados derivados
 
 `ResultadoVariacion` y `ResultadoIncidencia` encapsulan variaciones e incidencias calculadas sobre un `ResultadoIndice`. Ambos heredan de `Resultado` ([5.5](#55-modelo-base)). Estructura simétrica; las diferencias están en el nombre de la columna calculada y el nombre del campo de clase.
 
@@ -1073,7 +1082,7 @@ DataFrame vacío si todos los índices tuvieron dato exacto en ambos extremos; d
 
 ---
 
-## 5.9 Modelos de validación
+### 5.9 Modelos de validación
 
 `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` encapsulan la comparación entre un resultado replicado y las series publicadas por INEGI. Todas heredan de `Validacion` (ver [5.5](#55-modelo-base)).
 
@@ -1225,7 +1234,7 @@ Extiende `ResultadoVariacion.reporte` / `ResultadoIncidencia.reporte`. Índice: 
 
 ---
 
-## 5.10 Conversión y combinación
+### 5.10 Conversión y combinación
 
 Funciones puras en `dominio/conversion.py`. Sin IO; sin infraestructura; entradas no mutadas.
 
@@ -1339,7 +1348,7 @@ mensual_rebased = rebasar(a_mensual(indice), periodo_referencia=PeriodoMensual(2
 
 ---
 
-## 5.11 Cálculo de variaciones e incidencias
+### 5.11 Cálculo de variaciones e incidencias
 
 Funciones puras en `dominio/calculo/variaciones.py` y `dominio/calculo/incidencias.py`. Sin IO; sin infraestructura; entradas no mutadas.
 
@@ -1461,7 +1470,7 @@ inc = incidencia_desde(inpc, cog, canastas, desde=PeriodoMensual(2024, 1))
 
 ---
 
-## 5.12 Funciones de consulta
+### 5.12 Funciones de consulta
 
 Funciones thin en `dominio/consulta/variaciones.py` y `dominio/consulta/incidencias.py`. Sin estado ni IO. Devuelven escalares, tuplas o `DataFrame` — nunca un `ResultadoX`. La lógica común vive en `dominio/consulta/_comun.py`; los módulos son envoltorios parametrizados por columna (`variacion_pp` / `incidencia_pp`).
 
@@ -1506,7 +1515,7 @@ Análogas a las de variaciones sobre `incidencia_pp`. `incidencia_promedio` no t
 
 ---
 
-## 5.13 Correspondencia
+### 5.13 Correspondencia
 
 **alinear_genericos** (`dominio/correspondencia.py`)
 
@@ -1538,7 +1547,7 @@ El mismo archivo contiene tablas de cambios de cobertura entre versiones de cana
 
 ---
 
-## 5.14 Validación — validacion/
+### 5.14 Validación — validacion/
 
 Tres funciones en `dominio/validacion/`. Privadas — llamadas solo desde `api/validaciones.py`. Comparan resultados replicados contra datos publicados por INEGI mediante `FuenteValidacion` ([5.5](#55-modelo-base)). La fuente es una dependencia inyectada; sin IO directo.
 
@@ -1624,7 +1633,7 @@ Solo admite `resultado.manifiesto.tipo ∈ TIPOS_CON_VALIDACION`. Solo `clase_in
 
 ---
 
-## 5.15 Errores
+### 5.15 Errores
 
 Jerarquía completa en `dominio/errores.py`. Todas heredan de `ReplicaInpcError`; las capas internas nunca importan excepciones de librerías externas.
 
@@ -1710,7 +1719,7 @@ Funciones públicas aceptan `str` en parámetros de periodo; nunca `Periodo*` en
 
 ---
 
-## 6.1 config.py
+### 6.1 config.py
 
 Configuración global de la sesión.
 
@@ -1764,7 +1773,7 @@ rep.timeout_api = 30
 
 ---
 
-## 6.2 insumos.py
+### 6.2 insumos.py
 
 IO de inputs. Sin transformaciones de dominio; solo carga y normalización de CSV.
 
@@ -1833,7 +1842,7 @@ serie = rep.cargar_serie("data/serie_2018.csv", version=2018)
 
 ---
 
-## 6.3 indices.py
+### 6.3 indices.py
 
 Cálculo de índices y transformaciones sobre `ResultadoIndice`.
 
@@ -1978,7 +1987,7 @@ mensual = rep.a_mensual(indice)
 
 ---
 
-## 6.4 variaciones.py
+### 6.4 variaciones.py
 
 Cálculo y análisis de variaciones (inflación). Dos grupos: funciones de serie (devuelven `ResultadoVariacion`) y funciones de análisis (devuelven escalares o `pd.DataFrame`).
 
@@ -2162,7 +2171,7 @@ p, i, v = rep.inflacion_maxima(variaciones, indice="Alimentos")
 
 ---
 
-## 6.5 incidencias.py
+### 6.5 incidencias.py
 
 Cálculo y análisis de incidencias. Misma estructura que §6.4: funciones de serie (devuelven `ResultadoIncidencia`) y funciones de análisis (escalares o `pd.DataFrame`).
 
@@ -2363,7 +2372,7 @@ p, i, v = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
 
 ---
 
-## 6.6 validaciones.py
+### 6.6 validaciones.py
 
 Comparación de resultados replicados contra series publicadas por INEGI. Las tres funciones usan las tolerancias configuradas en `config.py` (§6.1) y obtienen el token vía `get_token()`.
 
@@ -2445,7 +2454,7 @@ val_incidencia = rep.validar_incidencia(incidencia_periodica_mensual)
 
 ---
 
-## 6.7 flujos.py
+### 6.7 flujos.py
 
 Flujo orquestado completo. Para control granular sobre cualquier paso usar las funciones de `insumos.py` e `indices.py` directamente.
 
@@ -2539,7 +2548,7 @@ Capa de contratos e intermediación. `aplicacion/` define los puertos (`Protocol
 
 ---
 
-## 7.1 Puertos
+### 7.1 Puertos
 
 Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la implementación. Un adaptador nuevo (xlsx, SQL, HTTP, etc.) solo necesita implementar el puerto correspondiente sin tocar el dominio.
 
@@ -2711,7 +2720,7 @@ Implementado por `infraestructura/inegi/fuente_validacion_api.py` — `FuenteVal
 
 ---
 
-## 7.2 Casos de uso
+### 7.2 Casos de uso
 
 **CalcularHistoria**
 
@@ -2796,7 +2805,7 @@ Adaptadores concretos que implementan los puertos de §7.1. El dominio y la capa
 
 ---
 
-## 8.1 lector_canasta_csv
+### 8.1 lector_canasta_csv
 
 `LectorCanastaCsv` implementa `LectorCanasta`. Carga un CSV canónico de ponderadores y devuelve `CanastaCanonica`.
 
@@ -2844,7 +2853,7 @@ class LectorCanastaCsv:
 
 ---
 
-## 8.2 lector_series_csv
+### 8.2 lector_series_csv
 
 `LectorSeriesCsv` implementa `LectorSeries`. Carga un CSV exportado del BIE del INEGI y devuelve `SerieNormalizada`. Resuelve internamente orientación, metadatos y encoding.
 
@@ -2904,7 +2913,7 @@ class LectorSeriesCsv:
 
 ---
 
-## 8.3 fuente_validacion_api
+### 8.3 fuente_validacion_api
 
 `FuenteValidacionApi` implementa `FuenteValidacion`. Consulta la API de indicadores del INEGI BIE-BISE y devuelve históricos completos con cache de clase.
 
@@ -3062,7 +3071,7 @@ Todas las excepciones del sistema heredan de `ReplicaInpcError` y se definen en 
 
 ---
 
-## 9.1 Jerarquía de excepciones
+### 9.1 Jerarquía de excepciones
 
 ```python
 # Base
@@ -3108,7 +3117,7 @@ class ArtefactoNoEncontrado(ErrorPersistencia): ...
 
 Todos los tipos de error se re-exportan en `replica_inpc/__init__.py` — el usuario los importa como `rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc., sin rutas internas.
 
-## 9.2 Propagación
+### 9.2 Propagación
 
 Los errores se lanzan lo más cerca posible de donde ocurren. Las capas intermedias no capturan ni envuelven — dejan pasar.
 
@@ -3122,7 +3131,7 @@ Los errores se lanzan lo más cerca posible de donde ocurren. Las capas intermed
 
 `ErrorValidacion` no falla la corrida: `dominio/validacion/` lo captura y marca la validación como `no_disponible` para los periodos afectados, preservando el resultado de índice.
 
-## 9.3 Traducción en adaptadores
+### 9.3 Traducción en adaptadores
 
 Los adaptadores traducen excepciones externas a errores propios del sistema antes de que lleguen al dominio. El dominio nunca ve `FileNotFoundError`, `UnicodeDecodeError` ni excepciones de librerías externas.
 
@@ -3142,7 +3151,7 @@ Esto mantiene los casos de uso independientes de las librerías concretas y hace
 
 ## 10. Estrategia de testing
 
-## 10.1 Tipos de test
+### 10.1 Tipos de test
 
 | Componente | Tipo | Archivo |
 | --- | --- | --- |
@@ -3180,7 +3189,7 @@ Esto mantiene los casos de uso independientes de las librerías concretas y hace
 
 ---
 
-## 10.2 Fixtures
+### 10.2 Fixtures
 
 Fixtures viven en `tests/fixtures/` (vacío; cada test construye sus datos sintéticos inline) y en `data/inputs/` para tests de integración con archivos reales.
 
@@ -3200,7 +3209,7 @@ Un CSV de canasta sintético por versión soportada.
 
 ---
 
-## 10.3 Mock de la API del INEGI
+### 10.3 Mock de la API del INEGI
 
 `FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real. El patrón es una clase mínima que implementa los tres métodos del protocolo:
 
@@ -3231,7 +3240,7 @@ Los mocks cubren cuatro escenarios:
 
 ---
 
-## 10.4 Criterio de suficiencia
+### 10.4 Criterio de suficiencia
 
 El suite es suficiente cuando cubre:
 
@@ -3252,3 +3261,523 @@ El suite es suficiente cuando cubre:
 - Las 4 variantes de CSV de series (con/sin metadatos × horizontal/vertical)
 - Correspondencia: match exitoso; fallo por cobertura insuficiente (`CorrespondenciaInsuficiente`)
 - Test de integración con datos reales — canasta 2018 y 2024
+
+---
+
+## 11. Decisiones de diseño
+
+### 11.1 `SerieNormalizada` en formato ancho
+
+**Decisión:** DataFrame con `generico_limpio` como índice y objetos `PeriodoQuincenal` como columnas.
+
+**Alternativa considerada:** formato largo — columnas `generico_limpio`, `periodo`, `indice`.
+
+**Razón:** el cálculo Laspeyres sobre todos los periodos es una multiplicación matricial directa entre el vector de ponderadores y la matriz de índices. El formato ancho lo hace eficiente y legible. El formato largo requeriría un pivot antes de cada cálculo.
+
+---
+
+### 11.2 `generico_original` como diccionario
+
+**Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), fuera del DataFrame.
+
+**Alternativa considerada:** columna opcional en el DataFrame de `SerieNormalizada`.
+
+**Razón:** `generico_original` es dato de trazabilidad, no de cálculo. Mantenerlo fuera del DataFrame evita que aparezca en operaciones sobre la matriz de índices y deja claro su propósito.
+
+---
+
+### 11.3 Correspondencia por normalización exacta
+
+**Decisión:** matching exacto después de normalizar — quitar tildes + lowercase (`unicodedata`). `rapidfuzz` removido del stack.
+
+**Alternativa considerada:** matching fuzzy con `rapidfuzz`.
+
+**Razón:** la divergencia entre nombres de series y canasta es sistemática y
+determinista. En 2018/2024, después de normalizar ambos lados, los genéricos
+extraídos de las series BIE coinciden exactamente con la canasta. En 2010/2013,
+el problema no es de correspondencia sino de extracción: los títulos BIE no
+terminan con una clave de genérico de 3 dígitos, por lo que `LectorSeriesCsv`
+produce el mismo `generico_limpio` usando una estrategia jerárquica
+determinística (ver §8.2). Una vez producida la `SerieNormalizada`,
+`correspondencia.py` sigue comparando strings directos y falla si falta algún
+genérico.
+
+El fuzzy resolvía un problema que la normalización y la extracción determinística
+resuelven de forma predecible, sin riesgo de falsos positivos entre genéricos
+con nombres parecidos.
+
+---
+
+### 11.4 pandas en el dominio
+
+**Decisión:** los contratos del dominio usan DataFrames de pandas directamente.
+
+**Alternativa considerada:** dominio sin dependencias externas, pandas solo en infraestructura.
+
+**Razón:** el proyecto es notebook-first. Aislar pandas del dominio agregaría una capa de conversión sin beneficio real — el dominio siempre va a operar sobre estructuras tabulares. El hexágono aísla formato y fuente de datos, no librerías de procesamiento.
+
+---
+
+### 11.5 `ponderador` y `encadenamiento` como `str`
+
+**Decisión:** se almacenan como `str` en `CanastaCanonica`. La conversión a `float` ocurre solo en el momento del cálculo.
+
+**Alternativa considerada:** almacenar directamente como `float`.
+
+**Razón:** los archivos fuente tienen precisión decimal que puede perderse en la conversión binaria a `float`. Almacenar como `str` preserva el valor exacto extraído del CSV oficial. La conversión a `float` en el cálculo no acumula error adicional porque se aplica una sola vez por operación.
+
+---
+
+### 11.6 `Periodo` como tipo propio
+
+**Decisión:** value objects `PeriodoQuincenal(año, mes, quincena)` y `PeriodoMensual(año, mes)`. La función `periodo_desde_str` detecta el formato automáticamente.
+
+**Alternativa considerada:** `str` con formato `"1Q Ene 2020"` o `pd.Timestamp`.
+
+**Razón:** una quincena no tiene representación natural en Python ni en pandas. `str` no permite sorting natural ni uso como clave hashable confiable. `pd.Timestamp` requiere una convención arbitraria para el día (día 1 o día 16) que no es un dato real. `PeriodoQuincenal` encapsula esa convención en `to_timestamp()` y expone sorting, hash e igualdad de forma explícita. `PeriodoMensual` cubre el caso de uso de `a_mensual` sin requerir quincena.
+
+---
+
+### 11.7 Categorías de clasificación version-específicas
+
+**Decisión:** las columnas de clasificación en `CanastaCanonica` almacenan texto tal como viene del CSV intermedio. No se usan `pd.Categorical`. El mapeo cross-versión de nombres no vive en `CanastaCanonica` sino en `RENOMBRES_INDICES` en `correspondencia_canastas.py` — se aplica al combinar resultados, no al leer la canasta (ver §11.22).
+
+**Columnas con categorías en canasta 2018** (`encadenamiento` y `canasta consumo minimo` están vacías para esta versión):
+
+| Columna | N categorías | Valores |
+| ------- | -----------: | ------- |
+| `COG` | 8 | `alimentos, bebidas y tabaco` · `educacion y esparcimiento` · `muebles, aparatos y accesorios domesticos` · `otros servicios` · `ropa, calzado y accesorios` · `salud y cuidado personal` · `transporte` · `vivienda` |
+| `CCIF division` | 12 | `alimentos y bebidas no alcoholicas` · `bebidas alcoholicas y tabaco` · `bienes y servicios diversos` · `comunicaciones` · `educacion` · `muebles, articulos para el hogar y para su conservacion` · `prendas de vestir y calzado` · `recreacion y cultura` · `restaurantes y hoteles` · `salud` · `transporte` · `vivienda, agua, electricidad, gas y otros combustibles` |
+| `CCIF grupo` | 44 | (ver CSV `ponderadores_2018.csv`) |
+| `CCIF clase` | 87 | (ver CSV `ponderadores_2018.csv`) |
+| `inflacion componente` | 2 | `no subyacente` · `subyacente` |
+| `inflacion subcomponente` | 4 | `agropecuarios` · `energeticos y tarifas autorizadas por el gobierno` · `mercancias` · `servicios` |
+| `inflacion agrupacion` | 9 | `alimentos, bebidas y tabaco` · `educacion (colegiaturas)` · `energeticos` · `frutas y verduras` · `mercancias no alimenticias` · `otros servicios` · `pecuarios` · `tarifas autorizadas por el gobierno` · `vivienda` |
+| `SCIAN sector` | 18 | (ver CSV `ponderadores_2018.csv`) |
+| `SCIAN rama` | 91 | (ver CSV `ponderadores_2018.csv`) |
+| `durabilidad` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
+| `canasta basica` | 1 | `X` (indica pertenencia; ausente si no aplica) |
+
+**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `empalmar` vía `_construir_mapa_renombre` + `_aplicar_renombre` resuelve automáticamente los nombres para `CCIF division`, `SCIAN rama` y, de forma preliminar, para renombres 1:1 de `CCIF grupo` y `CCIF clase`. `SCIAN sector` no tiene renombres 1:1 confirmados. Los splits, fusiones, categorías nuevas y categorías eliminadas no se mapean.
+
+---
+
+### 11.8 Tolerancia numérica por versión
+
+**Decisión:** tolerancias fijas para marcar diferencias:
+
+| Tipo | Tolerancia | Condición |
+| ---- | ---------- | --------- |
+| Índices | `error_absoluto ≤ 0.0009` | todas las versiones |
+| Derivados (variaciones, incidencias) | `error_pp ≤ 0.009` | todas las versiones |
+
+**Razón:** la validación histórica completa queda en el orden de milésimas de punto de índice. La tolerancia homogénea `0.0009` cubre los tramos 2010, 2013 y 2018; el peor error observado pertenece al empalme 2024 y es esperado por redondeo/encadenamiento. Los derivados tienen un orden de magnitud más de tolerancia (`0.009 pp`) porque acumulan el error de dos índices.
+
+---
+
+### 11.9 Reglas de `estado_calculo`
+
+**Decisión:** `estado_calculo` en `ResultadoIndice` es una columna por fila `(periodo, indice)` con cinco estados ordenados por severidad:
+
+| Estado | Severidad | Significado |
+| ------ | --------: | ----------- |
+| `ok` | 0 | Periodo calculado con datos completos |
+| `rellenado` | 1 | Algún genérico del periodo fue imputado por bfill/ffill (ver §11.25) |
+| `parcial` | 2 | Mes mensual calculado con solo una quincena disponible |
+| `sin_datos` | 3 | Hay NaN irrellenables; `indice_replicado = NaN` |
+| `fallida` | 4 | Cálculo fallido; `indice_replicado = NaN` |
+
+El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `ResultadoIndice.resumen` para reportar el peor estado de una corrida: `max(estados, key=_ORDEN_SEVERIDAD)`. En `a_mensual`, el estado del mes se determina con lógica específica — no con max-severidad: si ambas quincenas son computables → `"ok"` o `"rellenado"` según si alguna fue imputada; si solo una quincena disponible → `"parcial"`; si alguna es `"fallida"` → `"fallida"`; si ninguna computable → `"sin_datos"`.
+
+**Propagación a derivados:** al calcular variaciones e incidencias, `"rellenado"` se propaga como `"ok"` — la imputación ya quedó registrada en el `ResultadoIndice` subyacente. Solo `"parcial"` se propaga como `"parcial"` hacia los derivados, porque indica cobertura incompleta en el periodo base del cálculo. `"sin_datos"` y `"fallida"` producen `NaN` en el derivado (no hay valor que derivar).
+
+**Alternativa considerada:** un único campo booleano `calculo_completo` por periodo.
+
+**Razón:** el campo booleano no distingue entre imputación (advertencia de calidad) y datos faltantes sin solución (fallo real). El estado de 5 niveles permite que el usuario evalúe la calidad del resultado con granularidad suficiente sin necesidad de consultar el diagnóstico.
+
+---
+
+### 11.10 Detección de `null_por_faltantes`
+
+**Decisión:** la detección de valores faltantes en la serie por periodo es responsabilidad del calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`), no de `validacion/indices.py`.
+
+**Razón:** el calculador es quien conoce si el cálculo fue íntegro. Si la serie tiene NaN irrellenable para un genérico en un periodo, ese periodo se marca `estado_calculo = "sin_datos"` e `indice_replicado = NaN`. `validacion/indices.py` solo valida — no recalcula ni inspecciona la serie.
+
+---
+
+### 11.11 Firma de `validacion/indices.py`
+
+**Decisión:** el dominio recibe el puerto `FuenteValidacion` directamente — `validar_indices(resultado: ResultadoIndice, fuente: FuenteValidacion) -> ValidacionIndice`. La función llama internamente `fuente.obtener_indices(periodos)` para obtener los datos oficiales.
+
+**Razón:** `FuenteValidacion` es un Protocol definido en `dominio/fuente_validacion.py` (ver §11.27). Recibirlo directamente evita que la capa de aplicación pre-fetche el dict y lo pase al dominio — el dominio sabe qué periodos necesita y los solicita él mismo. El dict de resultados ya obtenido tiene estructura `dict[str, dict[Periodo, float | None]]` — clave exterior = nombre del índice (ej. `"INPC"` para `inpc`). Esto unifica el acceso para índice único y para subíndices sin condicionales adicionales.
+
+---
+
+### 11.12 `id_corrida` en `ResultadoIndice`
+
+**Decisión:** `CalcularHistoria` genera el UUID y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestUnidad(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
+
+**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El `ManifestUnidad` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
+
+---
+
+### 11.13 Schema condicional en `ReporteDetalladoValidacion`
+
+**Decisión:** `ValidacionIndice.reporte` tiene esquemas distintos según si el `tipo` tiene validación INEGI disponible. Con validación incluye `indice_inegi`, `error_absoluto` y `estado_validacion`; sin validación esas columnas están ausentes.
+
+**Alternativa considerada:** schema único siempre con todas las columnas, rellenando con `NaN` cuando el tipo no tiene validación INEGI.
+
+**Razón:** un schema único con NaN genera ambigüedad — el usuario no puede distinguir si `indice_inegi = NaN` significa "no hay dato para ese periodo" o "este tipo nunca tendrá dato INEGI". El schema condicional hace explícita la ausencia de columnas como propiedad estructural del tipo, no como dato faltante.
+
+---
+
+### 11.14 `TIPOS_CON_VALIDACION` en el dominio
+
+**Decisión:** `TIPOS_CON_VALIDACION` vive en `dominio/tipos.py`, aunque `INDICADORES_INEGI` (que mapea tipo → indicador concreto) vive en `infraestructura/inegi/fuente_validacion_api.py`.
+
+**Alternativa considerada:** derivar `TIPOS_CON_VALIDACION` dinámicamente desde `INDICADORES_INEGI` en infraestructura.
+
+**Razón:** qué tipos admiten comparación contra una fuente oficial es una propiedad del dominio — afecta el esquema de `ValidacionIndice.reporte` y la lógica de `validacion/indices.py`, ambos en el dominio. Que el indicador concreto sea `910420` es un detalle del adaptador INEGI. Si se agrega un adaptador distinto (ej. CSV con datos oficiales), `TIPOS_CON_VALIDACION` no debería cambiar.
+
+---
+
+### 11.15 Cache de clase en `FuenteValidacionApi`
+
+**Decisión:** `_cache` en `FuenteValidacionApi` es un atributo de clase (`dict[str, dict[Periodo, float | None]]`), no de instancia.
+
+**Alternativa considerada:** cache de instancia — cada objeto `FuenteValidacionApi` mantiene su propio cache.
+
+**Razón:** la API del INEGI devuelve el histórico completo en una sola llamada — no hay paginación por rango de fechas. Un cache de instancia no evitaría llamadas redundantes entre corridas distintas que instancian objetos separados. El cache de clase garantiza que el histórico de un indicador se descarga una sola vez por sesión, sin importar cuántas instancias o corridas se ejecuten. En tests se limpia con `FuenteValidacionApi._cache.clear()`.
+
+---
+
+### 11.16 UTF-8 como primer encoding en `LectorSeriesCsv`
+
+**Decisión:** el orden de encodings a intentar en `LectorSeriesCsv._leer_csv` es `["utf-8", "cp1252", "latin-1"]`.
+
+**Alternativa considerada:** mantener solo `["cp1252", "latin-1"]` — suficiente para archivos reales del INEGI.
+
+**Razón:** los archivos del demo (`demo/series_demo.csv`) se generan en UTF-8. Un archivo UTF-8 con caracteres no-ASCII leído con cp1252 produce texto corrupto sin lanzar `UnicodeDecodeError`, por lo que el fallback nunca se activaría. Agregar UTF-8 primero es seguro: los archivos cp1252 del INEGI contienen bytes no-ASCII que forman secuencias UTF-8 inválidas, lo que sí lanza `UnicodeDecodeError` y activa el fallback a cp1252. El comportamiento con archivos reales no cambia.
+
+---
+
+### 11.17 Dispatch interno en `CalculadorBase`
+
+**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `CalcularHistoria`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa $\sum w_j$ como denominador, válido tanto para la canasta completa ($\sum w_j = 100$) como para subgrupos ($\sum w_j < 100$). La firma de `CalculadorBase.calcular()` incluye `tipo` como parámetro — se deriva el nombre del índice internamente con `INDICE_POR_TIPO[tipo]`.
+
+**Razón:** `CalcularHistoria` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre $\sum w_j$.
+
+---
+
+### 11.18 Vectorización del loop interno de `validacion/indices.py`
+
+**Decisión:** operaciones vectorizadas de pandas en lugar de loops Python escalares en `validar_indices()`.
+
+**Por qué:** profiling con SCIAN rama (91 categorías, 158 periodos, canasta 2018) mostró que el loop ingenuo consume el 96% del tiempo de la corrida. Tres causas:
+
+1. 3× `.loc[(periodo, indice), col]` por iteración del loop `indices × periodos` → ≈40 000 llamadas a `__getitem__` con tupla sobre MultiIndex.
+2. `serie_col[ponderadores.index]` + 2× `notna()` por iteración → ≈26 000 llamadas escalares.
+3. Loop `for generico × for periodo` en el bloque de diagnóstico → ≈47 000 accesos escalares `pd.isna()`.
+
+**Tres cambios:**
+
+1. `res_lookup = resultado.df[cols].to_dict("index")` pre-computado — acceso O(1) por par `(periodo, indice)`.
+2. `notna_df = ~serie.df.isna()` pre-computado; dentro del loop por índice: `notna_df.loc[idx_grupo].sum()` y `.multiply(ponderadores, axis=0).sum()` calculan cobertura ponderada para todos los periodos a la vez.
+3. Diagnóstico: `serie.df.isna().stack()` seguido de filtro booleano — 1 operación vectorizada.
+
+**Alternativa descartada:** `numba` o `cython`. La causa raíz es el overhead de dispatch de pandas por acceso escalar, no el costo aritmético — la vectorización lo elimina directamente.
+
+---
+
+### 11.19 `LaspeyresEncadenado` — derivación de `f_h`
+
+#### Primer enfoque (descartado): media ponderada con ponderadores nuevos
+
+El diseño original computaba $f_h$ como media ponderada de los $f_k$ individuales usando los ponderadores de la canasta nueva:
+
+$$f_h^{\text{nuevo}} = \frac{\sum_{k \in h} w_k^{\text{nueva}} \cdot f_k}{\sum_{k \in h} w_k^{\text{nueva}}}$$
+
+**Por qué falló con datos reales en 2024:** el INEGI calcula $f_h$ con los 299
+ponderadores de la canasta 2018, no con los 292 de la canasta 2024. Las dos
+estructuras son diferentes tanto en número de genéricos como en los pesos
+relativos. El error resultante:
+
+- `error_absoluto` ≈ 0.716–0.737 puntos de índice (creciente conforme sube el INPC)
+- `error_relativo` ≈ 0.53% sistemático en todos los periodos post-traslape
+- Estado de validación: `diferencia_detectada` en todos los periodos
+
+#### Enfoque final: empalme desde el resultado de la versión anterior
+
+**Decisión:** `LaspeyresEncadenado` recibe un diccionario de valores de referencia
+por índice, extraídos del `ResultadoIndice` de la canasta anterior en el periodo
+de traslape. La forma de convertir esa referencia a factor de empalme depende de
+la versión:
+
+- **2024:** la referencia 2018 se divide entre 100:
+
+$$f_h^{\text{INEGI}} = \frac{I_h^{(2018)}[t_{\text{traslape}}]}{100}$$
+
+  donde $I_h^{(2018)}[t_{\text{traslape}}]$ es el índice calculado con
+  `LaspeyresDirecto` sobre la canasta 2018 en `2Q Jul 2024`.
+
+- **2013:** la referencia 2010 está en la misma escala vieja (`2Q Dic 2010 = 100`).
+  El factor de empalme se calcula como:
+
+$$f_h^{2013} = \frac{I_h^{(2010)}[2Q\,Mar\,2013]}{I_h^{\text{base 2013}}[2Q\,Mar\,2013]}$$
+
+  Esto garantiza continuidad en el empalme real `2Q Mar 2013`.
+
+**Por qué funciona para 2024:** en el traslape $I_k^{\text{pub}} = f_k \times 100$, por lo que $I_h^{(2018)}[t] = 100 \cdot f_h^{\text{INEGI}}$.
+
+**Por qué funciona para 2013:** el campo `encadenamiento` de `ponderadores_2013.csv`
+actúa como factor de alineación por genérico. La variante verificada con datos
+reales fue $I_k^{\text{alineado}}[t] = I_k^{\text{pub}}[t] / f_k$.
+
+**Fallback:** si `resultado_referencia` es `None` o el índice no está en el dict,
+2013 usa `factor_h = 1.0` y 2024 usa la media ponderada con ponderadores nuevos.
+El fallback de 2024 introduce el error sistemático descrito arriba.
+
+**No-aditividad:** cada agregado $h$ tiene su propio $f_h$. Los subíndices encadenados no suman al INPC encadenado post-traslape. Propiedad esperada y documentada por el INEGI.
+
+---
+
+### 11.20 Imputación de faltantes en series
+
+Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un periodo específico, incluso cuando ese genérico tiene datos en periodos adyacentes.
+
+**Algoritmo:** `bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la serie (columnas = periodos ordenados ascendente). Ver §11.25 para la mecánica exacta y los estados resultantes.
+
+**Implementación:** función privada `_rellenar_faltantes(df_serie, id_corrida, version, tipo)` en `dominio/calculo/base.py`. Se llama dentro de cada calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`) antes del cálculo Laspeyres. El `df_corr_relleno` que devuelve — un DataFrame con columnas `(id_corrida, version, tipo, periodo, generico, nivel_faltante, tipo_faltante, detalle)` — se concatena con el diagnóstico de faltantes de la corrida (`_construir_diagnostico`).
+
+**Por qué en el dominio y no en aplicación:** el calculador es quien conoce la serie cruda y puede registrar exactamente qué genérico fue imputado y desde qué periodo. Delegar la imputación a `CalcularHistoria` requeriría pasar información interna del calculador hacia afuera — acopla la interfaz innecesariamente.
+
+**Limitación:** el valor fuente (el periodo desde el que se tomó el dato) queda en el campo `detalle` como texto. Consultas programáticas sobre qué valor se usó requieren parsear `detalle`.
+
+---
+
+### 11.21 `empalmar` — combinación histórica
+
+**Problema:** cada corrida cubre un solo rango de canasta. Para construir la serie histórica continua del INPC (ej. 2010–hoy) el usuario necesita combinar resultados de múltiples corridas.
+
+**Decisión:** función suelta `empalmar(resultados: list[ResultadoIndice]) -> ResultadoIndice` en `dominio/conversion.py`. Exportada desde `replica_inpc/__init__.py`.
+
+**Por qué función suelta y no método de `CalcularHistoria`:** no requiere puertos ni infraestructura — es lógica pura sobre modelos de dominio. Vive en el dominio.
+
+**Algoritmo:**
+
+1. Ordenar cronológicamente por el mínimo de periodos de cada resultado.
+2. Validar topología PATH (ver §11.23) — exactamente un periodo compartido entre cada par consecutivo.
+3. Aplicar `_construir_mapa_renombre` + dedup defensivo por tramo (ver §11.22). Dedup con `keep="first"` — el tramo anterior prevalece cuando un renombre colapsa dos variantes en el mismo índice.
+4. Acumular tramos: cada tramo posterior contribuye solo sus periodos NO presentes ya en el acumulador; en el periodo frontera, aporta únicamente índices nuevos que el acumulador no tiene aún. En la práctica el periodo frontera queda del primer tramo — el segundo no añade nada para índices ya vistos.
+5. `pd.concat` de los DataFrames filtrados.
+6. El `manifiesto` del resultado combinado agrega las entradas `ManifestUnidad` de todos los tramos.
+
+**Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoIndice`. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
+
+**Rebase histórico:** para empalmar el bloque 2010+2013 con la base actual `2Q Jul 2018 = 100`, el dominio expone `rebasar(resultado, periodo_referencia, valor_base=100.0)` en `dominio/conversion.py`. El denominador es endógeno: usa el valor replicado propio del `ResultadoIndice` en `periodo_referencia`. En `CalcularHistoria`, el flujo es:
+
+```python
+acc_2010 = empalmar([r2010, r2013], forzar=True)
+acc_rebased = rebasar(acc_2010, PeriodoQuincenal(2018, 7, 2))
+resultado = empalmar([acc_rebased, r2018, r2024], forzar=True)
+```
+
+---
+
+### 11.22 `RENOMBRES_INDICES` y normalización cross-versión
+
+**Problema:** al combinar `ResultadoIndice` de canastas distintas, el nivel `indice` del MultiIndex contiene el nombre de la categoría tal como lo generó cada corrida. Para `CCIF division`, los nombres cambiaron entre 2018 y 2024 (ej. `"comunicaciones"` → `"informacion y comunicacion"`). Sin normalización, `empalmar` produce dos filas separadas para lo que conceptualmente es la misma serie.
+
+**Decisión:** constante `RENOMBRES_INDICES` en `dominio/correspondencia_canastas.py`. Funciones privadas `_construir_mapa_renombre(tipo, version_origen, version_canonica)` y `_aplicar_renombre(df, mapa)` en `conversion.py`. `empalmar` las invoca por tramo antes de acumular.
+
+**Estructura de `RENOMBRES_INDICES`:**
+
+```python
+RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]]
+# tipo → version_origen → {nombre_viejo: nombre_canonico}
+```
+
+**Tabla de correspondencia CCIF division (2018 → 2024):**
+
+| 2018 | 2024 (canónico) |
+| ---- | --------------- |
+| `bienes y servicios diversos` | `cuidado personal, proteccion social y bienes diversos` |
+| `comunicaciones` | `informacion y comunicacion` |
+| `educacion` | `servicios educativos` |
+| `muebles, articulos para el hogar y para su conservacion` | `mobiliario, equipo domestico y mantenimiento rutinario del hogar` |
+| `prendas de vestir y calzado` | `ropa y calzado` |
+| `recreacion y cultura` | `recreacion, deporte y cultura` |
+| `restaurantes y hoteles` | `restaurantes y servicios de alojamiento` |
+| `vivienda, agua, electricidad, gas y otros combustibles` | `vivienda, agua, electricidad y gas` |
+
+Sin cambio (4): `alimentos y bebidas no alcoholicas`, `bebidas alcoholicas y tabaco`, `salud`, `transporte`.
+
+Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 2018.
+
+**Algoritmo de `_construir_mapa_renombre(tipo, version_origen, version_canonica)`:**
+
+1. Si `tipo` no está en `RENOMBRES_INDICES`, o `version_origen == version_canonica`: retorna `{}`.
+2. Si `version_origen < version_canonica` (forward): `mapa = RENOMBRES_INDICES[tipo].get(version_origen, {})` — nombres de la versión antigua al canónico.
+3. Si `version_origen > version_canonica` (backward): `mapa_forward = RENOMBRES_INDICES[tipo].get(version_canonica, {})`, luego invierte: `{v: k for k, v in mapa_forward.items()}` — del nombre canónico de vuelta a la versión más antigua.
+
+`_aplicar_renombre(df, mapa)` mapea la columna `"indice"` del MultiIndex usando `mapa.get(x, x)` (sin-mapeo → identidad).
+
+**CCIF grupo — versión preliminar:** 19 renombres 1:1 (2018 → 2024). La selección usa reciprocidad estricta sobre genéricos comunes en los CSVs de ponderadores. Ver tabla completa en `dominio/correspondencia_canastas.py`.
+
+**CCIF clase:** 52 renombres 1:1 (2018 → 2024). Con esta normalización, las clases comunes pasan de 25 a 77. Ver tabla en `dominio/correspondencia_canastas.py`.
+
+**SCIAN rama:** 4 renombres 1:1 (2018 → 2024). Ramas comunes pasan de 82 a 86. `SCIAN sector` sin mapeo — `49 transportes...` aparece solo en 2018.
+
+**Validación:** todos los renombres de `CCIF grupo` y `CCIF clase` fueron verificados contra los CSVs de ponderadores (reciprocidad estricta) y contra COICOP 2018 (UN Statistics Division). Los cambios de nombre son oficiales de la revisión COICOP 2018.
+
+---
+
+### 11.23 `empalmar` — topología PATH
+
+**Decisión:** `empalmar` valida que los `ResultadoIndice` recibidos formen una topología PATH lineal: cada par consecutivo comparte exactamente 1 periodo (el periodo frontera), y ningún par no-consecutivo comparte periodos.
+
+**Implementación:** función privada `_validar_topologia(ordenados)` en `dominio/conversion.py`. Lanza `InvarianteViolado` en tres casos:
+
+1. Par consecutivo sin periodo compartido — no hay frontera válida para empalmar.
+2. Par consecutivo con más de 1 periodo compartido — la frontera es ambigua.
+3. Par no-consecutivo con periodos compartidos — la topología no es lineal (grafo con ciclo o bifurcación).
+
+**Alternativas consideradas:**
+
+- _Permitir múltiples periodos compartidos_ y truncar al último: ambigüedad sobre qué valor usar como referencia de escala.
+- _No validar la topología_ y dejar que `pd.concat` produzca duplicados: el resultado combinado no pasaría su propio invariante de índice único.
+
+**Razón:** la topología PATH garantiza que el resultado empalmado tiene una sola serie continua por índice, sin saltos ni solapamientos. El parámetro `forzar=True` omite la validación de `periodo_referencia` coincidente entre tramos (necesario cuando `rebasar` cambia la escala de un tramo antes de empalmar), pero no omite la validación de topología.
+
+---
+
+### 11.24 `rebasar` — huérfanos con `UserWarning`
+
+**Decisión:** `rebasar(resultado, periodo_referencia, valor_base=100.0)` emite `UserWarning` y deja sin rebasar los índices que no tienen dato en `periodo_referencia`. No lanza `InvarianteViolado`.
+
+**Comportamiento exacto:** si el índice `I` no tiene fila `(periodo_referencia, I)` en el df, se conserva el valor original en todos sus periodos y se agrega `I` a la lista `huerfanos`. Al final, si `len(huerfanos) > 0`, se emite un `UserWarning` con la lista de índices afectados.
+
+**Excepciones sí lanzadas (`InvarianteViolado`):**
+- El índice tiene fila en `periodo_referencia` pero `estado_calculo` no está en `_ESTADOS_CON_VALOR` (`"sin_datos"` o `"fallida"`) — el valor base no está disponible.
+- `indice_replicado` es `NaN` a pesar de tener estado con valor — inconsistencia interna.
+- `indice_replicado == 0.0` — dividir entre cero no produce un índice rebased válido.
+
+**Alternativa considerada:** lanzar `InvarianteViolado` ante cualquier huérfano.
+
+**Razón:** en el flujo histórico (`CalcularHistoria`), el tramo 2010+2013 puede tener índices de subcomponentes que no están presentes en el periodo de traslape `2Q Jul 2018 = 100` (p. ej. subíndices de inflación que el INEGI no publicaba en 2018). Esos índices son válidos en sus propios periodos; convertirlos en error terminaría la corrida. El `UserWarning` alerta al usuario sin interrumpir el flujo.
+
+---
+
+### 11.25 `bfill→ffill` y estado `"rellenado"`
+
+**Decisión:** la imputación de faltantes en las series usa `df.bfill(axis=1).ffill(axis=1)`. Los periodos que recibieron al menos un genérico imputado quedan marcados `estado_calculo = "rellenado"`. Los periodos donde la imputación deja NaN irrellenables (genérico sin datos en toda la serie) quedan `estado_calculo = "sin_datos"` e `indice_replicado = NaN`.
+
+**Mecánica:**
+
+1. `mask_antes = df_serie.isna()` — marca NaN originales.
+2. `df_rel = df_serie.bfill(axis=1).ffill(axis=1)` — rellena: primero hacia adelante (siguiente periodo disponible), luego hacia atrás (anterior) para los NaN al final del rango.
+3. `mask_rel = mask_antes & df_rel.notna()` — identifica qué NaN fueron resueltos.
+4. `periodos_rellenados = set(df_rel.columns[mask_rel.any(axis=0)])` — periodos con al menos un relleno.
+5. El calculador marca esos periodos `"rellenado"` en el df resultado, pero solo si no son también `"sin_datos"` (un periodo puede tener genéricos imputados y además genéricos irrellenables — el estado más severo gana).
+
+**Propagación a derivados:** `"rellenado"` se propaga como `"ok"` al calcular variaciones e incidencias. La imputación es una advertencia de calidad del índice base, no del derivado — el derivado se calcula sobre el valor imputado como si fuera real.
+
+**Razón para `bfill` antes que `ffill`:** el caso real observado en datos INEGI es un NaN aislado en el interior de la serie (no al inicio ni al final). `bfill` primero (siguiente periodo disponible) refleja mejor la práctica de imputación puntual que el INEGI documenta — usar el dato más próximo hacia adelante.
+
+---
+
+### 11.26 Autoreload IPython — `type(self)._PROXY`
+
+**Decisión:** en `_ReplicaModule.__getattr__` y `__setattr__`, la consulta al atributo de clase usa `type(self)._PROXY` en lugar de `_ReplicaModule._PROXY` o `self._PROXY`.
+
+**Contexto:** `_ReplicaModule` es la clase del objeto módulo `replica_inpc`. Se asigna con `sys.modules[__name__].__class__ = _ReplicaModule`. En notebooks con IPython autoreload (`%autoreload 2`), el módulo se recarga al detectar cambios en disco. Durante la recarga, Python reimporta el módulo y actualiza el objeto módulo existente con los nuevos atributos — pero puede no actualizar los closures de los métodos de clase que ya estaban en memoria.
+
+**Por qué `type(self)._PROXY`:**
+- `_ReplicaModule._PROXY` dentro de un método — si el closure fue compilado con la clase OLD, después del autoreload `_ReplicaModule` en el closure apunta a la clase vieja, y su `_PROXY` puede ser una tupla stale.
+- `type(self)._PROXY` — `type(self)` se resuelve dinámicamente en tiempo de ejecución sobre el objeto actual. Después de `sys.modules[__name__].__class__ = NewReplicaModule`, `type(sys.modules["replica_inpc"])` devuelve la clase nueva con el `_PROXY` actualizado.
+
+**Alternativa descartada:** `self._PROXY`. Dentro de `__getattr__`, acceder a `self._PROXY` dispararía de nuevo `__getattr__` si `_PROXY` no estuviera en el dict de instancia — potencial recursión o shadowing no deseado. `type(self)._PROXY` accede directamente al atributo de clase.
+
+---
+
+### 11.27 `FuenteValidacion` en `dominio/`, no en `aplicacion/`
+
+**Decisión:** el Protocol `FuenteValidacion` vive en `dominio/fuente_validacion.py`, no en `aplicacion/puertos/`.
+
+**Razón:** `dominio/validacion/indices.py` llama a `fuente.obtener_indices()` directamente (ver §11.11). Si `FuenteValidacion` viviera en `aplicacion/puertos/`, el módulo de dominio `dominio/validacion/indices.py` importaría de `aplicacion/`, violando la regla de dependencia de la arquitectura hexagonal — el dominio no debe conocer la capa de aplicación. Al moverlo a `dominio/fuente_validacion.py`, el dominio define su propio contrato (puerto de entrada) y la infraestructura lo implementa de forma estructural sin importar del dominio.
+
+**Consecuencia:** `infraestructura/inegi/fuente_validacion_api.py` implementa el Protocol estructuralmente — no importa `FuenteValidacion` para declararlo como base. Solo debe exponer el método `obtener_indices` con la firma correcta.
+
+---
+
+## 12. Gaps conocidos
+
+Decisiones que se tomaron con limitaciones conocidas. Cada entrada registra el comportamiento actual, el problema identificado y la mejora propuesta para cuando el trigger se cumpla. Las entradas marcadas RESUELTO no aparecen — sus soluciones están en las secciones correspondientes del documento.
+
+---
+
+### 12.1 Validación por niveles en `LectorCanastaCsv`
+
+**Comportamiento actual:** `LectorCanastaCsv` valida todas las columnas del esquema canónico o falla. No hay distinción entre "mínimo para calcular INPC" y "completo para calcular subíndices".
+
+**Problema:** puede haber CSVs que solo tengan `ponderador` y `encadenamiento` (suficientes para INPC) pero sin clasificaciones (COG, CCIF, etc.). Con el validador actual, ese CSV falla aunque el cálculo sea posible.
+
+**Mejora propuesta:** agregar un parámetro `nivel` al método `leer` y actualizar el Protocol `LectorCanasta`. Tres niveles: `"inpc"` (solo ponderador), `"subindices"` (+ clasificaciones), `"completo"` (todas las columnas).
+
+**Cuándo implementar:** cuando se requiera calcular sobre canastas simplificadas.
+
+---
+
+### 12.2 Detección dinámica del header en `LectorSeriesCsv`
+
+**Comportamiento actual:** `LectorSeriesCsv` usa `skiprows=5` fijo para saltar el encabezado de INEGI, asumiendo que siempre son exactamente 5 líneas.
+
+**Problema:** si INEGI cambia el formato de exportación, el lector fallaría silenciosamente — leería datos incorrectos sin lanzar error.
+
+**Mejora propuesta:** detectar dinámicamente la fila del header contando la moda de separadores en las primeras 25 líneas y usando la primera fila que alcanza ese conteo como header.
+
+**Cuándo implementar:** si se detecta que INEGI cambia su formato de exportación.
+
+---
+
+### 12.3 Catalogación incompleta de `RENOMBRES_INDICES` para 2010 y 2013
+
+**Situación actual:** `RENOMBRES_INDICES` en `dominio/correspondencia_canastas.py` tiene cobertura parcial para versiones anteriores a 2018. Estado por tipo de clasificación:
+
+| Tipo | Versiones cubiertas |
+|---|---|
+| `CCIF division` | 2018 only |
+| `CCIF grupo` | 2018 only |
+| `CCIF clase` | 2013 + 2018 |
+| `SCIAN sector` | 2013 |
+| `SCIAN rama` | 2010 + 2013 |
+
+**Problema:** `CCIF division` y `CCIF grupo` no tienen entradas para 2010/2013. Para análisis cross-versión completo por subíndice CCIF que incluya esas versiones, los nombres de categorías de `division` y `grupo` no se normalizan automáticamente entre versiones.
+
+**Mejora propuesta:** extender `RENOMBRES_INDICES["CCIF division"]` y `RENOMBRES_INDICES["CCIF grupo"]` con entradas para `version_origen ∈ {2010, 2013}` usando el mismo criterio de reciprocidad estricta sobre genéricos comunes.
+
+**Cuándo implementar:** cuando el análisis histórico completo 2010–2024 por subíndice CCIF requiera series continuas de clasificación.
+
+---
+
+### 12.4 `DiagnosticoValidacion` — cobertura temporal de la API INEGI
+
+**Situación actual:** `validar_indices` marca periodos como `no_disponible` en `estado_validacion` cuando la API no devuelve dato para ese periodo, pero no hay un objeto estructurado que resuma cuántos periodos por tipo quedaron sin verificar y por qué (fuera del rango publicado, indicador no disponible, etc.).
+
+**Problema:** el usuario no puede distinguir fácilmente entre "INEGI no publica datos para ese rango histórico" (ej. variación quincenal interanual solo disponible desde `1Q Ago 2024`) y "la API falló". El `ReporteDetalladoValidacion` contiene la información pero requiere filtrado manual.
+
+**Mejora propuesta:** `DiagnosticoValidacion` — clase análoga a `DiagnosticoFaltantes` pero para cobertura temporal de la API. Campos: `tipo`, `periodo`, `motivo` (`"fuera_de_rango"`, `"api_no_disponible"`, `"indicador_no_publicado"`).
+
+**Cuándo implementar:** cuando se rediseñe la API de validación separando `ResultadoIndice` (cálculo) de `ValidacionIndice` (validación) en objetos independientes.
+
+---
+
+### 12.5 Tool de ponderadores — bugs propios pendientes
+
+**Situación actual:** el módulo de generación de archivos intermedios de ponderadores (CSVs canónicos) tiene bugs propios no relacionados con el cálculo del INPC. Los bugs no afectan el cálculo ni los tests de la suite principal — los CSVs canónicos actuales son correctos.
+
+**Problema:** regenerar los CSVs canónicos desde cero (ante un cambio en la canasta oficial) requeriría corregir esos bugs primero.
+
+**Mejora propuesta:** identificar y corregir los bugs del tool en una iteración post-v2.0.
+
+**Cuándo implementar:** cuando se publique una nueva canasta oficial del INEGI que requiera regenerar los archivos intermedios.
