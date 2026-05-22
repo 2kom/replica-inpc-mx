@@ -2511,3 +2511,744 @@ insumos = [
 ]
 historico = rep.calcular_historia(insumos)
 ```
+
+---
+
+## 7. Aplicación
+
+Capa de contratos e intermediación. `aplicacion/` define los puertos (`Protocol`) que el dominio y `api/` requieren, y los casos de uso que orquestan la lógica de negocio. El acoplamiento real vive solo en `api/` — dominio y casos de uso reciben interfaces, nunca adaptadores concretos.
+
+**Estructura de archivos**
+
+| Archivo | Contenido |
+| --- | --- |
+| `puertos/lector_canasta.py` | `LectorCanasta` — sin cambio vs v1 |
+| `puertos/lector_series.py` | `LectorSeries` — sin cambio vs v1 |
+| `dominio/fuente_validacion.py` | `FuenteValidacion` — agrega `obtener_variaciones` y `obtener_incidencias` |
+| `casos_uso/calcular_historia.py` | `CalcularHistoria` — nuevo; reemplaza `EjecutarCorrida` |
+
+> `FuenteValidacion` vive en `dominio/`, no en `aplicacion/puertos/`. El dominio depende de ella directamente (`dominio/validacion/` la consume); moverla a `aplicacion/` crearía una dependencia dominio→aplicacion prohibida por la arquitectura hexagonal.
+
+**Puertos eliminados vs v1**
+
+| Puerto eliminado | Razón |
+| --- | --- |
+| `AlmacenArtefactos` | Solo lo consumía `EjecutarCorrida`; la persistencia es responsabilidad del notebook o del usuario |
+| `EscritorResultados` | Tipos v1 eliminados |
+| `RepositorioCorridas` | `ManifestCorrida` eliminado en v2 |
+
+---
+
+## 7.1 Puertos
+
+Cada puerto es un `Protocol` de Python — el dominio depende de la interfaz, no de la implementación. Un adaptador nuevo (xlsx, SQL, HTTP, etc.) solo necesita implementar el puerto correspondiente sin tocar el dominio.
+
+**LectorCanasta**
+
+Carga un CSV de canasta y devuelve una `CanastaCanonica` validada. La versión es siempre explícita — las canastas 2010 y 2013 tienen genéricos idénticos y no son distinguibles por auto-detect.
+
+```python
+class LectorCanasta(Protocol):
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanonica: ...
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `ruta` | `Path` | ruta al CSV; existencia no garantizada por el puerto |
+| `version` | `VersionCanasta` | versión de canasta; requerida para validar e interpretar el CSV |
+
+| Condición | Lanza |
+| --- | --- |
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo vacío | `ArchivoVacio` |
+| CSV no parseable | `ArchivoCorrupto` |
+| columnas requeridas ausentes | `ColumnasMinFaltantes` |
+| `version` inválida | `InvarianteViolado` |
+
+Implementado por `infraestructura/csv/lector_canasta_csv.py` — `LectorCanastaCsv`.
+
+---
+
+**LectorSeries**
+
+Carga un CSV de series de genéricos y devuelve una `SerieNormalizada`. Resuelve internamente orientación, metadatos y encoding. No filtra por rango de periodos — esa responsabilidad es de `CalcularHistoria`.
+
+```python
+class LectorSeries(Protocol):
+    def leer(self, ruta: Path) -> SerieNormalizada: ...
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `ruta` | `Path` | ruta al CSV; existencia no garantizada por el puerto |
+
+| Condición | Lanza |
+| --- | --- |
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo vacío | `ArchivoVacio` |
+| CSV no parseable | `ArchivoCorrupto` |
+| orientación no detectable | `OrientacionNoDetectable` |
+| ninguna fila útil tras normalización | `SerieVacia` |
+
+Implementado por `infraestructura/csv/lector_series_csv.py` — `LectorSeriesCsv`.
+
+---
+
+**FuenteValidacion**
+
+Obtiene series publicadas por INEGI para tres tipos de dato: niveles de índice, variaciones e incidencias. El `tipo` se fija en el constructor del implementador, no en el método.
+
+```python
+class FuenteValidacion(Protocol):
+    def obtener_indices(
+        self,
+        periodos: list[PeriodoQuincenal | PeriodoMensual],
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]: ...
+
+    def obtener_variaciones(
+        self,
+        periodos: list[PeriodoQuincenal | PeriodoMensual],
+        tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]: ...
+
+    def obtener_incidencias(
+        self,
+        periodos: list[PeriodoMensual],
+        tipo_incidencia: Literal["periodica"],
+    ) -> dict[str, dict[PeriodoMensual, float | None]]: ...
+```
+
+> **Modificación vs v1:** v1 solo declaraba `obtener`. v2 agrega `obtener_variaciones` y `obtener_incidencias` para soportar `dominio/validacion/variaciones.py` y `dominio/validacion/incidencias.py`.
+
+**Esquema de retorno compartido**
+
+Todos los métodos devuelven `dict[str, dict[Periodo, float | None]]`:
+
+| Nivel | Clave | Significado |
+| --- | --- | --- |
+| exterior | nombre del índice | ej. `"INPC"`, `"subyacente"`, `"mercancias"` |
+| interior | `Periodo` | el periodo consultado |
+| interior valor | `float` | valor publicado por INEGI |
+| interior valor | `None` | INEGI tiene el periodo en rango pero sin dato (`no_disponible`) |
+| interior ausente | — | periodo antes del inicio del histórico INEGI (`fuera_rango_inegi`) |
+
+**Claves de retorno por tipo**
+
+| `tipo` | Claves devueltas |
+| --- | --- |
+| `"inpc"` | `"INPC"` |
+| `"inflacion componente"` | `"subyacente"`, `"no subyacente"` |
+| `"inflacion subcomponente"` | `"mercancias"`, `"servicios"`, `"agropecuarios"`, `"energeticos y tarifas autorizadas por el gobierno"` |
+
+`obtener_variaciones` y `obtener_incidencias` devuelven las mismas claves que `obtener_indices` según `tipo`.
+
+**obtener_indices**
+
+Niveles de índice publicados por INEGI (series BIE de nivel). Frecuencias soportadas: quincenal y mensual. Detección por `type(periodos[0])`.
+
+| Condición | Lanza |
+| --- | --- |
+| `len(periodos) == 0` | `InvarianteViolado` |
+| `tipo` sin indicador INEGI disponible | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta INEGI con formato inesperado | `RespuestaInvalida` |
+
+**obtener_variaciones**
+
+Series de variación publicadas por INEGI. Frecuencias soportadas: quincenal y mensual para los tres `tipo_variacion`.
+
+| `tipo_variacion` | Significado |
+| --- | --- |
+| `"periodica"` | variación periodo a periodo |
+| `"interanual"` | variación respecto al mismo periodo del año anterior |
+| `"acumulada_anual"` | variación acumulada en el año calendario |
+
+| Condición | Lanza |
+| --- | --- |
+| `len(periodos) == 0` | `InvarianteViolado` |
+| `tipo_variacion` inválido | `ErrorConfiguracion` |
+| `tipo` sin indicadores de variación para `tipo_variacion` | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta INEGI con formato inesperado | `RespuestaInvalida` |
+
+**obtener_incidencias**
+
+Series de incidencia publicadas por INEGI. Solo mensual — INEGI no publica incidencias quincenales. `tipo_incidencia="periodica"` es el único tipo publicado.
+
+| Condición | Lanza |
+| --- | --- |
+| `len(periodos) == 0` | `InvarianteViolado` |
+| `tipo_incidencia` inválido | `ErrorConfiguracion` |
+| `tipo` sin indicadores de incidencia | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta INEGI con formato inesperado | `RespuestaInvalida` |
+
+**Mapeo desde contratos de dominio**
+
+`dominio/validacion/` traduce `clase_variacion`/`clase_incidencia` a los parámetros del puerto antes de llamar.
+
+| `clase_variacion` | `tipo_variacion` | Notas |
+| --- | --- | --- |
+| `"periodica_quincenal"` | `"periodica"` | `periodos` son `PeriodoQuincenal` |
+| `"periodica_mensual"` | `"periodica"` | `periodos` son `PeriodoMensual` |
+| `"periodica_bimestral"`, `"periodica_trimestral"`, `"periodica_cuatrimestral"`, `"periodica_semestral"` | — | INEGI no publica → `ErrorConfiguracion` |
+| `"periodica_anual"` | `"interanual"` | — |
+| `"acumulada_anual"` | `"acumulada_anual"` | — |
+| `"desde"` | — | no comparable → `ErrorConfiguracion` |
+
+| `clase_incidencia` | `tipo_incidencia` | Notas |
+| --- | --- | --- |
+| `"periodica_mensual"` | `"periodica"` | único caso comparable; `periodos` son `PeriodoMensual` |
+| cualquier otro | — | INEGI no publica → `ErrorConfiguracion` |
+
+**Invariantes del implementador**
+
+- cache de clase compartido entre instancias — primera llamada descarga histórico completo; siguientes reutilizan sin requests adicionales
+- detección de frecuencia por `type(periodos[0])`; lista vacía → comportamiento indefinido
+- `tipo` fijo en constructor; no cambia entre llamadas
+
+Implementado por `infraestructura/inegi/fuente_validacion_api.py` — `FuenteValidacionApi`.
+
+---
+
+## 7.2 Casos de uso
+
+**CalcularHistoria**
+
+Orquesta carga, cálculo, empalme, rebase y conversión de frecuencia para producir un `ResultadoIndice` histórico a partir de una lista de insumos por versión de canasta. Reemplaza `EjecutarCorrida` de v1.
+
+```python
+class CalcularHistoria:
+    def __init__(
+        self,
+        lector_canasta: LectorCanasta,
+        lector_series: LectorSeries,
+    ) -> None:
+```
+
+```python
+def ejecutar(
+    self,
+    insumos: list[tuple[VersionCanasta, Path, Path]],
+    tipo: str,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual,
+    periodicidad: Literal["quincenal", "mensual"],
+) -> ResultadoIndice:
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `insumos` | `list[tuple[VersionCanasta, Path, Path]]` | cada elemento = `(version, ruta_canasta, ruta_series)`; mínimo 1; sin versiones duplicadas; versiones contiguas en `(2010, 2013, 2018, 2024)`; el orden no importa — se ordena internamente |
+| `tipo` | `str` | tipo de índice a calcular; debe existir en todas las canastas |
+| `periodo_referencia` | `PeriodoQuincenal \| PeriodoMensual` | periodo para `rebasar`; debe existir en el resultado empalmado |
+| `periodicidad` | `Literal["quincenal", "mensual"]` | frecuencia del resultado final |
+
+Devuelve `ResultadoIndice` — resultado empalmado, rebased, en `periodicidad` indicada; `.periodo_referencia` seteado.
+
+**Pasos de orquestación**
+
+Pasos en orden; el llamador no tiene acceso a resultados intermedios:
+
+1. Por cada `(version, ruta_canasta, ruta_series)` en `insumos`: `lector_canasta.leer` + `lector_series.leer`
+2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
+3. Si `len(insumos) > 1`: `empalmar` por pares vecinos (fold-left), `version_nombres` de la versión más reciente de cada par
+4. Si `periodicidad="mensual"`: `a_mensual`
+5. `rebasar` al `periodo_referencia` — sobre el resultado ya en la periodicidad final
+
+> **Orden `a_mensual` → `rebasar`:** `a_mensual` devuelve `periodo_referencia=None`; si se rebaseara antes, la conversión a mensual anularía el rebase. Además, con `periodicidad="mensual"` el `periodo_referencia` es `PeriodoMensual` y `rebasar` requiere que exista en el resultado, lo que solo ocurre tras `a_mensual`.
+
+**Errores**
+
+| Condición | Lanza |
+| --- | --- |
+| `insumos` vacío | `InvarianteViolado` |
+| `periodicidad` inválida | `InvarianteViolado` |
+| versión duplicada en `insumos` | `InvarianteViolado` |
+| versión desconocida (fuera de `(2010, 2013, 2018, 2024)`) | `InvarianteViolado` |
+| versiones no contiguas en `(2010, 2013, 2018, 2024)` | `InvarianteViolado` |
+| versión encadenada sin su versión base en `insumos` | `InvarianteViolado` |
+| `periodo_referencia` no existe en resultado empalmado | `InvarianteViolado` (desde `rebasar`) |
+| error de IO en carga | propaga errores de `LectorCanasta` / `LectorSeries` |
+
+Usado por `api/flujos.py` — `calcular_historia` instancia `CalcularHistoria(LectorCanastaCsv(), LectorSeriesCsv())` y llama `ejecutar`.
+
+**§D1 — Eliminación de puertos de persistencia**
+
+`AlmacenArtefactos`, `EscritorResultados` y `RepositorioCorridas` se eliminan en v2 porque `EjecutarCorrida` era su único consumidor y se reemplaza por `calcular_historia`. La persistencia de artefactos es responsabilidad del notebook o del usuario — `ResultadoIndice` expone `.df` como DataFrame de pandas, exportable con `.df.to_csv(...)` o `.df.to_parquet(...)` sin intermediarios.
+
+**§D2 — FuenteValidacion con tres métodos**
+
+El puerto expone `obtener_indices`, `obtener_variaciones` y `obtener_incidencias` por separado en lugar de un método genérico unificado. Unificar requeriría un parámetro `clase` con semántica variable y dispatch interno en el puerto — la separación hace explícita la diferencia de frecuencia (`obtener_incidencias` solo acepta `PeriodoMensual`) y de parámetros adicionales, sin romper el Liskov Substitution Principle en los implementadores.
+
+---
+
+## 8. Infraestructura
+
+Adaptadores concretos que implementan los puertos de §7.1. El dominio y la capa de aplicación no conocen estos detalles — solo operan con los contratos.
+
+**Archivos eliminados vs v1**
+
+| Archivo | Puerto | Razón |
+| --- | --- | --- |
+| `infraestructura/fs/repositorio_corridas_fs.py` | `RepositorioCorridas` | `ManifestCorrida` eliminado |
+| `infraestructura/fs/almacen_artefactos_fs.py` | `AlmacenArtefactos` | Puerto eliminado |
+| `infraestructura/csv/escritor_resultados_csv.py` | `EscritorResultados` | Puerto eliminado |
+
+---
+
+## 8.1 lector_canasta_csv
+
+`LectorCanastaCsv` implementa `LectorCanasta`. Carga un CSV canónico de ponderadores y devuelve `CanastaCanonica`.
+
+**Formato del CSV**
+
+Todas las versiones (2010, 2013, 2018, 2024) comparten el mismo esquema de CSV intermedio. Este archivo se genera en preparación de datos (fuera del pipeline) a partir de los archivos fuente (.xlsx, .pdf).
+
+| Columna | Tipo | Notas |
+| --- | --- | --- |
+| `generico` | `str` | Índice — nombre del genérico |
+| `ponderador` | `float` | Peso del genérico; suma 100 por versión |
+| `encadenamiento` | `float` | Factor de encadenamiento; vacío en 2010 y 2018 |
+| `COG` | `str` | Clasificación por objeto del gasto |
+| `CCIF` | `str` | Clasificación del consumo individual por finalidad |
+| `inflacion 1` | `str` | Categoría de inflación nivel 1 |
+| `inflacion 2` | `str` | Categoría de inflación nivel 2 |
+| `inflacion 3` | `str` | Categoría de inflación nivel 3 |
+| `SCIAN 1` | `str` | Clasificación SCIAN nivel 1 |
+| `SCIAN 2` | `str` | Clasificación SCIAN nivel 2 |
+| `canasta basica` | `str` | `'X'` si pertenece, vacío si no |
+| `canasta consumo minimo` | `str` | `'X'` si pertenece, vacío si no |
+
+**Normalización del índice**
+
+`LectorCanastaCsv` lee `generico` como índice y convierte `ponderador` y `encadenamiento` a `str` antes de construir `CanastaCanonica`. Las columnas de clasificación se pasan al DataFrame sin modificar.
+
+El índice `generico` se normaliza con la misma función que `LectorSeriesCsv` aplica para producir `generico_limpio`: eliminar tildes vocálicas (`á`→`a`, etc.), conservar `ñ`, eliminar puntuación, convertir a minúsculas. Normalización simétrica garantiza comparabilidad directa en `correspondencia.py`. Verificado: 299 genéricos de la canasta 2018 coinciden exactamente con los 299 extraídos de las series BIE.
+
+Función de normalización en `infraestructura/csv/_utils.py`, compartida con `LectorSeriesCsv`.
+
+**Adaptador**
+
+```python
+class LectorCanastaCsv:
+    def leer(self, ruta: Path, version: VersionCanasta) -> CanastaCanonica: ...
+```
+
+| Condición | Lanza |
+| --- | --- |
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo vacío | `ArchivoVacio` |
+| CSV no parseable | `ArchivoCorrupto` |
+| encoding no decodificable | `EncodingNoLegible` |
+| columnas requeridas ausentes | `ColumnasMinFaltantes` |
+
+---
+
+## 8.2 lector_series_csv
+
+`LectorSeriesCsv` implementa `LectorSeries`. Carga un CSV exportado del BIE del INEGI y devuelve `SerieNormalizada`. Resuelve internamente orientación, metadatos y encoding.
+
+**Formato del CSV**
+
+Archivo descargado del BIE del INEGI. Todas las versiones comparten el mismo formato de exportación con dos variantes: con columnas de metadatos o sin ellas.
+
+**Encabezado INEGI:** siempre 5 líneas a saltar (`skiprows=5`): 4 líneas de metadatos institucionales + 1 línea vacía.
+
+**Orientación horizontal** (filas = genéricos, columnas = periodos):
+
+| Columna | Notas |
+| --- | --- |
+| `Título` (posición 0) | Descripción larga del genérico o agregado |
+| Metadatos opcionales | `Periodicidad`, `Unidad`, `Base`, `Aviso`, etc. |
+| `Cifra`, `Serie` | Presentes en ambas variantes; se descartan |
+| `1Q Ene 2018`, `2Q Ene 2018`, … | Columnas de periodo; formato `[12]Q Mes YYYY` |
+
+**Orientación vertical** (filas = periodos, columnas = genéricos): el `Título` en posición 0 contiene cadenas de periodo; el resto de columnas son títulos largos de series. Se normaliza a horizontal transponiendo.
+
+**Detección de orientación:**
+
+1. Leer con `skiprows=5`. Si `df.columns[0] != 'Título'` → `ArchivoCorrupto`.
+2. Si `'Cifra' in df.columns` → horizontal.
+3. Si `'Cifra' in df.iloc[:, 0].values` → vertical.
+4. Si ninguno → `OrientacionNoDetectable`.
+
+El metadata se descarta implícitamente: en horizontal se conservan solo columnas cuyo nombre coincide con el patrón de periodo; en vertical, solo filas cuyo `Título` coincide con ese patrón.
+
+**Extracción del genérico desde `Título`**
+
+Dos estrategias determinísticas según formato:
+
+1. **Formato con clave de 3 dígitos** (series 2018/2024): regex `\b\d{3}\b\s*(.*)` sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto son agregados CCIF y se descartan.
+2. **Formato jerárquico BIE sin clave terminal** (series 2010/2013): se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título empiece con `titulo + ","`). En esas filas, el extractor ubica el último componente con código CCIF (`01.1.1`, `04.5.1`, etc.) y genera candidatos de sufijo. Esto preserva genéricos con comas, como `Leche evaporada, condensada y maternizada`. Aplica tabla mínima de aliases para diferencias reales verificadas (`niña`/`niñas`, `deshechables`/`desechables`). Sin fuzzy matching.
+
+**Normalización de nombres:** eliminar tildes vocálicas, conservar `ñ`, eliminar puntuación, minúsculas. Resultado: `generico_limpio`; nombre original: `generico_original`. Implementada en `infraestructura/csv/_utils.py`.
+
+**Parseo de periodos:** `"1Q Ene 2018"` → `PeriodoQuincenal(2018, 1, 1)`. Mes en español abreviado (`Ene`…`Dic`). Internamente usa `periodo_desde_str`; si el string no puede parsearse lanza `PeriodoNoInterpretable`.
+
+**Adaptador**
+
+```python
+class LectorSeriesCsv:
+    def leer(self, ruta: Path) -> SerieNormalizada: ...
+```
+
+| Condición | Lanza |
+| --- | --- |
+| `ruta` no existe | `ArchivoNoEncontrado` |
+| archivo vacío | `ArchivoVacio` |
+| CSV no parseable o `df.columns[0] != 'Título'` | `ArchivoCorrupto` |
+| encoding no decodificable | `EncodingNoLegible` |
+| orientación no detectable | `OrientacionNoDetectable` |
+| columna de periodo no parseable | `PeriodoNoInterpretable` |
+| ninguna estrategia produce genéricos válidos | `SerieVacia` |
+
+---
+
+## 8.3 fuente_validacion_api
+
+`FuenteValidacionApi` implementa `FuenteValidacion`. Consulta la API de indicadores del INEGI BIE-BISE y devuelve históricos completos con cache de clase.
+
+**Constructor**
+
+```python
+class FuenteValidacionApi:
+    def __init__(self, token: str, tipo: str, timeout: int = 10) -> None: ...
+```
+
+Lanza `ErrorConfiguracion` si `tipo not in _INDICADORES_QUINCENALES`.
+
+**URL de la API**
+
+```
+https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/{indicador}/es/00/false/BIE-BISE/2.0/{token}?type=json
+```
+
+Una sola llamada devuelve todo el histórico disponible (~917 observaciones para INPC quincenal). El token no es validado por la API (cualquier string funciona para acceso; credenciales incorrectas → HTTP 4xx → `FuenteNoDisponible`).
+
+**Formato de respuesta**
+
+```json
+{
+  "Series": [{
+    "OBSERVATIONS": [
+      {"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "145.44600000000000000000"},
+      ...
+    ]
+  }]
+}
+```
+
+Las observaciones vienen en orden cronológico descendente. `OBS_STATUS` siempre es `"3"` — no se filtra.
+
+**Mapeo `TIME_PERIOD` → periodo**
+
+`_fetch()` detecta el tipo por conteo de partes (`split("/")`):
+
+| Formato | Partes | Tipo | Construcción |
+| --- | --- | --- | --- |
+| `"YYYY/MM/QQ"` | 3 | quincenal | `PeriodoQuincenal(YYYY, MM, QQ)` |
+| `"YYYY/MM"` | 2 | mensual | `PeriodoMensual(YYYY, MM)` |
+
+`OBS_VALUE` es string con decimales. Se convierte con `float()`. Si es JSON `null` → `None` para ese periodo.
+
+**Mapeo tipo → indicador — niveles quincenales**
+
+| `tipo` | índice | BIE |
+| --- | --- | --- |
+| `"inpc"` | `"INPC"` | `910420` |
+| `"inflacion componente"` | `"subyacente"` | `910421` |
+| `"inflacion componente"` | `"no subyacente"` | `910424` |
+| `"inflacion subcomponente"` | `"mercancias"` | `910422` |
+| `"inflacion subcomponente"` | `"servicios"` | `910423` |
+| `"inflacion subcomponente"` | `"agropecuarios"` | `910425` |
+| `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910426` |
+
+**Mapeo tipo → indicador — niveles mensuales**
+
+| `tipo` | índice | BIE |
+| --- | --- | --- |
+| `"inpc"` | `"INPC"` | `910392` |
+| `"inflacion componente"` | `"subyacente"` | `910393` |
+| `"inflacion componente"` | `"no subyacente"` | `910396` |
+| `"inflacion subcomponente"` | `"mercancias"` | `910394` |
+| `"inflacion subcomponente"` | `"servicios"` | `910395` |
+| `"inflacion subcomponente"` | `"agropecuarios"` | `910397` |
+| `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910398` |
+
+**Mapeo tipo → indicador — variaciones mensuales**
+
+| `tipo_variacion` | `tipo` | índice | BIE |
+| --- | --- | --- | --- |
+| `"periodica"` | `"inpc"` | `"INPC"` | `910399` |
+| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `910400` |
+| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `910403` |
+| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `910401` |
+| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `910402` |
+| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910404` |
+| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910405` |
+| `"interanual"` | `"inpc"` | `"INPC"` | `910406` |
+| `"interanual"` | `"inflacion componente"` | `"subyacente"` | `910407` |
+| `"interanual"` | `"inflacion componente"` | `"no subyacente"` | `910410` |
+| `"interanual"` | `"inflacion subcomponente"` | `"mercancias"` | `910408` |
+| `"interanual"` | `"inflacion subcomponente"` | `"servicios"` | `910409` |
+| `"interanual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910411` |
+| `"interanual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910412` |
+| `"acumulada_anual"` | `"inpc"` | `"INPC"` | `910413` |
+| `"acumulada_anual"` | `"inflacion componente"` | `"subyacente"` | `910414` |
+| `"acumulada_anual"` | `"inflacion componente"` | `"no subyacente"` | `910417` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"mercancias"` | `910415` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"servicios"` | `910416` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910418` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910419` |
+
+**Mapeo tipo → indicador — variaciones quincenales**
+
+| `tipo_variacion` | `tipo` | índice | BIE |
+| --- | --- | --- | --- |
+| `"periodica"` | `"inpc"` | `"INPC"` | `910427` |
+| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `910428` |
+| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `910431` |
+| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `910429` |
+| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `910430` |
+| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910432` |
+| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910433` |
+| `"interanual"` | `"inpc"` | `"INPC"` | `910438` |
+| `"interanual"` | `"inflacion componente"` | `"subyacente"` | `910439` |
+| `"interanual"` | `"inflacion componente"` | `"no subyacente"` | `910442` |
+| `"interanual"` | `"inflacion subcomponente"` | `"mercancias"` | `910440` |
+| `"interanual"` | `"inflacion subcomponente"` | `"servicios"` | `910441` |
+| `"interanual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910443` |
+| `"interanual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910444` |
+| `"acumulada_anual"` | `"inpc"` | `"INPC"` | `910445` |
+| `"acumulada_anual"` | `"inflacion componente"` | `"subyacente"` | `910446` |
+| `"acumulada_anual"` | `"inflacion componente"` | `"no subyacente"` | `910449` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"mercancias"` | `910447` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"servicios"` | `910448` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910450` |
+| `"acumulada_anual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910451` |
+
+**Mapeo tipo → indicador — incidencias mensuales**
+
+| `tipo_incidencia` | `tipo` | índice | BIE |
+| --- | --- | --- | --- |
+| `"periodica"` | `"inpc"` | `"INPC"` | `909281` |
+| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `909282` |
+| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `909290` |
+| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `909283` |
+| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `909286` |
+| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `909291` |
+| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `909294` |
+
+**Cache de clase**
+
+`_cache: dict[str, dict[_Periodo, float | None]]` es variable de clase — compartida entre instancias. Primera llamada por indicador descarga histórico completo; siguientes reutilizan sin requests adicionales. Para limpiar en tests: `FuenteValidacionApi._cache.clear()`.
+
+**Errores**
+
+| Condición | Lanza |
+| --- | --- |
+| `tipo not in _INDICADORES_QUINCENALES` en constructor | `ErrorConfiguracion` |
+| red / timeout (`requests.exceptions.RequestException`) | `FuenteNoDisponible` |
+| HTTP 4xx / 5xx | `FuenteNoDisponible` |
+| respuesta no es JSON válido | `RespuestaInvalida` |
+| sin clave `Series` / `OBSERVATIONS`, o `Series` vacío | `RespuestaInvalida` |
+| `TIME_PERIOD` o `OBS_VALUE` con formato inesperado | `RespuestaInvalida` |
+
+---
+
+## 9. Estrategia de errores
+
+Todas las excepciones del sistema heredan de `ReplicaInpcError` y se definen en `dominio/errores.py`. Los adaptadores traducen errores externos antes de que lleguen al dominio; las capas intermedias no capturan ni envuelven — dejan pasar.
+
+---
+
+## 9.1 Jerarquía de excepciones
+
+```python
+# Base
+class ReplicaInpcError(Exception): ...
+
+# Errores de importación — fallan la corrida inmediatamente
+class ErrorImportacion(ReplicaInpcError): ...
+class ArchivoNoEncontrado(ErrorImportacion): ...
+class ArchivoVacio(ErrorImportacion): ...
+class ArchivoCorrupto(ErrorImportacion): ...
+class EncodingNoLegible(ErrorImportacion): ...
+class OrientacionNoDetectable(ErrorImportacion): ...
+class ColumnasMinFaltantes(ErrorImportacion): ...
+class CanastaNoSoportada(ErrorImportacion): ...
+class PeriodoNoInterpretable(ErrorImportacion): ...
+class VersionNoCoincide(ErrorImportacion): ...
+class SerieVacia(ErrorImportacion): ...
+class PeriodosInsuficientes(ErrorImportacion): ...
+
+# Errores de dominio — invariante violado al construir un contrato
+class ErrorDominio(ReplicaInpcError): ...
+class InvarianteViolado(ErrorDominio): ...
+
+# Errores de cálculo — fallan la corrida inmediatamente
+class ErrorCalculo(ReplicaInpcError): ...
+class CorrespondenciaInsuficiente(ErrorCalculo):
+    def __init__(self, faltantes: list[str]) -> None: ...
+class PonderadorFaltante(ErrorCalculo): ...
+class CanastaSinGenericos(ErrorCalculo): ...
+
+# Errores de validación — no fallan la corrida
+class ErrorValidacion(ReplicaInpcError): ...
+class FuenteNoDisponible(ErrorValidacion): ...
+class RespuestaInvalida(ErrorValidacion): ...
+
+# Errores de configuración — el sistema fue ensamblado o invocado incorrectamente
+class ErrorConfiguracion(ReplicaInpcError): ...
+
+# Errores de persistencia — en la jerarquía por compatibilidad; no lanzados en v2
+class ErrorPersistencia(ReplicaInpcError): ...
+class ArtefactoNoEncontrado(ErrorPersistencia): ...
+```
+
+Todos los tipos de error se re-exportan en `replica_inpc/__init__.py` — el usuario los importa como `rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc., sin rutas internas.
+
+## 9.2 Propagación
+
+Los errores se lanzan lo más cerca posible de donde ocurren. Las capas intermedias no capturan ni envuelven — dejan pasar.
+
+| Error | Dónde se lanza | Quién captura | Efecto |
+| --- | --- | --- | --- |
+| `ErrorImportacion` | adaptador (infraestructura) | `CalcularHistoria` / `api/` | falla la operación |
+| `ErrorDominio` | constructor del contrato (dominio) | `CalcularHistoria` / `api/` | falla la operación |
+| `ErrorCalculo` | dominio (cálculo) | `CalcularHistoria` / `api/` | falla la operación |
+| `ErrorValidacion` | adaptador (infraestructura) | `dominio/validacion/` | validación `no_disponible` |
+| `ErrorConfiguracion` | constructor de adaptador | llamador directo | error de ensamblado |
+
+`ErrorValidacion` no falla la corrida: `dominio/validacion/` lo captura y marca la validación como `no_disponible` para los periodos afectados, preservando el resultado de índice.
+
+## 9.3 Traducción en adaptadores
+
+Los adaptadores traducen excepciones externas a errores propios del sistema antes de que lleguen al dominio. El dominio nunca ve `FileNotFoundError`, `UnicodeDecodeError` ni excepciones de librerías externas.
+
+```python
+# Ejemplo en lector_series_csv.py
+try:
+    df = pd.read_csv(ruta, encoding="cp1252")
+except FileNotFoundError:
+    raise ArchivoNoEncontrado(ruta)
+except UnicodeDecodeError:
+    raise EncodingNoLegible(ruta)
+```
+
+Esto mantiene los casos de uso independientes de las librerías concretas y hace que los errores sean predecibles desde cualquier adaptador.
+
+---
+
+## 10. Estrategia de testing
+
+## 10.1 Tipos de test
+
+| Componente | Tipo | Archivo |
+| --- | --- | --- |
+| `PeriodoQuincenal`, `PeriodoMensual` | Unit | `test_periodos.py` |
+| Manejo de periodos en `api/` | Unit | `test_api_periodos.py` |
+| `correspondencia.py` | Unit | `test_correspondencia.py` |
+| `LaspeyresDirecto` | Unit | `test_calculo_laspeyres_directo.py` |
+| `LaspeyresEncadenado` | Unit | `test_calculo_laspeyres_encadenado.py` |
+| Estrategia de cálculo (`para_canasta`) | Unit | `test_calculo_estrategia.py` |
+| Subíndices | Unit | `test_calculo_subindices.py` |
+| Imputación de faltantes | Unit | `test_calculo_faltantes.py` |
+| `a_mensual`, `empalmar`, `rebasar` | Unit | `test_conversion.py` |
+| Modelos de entrada y base | Unit | `test_modelos_base.py` |
+| `ResultadoIndice` | Unit | `test_modelos_indice.py` |
+| `ResultadoVariacion` | Unit | `test_modelos_variacion.py` |
+| `ResultadoIncidencia` | Unit | `test_modelos_incidencia.py` |
+| Modelos de validación | Unit | `test_modelos_validacion.py` |
+| Funciones de variación | Unit | `test_consulta_variaciones.py`, `test_variaciones.py` |
+| Funciones de incidencia | Unit | `test_consulta_incidencias.py`, `test_incidencias.py` |
+| `validar_indices` | Unit | `test_validar_indices.py` |
+| `validar_variaciones` | Unit | `test_validar_variaciones.py` |
+| `validar_incidencias` | Unit | `test_validar_incidencias.py` |
+| `CalcularHistoria` | Unit | `test_calcular_historia.py` |
+| `api/config.py` | Unit | `test_api_config.py` |
+| `api/insumos.py` | Unit | `test_api_insumos.py` |
+| `api/indices.py` | Unit | `test_api_indices.py` |
+| `api/variaciones.py` | Unit | `test_api_variaciones.py` |
+| `api/incidencias.py` | Unit | `test_api_incidencias.py` |
+| `api/validaciones.py` | Unit | `test_api_validaciones.py` |
+| Re-exports de `api/` | Unit | `test_api_exports.py` |
+| `LectorCanastaCsv` | Integration | `test_lector_canasta_csv.py` — archivos reales |
+| `LectorSeriesCsv` | Integration | `test_lector_series_csv.py` — archivos reales |
+| `FuenteValidacionApi` | Integration | `test_fuente_validacion_api.py` — mockeada (ver §10.3) |
+| `api/flujos.py` | Integration | `test_api_flujos.py` — archivos reales |
+
+---
+
+## 10.2 Fixtures
+
+Fixtures viven en `tests/fixtures/` (vacío; cada test construye sus datos sintéticos inline) y en `data/inputs/` para tests de integración con archivos reales.
+
+**Sintéticos** — construidos con 5-10 genéricos ficticios dentro de cada archivo de test. Cubren las variantes de CSV de series:
+
+| Orientación | Metadatos | Ruido |
+| --- | --- | --- |
+| Horizontal | Con | Sin |
+| Horizontal | Sin | Sin |
+| Vertical | Con | Sin |
+| Vertical | Sin | Sin |
+| Horizontal | Con | Con ruido (subclasificaciones, índices adicionales) |
+
+Un CSV de canasta sintético por versión soportada.
+
+**Integración con datos reales** — archivos reales de `data/inputs/` para verificar que el sistema procesa insumos INEGI sin errores y produce resultados dentro de tolerancia. `test_lector_series_csv.py` verifica las cuatro variantes `series2010_*` (360 candidatos únicos, 283/283 genéricos alineados contra `ponderadores_2010.csv`).
+
+---
+
+## 10.3 Mock de la API del INEGI
+
+`FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real. El patrón es una clase mínima que implementa los tres métodos del protocolo:
+
+```python
+class _Fuente:
+    def obtener_indices(self, periodos: list) -> dict:
+        return {"INPC": {p: 134.471 for p in periodos}}
+
+    def obtener_variaciones(self, periodos: list, tipo_variacion: str) -> dict:
+        return {"INPC": {p: 0.55 for p in periodos}}
+
+    def obtener_incidencias(self, periodos: list, tipo_incidencia: str) -> dict:
+        return {"INPC": {p: 0.04 for p in periodos}}
+
+class _FuenteExplota:
+    def obtener_indices(self, periodos: list) -> dict:
+        raise FuenteNoDisponible("test")
+```
+
+Los mocks cubren cuatro escenarios:
+
+| Escenario | Comportamiento |
+| --- | --- |
+| Respuesta normal | Devuelve valores para todos los periodos |
+| Periodo sin dato | Devuelve `None` para algún periodo |
+| API no disponible | Lanza `FuenteNoDisponible` → validación `no_disponible` |
+| Respuesta inválida | Lanza `RespuestaInvalida` → validación `no_disponible` |
+
+---
+
+## 10.4 Criterio de suficiencia
+
+El suite es suficiente cuando cubre:
+
+- Corrida completa exitosa — canasta única (2018), series completas
+- Corrida histórica completa — `CalcularHistoria` con insumos 2018+2024, `empalmar` correcto
+- Corrida con faltantes en series → periodos en `estado_calculo = "parcial"` o `"sin_datos"`
+- Corrida con faltante en ponderador → falla inmediata (`PonderadorFaltante`)
+- Corrida con API no disponible → continúa, validación `no_disponible`
+- Corrida con respuesta inválida de API → continúa, validación `no_disponible`
+- `LaspeyresEncadenado` con `referencias` → `f_h` exacto, `error_absoluto ≤ 0.0009`
+- `LaspeyresEncadenado` sin `referencias` → fallback media ponderada
+- `empalmar` de dos `ResultadoIndice` → serie continua, sin duplicados, `version_nombres` correcto
+- `rebasar` → índice de referencia = 100.0 en el periodo base
+- `a_mensual` → promedio simple 1Q/2Q, `estado_calculo` correcto
+- Variaciones e incidencias: periódica, interanual, acumulada anual — valores dentro de tolerancia
+- Validación cruzada contra INEGI — `error_absoluto ≤ tolerancia_indice`, `error_pp ≤ tolerancia_derivados`
+- Invariantes de todos los contratos del dominio
+- Las 4 variantes de CSV de series (con/sin metadatos × horizontal/vertical)
+- Correspondencia: match exitoso; fallo por cobertura insuficiente (`CorrespondenciaInsuficiente`)
+- Test de integración con datos reales — canasta 2018 y 2024
