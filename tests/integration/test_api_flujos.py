@@ -15,6 +15,7 @@ _SERIE_2018 = str(DATA_DIR / "series2018_horizontal_metadata.CSV")
 _BASE = PeriodoQuincenal(2018, 7, 2)
 
 
+@pytest.mark.requires_data
 def test_calcular_historia_defaults_sin_argumentos_extra() -> None:
     # Defaults (referencia="Jul 2018", periodicidad="mensual") deben ser
     # consistentes entre sí: el rebase mensual exige una referencia mensual.
@@ -28,6 +29,7 @@ def test_calcular_historia_defaults_sin_argumentos_extra() -> None:
     )
 
 
+@pytest.mark.requires_data
 def test_calcular_historia_2018_standalone_quincenal() -> None:
     resultado = rep.calcular_historia(
         [(2018, _CANASTA_2018, _SERIE_2018)],
@@ -51,6 +53,7 @@ def test_calcular_historia_referencia_invalida_lanza_error_configuracion() -> No
         )
 
 
+@pytest.mark.requires_data
 def test_calcular_historia_smoke_pipeline_completo() -> None:
     # Variación y consulta sobre el resultado del flujo orquestado.
     resultado = rep.calcular_historia(
