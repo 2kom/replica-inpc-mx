@@ -228,9 +228,9 @@ class FuenteValidacionApi:
 
     def obtener_variaciones(
         self,
-        periodos: list[PeriodoMensual] | list[PeriodoQuincenal],
+        periodos: list[PeriodoQuincenal | PeriodoMensual],
         tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-    ) -> dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]]:
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]:
         """Devuelve series de variación publicadas por INEGI.
 
         Detecta automáticamente si los periodos son mensuales o quincenales y

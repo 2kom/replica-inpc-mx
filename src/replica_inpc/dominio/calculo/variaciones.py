@@ -289,7 +289,7 @@ def variacion_desde(
         raise InvarianteViolado(
             f"El periodo 'hasta' ({hasta}) no existe en el resultado."
         )
-    if hasta_efectivo < desde:
+    if hasta_efectivo < desde:  # type: ignore[operator]
         raise InvarianteViolado(
             f"'hasta' ({hasta_efectivo}) no puede ser anterior a 'desde' ({desde})."
         )
@@ -341,8 +341,8 @@ def variacion_desde(
             )
             continue
 
-        valor_desde = float(valores.at[(desde_real, indice)])
-        valor_hasta = float(valores.at[(hasta_real, indice)])
+        valor_desde = float(valores.at[(desde_real, indice)])  # type: ignore[arg-type]
+        valor_hasta = float(valores.at[(hasta_real, indice)])  # type: ignore[arg-type]
         variacion_pp = (valor_hasta / valor_desde - 1.0) * 100.0
         estado = _estado_derivado(
             str(estados.at[(hasta_real, indice)]),
@@ -358,7 +358,7 @@ def variacion_desde(
                     "clase_variacion": "desde",
                     "variacion_pp": variacion_pp,
                     "estado_calculo": estado,
-                    "version_t": int(versiones.at[(hasta_real, indice)]),
+                    "version_t": int(versiones.at[(hasta_real, indice)]),  # type: ignore[arg-type]
                 }
             )
         filas_rep.append(
@@ -425,7 +425,7 @@ def _fila_reporte(
         if cobertura is None:
             return float("nan")
         try:
-            return float(cobertura.at[(p, indice)])
+            return float(cobertura.at[(p, indice)])  # type: ignore[arg-type]
         except KeyError:
             return float("nan")
 

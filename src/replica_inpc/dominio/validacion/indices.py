@@ -45,11 +45,11 @@ def validar_indices(
     estados: list[str] = []
     valores_inegi: list[float] = []
     errores: list[float] = []
-    for (periodo, indice), fila in largo.iterrows():
+    for (periodo, indice), fila in largo.iterrows():  # type: ignore[misc]
         estado, valor_inegi, error = clasificar(
             fila["indice_replicado"],
-            inegi.get(indice),
-            periodo,
+            inegi.get(indice),  # type: ignore[has-type]
+            periodo,  # type: ignore[has-type]
             fila["estado_calculo"],
             tolerancia,
             admite_sin_calculo=True,

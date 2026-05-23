@@ -30,7 +30,7 @@ def _verificar_rango(periodo_desde: Periodo | None, periodo_hasta: Periodo | Non
     if (
         periodo_desde is not None
         and periodo_hasta is not None
-        and periodo_hasta < periodo_desde
+        and periodo_hasta < periodo_desde  # type: ignore[operator]
     ):
         raise InvarianteViolado(
             f"'desde' ({periodo_desde}) no puede ser posterior a 'hasta' "
@@ -41,7 +41,7 @@ def _verificar_rango(periodo_desde: Periodo | None, periodo_hasta: Periodo | Non
 def valor_en(df: pd.DataFrame, columna: str, periodo: Periodo) -> pd.DataFrame:
     """Devuelve todas las categorías en `periodo`; índice = `indice`."""
     _verificar_periodo(df, periodo)
-    return df.xs(periodo, level="periodo")[[columna]].copy()
+    return df.xs(periodo, level="periodo")[[columna]].copy()  # type: ignore[return-value]
 
 
 def serie_en_rango(
@@ -137,5 +137,5 @@ def extremo(
 
     col = sub[columna]
     etiqueta = col.idxmax() if mayor else col.idxmin()
-    periodo, ind = etiqueta
-    return periodo, str(ind), float(col.loc[etiqueta])
+    periodo, ind = etiqueta  # type: ignore[misc, str-unpack]
+    return periodo, str(ind), float(col.loc[etiqueta])  # type: ignore[arg-type, return-value]

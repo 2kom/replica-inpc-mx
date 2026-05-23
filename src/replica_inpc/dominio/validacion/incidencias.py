@@ -61,13 +61,13 @@ def validar_incidencias(
     estados: list[str] = []
     valores_inegi: list[float] = []
     errores: list[float] = []
-    for ((periodo, indice), fila), valor_rep in zip(
+    for ((periodo, indice), fila), valor_rep in zip(  # type: ignore[misc]
         reporte_base.iterrows(), inc_pp.to_numpy()
     ):
         estado, valor_inegi, error = clasificar(
             valor_rep,
-            inegi.get(indice),
-            periodo,
+            inegi.get(indice),  # type: ignore[arg-type, has-type]
+            periodo,  # type: ignore[has-type]
             fila["estado_calculo"],
             tolerancia_pp,
             admite_sin_calculo=True,

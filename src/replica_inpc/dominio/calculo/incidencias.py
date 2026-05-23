@@ -187,7 +187,7 @@ def incidencia_desde(
         raise InvarianteViolado(f"El periodo 'hasta' ({hasta}) no existe en el resultado.")
     desde_e: Periodo = desde if desde is not None else periodos[0]
     hasta_e: Periodo = hasta if hasta is not None else periodos[-1]
-    if hasta_e < desde_e:
+    if hasta_e < desde_e:  # type: ignore[operator]
         raise InvarianteViolado(
             f"'hasta' ({hasta_e}) no puede ser anterior a 'desde' ({desde_e})."
         )
@@ -297,7 +297,7 @@ def _construir_resultado(
     ]
     if any(same_encadenada):
         traslape_por_version: dict[int, Periodo] = {
-            ver: min(p for p, v in version_por_periodo.items() if v == ver)
+            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[type-var, misc]
             for ver in versiones_encadenadas
             if ver in set(ver_p_per_row)
         }
@@ -306,13 +306,13 @@ def _construir_resultado(
         for ver, traslape in traslape_por_version.items():
             for idx in df_lookup.index.get_level_values("indice").unique():
                 try:
-                    val = float(df_lookup.at[(traslape, idx), "indice_replicado"])
+                    val = float(df_lookup.at[(traslape, idx), "indice_replicado"])  # type: ignore[arg-type]
                     if not pd.isna(val) and val != 0:
                         f_h_clas_map[(ver, str(idx))] = val / 100
                 except KeyError:
                     pass
             try:
-                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])
+                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
                 if not pd.isna(val) and val != 0:
                     f_h_inpc_map[ver] = val / 100
             except KeyError:
@@ -359,7 +359,7 @@ def _construir_resultado(
     inpc_estado_cache: dict[Periodo, object] = {}
     for bp in set(base_periodos):
         try:
-            inpc_val_cache[bp] = float(df_inpc.at[(bp, "INPC"), "indice_replicado"])
+            inpc_val_cache[bp] = float(df_inpc.at[(bp, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
             inpc_estado_cache[bp] = df_inpc.at[(bp, "INPC"), "estado_calculo"]
         except KeyError:
             inpc_val_cache[bp] = float("nan")

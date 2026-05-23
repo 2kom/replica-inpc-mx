@@ -64,7 +64,7 @@ def _tcac(
     `1/ppy` de año (`ppy = 24` quincenal, `12` mensual).
     """
     serie = _comun.serie_en_rango(df, _COL, desde, hasta, indice)
-    factor = float((1.0 + serie / 100.0).prod())
+    factor = float((1.0 + serie / 100.0).prod())  # type: ignore[arg-type]
     ppy = 24 if isinstance(serie.index[0], PeriodoQuincenal) else 12
     return (factor ** (ppy / len(serie)) - 1.0) * 100.0
 
