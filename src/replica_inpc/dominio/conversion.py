@@ -18,15 +18,40 @@ _COLS_REPORTE_MIN = ("genericos_con_indice", "cobertura_genericos_pct", "pondera
 _COLS_REPORTE_MAX = ("genericos_sin_indice",)
 
 
+def _componer_mapas(m1: dict[str, str], m2: dict[str, str]) -> dict[str, str]:
+    resultado: dict[str, str] = {}
+    for nombre in set(m1) | set(m2):
+        v1 = m1.get(nombre, nombre)
+        v2 = m2.get(v1, v1)
+        if v2 != nombre:
+            resultado[nombre] = v2
+    return resultado
+
+
 def _construir_mapa_renombre(
     tipo: str, version_origen: int, version_canonica: int
 ) -> dict[str, str]:
     if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
         return {}
-    if version_origen < version_canonica:
-        return dict(RENOMBRES_INDICES[tipo].get(version_origen, {}))
-    mapa_forward = RENOMBRES_INDICES[tipo].get(version_canonica, {})
-    return {v: k for k, v in mapa_forward.items()}
+    orden = list(_ORDEN_VERSIONES)
+    try:
+        idx_o = orden.index(version_origen)
+        idx_c = orden.index(version_canonica)
+    except ValueError:
+        return {}
+    mapa: dict[str, str] = {}
+    if idx_o < idx_c:
+        for paso in range(idx_o, idx_c):
+            mapa_paso = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
+            mapa = _componer_mapas(mapa, mapa_paso)
+    else:
+        pasos_inv = []
+        for paso in range(idx_c, idx_o):
+            mapa_fwd = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
+            pasos_inv.append({v: k for k, v in mapa_fwd.items()})
+        for mapa_inv in reversed(pasos_inv):
+            mapa = _componer_mapas(mapa, mapa_inv)
+    return mapa
 
 
 def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
@@ -124,14 +149,13 @@ def empalmar(
         vc = int(version_nombres)
 
     vers_labels = {max(m.version for m in r.manifiesto) for r in ordenados}
-    if version_nombres is not None:
-        vers_labels.add(vc)
-    idx_labels = [_ORDEN_VERSIONES.index(v) for v in vers_labels if v in _ORDEN_VERSIONES]
-    if idx_labels and max(idx_labels) - min(idx_labels) > 1:
-        raise InvarianteViolado(
-            f"empalmar: nomenclaturas {sorted(vers_labels)} abarcan más de un paso adyacente "
-            f"en {list(_ORDEN_VERSIONES)}; componer por pares vecinos en su lugar."
-        )
+    vers_en_orden = sorted(v for v in vers_labels if v in _ORDEN_VERSIONES)
+    if version_nombres is not None and vers_en_orden:
+        if vc < min(vers_en_orden) or vc > max(vers_en_orden):
+            raise InvarianteViolado(
+                f"empalmar: version_nombres={vc} fuera del rango de versiones de los inputs "
+                f"[{min(vers_en_orden)}, {max(vers_en_orden)}]."
+            )
 
     tipo_unico = next(iter(tipos))
 

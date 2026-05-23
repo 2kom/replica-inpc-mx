@@ -116,16 +116,19 @@ def test_empalmar_pares_con_frontera_aceptados() -> None:
     assert len(out.manifiesto) == 2
 
 
-def test_empalmar_tres_versiones_en_una_llamada_falla() -> None:
-    # Tres versiones en una sola llamada: span {2010, 2013, 2018} = 2 pasos > 1.
+def test_empalmar_tres_versiones_en_una_llamada_ok() -> None:
+    # Tres versiones en una sola llamada: renombre transitivo 2010→2013→2018.
     pa = PeriodoQuincenal(2010, 12, 2)
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
+    pd_ = PeriodoQuincenal(2018, 8, 1)
     r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
     r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
-    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None)], version=2018)
-    with pytest.raises(InvarianteViolado, match="paso adyacente"):
-        empalmar([r_2010, r_2013, r_2018], forzar=True)
+    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 112.0, "ok", None)], version=2018)
+    out = empalmar([r_2010, r_2013, r_2018], forzar=True)
+    assert len(out.manifiesto) == 3
+    periodos = list(out.df.index.get_level_values("periodo"))
+    assert periodos == sorted(periodos)
 
 
 def test_empalmar_cadena_pares_con_fronteras() -> None:
@@ -260,11 +263,33 @@ def test_empalmar_version_nombres_explicito_2018_invierte() -> None:
     assert set(out.df.index.get_level_values("indice")) == {"comunicaciones"}
 
 
+def test_empalmar_bloques_preempalmados_ok() -> None:
+    # Escenario real: dos bloques pre-empalmados con span>1 entre sus max_versions.
+    # pre_r = empalmar([r_2010, r_2013]) → max_version=2013
+    # inpc_pos = empalmar([r_2018, r_2024]) → max_version=2024
+    # empalmar([pre_r, inpc_pos]): renombre transitivo 2013→2018→2024.
+    pa = PeriodoQuincenal(2010, 12, 2)
+    pb = PeriodoQuincenal(2013, 3, 2)
+    pc = PeriodoQuincenal(2018, 7, 2)
+    pd_ = PeriodoQuincenal(2024, 7, 2)
+    pe = PeriodoQuincenal(2024, 8, 1)
+    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
+    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
+    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018)
+    r_2024 = _resultado([(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024)
+    pre_r = empalmar([r_2010, r_2013])
+    inpc_pos = empalmar([r_2018, r_2024])
+    final = empalmar([pre_r, inpc_pos])
+    assert len(final.manifiesto) == 4
+    periodos = list(final.df.index.get_level_values("periodo"))
+    assert periodos == sorted(periodos)
+
+
 def test_empalmar_version_nombres_fuera_de_rango_falla() -> None:
-    # inputs 2018+2024, pide 2010 como destino: span {2010,2018,2024} = 3 pasos > 1.
+    # inputs 2018+2024, pide 2010 como destino: fuera del rango [2018, 2024].
     r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
     r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
-    with pytest.raises(InvarianteViolado, match="paso adyacente"):
+    with pytest.raises(InvarianteViolado, match="fuera del rango"):
         empalmar([r_2018, r_2024], version_nombres=2010)
 
 
