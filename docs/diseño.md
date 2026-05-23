@@ -2474,7 +2474,7 @@ def calcular_historia(
 | --- | --- | --- |
 | `insumos` | `list[tuple[VersionCanasta, str, str]]` | orden cronológico; cada elemento = `(version, ruta_canasta, ruta_series)`; mínimo 1 elemento; sin versiones duplicadas; si contiene 2013 → debe contener 2010; si contiene 2024 → debe contener 2018 |
 | `tipo` | `str` | clasificación a calcular; debe existir en todas las canastas; default `"inpc"` |
-| `referencia` | `str` | periodo base para `rebasar`; acepta `"NQ Mmm AAAA"` o `"Mmm AAAA"`; con `periodicidad="mensual"` un valor quincenal se convierte automáticamente a su equivalente mensual; default `"2Q Jul 2018"` |
+| `referencia` | `str` | periodo base para `rebasar`; solo formato quincenal `"NQ Mmm AAAA"`; con `periodicidad="mensual"` se convierte automáticamente a su equivalente mensual; default `"2Q Jul 2018"` |
 | `periodicidad` | `Literal["quincenal", "mensual"]` | frecuencia del resultado final; default `"mensual"` |
 
 Devuelve `ResultadoIndice` empalmado, rebased a `referencia`, en `periodicidad` indicada; nombres de categorías de la versión más reciente en `insumos`.
@@ -2493,6 +2493,7 @@ Devuelve `ResultadoIndice` empalmado, rebased a `referencia`, en `periodicidad` 
 | orientación no detectable en serie | `OrientacionNoDetectable` |
 | sin genéricos útiles en serie | `SerieVacia` |
 | `referencia` no parseable | `ErrorConfiguracion` |
+| `referencia` en formato mensual | `ErrorConfiguracion` |
 
 **Orquestación interna** (el usuario no tiene acceso a resultados intermedios):
 

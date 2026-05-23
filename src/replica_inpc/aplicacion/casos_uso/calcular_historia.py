@@ -101,6 +101,11 @@ class CalcularHistoria:
 
         if periodicidad == "mensual":
             acc = a_mensual(acc)
+            # "2Q Jul 2018" (quincenal) → "Jul 2018" (mensual) para que el rebase funcione
+            if isinstance(periodo_referencia, PeriodoQuincenal):
+                periodo_referencia = PeriodoMensual(
+                    periodo_referencia.año, periodo_referencia.mes
+                )
         return rebasar(acc, periodo_referencia)
 
     @staticmethod
