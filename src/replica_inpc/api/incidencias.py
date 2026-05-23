@@ -1,50 +1,132 @@
-from pathlib import Path
+"""Cálculo y análisis de incidencias."""
 
-from replica_inpc.dominio.incidencias import (
+from __future__ import annotations
+
+import pandas as pd
+
+from replica_inpc.api._periodos import parsear_periodo
+from replica_inpc.dominio.calculo.incidencias import (
     incidencia_acumulada_anual as _incidencia_acumulada_anual,
 )
-from replica_inpc.dominio.incidencias import (
+from replica_inpc.dominio.calculo.incidencias import (
     incidencia_desde as _incidencia_desde,
 )
-from replica_inpc.dominio.incidencias import (
+from replica_inpc.dominio.calculo.incidencias import (
     incidencia_periodica as _incidencia_periodica,
 )
+from replica_inpc.dominio.consulta import incidencias as _consulta
+from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
-from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
-from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import VersionCanasta
-from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
+from replica_inpc.dominio.modelos.indice import ResultadoIndice
 
-
-def _cargar_canastas(
-    canastas: list[tuple[Path | str, VersionCanasta]],
-) -> dict[int, object]:
-    lector = LectorCanastaCsv()
-    return {int(v): lector.leer(Path(ruta), v) for ruta, v in canastas}
+# -- series --------------------------------------------------------------------
 
 
 def incidencia_periodica(
-    inpc: ResultadoCalculo,
-    clasificacion: ResultadoCalculo,
-    canastas: list[tuple[Path | str, VersionCanasta]],
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
     frecuencia: str,
 ) -> ResultadoIncidencia:
-    return _incidencia_periodica(inpc, clasificacion, _cargar_canastas(canastas), frecuencia)  # type: ignore[arg-type]
+    """Incidencia de cada periodo contra N periodos anteriores."""
+    return _incidencia_periodica(inpc, clasificacion, canastas, frecuencia)  # type: ignore[arg-type]
 
 
 def incidencia_acumulada_anual(
-    inpc: ResultadoCalculo,
-    clasificacion: ResultadoCalculo,
-    canastas: list[tuple[Path | str, VersionCanasta]],
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
 ) -> ResultadoIncidencia:
-    return _incidencia_acumulada_anual(inpc, clasificacion, _cargar_canastas(canastas))  # type: ignore[arg-type]
+    """Incidencia acumulada del año en curso por genérico."""
+    return _incidencia_acumulada_anual(inpc, clasificacion, canastas)
 
 
 def incidencia_desde(
-    inpc: ResultadoCalculo,
-    clasificacion: ResultadoCalculo,
-    canastas: list[tuple[Path | str, VersionCanasta]],
-    desde: PeriodoQuincenal | PeriodoMensual,
-    hasta: PeriodoQuincenal | PeriodoMensual,
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    canastas: dict[int, CanastaCanonica],
+    desde: str | None = None,
+    hasta: str | None = None,
+    incluir_parciales: bool = True,
 ) -> ResultadoIncidencia:
-    return _incidencia_desde(inpc, clasificacion, _cargar_canastas(canastas), desde, hasta)  # type: ignore[arg-type]
+    """Incidencia total del rango `[desde, hasta]`; una fila por genérico."""
+    return _incidencia_desde(
+        inpc,
+        clasificacion,
+        canastas,
+        parsear_periodo(desde) if desde is not None else None,
+        parsear_periodo(hasta) if hasta is not None else None,
+        incluir_parciales,
+    )
+
+
+# -- análisis ------------------------------------------------------------------
+
+
+def incidencia_en(resultado: ResultadoIncidencia, periodo: str) -> pd.DataFrame:
+    """Incidencia de todas las categorías en `periodo`; índice = `indice`."""
+    return _consulta.incidencia_en(resultado, parsear_periodo(periodo))
+
+
+def incidencia_acumulada(
+    resultado: ResultadoIncidencia,
+    desde: str,
+    hasta: str | None = None,
+    *,
+    indice: str,
+) -> float:
+    """Incidencia acumulada del rango para `indice`."""
+    return _consulta.incidencia_acumulada(
+        resultado,
+        parsear_periodo(desde),
+        parsear_periodo(hasta) if hasta is not None else None,
+        indice=indice,
+    )
+
+
+def incidencia_promedio(
+    resultado: ResultadoIncidencia,
+    desde: str | None = None,
+    hasta: str | None = None,
+    *,
+    indice: str,
+) -> float:
+    """Media aritmética de `incidencia_pp` en el rango para `indice`."""
+    return _consulta.incidencia_promedio(
+        resultado,
+        parsear_periodo(desde) if desde is not None else None,
+        parsear_periodo(hasta) if hasta is not None else None,
+        indice=indice,
+    )
+
+
+def mayor_incidencia(
+    resultado: ResultadoIncidencia,
+    desde: str | None = None,
+    hasta: str | None = None,
+    indice: str | None = None,
+) -> tuple[str, str, float]:
+    """`(periodo, indice, incidencia_pp)` del máximo en el rango."""
+    periodo, idx, valor = _consulta.mayor_incidencia(
+        resultado,
+        parsear_periodo(desde) if desde is not None else None,
+        parsear_periodo(hasta) if hasta is not None else None,
+        indice,
+    )
+    return str(periodo), idx, valor
+
+
+def menor_incidencia(
+    resultado: ResultadoIncidencia,
+    desde: str | None = None,
+    hasta: str | None = None,
+    indice: str | None = None,
+) -> tuple[str, str, float]:
+    """`(periodo, indice, incidencia_pp)` del mínimo en el rango."""
+    periodo, idx, valor = _consulta.menor_incidencia(
+        resultado,
+        parsear_periodo(desde) if desde is not None else None,
+        parsear_periodo(hasta) if hasta is not None else None,
+        indice,
+    )
+    return str(periodo), idx, valor

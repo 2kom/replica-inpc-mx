@@ -91,7 +91,7 @@ _VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
     },
 }
 
-_VARIACIONES_POR_TIPO: dict[str, dict[str, dict[str, str]]] = {
+_VARIACIONES_POR_TIPO_MENSUAL: dict[str, dict[str, dict[str, str]]] = {
     "periodica": _VARIACIONES_PERIODICA_MENSUAL,
     "interanual": _VARIACIONES_INTERANUAL_MENSUAL,
     "acumulada_anual": _VARIACIONES_ACUMULADA_ANUAL_MENSUAL,
@@ -187,7 +187,7 @@ class FuenteValidacionApi:
 
     _cache: dict[str, dict[_Periodo, float | None]] = {}
 
-    def __init__(self, token: str, tipo: str) -> None:
+    def __init__(self, token: str, tipo: str, timeout: int = 10) -> None:
         if tipo not in _INDICADORES_QUINCENALES:
             raise ErrorConfiguracion(
                 f"tipo '{tipo}' no tiene indicador INEGI disponible. "
@@ -195,8 +195,11 @@ class FuenteValidacionApi:
             )
         self._token = token
         self._tipo = tipo
+        self._timeout = timeout
 
-    def obtener(self, periodos: list[_Periodo]) -> dict[str, dict[_Periodo, float | None]]:
+    def obtener_indices(
+        self, periodos: list[_Periodo]
+    ) -> dict[str, dict[_Periodo, float | None]]:
         """Devuelve el valor publicado por el INEGI por índice y por periodo.
 
         Detecta automáticamente si los periodos son mensuales o quincenales y
@@ -225,9 +228,9 @@ class FuenteValidacionApi:
 
     def obtener_variaciones(
         self,
-        periodos: list[PeriodoMensual] | list[PeriodoQuincenal],
+        periodos: list[PeriodoQuincenal | PeriodoMensual],
         tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
-    ) -> dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]]:
+    ) -> dict[str, dict[PeriodoQuincenal | PeriodoMensual, float | None]]:
         """Devuelve series de variación publicadas por INEGI.
 
         Detecta automáticamente si los periodos son mensuales o quincenales y
@@ -235,7 +238,11 @@ class FuenteValidacionApi:
         periodos >= min(historico) — ausencia de clave indica fuera_de_rango_inegi.
         """
         es_quincenal = bool(periodos) and isinstance(periodos[0], PeriodoQuincenal)
-        mapa = _VARIACIONES_POR_TIPO_QUINCENAL if es_quincenal else _VARIACIONES_POR_TIPO
+        mapa = (
+            _VARIACIONES_POR_TIPO_QUINCENAL
+            if es_quincenal
+            else _VARIACIONES_POR_TIPO_MENSUAL
+        )
         if tipo_variacion not in mapa:
             raise ErrorConfiguracion(
                 f"tipo_variacion '{tipo_variacion}' no válido. Valores soportados: {list(mapa)}"
@@ -300,7 +307,7 @@ class FuenteValidacionApi:
     def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:
         url = _URL.format(indicador=indicador, token=self._token)
         try:
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, timeout=self._timeout)
             resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
             raise FuenteNoDisponible(f"No se pudo conectar a la API del INEGI: {exc}") from exc

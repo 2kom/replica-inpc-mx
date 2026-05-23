@@ -1,224 +1,165 @@
 from __future__ import annotations
 
-import uuid
+from datetime import datetime
 
 import pandas as pd
 import pytest
 
-from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.modelos.validacion import ReporteValidacionVariaciones
+from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.validar_variaciones import (
-    _base_periodo,
-    _restar_quincenas,
-    validar_variaciones,
-)
+from replica_inpc.dominio.periodos import PeriodoMensual
+from replica_inpc.dominio.tipos import ManifestDerivado
+from replica_inpc.dominio.validacion.variaciones import validar_variaciones
 
-_ID = str(uuid.uuid4())
+_P1 = PeriodoMensual(2024, 1)
+_P2 = PeriodoMensual(2024, 2)
+_P3 = PeriodoMensual(2024, 3)
+_P4 = PeriodoMensual(2024, 4)
+_P5 = PeriodoMensual(2024, 5)
 
-_PERIODOS = [PeriodoMensual(2019, m) for m in range(1, 10)]
+# -- helpers -------------------------------------------------------------------
 
 
-def _rv(periodos, semiok=None, clase="periodica", descripcion="mensual", valores=None):
-    if valores is None:
-        valores = [100.0 + i * 0.5 for i in range(len(periodos))]
-    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
-    df = pd.DataFrame({"variacion": pd.array(valores, dtype="Float64")}, index=idx)
-    return ResultadoVariacion(
-        df,
-        tipo="inpc",
-        descripcion=descripcion,
-        clase_variacion=clase,  # type: ignore[arg-type]
-        periodos_semiok=frozenset(semiok) if semiok else None,
+def _rv(
+    filas: list[tuple[PeriodoMensual, float, str]],
+    *,
+    tipo: str = "inpc",
+    clase: str = "periodica_mensual",
+    indice: str = "INPC",
+) -> ResultadoVariacion:
+    rows = []
+    for periodo, valor, estado in filas:
+        rows.append(
+            {
+                "periodo": periodo,
+                "indice": indice,
+                "tipo": tipo,
+                "clase_variacion": clase,
+                "variacion_pp": float(valor),
+                "estado_calculo": estado,
+                "version_t": 2024,
+            }
+        )
+    df = pd.DataFrame(rows).set_index(["periodo", "indice"])
+    manifiesto = ManifestDerivado(
+        id_corrida=["c1"], tipo=tipo, clase=clase, descripcion="",
+        fecha=datetime(2024, 1, 1),
     )
+    reporte = pd.DataFrame(
+        {"estado_calculo": [e for _, _, e in filas], "version_t": [2024] * len(filas)},
+        index=df.index,
+    )
+    return ResultadoVariacion(df, manifiesto, reporte, pd.DataFrame())
 
 
-def _inegi_vacio():
-    return {"INPC": {}}
+class _Fuente:
+    def __init__(self, datos: dict) -> None:
+        self._datos = datos
+
+    def obtener_variaciones(self, periodos: list, tipo_variacion: str) -> dict:
+        return self._datos
 
 
-def _inegi_con_valores(periodos, valor_pp=0.5):
-    return {"INPC": {p: valor_pp for p in periodos}}
+class _FuenteExplota:
+    def obtener_variaciones(self, periodos: list, tipo_variacion: str) -> dict:
+        raise AssertionError("FuenteValidacion no debe llamarse")
 
 
-class TestRetornoTipo:
-    def test_retorna_reporte(self):
-        rv = _rv(_PERIODOS)
-        result = validar_variaciones(rv, "periodica", _inegi_vacio())
-        assert isinstance(result, ReporteValidacionVariaciones)
-
-    def test_indice_tiene_tres_niveles(self):
-        rv = _rv(_PERIODOS)
-        reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
-        assert reporte.df.index.names == ["tipo_variacion", "periodo", "indice"]
-
-    def test_tipo_variacion_en_indice(self):
-        rv = _rv(_PERIODOS)
-        reporte = validar_variaciones(rv, "interanual", _inegi_vacio())
-        tipos = reporte.df.index.get_level_values("tipo_variacion").unique().tolist()
-        assert tipos == ["interanual"]
+_FILAS = [
+    (_P1, 1.0, "ok"),
+    (_P2, 1.0, "ok"),
+    (_P3, 1.0, "parcial"),
+    (_P4, 1.0, "ok"),
+    (_P5, 1.0, "ok"),
+]
+_INEGI = {"INPC": {_P1: 1.0, _P2: 2.0, _P3: 2.0, _P4: None}}
 
 
-class TestEstadoValidacion:
-    def test_sin_inegi_es_fuera_de_rango_inegi(self):
-        rv = _rv(_PERIODOS)
-        reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
-        assert (reporte.df["estado_validacion"] == "fuera_de_rango_inegi").all()
-
-    def test_inegi_none_es_no_disponible(self):
-        rv = _rv(_PERIODOS)
-        inegi: dict = {"INPC": {p: None for p in _PERIODOS}}
-        reporte = validar_variaciones(rv, "periodica", inegi)
-        assert (reporte.df["estado_validacion"] == "no_disponible").all()
-
-    def test_dentro_tolerancia_es_ok(self):
-        rv = _rv(_PERIODOS, valores=[1.005] * len(_PERIODOS))
-        # variacion decimal 1.005 × 100 = 100.5 pp; inegi = 100.5 → error 0
-        inegi = _inegi_con_valores(_PERIODOS, valor_pp=100.5)
-        reporte = validar_variaciones(rv, "periodica", inegi)  # type: ignore[arg-type]
-        assert (reporte.df["estado_validacion"] == "ok").all()
-
-    def test_variacion_replicada_almacenada_en_pp(self):
-        rv = _rv(_PERIODOS, valores=[0.005] * len(_PERIODOS))
-        inegi = _inegi_con_valores(_PERIODOS, valor_pp=0.5)
-        reporte = validar_variaciones(rv, "periodica", inegi)  # type: ignore[arg-type]
-        assert reporte.df["variacion_replicada_pp"].tolist() == pytest.approx(
-            [0.5] * len(_PERIODOS)
-        )
-
-    def test_fuera_tolerancia_es_diferencia_detectada(self):
-        rv = _rv(_PERIODOS, valores=[0.005] * len(_PERIODOS))
-        # variacion decimal 0.005 × 100 = 0.5 pp; inegi = 5.0 → error 4.5 pp > 0.09
-        inegi = _inegi_con_valores(_PERIODOS, valor_pp=5.0)
-        reporte = validar_variaciones(rv, "periodica", inegi)  # type: ignore[arg-type]
-        assert (reporte.df["estado_validacion"] == "diferencia_detectada").all()
-
-    def test_base_semiok_excluye_periodica(self):
-        # periodica lag=1: base de Feb 2019 es Ene 2019
-        semiok = {PeriodoMensual(2019, 1)}
-        rv = _rv(_PERIODOS, semiok=semiok)
-        reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
-        estado_feb = reporte.df.loc[
-            ("periodica", PeriodoMensual(2019, 2), "INPC"), "estado_validacion"  # type: ignore[union-attr]
-        ]
-        assert estado_feb == "excluido_semi_ok"
-
-    def test_base_semiok_excluye_interanual(self):
-        # interanual lag=12: base de Ene 2019 es Ene 2018
-        semiok = {PeriodoMensual(2018, 1)}
-        rv = _rv(_PERIODOS, semiok=semiok)
-        reporte = validar_variaciones(rv, "interanual", _inegi_vacio())
-        estado = reporte.df.loc[
-            ("interanual", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
-        ]
-        assert estado == "excluido_semi_ok"
-
-    def test_base_semiok_excluye_acumulada(self):
-        # acumulada: base de Ene 2019 es Dic 2018
-        semiok = {PeriodoMensual(2018, 12)}
-        rv = _rv(_PERIODOS, semiok=semiok, clase="acumulada_anual", descripcion="acumulada_anual")
-        reporte = validar_variaciones(rv, "acumulada_anual", _inegi_vacio())
-        estado = reporte.df.loc[
-            ("acumulada_anual", PeriodoMensual(2019, 1), "INPC"), "estado_validacion"  # type: ignore[union-attr]
-        ]
-        assert estado == "excluido_semi_ok"
-
-    def test_periodo_no_excluido_sin_semiok(self):
-        rv = _rv(_PERIODOS)
-        reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
-        estado_feb = reporte.df.loc[
-            ("periodica", PeriodoMensual(2019, 2), "INPC"), "estado_validacion"  # type: ignore[union-attr]
-        ]
-        assert estado_feb == "fuera_de_rango_inegi"
+def _validacion() -> object:
+    return validar_variaciones(_rv(_FILAS), _Fuente(_INEGI))
 
 
-class TestColumnas:
-    def test_columnas_esperadas(self):
-        rv = _rv(_PERIODOS)
-        reporte = validar_variaciones(rv, "periodica", _inegi_vacio())
-        assert set(reporte.df.columns) == {
-            "variacion_replicada_pp",
-            "variacion_inegi_pp",
-            "error_absoluto_pp",
-            "estado_validacion",
-        }
+# -- estado_validacion por rama ------------------------------------------------
 
 
-class TestInvariantesModelos:
-    def test_reporte_vacio_lanza_error(self):
-        df = pd.DataFrame(
+@pytest.mark.parametrize(
+    "periodo, esperado",
+    [
+        (_P1, "ok"),
+        (_P2, "diferencia_detectada"),
+        (_P3, "diferencia_por_parcial"),
+        (_P4, "no_disponible"),
+        (_P5, "fuera_rango_inegi"),
+    ],
+)
+def test_estado_validacion_por_rama(periodo: PeriodoMensual, esperado: str) -> None:
+    largo = _validacion().resultado.largo
+    assert largo.loc[(periodo, "INPC"), "estado_validacion"] == esperado
+
+
+def test_resumen_conteos_y_global() -> None:
+    fila = _validacion().resumen.iloc[0]
+    assert fila["n_comparables"] == 3
+    assert fila["n_no_disponibles"] == 1
+    assert fila["n_fuera_rango_inegi"] == 1
+    assert fila["n_diferencia_por_parcial"] == 1
+    assert fila["error_absoluto_max_pp"] == pytest.approx(1.0)
+    assert fila["estado_validacion_global"] == "diferencia_detectada"
+
+
+def test_diagnostico_solo_no_ok() -> None:
+    diag = _validacion().diagnostico
+    assert set(diag["estado_validacion"]) == {
+        "diferencia_detectada",
+        "diferencia_por_parcial",
+        "no_disponible",
+        "fuera_rango_inegi",
+    }
+    assert "id_corrida" not in diag.columns
+
+
+def test_reporte_fila_no_computable_es_sin_calculo() -> None:
+    # El .reporte derivado incluye filas no computables ausentes del largo.
+    df = pd.DataFrame(
+        [
             {
-                "variacion_replicada": [],
-                "variacion_inegi_pp": [],
-                "error_absoluto_pp": [],
-                "estado_validacion": [],
-            },
-        )
-        df.index = pd.MultiIndex.from_tuples([], names=["tipo_variacion", "periodo", "indice"])
-        with pytest.raises(InvarianteViolado):
-            ReporteValidacionVariaciones(df)
-
-    def test_reporte_estado_invalido_lanza_error(self):
-        idx = pd.MultiIndex.from_tuples(
-            [("periodica", PeriodoMensual(2019, 1), "INPC")],
-            names=["tipo_variacion", "periodo", "indice"],
-        )
-        df = pd.DataFrame(
-            {
-                "variacion_replicada": [0.005],
-                "variacion_inegi_pp": [0.5],
-                "error_absoluto_pp": [0.0],
-                "estado_validacion": ["invalido"],
-            },
-            index=idx,
-        )
-        with pytest.raises(InvarianteViolado):
-            ReporteValidacionVariaciones(df)
-
-
-_PERIODOS_Q = [PeriodoQuincenal(2019, m, q) for m in range(1, 4) for q in (1, 2)]
+                "periodo": _P1,
+                "indice": "INPC",
+                "tipo": "inpc",
+                "clase_variacion": "periodica_mensual",
+                "variacion_pp": 1.0,
+                "estado_calculo": "ok",
+                "version_t": 2024,
+            }
+        ]
+    ).set_index(["periodo", "indice"])
+    reporte = pd.DataFrame(
+        {"estado_calculo": ["ok", "sin_datos"], "version_t": [2024, 2024]},
+        index=pd.MultiIndex.from_tuples(
+            [(_P1, "INPC"), (_P2, "INPC")], names=["periodo", "indice"]
+        ),
+    )
+    manifiesto = ManifestDerivado(
+        id_corrida=["c1"], tipo="inpc", clase="periodica_mensual", descripcion="",
+        fecha=datetime(2024, 1, 1),
+    )
+    resultado = ResultadoVariacion(df, manifiesto, reporte, pd.DataFrame())
+    v = validar_variaciones(resultado, _Fuente({"INPC": {_P1: 1.0, _P2: 5.0}}))
+    assert v.reporte.loc[(_P2, "INPC"), "estado_validacion"] == "sin_calculo"
+    assert not v.reporte["estado_validacion"].isna().any()
+    assert (_P2, "INPC") not in v.resultado.largo.index
 
 
-class TestRestarQuincenas:
-    def test_resta_una_quincena_dentro_del_mes(self):
-        assert _restar_quincenas(PeriodoQuincenal(2019, 2, 1), 1) == PeriodoQuincenal(2019, 1, 2)
-
-    def test_resta_una_quincena_cruzando_mes(self):
-        assert _restar_quincenas(PeriodoQuincenal(2019, 1, 1), 1) == PeriodoQuincenal(2018, 12, 2)
-
-    def test_resta_24_quincenas_es_interanual(self):
-        assert _restar_quincenas(PeriodoQuincenal(2019, 2, 1), 24) == PeriodoQuincenal(2018, 2, 1)
-
-    def test_resta_24_quincenas_cruzando_anio(self):
-        assert _restar_quincenas(PeriodoQuincenal(2019, 1, 1), 24) == PeriodoQuincenal(2018, 1, 1)
+# -- fail-fast -----------------------------------------------------------------
 
 
-class TestBasePeriodoQuincenal:
-    def test_periodica_resta_una_quincena(self):
-        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "periodica") == PeriodoQuincenal(
-            2019, 2, 2
-        )
-
-    def test_interanual_resta_24_quincenas(self):
-        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "interanual") == PeriodoQuincenal(
-            2018, 3, 1
-        )
-
-    def test_acumulada_anual_es_dic2q_anio_anterior(self):
-        assert _base_periodo(PeriodoQuincenal(2019, 3, 1), "acumulada_anual") == PeriodoQuincenal(
-            2018, 12, 2
-        )
+def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
+    resultado = _rv([(_P1, 1.0, "ok")], tipo="COG", indice="bienes")
+    with pytest.raises(InvarianteViolado):
+        validar_variaciones(resultado, _FuenteExplota())
 
 
-class TestFueraDeRangoInegi:
-    def test_periodo_ausente_del_dict_es_fuera_de_rango(self):
-        rv = _rv(_PERIODOS_Q)
-        reporte = validar_variaciones(rv, "periodica", {"INPC": {}})
-        assert (reporte.df["estado_validacion"] == "fuera_de_rango_inegi").all()
-
-    def test_periodo_con_none_es_no_disponible(self):
-        rv = _rv(_PERIODOS_Q)
-        inegi: dict = {"INPC": {p: None for p in _PERIODOS_Q}}
-        reporte = validar_variaciones(rv, "periodica", inegi)
-        assert (reporte.df["estado_validacion"] == "no_disponible").all()
+def test_clase_no_mapeable_falla_sin_tocar_fuente() -> None:
+    resultado = _rv([(_P1, 1.0, "ok")], clase="periodica_bimestral")
+    with pytest.raises(ErrorConfiguracion):
+        validar_variaciones(resultado, _FuenteExplota())

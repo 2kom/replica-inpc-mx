@@ -26,10 +26,10 @@ python tools/generar_canasta.py ...
 ```
 
 - Python `>=3.10`.  
-- Dependencias del proyecto mas las dependencias opcionales de herramientas:
+- Dependencias del proyecto mas las dependencias opcionales de ponderadores:
 
 ```bash
-pip install -e '.[tools]'
+pip install -e '.[ponderadores]'
 ```
 
 Eso instala, entre otras, las librerias que usa esta herramienta:

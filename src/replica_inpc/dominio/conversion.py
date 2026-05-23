@@ -1,38 +1,359 @@
 from __future__ import annotations
 
-from typing import Any
+import warnings
 
 import pandas as pd
 
+from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.modelos.resultado import ResultadoCalculo
+from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.tipos import VersionCanasta
 
-_ESTADOS_CON_VALOR = frozenset({"ok", "semi_ok"})
+_ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
+_ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
+
+_COLS_REPORTE_STRUCT = ("genericos_esperados", "ponderador_esperado")
+_COLS_REPORTE_MIN = ("genericos_con_indice", "cobertura_genericos_pct", "ponderador_cubierto")
+_COLS_REPORTE_MAX = ("genericos_sin_indice",)
 
 
-def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
-    """Convierte un ResultadoCalculo quincenal a periodos mensuales.
+def _componer_mapas(m1: dict[str, str], m2: dict[str, str]) -> dict[str, str]:
+    resultado: dict[str, str] = {}
+    for nombre in set(m1) | set(m2):
+        v1 = m1.get(nombre, nombre)
+        v2 = m2.get(v1, v1)
+        if v2 != nombre:
+            resultado[nombre] = v2
+    return resultado
 
-    Promedia las dos quincenas de cada mes por promedio simple. Si solo hay
-    una quincena disponible, usa ese valor con estado_calculo='semi_ok'.
 
-    Args:
-        resultado: ResultadoCalculo con todos los periodos PeriodoQuincenal.
+def _construir_mapa_renombre(
+    tipo: str, version_origen: int, version_canonica: int
+) -> dict[str, str]:
+    if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
+        return {}
+    orden = list(_ORDEN_VERSIONES)
+    try:
+        idx_o = orden.index(version_origen)
+        idx_c = orden.index(version_canonica)
+    except ValueError:
+        return {}
+    mapa: dict[str, str] = {}
+    if idx_o < idx_c:
+        for paso in range(idx_o, idx_c):
+            mapa_paso = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
+            mapa = _componer_mapas(mapa, mapa_paso)
+    else:
+        pasos_inv = []
+        for paso in range(idx_c, idx_o):
+            mapa_fwd = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
+            pasos_inv.append({v: k for k, v in mapa_fwd.items()})
+        for mapa_inv in reversed(pasos_inv):
+            mapa = _componer_mapas(mapa, mapa_inv)
+    return mapa
 
-    Returns:
-        ResultadoCalculo con periodos PeriodoMensual y mismo id_corrida.
 
-    Raises:
-        InvarianteViolado: Si resultado ya es mensual.
+def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
+    if not mapa or df.empty:
+        return df
+    new_indice = df.index.get_level_values("indice").map(lambda x: mapa.get(x, x))
+    new_periodo = df.index.get_level_values("periodo")
+    df_nuevo = df.copy()
+    df_nuevo.index = pd.MultiIndex.from_arrays(
+        [new_periodo, new_indice], names=["periodo", "indice"]
+    )
+    return df_nuevo
 
-    Ver: docs/diseño.md §5.13
+
+def _validar_topologia(ordenados: list[ResultadoIndice]) -> list[object]:
+    """Valida topología PATH y devuelve lista de periodos frontera entre pares consecutivos."""
+    conjuntos = [
+        set(r._df_completo.index.get_level_values("periodo")) for r in ordenados
+    ]
+    fronteras: list[object] = []
+    for i in range(len(ordenados) - 1):
+        compartidos = conjuntos[i] & conjuntos[i + 1]
+        if len(compartidos) == 0:
+            raise InvarianteViolado(
+                f"empalmar: par consecutivo [{i}, {i+1}] no comparte ningún periodo — "
+                "no hay frontera válida para empalmar."
+            )
+        if len(compartidos) > 1:
+            raise InvarianteViolado(
+                f"empalmar: par consecutivo [{i}, {i+1}] comparte {len(compartidos)} periodos "
+                f"({sorted(map(str, compartidos))}); se requiere exactamente 1 (topología PATH)."
+            )
+        fronteras.append(next(iter(compartidos)))
+        for j in range(i + 2, len(ordenados)):
+            no_consecutivos = conjuntos[i] & conjuntos[j]
+            if no_consecutivos:
+                raise InvarianteViolado(
+                    f"empalmar: par no-consecutivo [{i}, {j}] comparte periodos "
+                    f"({sorted(map(str, no_consecutivos))}); topología debe ser PATH lineal."
+                )
+    return fronteras
+
+
+def empalmar(
+    resultados: list[ResultadoIndice],
+    forzar: bool = False,
+    version_nombres: VersionCanasta | None = None,
+) -> ResultadoIndice:
+    """Concatena tramos del mismo `tipo` en un único `ResultadoIndice`.
+
+    Normaliza nomenclatura de categorías entre versiones. En la frontera entre
+    tramos consecutivos, el tramo anterior posee (frontera, indice) si ese
+    indice existe en él; si no, el tramo posterior lo aporta.
     """
-    df = resultado.df
+    if len(resultados) < 2:
+        raise InvarianteViolado("empalmar requiere al menos 2 ResultadoIndice.")
+
+    tipos = {m.tipo for r in resultados for m in r.manifiesto}
+    if len(tipos) != 1:
+        raise InvarianteViolado(
+            f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
+        )
+
+    primer_periodo = resultados[0]._df_completo.index.get_level_values("periodo")[0]
+    if not isinstance(primer_periodo, PeriodoQuincenal):
+        warnings.warn(
+            "empalmar recibió ResultadoIndice mensuales. El mes frontera puede perder "
+            "una quincena. Usa a_mensual(empalmar([r1, r2])) en su lugar.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    ordenados = sorted(
+        resultados,
+        key=lambda r: r._df_completo.index.get_level_values("periodo").min(),
+    )
+
+    fronteras = _validar_topologia(ordenados)
+
+    for i, frontera in enumerate(fronteras):
+        ref_i = ordenados[i].periodo_referencia
+        if ref_i is not None and ref_i != frontera:
+            msg = (
+                f"empalmar: tramo {i} tiene periodo_referencia={ref_i} "
+                f"pero la frontera con el siguiente tramo es {frontera}; "
+                "la juntura puede ser discontinua — usa rebasar() antes o forzar=True."
+            )
+            if not forzar:
+                raise InvarianteViolado(msg)
+            warnings.warn(msg, UserWarning, stacklevel=2)
+
+    if version_nombres is None:
+        vc = max(int(v) for r in ordenados for v in r._df_completo["version"].unique())
+    else:
+        vc = int(version_nombres)
+
+    vers_labels = {max(m.version for m in r.manifiesto) for r in ordenados}
+    vers_en_orden = sorted(v for v in vers_labels if v in _ORDEN_VERSIONES)
+    if version_nombres is not None and vers_en_orden:
+        if vc < min(vers_en_orden) or vc > max(vers_en_orden):
+            raise InvarianteViolado(
+                f"empalmar: version_nombres={vc} fuera del rango de versiones de los inputs "
+                f"[{min(vers_en_orden)}, {max(vers_en_orden)}]."
+            )
+
+    tipo_unico = next(iter(tipos))
+
+    indices_acumulados: set[object] = set()
+    periodos_acumulados: set[object] = set()
+    dfs_indice: list[pd.DataFrame] = []
+    dfs_reporte: list[pd.DataFrame] = []
+    dfs_diag: list[pd.DataFrame] = []
+
+    for i, r in enumerate(ordenados):
+        version_origen = max(m.version for m in r.manifiesto)
+        mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
+
+        df_completo = _aplicar_renombre(r._df_completo, mapa)
+        reporte = _aplicar_renombre(r.reporte, mapa)
+        # El renombre puede colapsar dos variantes del mismo índice cuando el
+        # catálogo 2010→2013 está incompleto y acc acumula ambas formas. Se
+        # preserva la primera aparición (orden cronológico = tramo anterior
+        # prevalece), coherente con el contrato de empalmar.
+        if df_completo.index.duplicated().any():
+            df_completo = df_completo[~df_completo.index.duplicated(keep="first")]
+        if reporte.index.duplicated().any():
+            reporte = reporte[~reporte.index.duplicated(keep="first")]
+        periodos_propios = set(df_completo.index.get_level_values("periodo"))
+        frontera = fronteras[i - 1] if i > 0 else None
+
+        if frontera is not None:
+            # Periodos normales: excluir los ya acumulados (excepto la frontera)
+            periodos_normales = periodos_propios - periodos_acumulados - {frontera}
+            # Frontera: solo índices que el acumulado no tiene (nombres canónicos)
+            mask_frontera = df_completo.index.get_level_values("periodo") == frontera
+            df_frontera_todos = df_completo[mask_frontera]
+            indices_frontera_nuevos = ~df_frontera_todos.index.get_level_values("indice").isin(
+                indices_acumulados
+            )
+            df_frontera_nuevos = df_frontera_todos[indices_frontera_nuevos]
+
+            rep_frontera_todos = reporte[reporte.index.get_level_values("periodo") == frontera]
+            rep_frontera_nuevos = rep_frontera_todos[
+                ~rep_frontera_todos.index.get_level_values("indice").isin(indices_acumulados)
+            ]
+
+            mask_normales = df_completo.index.get_level_values("periodo").isin(periodos_normales)
+            df_filtrado = pd.concat([df_completo[mask_normales], df_frontera_nuevos])
+            rep_filtrado = pd.concat([
+                reporte[reporte.index.get_level_values("periodo").isin(periodos_normales)],
+                rep_frontera_nuevos,
+            ])
+        else:
+            df_filtrado = df_completo
+            rep_filtrado = reporte
+
+        dfs_indice.append(df_filtrado)
+        dfs_reporte.append(rep_filtrado)
+        dfs_diag.append(r.diagnostico)
+
+        periodos_acumulados |= periodos_propios
+        indices_acumulados |= set(df_completo.index.get_level_values("indice"))
+
+    df_combinado = pd.concat(dfs_indice)
+    df_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
+
+    reporte_combinado = pd.concat(dfs_reporte)
+    reporte_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
+
+    diag_combinado = pd.concat(dfs_diag, ignore_index=True)
+    manifiesto_combinado = [m for r in ordenados for m in r.manifiesto]
+
+    refs_explicitas = [r.periodo_referencia for r in ordenados if r.periodo_referencia is not None]
+    periodo_referencia_out = refs_explicitas[-1] if refs_explicitas else None
+
+    return ResultadoIndice(
+        df_combinado,
+        manifiesto_combinado,
+        reporte_combinado,
+        diag_combinado,
+        periodo_referencia=periodo_referencia_out,
+    )
+
+
+def rebasar(
+    resultado: ResultadoIndice,
+    periodo_referencia: PeriodoQuincenal | PeriodoMensual,
+    valor_base: float = 100.0,
+) -> ResultadoIndice:
+    """Reexpresa cada índice a una nueva referencia usando el valor replicado propio.
+
+    Endógeno: el denominador es el valor replicado del propio resultado en
+    `periodo_referencia`.
+    """
+    df = resultado._df_completo.copy()
+    indices_unicos = df.index.get_level_values("indice").unique()
+    huerfanos: list[str] = []
+
+    for indice in indices_unicos:
+        key = (periodo_referencia, indice)
+        if key not in df.index:
+            huerfanos.append(str(indice))
+            continue
+        fila_base: pd.Series = df.loc[key]  # type: ignore[index, assignment]
+        estado_base = fila_base["estado_calculo"]
+        if estado_base not in _ESTADOS_CON_VALOR:
+            raise InvarianteViolado(
+                f"El valor base de '{indice}' en {periodo_referencia} no está disponible "
+                f"(estado_calculo='{estado_base}')."
+            )
+        base_raw = fila_base["indice_replicado"]
+        if pd.isna(base_raw):
+            raise InvarianteViolado(
+                f"indice_replicado de '{indice}' en {periodo_referencia} es NaN; "
+                f"estado_calculo='{estado_base}' es inconsistente."
+            )
+        base = float(base_raw)  # type: ignore[arg-type]
+        if base == 0:
+            raise InvarianteViolado(
+                f"indice_replicado de '{indice}' en {periodo_referencia} es 0; no rebasable."
+            )
+
+        mask_indice = df.index.get_level_values("indice") == indice
+        mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
+        df.loc[mask_indice & mask_valor, "indice_replicado"] = (  # type: ignore[index]
+            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
+            * valor_base
+            / base
+        )
+
+    if huerfanos:
+        warnings.warn(
+            f"rebasar: {len(huerfanos)} índice(s) sin dato en {periodo_referencia} "
+            f"quedan sin rebasar (base original): {huerfanos}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return ResultadoIndice(
+        df,
+        resultado.manifiesto,
+        resultado.reporte,
+        resultado.diagnostico,
+        periodo_referencia=periodo_referencia,
+    )
+
+
+def _reporte_a_mensual(df_result: pd.DataFrame, reporte_q: pd.DataFrame) -> pd.DataFrame:
+    """Construye reporte con índice PeriodoMensual a partir del reporte quincenal.
+
+    version/estado_calculo/motivo_error vienen de df_result (ya agregados).
+    Columnas de cobertura: peor caso entre Q1 y Q2 del mismo mes.
+    """
+    rq = reporte_q.reset_index()
+    periodos = rq["periodo"]
+    rq["_año"] = [p.año for p in periodos]
+    rq["_mes"] = [p.mes for p in periodos]
+    rq["_quincena"] = [p.quincena for p in periodos]
+    rq = rq.drop(columns="periodo").set_index(["_año", "_mes", "indice"])
+
+    q1 = rq[rq["_quincena"] == 1].drop(columns="_quincena")
+    q2 = rq[rq["_quincena"] == 2].drop(columns="_quincena")
+    all_groups = q1.index.union(q2.index)
+    q1_r = q1.reindex(all_groups)
+    q2_r = q2.reindex(all_groups)
+
+    años = all_groups.get_level_values("_año")
+    meses = all_groups.get_level_values("_mes")
+    idx_vals = all_groups.get_level_values("indice")
+    periodos_m = [PeriodoMensual(int(a), int(m)) for a, m in zip(años, meses)]
+    m_idx = pd.MultiIndex.from_arrays([periodos_m, idx_vals], names=["periodo", "indice"])
+
+    cols_result = [
+        c for c in ("version", "estado_calculo", "motivo_error") if c in reporte_q.columns
+    ]
+    df_rep = df_result[cols_result].reindex(m_idx)
+
+    for col in _COLS_REPORTE_STRUCT:
+        if col in reporte_q.columns:
+            df_rep[col] = q2_r[col].fillna(q1_r[col]).values
+
+    for col in _COLS_REPORTE_MIN:
+        if col in reporte_q.columns:
+            df_rep[col] = pd.concat([q1_r[col], q2_r[col]], axis=1).min(axis=1).values
+
+    for col in _COLS_REPORTE_MAX:
+        if col in reporte_q.columns:
+            df_rep[col] = pd.concat([q1_r[col], q2_r[col]], axis=1).max(axis=1).values
+
+    return df_rep[list(reporte_q.columns)]
+
+
+def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
+    """Convierte un ResultadoIndice quincenal a periodos mensuales.
+
+    Promedio simple 1Q+2Q. Si solo una quincena disponible → `parcial`.
+    """
+    df = resultado._df_completo
     periodos = df.index.get_level_values("periodo")
 
     if not all(isinstance(p, PeriodoQuincenal) for p in periodos):
-        raise InvarianteViolado("a_mensual requiere un ResultadoCalculo quincenal")
+        raise InvarianteViolado("a_mensual requiere un ResultadoIndice quincenal")
 
     df_flat = df.copy()
     df_flat["_año"] = [p.año for p in periodos]
@@ -48,11 +369,9 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     q1_r = q1.reindex(all_groups)
     q2_r = q2.reindex(all_groups)
 
-    # Metadata: preferir q2, fallback q1
     version = q2_r["version"].fillna(q1_r["version"])
     tipo = q2_r["tipo"].fillna(q1_r["tipo"])
 
-    # Valores e indicadores de disponibilidad
     v1 = q1_r["indice_replicado"]
     v2 = q2_r["indice_replicado"]
     v1_ok = v1.notna()
@@ -60,25 +379,27 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     both_ok = v1_ok & v2_ok
     one_ok = v1_ok ^ v2_ok
 
-    # Estado
     fallida_q1 = (q1_r["estado_calculo"] == "fallida").fillna(False)
     fallida_q2 = (q2_r["estado_calculo"] == "fallida").fillna(False)
     any_fallida = fallida_q1 | fallida_q2
     null_mask = ~any_fallida & ~both_ok & ~one_ok
 
-    estado_calculo = pd.Series("null_por_faltantes", index=all_groups, dtype=object)
+    rellenado_q1 = (q1_r["estado_calculo"] == "rellenado").fillna(False)
+    rellenado_q2 = (q2_r["estado_calculo"] == "rellenado").fillna(False)
+    any_rellenado = rellenado_q1 | rellenado_q2
+
+    estado_calculo = pd.Series("sin_datos", index=all_groups, dtype=object)
     estado_calculo[any_fallida] = "fallida"
     estado_calculo[~any_fallida & both_ok] = "ok"
-    estado_calculo[~any_fallida & one_ok] = "semi_ok"
+    estado_calculo[~any_fallida & both_ok & any_rellenado] = "rellenado"
+    estado_calculo[~any_fallida & one_ok] = "parcial"
 
-    # Valor promediado
     val_avg = (v1 + v2) / 2
     val_one = v1.fillna(v2)
     indice_replicado = pd.Series(float("nan"), index=all_groups)
     indice_replicado[~any_fallida & both_ok] = val_avg[~any_fallida & both_ok]
     indice_replicado[~any_fallida & one_ok] = val_one[~any_fallida & one_ok]
 
-    # Motivo error
     motivo_q1 = q1_r["motivo_error"]
     motivo_q2 = q2_r["motivo_error"]
     motivo_fallida_s = motivo_q1.where(fallida_q1, motivo_q2)
@@ -87,7 +408,6 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     motivo_error[any_fallida] = motivo_fallida_s[any_fallida]
     motivo_error[null_mask] = motivo_faltante_s[null_mask]
 
-    # Construir índice de PeriodoMensual
     años = all_groups.get_level_values("_año")
     meses = all_groups.get_level_values("_mes")
     indices = all_groups.get_level_values("_indice")
@@ -105,60 +425,22 @@ def a_mensual(resultado: ResultadoCalculo) -> ResultadoCalculo:
     )
 
     df_result.sort_index(level="periodo", sort_remaining=False, inplace=True)
-    return ResultadoCalculo(df_result, resultado.id_corrida)
 
+    # ResultadoIndice exige fila por cada manifiesto. Tras a_mensual, una version
+    # puede perder todas sus filas (ej: q1=2018, q2=2024 → mensual hereda 2024 por
+    # preferencia 2Q). Se descartan manifiestos huérfanos; si todos quedarían
+    # huérfanos, se preserva la lista original como fallback de provenance.
+    pares_presentes = set(zip(df_result["version"], df_result["tipo"]))
+    manifiesto_filtrado = [
+        m for m in resultado.manifiesto if (m.version, m.tipo) in pares_presentes
+    ]
+    if not manifiesto_filtrado:
+        manifiesto_filtrado = resultado.manifiesto
 
-def rebasar(
-    resultado: ResultadoCalculo,
-    periodo_base: PeriodoQuincenal,
-    valor_base: float = 100.0,
-) -> ResultadoCalculo:
-    """Reexpresa cada índice a una nueva referencia usando el valor replicado propio.
-
-    El denominador es endógeno: usa el valor calculado en `periodo_base`, no un
-    valor oficial externo. Cualquier error en ese denominador se propaga
-    proporcionalmente a todo el tramo.
-
-    Args:
-        resultado: ResultadoCalculo quincenal con el bloque a reexpresar.
-        periodo_base: Periodo cuyo valor replicado será `valor_base` tras el rebase.
-        valor_base: Valor al que se ancla `periodo_base` (default 100.0).
-
-    Returns:
-        ResultadoCalculo con los mismos periodos e índices rescalados.
-
-    Raises:
-        InvarianteViolado: Si `periodo_base` no existe en el resultado, o si el
-            valor en ese periodo no está disponible o es cero.
-    """
-    df = resultado.df.copy()
-    indices_unicos = df.index.get_level_values("indice").unique()
-
-    for indice in indices_unicos:
-        key = (periodo_base, indice)
-        if key not in df.index:
-            raise InvarianteViolado(
-                f"periodo_base {periodo_base} no existe para índice '{indice}'."
-            )
-        fila_base: pd.Series[Any] = df.loc[key]  # type: ignore[assignment,index]
-        estado_base = fila_base["estado_calculo"]
-        if estado_base not in _ESTADOS_CON_VALOR:
-            raise InvarianteViolado(
-                f"El valor base de '{indice}' en {periodo_base} no está disponible "
-                f"(estado_calculo='{estado_base}')."
-            )
-        base = float(fila_base["indice_replicado"])
-        if base == 0:
-            raise InvarianteViolado(
-                f"El valor base de '{indice}' en {periodo_base} es cero."
-            )
-
-        mask_indice = df.index.get_level_values("indice") == indice
-        mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
-        df.loc[mask_indice & mask_valor, "indice_replicado"] = (
-            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
-            * valor_base
-            / base
-        )
-
-    return ResultadoCalculo(df, f"{resultado.id_corrida}-base-{periodo_base}")
+    return ResultadoIndice(
+        df_result,
+        manifiesto_filtrado,
+        _reporte_a_mensual(df_result, resultado.reporte),
+        resultado.diagnostico,
+        periodo_referencia=None,
+    )
