@@ -319,14 +319,26 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "9312 administracion publica en general": "9312 administracion publica en general.",
         },
         2013: {
-            # Renombres 2013 -> 2018 incluidos solo cuando pasan tres filtros:
-            # 1) nombre/codigo compatible entre versiones SCIAN oficiales,
-            # 2) genericos identicos despues de aplicar RENOMBRES_GENERICOS[2013],
-            # 3) sin depender de fusiones, desagregaciones, nuevos o eliminados.
+            # Renombres 2013 -> 2018 incluidos cuando hay continuidad clara de
+            # rama: mismo codigo SCIAN, o cambio oficial de codigo, y genericos
+            # compatibles despues de aplicar RENOMBRES_GENERICOS[2013].
             #
             # Incluidos:
             # - 2211 y 2221/2213: cambio oficial SCIAN de nombre/codigo; los
             #   genericos INPC son exactamente electricidad y derechos por agua.
+            # - 3114 y 3151: mismo codigo y cambio de titulo; conservan la
+            #   mayoria de genericos y el resto se explica por cambios de
+            #   genericos documentados entre canastas.
+            # - 3116: mismo codigo y cambio de titulo; los 9 genericos de 2013
+            #   estan contenidos en 2018, que solo agrega "manteca de cerdo".
+            # - 3272/3271: cambio de codigo/nombre; el unico generico INPC
+            #   ("loza, cristaleria y cubiertos") se conserva exacto.
+            # - 5412/5411: continuidad operativa por generico INPC exacto, no
+            #   renombre SCIAN semantico limpio.
+            # - 7221/7225: continuidad operativa por genericos INPC completos,
+            #   aunque cambia el titulo SCIAN de restaurantes a preparacion de alimentos.
+            # - 8121: continuidad operativa por mismo codigo y fusion documentada
+            #   de "sala de belleza" en "sala de belleza y masajes".
             # - 5241 y 6112: cambio oficial de titulo; cada rama contiene un
             #   unico generico, igual entre canastas.
             # - 8122, 8123, 8124 y 9312: solo normalizan punto final en la
@@ -335,17 +347,19 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             # No se incluyen casos con traslape parcial de genericos. Por ejemplo:
             # 3118, 3119 y 3399 mezclan genericos comunes con genericos nuevos,
             # eliminados o reasignados; no son renombres 1:1 de rama.
-            # 3114 separa "chiles envasados, moles y salsas" y agrega genericos;
-            # 3116 agrega "manteca de cerdo"; 8121 requiere la fusion de
-            # "sala de belleza" en "sala de belleza y masajes"; 5171/5172 se
-            # reestructura hacia 5173; 7221/7222 se reestructura hacia 7223/7225.
-            # Tampoco se incluyen falsos positivos por genericidad del INPC:
-            # 3272 -> 3271 y 5412 -> 5411 comparten un generico, pero no son
-            # renombres SCIAN oficiales 1:1.
+            # 5171/5172 se reestructura hacia 5173; 7222 se reestructura
+            # parcialmente hacia 7223.
             "2211 generacion, transmision y distribucion de energia electrica.": "2211 generacion, transmision, distribucion y comercializacion de energia electrica",
             "2221 captacion, tratamiento y suministro de agua.": "2213 captacion, tratamiento y suministro de agua",
+            "3114 conservacion de frutas, verduras y alimentos preparados": "3114 conservacion de frutas, verduras, guisos y otros alimentos preparados",  # no es 1:1 en contenido de genericos
+            "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales",  # no es 1:1 en contenido de genericos
+            "3151 fabricacion de prendas de vestir de punto": "3151 fabricacion de prendas de vestir de tejido de punto",  # no es 1:1 en contenido de genericos
+            "3272 fabricacion de vidrio y productos de vidrio": "3271 fabricacion de productos a base de arcillas y minerales refractarios",
             "5241 instituciones de seguros y fianzas": "5241 compañias de seguros y fianzas",
+            "5412 servicios de contabilidad, auditoria y servicios relacionados": "5411 servicios legales",  # continuidad por generico INPC exacto: "servicios profesionales"; no es renombre SCIAN semantico limpio
             "6112 escuelas de educacion post bachillerato": "6112 escuelas de educacion tecnica superior",
+            "7221 restaurantes con servicio completo": "7225 servicios de preparacion de alimentos y bebidas alcoholicas y no alcoholicas",  # continuidad completa por genericos INPC; no es renombre SCIAN literal
+            "8121 salones y clinicas de belleza, baños publicos y bolerias.": "8121 salones y clinicas de belleza, baños publicos y bolerias",  # continuidad por fusion documentada: "sala de belleza" -> "sala de belleza y masajes"
             "8122 lavanderias y tintorerias.": "8122 lavanderias y tintorerias",
             "8123 servicios funerarios y administracion de cementerios.": "8123 servicios funerarios y administracion de cementerios",
             "8124 estacionamientos y pensiones para vehiculos automotores.": "8124 estacionamientos y pensiones para vehiculos automotores",
@@ -359,3 +373,127 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
         },
     },
 }
+
+
+# Notas de analisis SCIAN rama 2013/2018/2024:
+#
+# 1114 cultivo en invernaderos y otras estructuras agricolas protegidas, y floricultura
+# - Generico 2024: "plantas y flores".
+# - 2018: existe igual en 1114, con el mismo sector SCIAN 11.
+# - 2013 y 2010: no existe el generico, ni aparece candidato real por nombres
+#   similares ("planta", "flor", "jardin" o "jardineria"). Los parecidos por
+#   distancia textual son falsos positivos, como "velas y veladoras".
+# - Conclusion: 1114 es categoria nueva desde 2018 y se mantiene igual en 2024;
+#   no viene de renombre, fusion o desagregacion visible desde 2013/2010.
+#
+# 3159 confeccion de accesorios de vestir y otras prendas de vestir no clasificados en otra parte
+# - Genericos 2024: "complementos de vestir", "otras prendas de vestir para
+#   hombre" y "otras prendas de vestir para mujer".
+# - "otras prendas de vestir para hombre": en 2010/2013 existe como "otras
+#   prendas para hombre" en 3152; en 2018/2024 cae en 3159.
+# - "otras prendas de vestir para mujer": en 2010/2013 existe como "otras
+#   prendas para mujer" en 3152; en 2018/2024 cae en 3159.
+# - "complementos de vestir": no existe exacto ni por renombre en 2010/2013/2018;
+#   los similares apuntan a ropa/prendas, pero no hay equivalente directo.
+# - Conclusion: 3159 no es renombre puro de 3152; es reclasificacion o
+#   desagregacion parcial desde 3152 para "otras prendas...", y en 2024 agrega
+#   "complementos de vestir".
+#
+# 3255 fabricacion de pinturas, recubrimientos y adhesivos
+# - Generico 2024: "productos para reparacion menor de la vivienda".
+# - 2018: existe igual en 3255, con sector SCIAN 32.
+# - 2013 y 2010: no existe exacto ni por renombre de genericos. Los similares
+#   por texto apuntan a falsos positivos como "pasta dental", "productos para
+#   el cabello", "reparacion de automovil" o "renta de vivienda".
+# - Conclusion: 3255 es categoria nueva desde 2018 y se mantiene igual en 2024;
+#   no viene de renombre, fusion o desagregacion visible desde 2013/2010.
+#
+# 4854 transporte escolar y de personal
+# - Generico 2024: "transporte escolar".
+# - 2018: existe igual en 4854, con sector SCIAN 48.
+# - 2013 y 2010: no existe exacto ni por renombre de genericos. Los similares
+#   por texto son falsos positivos por "transporte" o "escolar", como
+#   "transporte aereo", "metro o transporte electrico", "uniformes escolares",
+#   "material escolar" o "preescolar".
+# - Conclusion: 4854 es categoria nueva desde 2018 y se mantiene igual en 2024;
+#   no viene de renombre, fusion o desagregacion visible desde 2013/2010.
+#
+# 4921 servicios de mensajeria y paqueteria foranea
+# - Generico 2018: "paqueteria".
+# - 2018: existe en 4921, con sector SCIAN 49 y CCIF "servicios postales".
+# - 2013 y 2010: no existe exacto ni por renombre de genericos. Los similares
+#   por texto son falsos positivos como "pera", "primaria", "preparatoria" o
+#   "planchas electricas".
+# - 2024: no existe "paqueteria"; "paquetes para fiesta" es falso positivo
+#   porque cae en servicios culturales/alquiler, no en postal o paqueteria.
+# - Conclusion: 4921 aparece como categoria nueva en 2018 y desaparece en 2024;
+#   no hay traduccion 2018 -> 2024 ni origen visible en 2013/2010.
+#
+# 5173 operadores de servicios de telecomunicaciones alambricas e inalambricas
+# - Genericos 2024: "servicio de telefonia movil", "servicios de telefonia
+#   fija", "paquetes de internet, telefonia y television de paga", "servicio de
+#   internet", "servicio de television de paga" y "streaming de peliculas y musica".
+# - "servicio de telefonia movil": en 2010/2013 cae en 5172; en 2018/2024 cae
+#   en 5173.
+# - "servicio de internet" y "servicio de television de paga": en 2010/2013 caen
+#   en 5171; en 2018/2024 caen en 5173.
+# - "servicios de telefonia fija": aparece en 2018/2024; en 2010/2013 no existe
+#   exacto por renombre, aunque se relaciona con fusiones de telefonia fija.
+# - "paquetes de internet, telefonia y television de paga": aparece en
+#   2018/2024; en 2010/2013 solo hay componentes parciales.
+# - "streaming de peliculas y musica": aparece en 2024; los similares previos,
+#   como "peliculas, musica y videojuegos", no son equivalentes directos.
+# - Conclusion: 5173 es consolidacion de 5171 + 5172 desde 2013 hacia 2018 y
+#   expansion en 2024; no es renombre 1:1 de rama.
+#
+# 5419 otros servicios profesionales, cientificos y tecnicos
+# - Generico 2024: "servicios para mascotas".
+# - 2018: existe igual en 5419, con sector SCIAN 54.
+# - 2013 y 2010: no existe exacto ni por renombre de genericos. El similar real
+#   mas cercano es "alimento para mascotas", pero no es equivalente porque es
+#   producto/alimento, no servicio. Otros similares por "servicios" son falsos
+#   positivos.
+# - Conclusion: 5419 es categoria nueva desde 2018 y se mantiene igual en 2024;
+#   no viene de renombre, fusion o desagregacion visible desde 2013/2010.
+#
+# 7111 compañias y grupos de espectaculos artisticos y culturales
+# - Generico 2018: "otros servicios culturales, diversiones y espectaculos deportivos".
+# - 2010/2013: existe como "otras diversiones y espectaculos deportivos" en 7139.
+# - 2018: cae en 7111.
+# - 2024: no existe el generico; los similares relevantes son "museos y sitios
+#   culturales" en 7121 y "servicios recreativos y centros nocturnos" en 7113,
+#   pero no son equivalentes exactos.
+# - Conclusion: 7111 es continuidad parcial desde 7139 hacia 2018 para ese
+#   generico; en 2024 desaparece y se reparte o reformula en categorias
+#   culturales/recreativas.
+#
+# 7113 promotores de espectaculos artisticos, culturales, deportivos y similares
+# - Generico 2024: "servicios recreativos y centros nocturnos".
+# - 2018, 2013 y 2010: no existe exacto ni por renombre de genericos.
+# - Similares relevantes: "centro nocturno" cae en 7224 hasta 2018; "otros
+#   servicios culturales, diversiones y espectaculos deportivos" cae en 7111 en
+#   2018 y en 7139 en 2010/2013.
+# - Conclusion: 7113 es categoria nueva en 2024 formada por reacomodo o fusion
+#   parcial de servicios recreativos/culturales y centros nocturnos; no es
+#   renombre 1:1 desde 2018 o 2013.
+#
+# 7121 museos, sitios historicos, zoologicos y similares
+# - Generico 2024: "museos y sitios culturales".
+# - 2018, 2013 y 2010: no existe exacto ni por renombre de genericos.
+# - Similar relevante: el bloque amplio "otros servicios culturales, diversiones
+#   y espectaculos deportivos", que cae en 7111 en 2018 y en 7139 en 2010/2013,
+#   pero no es equivalente exacto.
+# - Conclusion: 7121 es categoria nueva en 2024, probablemente por desagregacion
+#   o reacomodo desde el bloque cultural amplio; no es renombre 1:1 desde 2018
+#   o 2013.
+#
+# 7223 servicios de preparacion de alimentos por encargo
+# - Genericos 2024: "barbacoa o birria", "carnitas", "otros alimentos
+#   cocinados", "pizzas" y "pollos rostizados".
+# - "barbacoa o birria", "carnitas" y "pizzas": en 2010/2013 caen en 3119; en
+#   2018/2024 caen en 7223.
+# - "otros alimentos cocinados" y "pollos rostizados": en 2010/2013 caen en
+#   7222; en 2018/2024 caen en 7223.
+# - Conclusion: 7223 no es renombre 1:1 desde 2013; es reagrupacion o fusion
+#   parcial desde 3119 y 7222. Desde 2018 a 2024 se mantiene estable con los
+#   mismos cinco genericos.
