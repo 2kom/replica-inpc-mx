@@ -62,38 +62,43 @@ El historial de cambios vive en git.
     - [10.3 Mock de la API del INEGI](#103-mock-de-la-api-del-inegi)
     - [10.4 Criterio de suficiencia](#104-criterio-de-suficiencia)
   - [11. Decisiones de diseño](#11-decisiones-de-diseño)
-    - [11.1 SerieNormalizada en formato ancho](#111-serienormalizada-en-formato-ancho)
-    - [11.2 generico_original como diccionario](#112-generico_original-como-diccionario)
+    - [11.1 `SerieNormalizada` en formato ancho](#111-serienormalizada-en-formato-ancho)
+    - [11.2 `generico_original` como diccionario](#112-generico_original-como-diccionario)
     - [11.3 Correspondencia por normalización exacta](#113-correspondencia-por-normalización-exacta)
     - [11.4 pandas en el dominio](#114-pandas-en-el-dominio)
-    - [11.5 ponderador y encadenamiento como str](#115-ponderador-y-encadenamiento-como-str)
-    - [11.6 Periodo como tipo propio](#116-periodo-como-tipo-propio)
+    - [11.5 `ponderador` y `encadenamiento` como `str`](#115-ponderador-y-encadenamiento-como-str)
+    - [11.6 `Periodo` como tipo propio](#116-periodo-como-tipo-propio)
     - [11.7 Categorías de clasificación version-específicas](#117-categorías-de-clasificación-version-específicas)
     - [11.8 Tolerancia numérica por versión](#118-tolerancia-numérica-por-versión)
-    - [11.9 Reglas de estado_calculo](#119-reglas-de-estado_calculo)
-    - [11.10 Detección de null_por_faltantes](#1110-detección-de-null_por_faltantes)
-    - [11.11 Firma de validacion/indices.py](#1111-firma-de-validacionindicespy)
-    - [11.12 id_corrida en ResultadoIndice](#1112-id_corrida-en-resultadoindice)
-    - [11.13 Schema condicional en ReporteDetalladoValidacion](#1113-schema-condicional-en-reportedetalladovalidacion)
-    - [11.14 TIPOS_CON_VALIDACION en el dominio](#1114-tipos_con_validacion-en-el-dominio)
-    - [11.15 Cache de clase en FuenteValidacionApi](#1115-cache-de-clase-en-fuentevalidacionapi)
-    - [11.16 UTF-8 como primer encoding en LectorSeriesCsv](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
-    - [11.17 Dispatch interno en CalculadorBase](#1117-dispatch-interno-en-calculadorbase)
-    - [11.18 Vectorización del loop de validacion/indices.py](#1118-vectorización-del-loop-de-validacionindicespy)
-    - [11.19 LaspeyresEncadenado — derivación de f_h](#1119-laspeyresencadenado--derivación-de-f_h)
+    - [11.9 Reglas de `estado_calculo`](#119-reglas-de-estado_calculo)
+    - [11.10 Detección de `null_por_faltantes`](#1110-detección-de-null_por_faltantes)
+    - [11.11 Firma de `validacion/indices.py`](#1111-firma-de-validacionindicespy)
+    - [11.12 `id_corrida` en `ResultadoIndice`](#1112-id_corrida-en-resultadoindice)
+    - [11.13 Schema condicional en `ReporteDetalladoValidacion`](#1113-schema-condicional-en-reportedetalladovalidacion)
+    - [11.14 `TIPOS_CON_VALIDACION` en el dominio](#1114-tipos_con_validacion-en-el-dominio)
+    - [11.15 Cache de clase en `FuenteValidacionApi`](#1115-cache-de-clase-en-fuentevalidacionapi)
+    - [11.16 UTF-8 como primer encoding en `LectorSeriesCsv`](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
+    - [11.17 Dispatch interno en `CalculadorBase`](#1117-dispatch-interno-en-calculadorbase)
+    - [11.18 Vectorización del loop interno de `validacion/indices.py`](#1118-vectorización-del-loop-interno-de-validacionindicespy)
+    - [11.19 `LaspeyresEncadenado` — derivación de `f_h`](#1119-laspeyresencadenado--derivación-de-f_h)
+      - [Primer enfoque (descartado): media ponderada con ponderadores nuevos](#primer-enfoque-descartado-media-ponderada-con-ponderadores-nuevos)
+      - [Enfoque final: empalme desde el resultado de la versión anterior](#enfoque-final-empalme-desde-el-resultado-de-la-versión-anterior)
     - [11.20 Imputación de faltantes en series](#1120-imputación-de-faltantes-en-series)
-    - [11.21 empalmar — combinación histórica](#1121-empalmar--combinación-histórica)
-    - [11.22 RENOMBRES_INDICES y normalización cross-versión](#1122-renombres_indices-y-normalización-cross-versión)
-    - [11.23 empalmar — topología PATH](#1123-empalmar--topología-path)
-    - [11.24 rebasar — huérfanos con UserWarning](#1124-rebasar--huérfanos-con-userwarning)
-    - [11.25 bfill→ffill y estado "rellenado"](#1125-bfillffill-y-estado-rellenado)
-    - [11.26 Autoreload IPython — type(self)._PROXY](#1126-autoreload-ipython--typeself_proxy)
-    - [11.27 FuenteValidacion en dominio/, no en aplicacion/](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
+    - [11.21 `empalmar` — combinación histórica](#1121-empalmar--combinación-histórica)
+    - [11.22 `RENOMBRES_INDICES` y normalización cross-versión](#1122-renombres_indices-y-normalización-cross-versión)
+    - [11.23 `empalmar` — topología PATH](#1123-empalmar--topología-path)
+    - [11.24 `rebasar` — huérfanos con `UserWarning`](#1124-rebasar--huérfanos-con-userwarning)
+    - [11.25 `bfill→ffill` y estado `"rellenado"`](#1125-bfillffill-y-estado-rellenado)
+    - [11.26 Autoreload IPython — `type(self)._PROXY`](#1126-autoreload-ipython--typeself_proxy)
+    - [11.27 `FuenteValidacion` en `dominio/`, no en `aplicacion/`](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
+    - [11.28 Re-export de errores y tipos en `replica_inpc/__init__.py`](#1128-re-export-de-errores-y-tipos-en-replica_inpc__init__py)
+    - [11.29 `a_mensual` — filtrado de manifiestos huérfanos](#1129-a_mensual--filtrado-de-manifiestos-huérfanos)
+    - [11.30 `ManifestUnidad.ruta_canasta` y `ruta_series` opcionales](#1130-manifestunidadruta_canasta-y-ruta_series-opcionales)
   - [12. Gaps conocidos](#12-gaps-conocidos)
-    - [12.1 Validación por niveles en LectorCanastaCsv](#121-validación-por-niveles-en-lectorcanastacsvs)
-    - [12.2 Detección dinámica del header en LectorSeriesCsv](#122-detección-dinámica-del-header-en-lectorseriescsv)
-    - [12.3 Catalogación incompleta de RENOMBRES_INDICES para 2010 y 2013](#123-catalogación-incompleta-de-renombres_indices-para-2010-y-2013)
-    - [12.4 DiagnosticoValidacion — cobertura temporal de la API INEGI](#124-diagnosticovalidacion--cobertura-temporal-de-la-api-inegi)
+    - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
+    - [12.2 Detección dinámica del header en `LectorSeriesCsv`](#122-detección-dinámica-del-header-en-lectorseriescsv)
+    - [12.3 Catalogación incompleta de `RENOMBRES_INDICES` para 2010 y 2013](#123-catalogación-incompleta-de-renombres_indices-para-2010-y-2013)
+    - [12.4 `DiagnosticoValidacion` — cobertura temporal de la API INEGI](#124-diagnosticovalidacion--cobertura-temporal-de-la-api-inegi)
     - [12.5 Tool de ponderadores — bugs propios pendientes](#125-tool-de-ponderadores--bugs-propios-pendientes)
 
 ---
@@ -1770,6 +1775,37 @@ Las tres variables viven en `api/config.py`. `replica_inpc/__init__.py` instala 
 rep.tolerancia_indice = 0.001
 rep.tolerancia_derivados = 0.01
 rep.timeout_api = 30
+```
+
+**reset_config**
+
+```python
+def reset_config() -> None:
+```
+
+Restaura `tolerancia_indice`, `tolerancia_derivados` y `timeout_api` a sus valores por defecto. No toca el token — para ese, usar `set_token` de nuevo.
+
+```python
+rep.tolerancia_indice = 0.999
+rep.reset_config()
+assert rep.tolerancia_indice == 0.0009  # restaurado
+```
+
+**mostrar_config**
+
+```python
+def mostrar_config() -> None:
+```
+
+Imprime el estado actual de la configuración en stdout. No expone el valor del token — solo indica si está configurado y por qué mecanismo (`INEGI_TOKEN` o `set_token`).
+
+```python
+rep.mostrar_config()
+# tolerancia_indice:    0.0009
+# tolerancia_derivados: 0.009
+# timeout_api:          10
+# token INEGI:          no configurado
+# cache:                0 indicadores
 ```
 
 ---

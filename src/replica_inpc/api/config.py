@@ -47,6 +47,34 @@ def get_token() -> str:
     return token
 
 
+def reset_config() -> None:
+    """Restaura tolerancias y timeout a sus valores por defecto."""
+    global tolerancia_indice, tolerancia_derivados, timeout_api
+    tolerancia_indice = 0.0009
+    tolerancia_derivados = 0.009
+    timeout_api = 10
+
+
+def mostrar_config() -> None:
+    """Imprime el estado actual de la configuración en stdout."""
+    import os
+
+    if os.environ.get("INEGI_TOKEN"):
+        estado_token = "configurado (INEGI_TOKEN)"
+    elif _token:
+        estado_token = "configurado (set_token)"
+    else:
+        estado_token = "no configurado"
+    n = len(FuenteValidacionApi._cache)
+    print(
+        f"tolerancia_indice:    {tolerancia_indice}\n"
+        f"tolerancia_derivados: {tolerancia_derivados}\n"
+        f"timeout_api:          {timeout_api}\n"
+        f"token INEGI:          {estado_token}\n"
+        f"cache:                {n} indicador{'es' if n != 1 else ''}"
+    )
+
+
 def limpiar_cache() -> None:
     """Vacía el cache de respuestas INEGI.
 

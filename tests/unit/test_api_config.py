@@ -63,6 +63,53 @@ def test_proxy_lee_default_sin_escritura() -> None:
     assert rep.timeout_api == 10
 
 
+# -- reset_config --------------------------------------------------------------
+
+
+def test_reset_config_restaura_defaults() -> None:
+    rep.tolerancia_indice = 0.999
+    rep.tolerancia_derivados = 0.999
+    rep.timeout_api = 999
+    rep.reset_config()
+    assert rep.tolerancia_indice == 0.0009
+    assert rep.tolerancia_derivados == 0.009
+    assert rep.timeout_api == 10
+
+
+# -- mostrar_config ------------------------------------------------------------
+
+
+def test_mostrar_config_sin_token(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("INEGI_TOKEN", raising=False)
+    rep.mostrar_config()
+    out = capsys.readouterr().out
+    assert "0.0009" in out
+    assert "0.009" in out
+    assert "no configurado" in out
+
+
+def test_mostrar_config_con_set_token(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("INEGI_TOKEN", raising=False)
+    rep.set_token("mi-token")
+    rep.mostrar_config()
+    out = capsys.readouterr().out
+    assert "set_token" in out
+    assert "mi-token" not in out
+
+
+def test_mostrar_config_con_env_var(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("INEGI_TOKEN", "token-env")
+    rep.mostrar_config()
+    out = capsys.readouterr().out
+    assert "INEGI_TOKEN" in out
+
+
 # -- cache ---------------------------------------------------------------------
 
 
