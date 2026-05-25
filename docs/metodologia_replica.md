@@ -56,7 +56,7 @@ El resultado es un índice por categoría y periodo, con la misma escala que el 
 
 ## Cálculo del INPC encadenado
 
-El proyecto usa `LaspeyresEncadenado` para canastas con columna
+El proyecto usa Laspeyres encadenado para canastas con columna
 `encadenamiento` poblada: 2013 y 2024. En ambos casos se divide cada serie por
 su factor de genérico antes de agregar:
 
@@ -95,64 +95,68 @@ $I_k^{2Q\,\text{Jul}\,2024} / 100$.
 
 **Cómo se obtiene $f_h$:** el valor correcto es el INPC calculado con la canasta
 2018 en el periodo de traslape, dividido entre 100. El proyecto lo extrae del
-`resultado_referencia` que el usuario pasa al ejecutar la corrida 2024:
+resultado de la versión 2018 que el usuario pasa como referencia al calcular 2024:
 
 ```python
-resultado_2024 = corrida.ejecutar(
-    ..., version=2024, resultado_referencia=resultado_2018.resultado
-)
+import replica_inpc as rep
+
+i2018 = rep.calcular_indice(c2018, s2018, tipo="inpc")
+i2024 = rep.calcular_indice(c2024, s2024, tipo="inpc", referencia=i2018)
 ```
 
-Sin `resultado_referencia`, el proyecto usa como fallback $f_h = \sum_k w_k f_k / \sum_k w_k$ (media ponderada de los factores individuales con ponderadores 2024). Este fallback introduce un error sistemático de ~0.72 puntos de índice porque los ponderadores 2018 y 2024 difieren. Ver §11.20 de `docs/diseño.md`.
+Sin `referencia`, el proyecto usa como fallback $f_h = \sum_k w_k f_k / \sum_k w_k$ (media ponderada de los factores individuales con ponderadores 2024). Este fallback introduce un error sistemático de ~0.72 puntos de índice porque los ponderadores 2018 y 2024 difieren.
 
 **No aditividad:** los subíndices encadenados calculados por el proyecto no son aditivos al INPC encadenado después del traslape. Cada índice superior se encadena de forma independiente, igual que en la metodología oficial.
 
 **Serie histórica continua:** para obtener una serie continua que abarque los
-tramos 2010, 2013, 2018 y 2024, la fachada `Corrida` ofrece
-`ejecutar_historico`:
+tramos 2010, 2013, 2018 y 2024, el modo automático orquesta carga, cálculo,
+empalme, conversión y rebase en una sola llamada:
 
 ```python
-historico = corrida.ejecutar_historico(
-    "data/inputs/ponderadores_2010.csv",
-    "data/inputs/series2010_horizontal_metadata.CSV",
-    "data/inputs/ponderadores_2013.csv",
-    "data/inputs/series2010_horizontal_metadata.CSV",
-    "data/inputs/ponderadores_2018.csv",
-    "data/inputs/series2018_horizontal_metadata.CSV",
-    "data/inputs/ponderadores_2024.csv",
-    "data/inputs/series2024_horizontal_metadata.CSV",
-    tipo="inpc",
-)
+import replica_inpc as rep
+
+insumos = [
+    (2010, "data/ponderadores_2010.csv", "data/series_2010.csv"),
+    (2013, "data/ponderadores_2013.csv", "data/series_2013.csv"),
+    (2018, "data/ponderadores_2018.csv", "data/series_2018.csv"),
+    (2024, "data/ponderadores_2024.csv", "data/series_2024.csv"),
+]
+inpc = rep.calcular_historia(insumos, tipo="inpc")
 ```
 
 Internamente, el proyecto combina 2010+2013, rebasa ese bloque de forma endógena
 a `2Q Jul 2018 = 100` usando su propio valor replicado en ese periodo, y después
-concatena con 2018+2024.
+empalma con 2018+2024.
 
-Para obtener una serie continua manual de los tramos 2018 y 2024:
+Para empalmar manualmente tramos individuales ya calculados:
 
 ```python
-from replica_inpc import combinar
-resultado_completo = combinar([resultado_2018.resultado, resultado_2024.resultado])
+import replica_inpc as rep
+
+hist   = rep.empalmar([i2018, i2024])
+hist_m = rep.a_mensual(hist)
+inpc   = rep.rebasar(hist_m, "Jul 2018")
 ```
 
-`combinar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 definidos en `RENOMBRES_INDICES`. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen — ver `docs/diseño.md` §12.10.
+`empalmar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 entre versiones de canasta. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen.
 
 ## Cálculo de variaciones
 
-Con un `ResultadoCalculo` disponible, el proyecto ofrece tres funciones para calcular variaciones:
+Con un resultado de índice disponible, el proyecto ofrece tres funciones para calcular variaciones:
 
-$$\text{variación}_{a:t} = \frac{I_t}{I_a} - 1$$
+$$\text{variación}_{a:t} = \left(\frac{I_t}{I_a} - 1\right) \times 100$$
 
-El resultado se expresa como fracción (no porcentaje). Para obtener el porcentaje, multiplicar por 100.
+El resultado se expresa en puntos porcentuales.
 
 ### variacion_periodica
 
 Calcula la variación de cada índice respecto a un lag fijo de quincenas:
 
 ```python
-rv = variacion_periodica(resultado, "mensual")   # lag = 2 quincenas
-rv = variacion_periodica(resultado, "anual")     # lag = 24 quincenas
+import replica_inpc as rep
+
+rv_m = rep.variacion_periodica(inpc, frecuencia="mensual")   # lag = 2 quincenas
+rv_a = rep.variacion_periodica(inpc, frecuencia="anual")     # lag = 24 quincenas
 ```
 
 Frecuencias soportadas: `quincenal` (1), `mensual` (2), `bimestral` (4), `trimestral` (6), `cuatrimestral` (8), `semestral` (12), `anual` (24).
@@ -164,8 +168,8 @@ Frecuencias soportadas: `quincenal` (1), `mensual` (2), `bimestral` (4), `trimes
 Calcula la variación acumulada desde un periodo base hasta cada quincena del rango:
 
 ```python
-rv = variacion_desde(resultado, "1Q Ene 2024")
-rv = variacion_desde(resultado, "1Q Ene 2024", hasta="2Q Jun 2024")
+rv = rep.variacion_desde(inpc, desde="1Q Ene 2024")
+rv = rep.variacion_desde(inpc, desde="1Q Ene 2024", hasta="2Q Jun 2024")
 ```
 
 La base es la quincena **inmediatamente anterior** a `desde`. Para un índice con dato en esa quincena base, la variación en `desde` refleja el cambio respecto al cierre del periodo anterior.
@@ -177,32 +181,29 @@ Para índices que no tienen dato en la quincena base (índices parciales), el pa
 Calcula la variación de cada quincena respecto a la 2Q diciembre del año anterior:
 
 ```python
-rv = variacion_acumulada_anual(resultado)
+rv = rep.variacion_acumulada_anual(inpc)
 ```
 
 Equivale a `variacion_desde` con `desde = "1Q Ene <año>"` pero usando como base fija `2Q Dic <año-1>` para todas las quincenas del año. Los periodos del primer año disponible se eliminan porque no existe su base anual.
 
 ### Advertencia para resultados encadenados (canasta 2024)
 
-Por la no aditividad del encadenamiento, la variación del INPC general encadenado no coincide con la suma ponderada de las variaciones de sus subíndices. Calcular variaciones directamente sobre el `ResultadoCalculo` de la corrida (o sobre el resultado combinado) produce el valor correcto. No reconstruir el INPC desde componentes para luego calcular variación.
+Por la no aditividad del encadenamiento, la variación del INPC general encadenado no coincide con la suma ponderada de las variaciones de sus subíndices. Calcular variaciones directamente sobre el resultado de índice (o sobre el resultado empalmado) produce el valor correcto. No reconstruir el INPC desde componentes para luego calcular variación.
 
 ## Validación
 
-Al terminar el cálculo, el proyecto consulta la API de indicadores del INEGI para obtener los valores oficiales publicados y los compara con los valores replicados.
+La validación contrasta los valores replicados contra los publicados por el INEGI vía su API. Se calcula el error absoluto por periodo. Las tolerancias vigentes son ≤ 0.0009 para índices y ≤ 0.009 pp para variaciones e incidencias.
 
-Para el INPC general y los clasificadores con indicadores disponibles en la API,
-se calcula el error absoluto y el error relativo por periodo. La tolerancia
-vigente para las canastas 2010, 2013, 2018 y 2024 es `<= 0.0009` en error
-absoluto. El resultado global de la validación puede ser:
+El estado de validación por fila puede ser:
 
-- `ok`: todos los periodos dentro de la tolerancia numérica.
-- `ok_parcial`: algunos periodos fuera de tolerancia o sin dato oficial.
-- `diferencia_detectada`: diferencias sistemáticas fuera de tolerancia.
-- `no_disponible`: la API no devolvió datos (sin token o indicador no disponible).
+- `ok`: diferencia dentro de tolerancia.
+- `diferencia_detectada`: diferencia fuera de tolerancia.
+- `diferencia_por_parcial`: diferencia asociada a un periodo con solo 1 quincena disponible.
+- `fuera_rango_inegi`: periodo fuera del rango publicado por INEGI.
+- `sin_calculo`: periodo sin resultado replicado comparable.
+- `no_disponible`: INEGI no tiene dato para ese periodo.
 
-La validación produce tres artefactos: un **resumen** con el estado global de la corrida, un **reporte detallado** con los valores por periodo y un **diagnóstico de faltantes** con los genéricos sin correspondencia o sin dato.
-
-El pipeline puede correr completamente en memoria (`persistir=False`, útil para exploración en notebooks) o escribir todos los artefactos a disco (`persistir=True`). La validación es opcional: sin token de la API del INEGI el cálculo corre igual y el estado de validación queda como `no_disponible`.
+La validación es opcional: sin token de la API del INEGI el cálculo corre igual. El resultado incluye el valor publicado, el error absoluto y el estado de validación para cada periodo.
 
 ## Limitaciones
 
@@ -210,7 +211,7 @@ Este proyecto no replica:
 
 - **La Etapa 1 del INEGI**: el cálculo de índices elementales desde cotizaciones individuales. Los índices por genérico se toman directamente de las series publicadas.
 - **Los índices por área geográfica**: el proyecto trabaja con los índices nacionales por genérico, no con los índices desagregados por ciudad o región.
-- **El tratamiento de faltantes del INEGI**: cuando el INEGI detecta un precio faltante aplica procedimientos de imputación propios. Este proyecto marca el periodo como `null_por_faltantes` si algún genérico no tiene dato.
+- **El tratamiento de faltantes del INEGI**: cuando el INEGI detecta un precio faltante aplica procedimientos de imputación propios. Este proyecto aplica imputación bfill/ffill y marca el periodo con estado `rellenado` o `sin_datos` según la disponibilidad de datos.
 
 ## Documentación relacionada
 
