@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
@@ -9,7 +10,7 @@ from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.validacion import ValidacionIncidencia
 from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
-from replica_inpc.dominio.validacion._comun import clasificar, contar, rollup_global
+from replica_inpc.dominio.validacion._comun import contar, rollup_global
 
 # clase_incidencia → tipo_incidencia del puerto FuenteValidacion.
 _MAPA_TIPO_INCIDENCIA: dict[str, str] = {"periodica_mensual": "periodica"}
@@ -58,29 +59,59 @@ def validar_incidencias(
     inegi = fuente.obtener_incidencias(periodos, tipo_incidencia)  # type: ignore[arg-type]
 
     inc_pp = largo["incidencia_pp"].reindex(reporte_base.index)
-    estados: list[str] = []
-    valores_inegi: list[float] = []
-    errores: list[float] = []
-    for ((periodo, indice), fila), valor_rep in zip(  # type: ignore[misc]
-        reporte_base.iterrows(), inc_pp.to_numpy()
-    ):
-        estado, valor_inegi, error = clasificar(
-            valor_rep,
-            inegi.get(indice),  # type: ignore[arg-type, has-type]
-            periodo,  # type: ignore[has-type]
-            fila["estado_calculo"],
-            tolerancia_pp,
-            admite_sin_calculo=True,
-        )
-        estados.append(estado)
-        valores_inegi.append(valor_inegi)
-        errores.append(error)
+
+    indices_lvl = reporte_base.index.get_level_values("indice")
+    periodos_lvl = reporte_base.index.get_level_values("periodo")
+
+    in_inegi = np.array(
+        [idx in inegi and per in inegi[idx] for idx, per in zip(indices_lvl, periodos_lvl)],
+        dtype=bool,
+    )
+    valor_inegi_arr = np.array(
+        [
+            (float(v) if (v := inegi[idx][per]) is not None else float("nan"))
+            if in_inegi[i]
+            else float("nan")
+            for i, (idx, per) in enumerate(zip(indices_lvl, periodos_lvl))
+        ],
+        dtype=np.float64,
+    )
+    tiene_valor = in_inegi & ~np.isnan(valor_inegi_arr)
+
+    replicado_arr = inc_pp.to_numpy(dtype=float)
+    estado_calc = reporte_base["estado_calculo"].to_numpy()
+    sin_calculo_mask = tiene_valor & np.isin(estado_calc, ["sin_datos", "fallida"])
+    error_arr = np.abs(replicado_arr - valor_inegi_arr)
+
+    estado_arr = np.where(
+        ~in_inegi,
+        "fuera_rango_inegi",
+        np.where(
+            ~tiene_valor,
+            "no_disponible",
+            np.where(
+                sin_calculo_mask,
+                "sin_calculo",
+                np.where(
+                    error_arr <= tolerancia_pp,
+                    "ok",
+                    np.where(
+                        estado_calc == "parcial",
+                        "diferencia_por_parcial",
+                        "diferencia_detectada",
+                    ),
+                ),
+            ),
+        ),
+    )
 
     reporte = reporte_base.copy()
     reporte["incidencia_pp"] = inc_pp
-    reporte["incidencia_inegi_pp"] = valores_inegi
-    reporte["error_absoluto_pp"] = errores
-    reporte["estado_validacion"] = estados
+    reporte["incidencia_inegi_pp"] = np.where(tiene_valor, valor_inegi_arr, float("nan"))
+    reporte["error_absoluto_pp"] = np.where(
+        tiene_valor & ~sin_calculo_mask, error_arr, float("nan")
+    )
+    reporte["estado_validacion"] = estado_arr
 
     largo_val = largo.copy()
     for col in ("incidencia_inegi_pp", "error_absoluto_pp", "estado_validacion"):
@@ -91,9 +122,7 @@ def validar_incidencias(
     return ValidacionIncidencia(resultado, largo_val, resumen, reporte, diagnostico)
 
 
-def _construir_diagnostico(
-    reporte: pd.DataFrame, resultado: ResultadoIncidencia
-) -> pd.DataFrame:
+def _construir_diagnostico(reporte: pd.DataFrame, resultado: ResultadoIncidencia) -> pd.DataFrame:
     filas = reporte[reporte["estado_validacion"] != "ok"].reset_index()
     if filas.empty:
         return pd.DataFrame(columns=_COLS_DIAGNOSTICO)
@@ -102,9 +131,7 @@ def _construir_diagnostico(
     return filas[_COLS_DIAGNOSTICO].reset_index(drop=True)
 
 
-def _construir_resumen(
-    largo_val: pd.DataFrame, resultado: ResultadoIncidencia
-) -> pd.DataFrame:
+def _construir_resumen(largo_val: pd.DataFrame, resultado: ResultadoIncidencia) -> pd.DataFrame:
     base = resultado.resumen.iloc[0]
     conteos = contar(largo_val["estado_validacion"])
     error_max = (
