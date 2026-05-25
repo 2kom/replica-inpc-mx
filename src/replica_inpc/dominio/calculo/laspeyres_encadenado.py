@@ -4,9 +4,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import numpy as np
 import pandas as pd
 
-from replica_inpc.dominio.calculo._subindices import grupos_por_clasificacion
 from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
@@ -171,6 +171,15 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
     ) -> pd.DataFrame:
         raise NotImplementedError
 
+    def _factor_h_para_cats(
+        self,
+        i_tramo_mat: pd.DataFrame,
+        f_k: pd.Series,
+        cat_por_gen: pd.Series,
+        pond: pd.Series,
+    ) -> pd.Series:
+        raise NotImplementedError
+
     def calcular(
         self,
         canasta: CanastaCanonica,
@@ -214,36 +223,108 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                 ignore_index=True,
             )
         else:
-            dfs_calc: list[pd.DataFrame] = []
-            dfs_reporte: list[pd.DataFrame] = []
-            dfs_diag: list[pd.DataFrame] = []
-            for cat, df_c, df_s_all in grupos_por_clasificacion(canasta, serie, tipo):
-                df_s_raw = _recortar_al_rango(df_s_all, canasta.version)
-                df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
-                    df_s_raw, id_corrida, canasta.version, tipo
-                )
-                df_calc_g = self._calcular_df_para(
-                    df_c,
-                    df_s,
-                    cat,
-                    tipo,
-                    self._referencia_empalme.get(cat),
-                    periodos_rel,
-                )
-                dfs_calc.append(df_calc_g)
-                dfs_reporte.append(_construir_reporte(df_calc_g, df_c, df_s, canasta.version))
-                dfs_diag.append(
-                    pd.concat(
-                        [
-                            _construir_diagnostico(df_c, df_s, id_corrida, canasta.version, tipo),
-                            df_corr_relleno,
-                        ],
-                        ignore_index=True,
+            # Vectorizado: un groupby reemplaza el loop por cada categoría.
+            # El fill bfill→ffill opera por fila (genérico), independiente del grupo.
+            cat_por_gen = canasta.df[tipo].dropna()
+            gens = cat_por_gen.index
+
+            df_s_raw = _recortar_al_rango(serie.df.loc[gens], canasta.version)
+            df_s, df_corr_relleno, _ = _rellenar_faltantes(
+                df_s_raw, id_corrida, canasta.version, tipo
+            )
+            pond = canasta.df.loc[gens, "ponderador"].astype(float)
+
+            enc_raw = canasta.df.loc[gens, "encadenamiento"]
+            necesita_fallback = enc_raw.isna()
+            if necesita_fallback.any():
+                traslape = RANGOS_VALIDOS[canasta.version][0]
+                if traslape not in df_s.columns:
+                    raise ErrorCalculo(
+                        f"PeriodoQuincenal de traslape {traslape} no está en la serie "
+                        "y falta encadenamiento en canasta"
                     )
+                f_k = enc_raw.astype(float).where(
+                    ~necesita_fallback, df_s[cast(Any, traslape)] / 100
                 )
-            df_calc = pd.concat(dfs_calc)
-            df_reporte = pd.concat(dfs_reporte)
-            df_diag = pd.concat(dfs_diag, ignore_index=True)
+            else:
+                f_k = enc_raw.astype(float)
+
+            # i_tramo por categoría: media ponderada de (serie / f_k)
+            df_base = df_s.divide(f_k, axis=0)
+            i_tramo_mat = (
+                df_base.multiply(pond, axis=0)
+                .groupby(cat_por_gen)
+                .sum()
+                .divide(pond.groupby(cat_por_gen).sum(), axis=0)
+            )
+
+            factor_h = self._factor_h_para_cats(i_tramo_mat, f_k, cat_por_gen, pond)
+            resultado_mat = i_tramo_mat.multiply(factor_h, axis=0)
+
+            has_null = df_s.isna().groupby(cat_por_gen).any()
+            has_rel = (df_s_raw.isna() & df_s.notna()).groupby(cat_por_gen).any()
+
+            df_stacked = resultado_mat.T.stack()
+            df_stacked.index = df_stacked.index.set_names(["periodo", "indice"])
+            idx = df_stacked.index
+
+            null_flat = has_null.T.stack().reindex(idx).fillna(False)
+            rel_flat = has_rel.T.stack().reindex(idx).fillna(False)
+
+            null_bool = null_flat.to_numpy(dtype=bool)
+            rel_bool = rel_flat.to_numpy(dtype=bool)
+            estado_arr = np.where(
+                null_bool,
+                "sin_datos",
+                np.where(rel_bool & ~null_bool, "rellenado", "ok"),
+            )
+            motivo_arr = np.where(null_bool, "faltantes en serie", None)  # type: ignore[call-overload]
+
+            df_calc = pd.DataFrame(
+                {
+                    "version": canasta.version,
+                    "tipo": tipo,
+                    "indice_replicado": df_stacked.where(~null_bool).values,
+                    "estado_calculo": estado_arr,
+                    "motivo_error": motivo_arr,
+                },
+                index=idx,
+            )
+
+            cubierto = df_s.notna()
+            con_by_cat = cubierto.groupby(cat_por_gen).sum()
+            pond_cub_by_cat = cubierto.multiply(pond, axis=0).groupby(cat_por_gen).sum()
+            gen_esp_by_cat = cat_por_gen.groupby(cat_por_gen).size()
+            pond_esp_by_cat = pond.groupby(cat_por_gen).sum()
+
+            con_flat = con_by_cat.T.stack().reindex(idx).to_numpy()
+            pond_cub_flat = pond_cub_by_cat.T.stack().reindex(idx).to_numpy()
+            cats_col = idx.get_level_values("indice")
+            gen_esp = gen_esp_by_cat.reindex(cats_col).to_numpy()
+            pond_esp = pond_esp_by_cat.reindex(cats_col).to_numpy()
+
+            df_reporte = pd.DataFrame(
+                {
+                    "version": canasta.version,
+                    "estado_calculo": estado_arr,
+                    "motivo_error": motivo_arr,
+                    "genericos_esperados": gen_esp,
+                    "genericos_con_indice": con_flat,
+                    "genericos_sin_indice": gen_esp - con_flat,
+                    "cobertura_genericos_pct": 100.0 * con_flat / gen_esp,
+                    "ponderador_esperado": pond_esp,
+                    "ponderador_cubierto": pond_cub_flat,
+                },
+                index=idx,
+            )
+
+            df_diag = pd.concat(
+                [
+                    _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo),
+                    df_corr_relleno,
+                ],
+                ignore_index=True,
+            )
 
         manifiesto = ManifestUnidad(
             id_corrida=id_corrida,
@@ -274,6 +355,26 @@ class LaspeyresEncadenadoT1(_LaspeyresEncadenadoBase):
             df_canasta, df_serie, indice, tipo, referencia_empalme, periodos_rellenados
         )
 
+    def _factor_h_para_cats(
+        self,
+        i_tramo_mat: pd.DataFrame,
+        f_k: pd.Series,
+        cat_por_gen: pd.Series,
+        pond: pd.Series,
+    ) -> pd.Series:
+        factor_h = pd.Series(1.0, index=i_tramo_mat.index)
+        cats_ref = [c for c in i_tramo_mat.index if c in self._referencia_empalme]
+        if cats_ref:
+            traslape = RANGOS_VALIDOS[2013][0]
+            if traslape not in i_tramo_mat.columns:
+                raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
+            refs_s = pd.Series({c: self._referencia_empalme[c] for c in cats_ref})
+            factor_h.loc[cats_ref] = (
+                refs_s.to_numpy(dtype=float)
+                / i_tramo_mat.loc[cats_ref, cast(Any, traslape)].astype(float).to_numpy()
+            )
+        return factor_h
+
 
 class LaspeyresEncadenadoT2(_LaspeyresEncadenadoBase):
     _VERSION_ESPERADA = 2024
@@ -291,3 +392,18 @@ class LaspeyresEncadenadoT2(_LaspeyresEncadenadoBase):
         return _calcular_df_t2(
             df_canasta, df_serie, indice, tipo, referencia_empalme, periodos_rellenados
         )
+
+    def _factor_h_para_cats(
+        self,
+        i_tramo_mat: pd.DataFrame,  # noqa: ARG002
+        f_k: pd.Series,
+        cat_por_gen: pd.Series,
+        pond: pd.Series,
+    ) -> pd.Series:
+        pond_fk_sum = (pond * f_k).groupby(cat_por_gen).sum()
+        factor_h = pond_fk_sum / pond.groupby(cat_por_gen).sum()
+        cats_ref = [c for c in factor_h.index if c in self._referencia_empalme]
+        if cats_ref:
+            refs_s = pd.Series({c: self._referencia_empalme[c] / 100 for c in cats_ref})
+            factor_h.loc[cats_ref] = refs_s
+        return factor_h

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ from replica_inpc.dominio.tipos import (
     INDICE_POR_TIPO,
     RANGOS_VALIDOS,
     ManifestUnidad,
+    VersionCanasta,
 )
 
 
@@ -42,9 +44,7 @@ def _calcular_df(
     if referencia_empalme is not None:
         traslape = RANGOS_VALIDOS[version][0]
         if traslape not in resultado.index:
-            raise ErrorCalculo(
-                f"PeriodoQuincenal de traslape {traslape} no está en la serie."
-            )
+            raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
         factor_h = referencia_empalme / float(resultado[traslape])
         resultado = resultado * factor_h
 
@@ -104,7 +104,12 @@ class LaspeyresDirecto(CalculadorBase):
                 df_s_raw, id_corrida, canasta.version, tipo
             )
             df_calc = _calcular_df(
-                canasta.df, df_s, indice, tipo, canasta.version, periodos_rel,
+                canasta.df,
+                df_s,
+                indice,
+                tipo,
+                canasta.version,
+                periodos_rel,
                 self._referencia_empalme.get(indice),
             )
             df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
@@ -129,9 +134,9 @@ class LaspeyresDirecto(CalculadorBase):
 
             # Laspeyres: media ponderada por categoría
             weighted = df_s.multiply(pond, axis=0)
-            pond_sum = weighted.groupby(cat_por_gen).sum()     # cat × periodo
-            pond_total = pond.groupby(cat_por_gen).sum()        # cat
-            resultado_mat = pond_sum.divide(pond_total, axis=0) # cat × periodo
+            pond_sum = weighted.groupby(cat_por_gen).sum()  # cat × periodo
+            pond_total = pond.groupby(cat_por_gen).sum()  # cat
+            resultado_mat = pond_sum.divide(pond_total, axis=0)  # cat × periodo
 
             # referencia_empalme por categoría (solo LaspeyresDirecto usado como T0 de encadenado)
             if self._referencia_empalme:
@@ -142,16 +147,16 @@ class LaspeyresDirecto(CalculadorBase):
                     )
                 cats_ref = [c for c in resultado_mat.index if c in self._referencia_empalme]
                 if cats_ref:
-                    refs_s = pd.Series(
-                        {c: self._referencia_empalme[c] for c in cats_ref}
+                    refs_s = pd.Series({c: self._referencia_empalme[c] for c in cats_ref})
+                    factor_h = refs_s / resultado_mat.loc[cats_ref, cast(Any, traslape)].astype(
+                        float
                     )
-                    factor_h = refs_s / resultado_mat.loc[cats_ref, traslape].astype(float)
                     resultado_mat.loc[cats_ref] = resultado_mat.loc[cats_ref].multiply(
                         factor_h, axis=0
                     )
 
             # Estado por (cat, periodo)
-            has_null = df_s.isna().groupby(cat_por_gen).any()              # cat × bool
+            has_null = df_s.isna().groupby(cat_por_gen).any()  # cat × bool
             has_rel = (df_s_raw.isna() & df_s.notna()).groupby(cat_por_gen).any()  # cat × bool
 
             # Reshape a MultiIndex (periodo, indice=cat)
@@ -162,15 +167,18 @@ class LaspeyresDirecto(CalculadorBase):
             null_flat = has_null.T.stack().reindex(idx).fillna(False)
             rel_flat = has_rel.T.stack().reindex(idx).fillna(False)
 
-            estado_arr = np.where(null_flat.values, "sin_datos",
-                         np.where(rel_flat.values & ~null_flat.values, "rellenado", "ok"))
-            motivo_arr = np.where(null_flat.values, "faltantes en serie", None)
+            null_bool = null_flat.to_numpy(dtype=bool)
+            rel_bool = rel_flat.to_numpy(dtype=bool)
+            estado_arr = np.where(
+                null_bool, "sin_datos", np.where(rel_bool & ~null_bool, "rellenado", "ok")
+            )
+            motivo_arr = np.where(null_bool, "faltantes en serie", None)  # type: ignore[call-overload]
 
             df_calc = pd.DataFrame(
                 {
                     "version": canasta.version,
                     "tipo": tipo,
-                    "indice_replicado": df_stacked.where(~null_flat).values,
+                    "indice_replicado": df_stacked.where(~null_bool).values,
                     "estado_calculo": estado_arr,
                     "motivo_error": motivo_arr,
                 },
