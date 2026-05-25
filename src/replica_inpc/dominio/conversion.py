@@ -33,7 +33,7 @@ def _construir_mapa_renombre(
 ) -> dict[str, str]:
     if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
         return {}
-    orden = list(_ORDEN_VERSIONES)
+    orden: list[int] = list(_ORDEN_VERSIONES)
     try:
         idx_o = orden.index(version_origen)
         idx_c = orden.index(version_canonica)
@@ -68,20 +68,18 @@ def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
 
 def _validar_topologia(ordenados: list[ResultadoIndice]) -> list[object]:
     """Valida topología PATH y devuelve lista de periodos frontera entre pares consecutivos."""
-    conjuntos = [
-        set(r._df_completo.index.get_level_values("periodo")) for r in ordenados
-    ]
+    conjuntos = [set(r._df_completo.index.get_level_values("periodo")) for r in ordenados]
     fronteras: list[object] = []
     for i in range(len(ordenados) - 1):
         compartidos = conjuntos[i] & conjuntos[i + 1]
         if len(compartidos) == 0:
             raise InvarianteViolado(
-                f"empalmar: par consecutivo [{i}, {i+1}] no comparte ningún periodo — "
+                f"empalmar: par consecutivo [{i}, {i + 1}] no comparte ningún periodo — "
                 "no hay frontera válida para empalmar."
             )
         if len(compartidos) > 1:
             raise InvarianteViolado(
-                f"empalmar: par consecutivo [{i}, {i+1}] comparte {len(compartidos)} periodos "
+                f"empalmar: par consecutivo [{i}, {i + 1}] comparte {len(compartidos)} periodos "
                 f"({sorted(map(str, compartidos))}); se requiere exactamente 1 (topología PATH)."
             )
         fronteras.append(next(iter(compartidos)))
@@ -200,10 +198,12 @@ def empalmar(
 
             mask_normales = df_completo.index.get_level_values("periodo").isin(periodos_normales)
             df_filtrado = pd.concat([df_completo[mask_normales], df_frontera_nuevos])
-            rep_filtrado = pd.concat([
-                reporte[reporte.index.get_level_values("periodo").isin(periodos_normales)],
-                rep_frontera_nuevos,
-            ])
+            rep_filtrado = pd.concat(
+                [
+                    reporte[reporte.index.get_level_values("periodo").isin(periodos_normales)],
+                    rep_frontera_nuevos,
+                ]
+            )
         else:
             df_filtrado = df_completo
             rep_filtrado = reporte
@@ -250,12 +250,17 @@ def rebasar(
     indices_unicos = df.index.get_level_values("indice").unique()
     huerfanos: list[str] = []
 
+    # Extraer fila base de cada índice en el periodo de referencia
+    mask_ref = df.index.get_level_values("periodo") == periodo_referencia
+    df_ref = df[mask_ref].copy()
+    df_ref.index = df_ref.index.droplevel("periodo")
+
+    factores: dict[object, float] = {}
     for indice in indices_unicos:
-        key = (periodo_referencia, indice)
-        if key not in df.index:
+        if indice not in df_ref.index:
             huerfanos.append(str(indice))
             continue
-        fila_base: pd.Series = df.loc[key]  # type: ignore[index, assignment]
+        fila_base: pd.Series = df_ref.loc[indice]  # type: ignore[assignment]
         estado_base = fila_base["estado_calculo"]
         if estado_base not in _ESTADOS_CON_VALOR:
             raise InvarianteViolado(
@@ -273,13 +278,20 @@ def rebasar(
             raise InvarianteViolado(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es 0; no rebasable."
             )
+        factores[indice] = valor_base / base
 
-        mask_indice = df.index.get_level_values("indice") == indice
+    if factores:
         mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
-        df.loc[mask_indice & mask_valor, "indice_replicado"] = (  # type: ignore[index]
-            df.loc[mask_indice & mask_valor, "indice_replicado"].astype(float)  # type: ignore[union-attr]
-            * valor_base
-            / base
+        indice_per_row = df.index.get_level_values("indice")
+        factor_series = pd.Series(
+            indice_per_row.map(factores),  # type: ignore[arg-type]
+            index=df.index,
+            dtype=float,
+        )
+        aplicar = mask_valor & factor_series.notna()
+        df.loc[aplicar, "indice_replicado"] = (  # type: ignore[index]
+            df.loc[aplicar, "indice_replicado"].astype(float).to_numpy()  # type: ignore[union-attr]
+            * factor_series.loc[aplicar].to_numpy()
         )
 
     if huerfanos:

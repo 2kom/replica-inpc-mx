@@ -97,12 +97,12 @@ class LectorSeriesCsv:
 
     def _extraer_por_codigo(self, data: pd.DataFrame) -> list[_Extraccion]:
         extracciones: list[_Extraccion] = []
-        for titulo, fila in data.iterrows():
+        for pos, titulo in enumerate(data.index):
             m = _PATRON_GENERICO.search(str(titulo))
             if m is None:
                 continue
             nombre = m.group(1).strip()
-            extracciones.append((nombre, _normalizar(nombre), fila))
+            extracciones.append((nombre, _normalizar(nombre), data.iloc[pos]))
         return extracciones
 
     def _requiere_extraccion_jerarquica(self, extracciones: list[_Extraccion]) -> bool:
@@ -114,10 +114,20 @@ class LectorSeriesCsv:
 
     def _extraer_por_jerarquia_bie(self, data: pd.DataFrame) -> list[_Extraccion]:
         titulos = [str(titulo) for titulo in data.index]
-        extracciones: list[_Extraccion] = []
+        titulos_set = set(titulos)
 
+        # Precomputar qué títulos tienen hijos: O(N×D) en vez de O(N²)
+        tiene_hijos_set: set[str] = set()
+        for t in titulos:
+            partes = t.split(",")
+            for i in range(1, len(partes)):
+                candidato = ",".join(partes[:i])
+                if candidato in titulos_set:
+                    tiene_hijos_set.add(candidato)
+
+        extracciones: list[_Extraccion] = []
         for pos, titulo in enumerate(titulos):
-            if self._tiene_hijos(titulo, titulos, pos):
+            if titulo in tiene_hijos_set:
                 continue
 
             partes = [parte.strip() for parte in titulo.split(",") if parte.strip()]
@@ -133,10 +143,6 @@ class LectorSeriesCsv:
                 extracciones.append((nombre, limpio, fila))
 
         return extracciones
-
-    def _tiene_hijos(self, titulo: str, titulos: list[str], pos: int) -> bool:
-        prefijo = f"{titulo},"
-        return any(i != pos and otro.startswith(prefijo) for i, otro in enumerate(titulos))
 
     def _ultimo_componente_ccif(self, partes: list[str]) -> int:
         ultimo_codigo = -1

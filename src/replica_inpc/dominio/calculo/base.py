@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
 
 import pandas as pd
 
@@ -124,28 +123,25 @@ def _construir_reporte(
     pond_cubierto_por_periodo = cubierto.multiply(ponderadores, axis=0).sum()
     con_indice_por_periodo = cubierto.sum().astype(int)
 
-    filas = []
-    for _key, fila in df_calculo.iterrows():
-        periodo, indice = cast(tuple[Any, Any], _key)
-        con_idx = int(con_indice_por_periodo[periodo])
-        pond_cub = float(pond_cubierto_por_periodo[periodo])
-        cobertura_pct = 100.0 * con_idx / genericos_esperados if genericos_esperados else 0.0
-        filas.append(
-            {
-                "periodo": periodo,
-                "indice": indice,
-                "version": version,
-                "estado_calculo": fila["estado_calculo"],
-                "motivo_error": fila["motivo_error"],
-                "genericos_esperados": genericos_esperados,
-                "genericos_con_indice": con_idx,
-                "genericos_sin_indice": genericos_esperados - con_idx,
-                "cobertura_genericos_pct": cobertura_pct,
-                "ponderador_esperado": ponderador_esperado,
-                "ponderador_cubierto": pond_cub,
-            }
-        )
-    return pd.DataFrame(filas).set_index(["periodo", "indice"])
+    periodos = df_calculo.index.get_level_values("periodo")
+    con_idx = con_indice_por_periodo.reindex(periodos).to_numpy()
+    pond_cub = pond_cubierto_por_periodo.reindex(periodos).to_numpy()
+    cobertura_pct = (100.0 * con_idx / genericos_esperados) if genericos_esperados else 0.0
+
+    return pd.DataFrame(
+        {
+            "version": version,
+            "estado_calculo": df_calculo["estado_calculo"].to_numpy(),
+            "motivo_error": df_calculo["motivo_error"].to_numpy(),
+            "genericos_esperados": genericos_esperados,
+            "genericos_con_indice": con_idx,
+            "genericos_sin_indice": genericos_esperados - con_idx,
+            "cobertura_genericos_pct": cobertura_pct,
+            "ponderador_esperado": ponderador_esperado,
+            "ponderador_cubierto": pond_cub,
+        },
+        index=df_calculo.index,
+    )
 
 
 def _construir_diagnostico(
@@ -162,24 +158,6 @@ def _construir_diagnostico(
     `df_canasta.index` (los del subgrupo).
     """
     _ = df_canasta
-    filas = []
-    mascara_faltante = df_serie.isna()
-    for generico in mascara_faltante.index:
-        for periodo in mascara_faltante.columns:
-            if not mascara_faltante.at[generico, periodo]:
-                continue
-            filas.append(
-                {
-                    "id_corrida": id_corrida,
-                    "version": version,
-                    "tipo": tipo,
-                    "periodo": periodo,
-                    "generico": generico,
-                    "nivel_faltante": "periodo",
-                    "tipo_faltante": "indice",
-                    "detalle": "valor NaN en serie publicada",
-                }
-            )
     columnas = [
         "id_corrida",
         "version",
@@ -190,6 +168,25 @@ def _construir_diagnostico(
         "tipo_faltante",
         "detalle",
     ]
-    if not filas:
+    mascara_faltante = df_serie.isna()
+    if not mascara_faltante.any(axis=None):
         return pd.DataFrame(columns=columnas)
-    return pd.DataFrame(filas, columns=columnas)
+
+    # nonzero() sobre matriz booleana: índices (fila, col) donde hay NaN
+    filas_idx, cols_idx = mascara_faltante.values.nonzero()
+    genericos_f = mascara_faltante.index[filas_idx]
+    periodos_f = mascara_faltante.columns[cols_idx]
+
+    return pd.DataFrame(
+        {
+            "id_corrida": id_corrida,
+            "version": version,
+            "tipo": tipo,
+            "periodo": periodos_f,
+            "generico": genericos_f,
+            "nivel_faltante": "periodo",
+            "tipo_faltante": "indice",
+            "detalle": "valor NaN en serie publicada",
+        },
+        columns=columnas,
+    )
