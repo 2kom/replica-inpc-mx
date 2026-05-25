@@ -1,683 +1,314 @@
-# Analisis de requerimientos
+# Análisis de requerimientos — replica-inpc-mx
 
 ## 1. Objetivo
 
-La primera version del proyecto busca **replicar el INPC general** a partir de:
+El sistema replica el INPC general a partir de:
 
-- las **series publicadas por el INEGI** de los indices superiores nacionales de los genericos;
-- las **canastas y ponderadores publicados por el INEGI**, previamente extraidos a CSV.
+- las **series publicadas por el INEGI** de los índices superiores nacionales de los genéricos;
+- las **canastas y ponderadores publicados por el INEGI**, previamente extraídos a CSV.
 
-El proyecto **no** busca, en esta etapa:
+El sistema no busca:
 
 - replicar el levantamiento de precios;
-- replicar indices elementales;
-- replicar el proceso institucional completo del INEGI;
-- usar directamente los archivos crudos `.xlsx` y `.pdf` de canastas como interfaz principal de uso.
+- replicar índices elementales;
+- replicar el proceso institucional completo del INEGI.
 
-## 2. Alcance de la version 1
+## 2. Alcance de v2
 
-La `v1` debe permitir:
+v2 permite:
 
-- importar canastas;
-- importar series de genericos;
-- calcular el **INPC general**;
-- validar el resultado contra lo publicado por el INEGI;
-- exportar resultados.
+- importar canastas de cualquier versión soportada;
+- importar series de genéricos;
+- calcular índices para uno o varios tramos históricos;
+- combinar tramos en una serie histórica continua;
+- calcular variaciones e incidencias sobre los índices;
+- validar los resultados contra lo publicado por el INEGI;
+- configurar tolerancias y token de sesión.
 
-### 2.1 Alcance temporal por etapas
+### 2.1 Historial de alcance por versión
 
-El desarrollo se plantea de forma incremental:
+| Versión | Alcance acumulado |
+|---------|-------------------|
+| v1.0.0  | INPC general (canasta 2018) + validación contra API INEGI |
+| v1.0.1  | v1.0.0 + guías de descarga + herramienta de acondicionamiento de ponderadores |
+| v1.1.0  | v1.0.1 + subíndices por clasificación de canasta (COG, CCIF, inflación, SCIAN, durabilidad) |
+| v1.1.1  | v1.1.0 + documentación pública + demo ejecutable |
+| v1.2.0  | v1.1.1 + canasta 2024 + Laspeyres encadenado + imputación de faltantes + combinación de tramos |
+| v1.2.1  | v1.2.0 + tabla de renombres cross-versión |
+| v1.2.2  | v1.2.1 + variaciones periódicas, acumuladas y desde período base |
+| v1.2.3  | v1.2.2 + conversión a frecuencia mensual + validaciones quincenal y mensual |
+| v1.2.4  | v1.2.3 + validación de variaciones quincenal y mensual + estado fuera_de_rango_inegi |
+| v1.2.5  | v1.2.4 + incidencias (multi-canasta 2018+2024) + validación de incidencias mensual |
+| v1.3.0  | v1.2.5 + canastas 2010 y 2013 + historia 2010-2024 + rebase endógeno |
+| v2.0.0  | Rediseño completo: arquitectura hexagonal; superficie pública unificada; historia multi-canasta en una operación; validación de índices, variaciones e incidencias |
 
-1. ~~iniciar con la canasta `2018`;~~ incorporado en `v1.0.0`;
-2. ~~despues incorporar la canasta `2024`;~~ incorporado en `v1.2.0`;
-3. ~~posteriormente considerar las canastas `2010` y `2013`;~~ incorporado en `v1.3.0`.
+### 2.2 Lo que el sistema no hace
 
-## 3. Casos de uso de la version 1
+- Replicar el levantamiento de precios.
+- Replicar índices elementales.
+- Leer archivos `.xlsx` o `.pdf` como entradas operativas.
+- Persistir artefactos a disco automáticamente — el sistema opera en memoria;
+  el usuario puede exportar los resultados con los medios que prefiera.
 
-Los casos de uso acordados para la `v1` son:
+## 3. Casos de uso (v2)
 
-1. importar una canasta en formato CSV;
-2. importar una serie de genericos en formato CSV;
-3. calcular el INPC general a partir de la canasta y la serie importadas;
-4. validar el INPC replicado contra lo publicado por el INEGI por medio de su API;
-5. exportar los resultados del calculo y la validacion.
+Los casos de uso acordados para v2 son:
 
-## 4. Entradas oficiales soportadas en la version 1
+1. Importar una canasta en formato CSV.
+2. Importar una serie de genéricos en formato CSV.
+3. Calcular el índice de precios para un tramo histórico.
+4. Combinar tramos en una serie histórica continua.
+5. Reexpresar resultados a una referencia de período distinta.
+6. Convertir resultados quincenales a frecuencia mensual.
+7. Calcular la historia completa multi-canasta en una sola operación.
+8. Calcular variaciones sobre un resultado de índice.
+9. Calcular incidencias sobre un resultado de índice.
+10. Validar índices replicados contra lo publicado por el INEGI.
+11. Validar variaciones calculadas contra lo publicado por el INEGI.
+12. Validar incidencias calculadas contra lo publicado por el INEGI.
+13. Configurar tolerancias de validación y token de sesión.
+
+## 4. Entradas
 
 ### 4.1 Canastas
 
-Las canastas se recibirán en **CSV**.
+Las canastas se reciben en **CSV**. Versiones soportadas: 2010, 2013, 2018, 2024.
 
-Estos CSV provienen de un proceso previo de extraccion desde los archivos oficiales del INEGI. En esta etapa:
+Columnas mínimas requeridas:
 
-- el `.xlsx` oficial es parte del proceso de preparacion de insumos;
-- el `.pdf` del manual se usa para contraste y validacion de la extraccion;
-- pero la interfaz principal del sistema en `v1` recibira **CSV de canastas**.
+- `ponderador`
+- `encadenamiento`
+- `COG`
+- `CCIF division`
+- `inflacion componente`
+- `inflacion subcomponente`
+- `inflacion agrupacion`
+- `SCIAN sector`
+- `SCIAN rama`
+- `canasta basica`
+- `canasta consumo minimo`
 
-En `v1`, ese CSV corresponde a la **canasta_intermedia**. A partir de ella, el sistema debe construir la **canasta_canonica** antes de realizar el calculo.
+Si falta alguna de estas columnas, la importación falla.
 
-### 4.2 Series de genericos
+La canasta importada preserva todos los campos de clasificación presentes en el CSV fuente,
+incluyendo campos adicionales de CCIF (grupo, clase) y campos derivados (durabilidad).
 
-Las series se recibirán en **CSV** descargados del INEGI.
+### 4.2 Series de genéricos
 
-El sistema debe contemplar que estos archivos pueden venir:
+Las series se reciben en **CSV** descargados del INEGI. El sistema soporta:
 
-- con o sin metadatos;
-- en orientacion horizontal o vertical;
-- con `encoding cp1252`.
+- Con o sin metadatos.
+- Orientación horizontal o vertical.
+- Encodings: se intentan en orden utf-8, cp1252, latin-1.
 
-La capa de importacion debe encargarse de resolver esas variantes y producir un formato interno estable.
+La primera columna del archivo debe llamarse `Título`.
 
-## 5. Salida minima esperada de la version 1
+## 5. Salidas del sistema
 
-La salida minima del calculo y validacion del INPC general debe incluir una tabla con:
+### 5.1 Resultado de índice
 
-- `periodo`
-- `inpc_replicado`
-- `inpc_inegi`
-- `error_absoluto`
-- `error_relativo`
-- `estado_calculo`
-- `motivo_error`
+El resultado del cálculo de índices incluye:
 
-El sistema debe permitir exportar esta salida al menos en:
+- el índice replicado por período y tipo;
+- diagnóstico de calidad por período, con estado de cálculo;
+- resumen agregado del estado general de la corrida;
+- acceso filtrado a períodos con estado distinto al normal;
+- manifiesto de trazabilidad (fuentes de entrada, versión de canasta, tipo de índice, fecha de cálculo).
 
-- `CSV`
+Los períodos pueden ser quincenales o mensuales.
 
-## 6. Criterios de validez del calculo
+### 5.2 Resultado de variaciones
 
-### 6.1 Criterio general
+El resultado de variaciones incluye la misma estructura de diagnóstico, resumen y manifiesto
+que el resultado de índice.
 
-La replicacion debe coincidir con lo publicado por el INEGI, salvo diferencias atribuibles a redondeo.
+Tipos de variación soportados:
 
-La tolerancia es configurable por version:
+| Tipo | Descripción |
+|------|-------------|
+| Periódica quincenal | Respecto a la quincena anterior |
+| Periódica mensual | Respecto al mes anterior |
+| Periódica bimestral | Respecto al bimestre anterior |
+| Periódica trimestral | Respecto al trimestre anterior |
+| Periódica cuatrimestral | Respecto al cuatrimestre anterior |
+| Periódica semestral | Respecto al semestre anterior |
+| Periódica anual | Respecto al año anterior |
+| Acumulada anual | Acumulada desde inicio del año calendario |
+| Desde período base | Desde un período base específico indicado por el usuario |
 
-| Version | Tolerancia (`error_absoluto`) |
-| --- | --- |
-| 2010 | `<= 0.0009` |
-| 2013 | `<= 0.0009` |
-| 2018 | `<= 0.0009` |
-| 2024 | `<= 0.0009` |
+### 5.3 Resultado de incidencias
 
-### 6.2 Faltantes en ponderadores
+El resultado de incidencias tiene la misma estructura que el de variaciones.
 
-Si falta el ponderador de algun generico requerido por la canasta:
+Tipos de incidencia soportados: los mismos que los de variación (ver §5.2).
 
-- el calculo completo del indice **falla**.
+## 6. Criterios de cálculo y validación
 
-Esto se considera un error estructural global.
+### 6.1 Tolerancias
+
+| Tipo de resultado | Tolerancia (error absoluto) |
+|---|---|
+| Índices (todas las versiones) | ≤ 0.0009 |
+| Variaciones e incidencias | ≤ 0.009 puntos porcentuales |
+
+Las tolerancias son configurables en sesión. Ver §10.
+
+### 6.2 Ponderadores inválidos o faltantes
+
+Si la canasta tiene ponderadores faltantes, no positivos o con suma incorrecta,
+la importación falla inmediatamente. Error estructural; no hay recuperación parcial.
 
 ### 6.3 Faltantes en series
 
-Si para una fecha o periodo especifico falta el valor del indice de algun generico requerido:
+Si falta el índice de algún genérico en un período, el sistema aplica imputación
+hacia atrás y luego hacia adelante por fila, y marca el estado de calidad del período resultante.
 
-- el calculo del INPC para ese periodo **falla**;
-- el valor resultante para ese periodo debe quedar como `null`;
-- los demas periodos pueden seguir calculandose si tienen cobertura completa.
+**Para el resultado de índice:**
 
-Esto se considera un error local por periodo.
+| Situación | Estado de cálculo |
+|-----------|------------------|
+| Todos los genéricos presentes, sin imputación | `ok` |
+| Algún genérico imputado; resultado utilizable | `rellenado` |
+| Solo 1 quincena disponible para el mes al convertir a mensual | `parcial` |
+| Ninguna quincena disponible para el mes | `sin_datos` |
+| Cálculo intentado y fallido; sin valor replicado | `fallida` |
 
-## 7. Persistencia deseada en la version 1
+Orden de severidad: `ok < rellenado < parcial < sin_datos < fallida`.
 
-El objetivo de esta seccion es declarar unicamente que artefactos deben persistirse en la `v1`.
+**Para resultados de variaciones e incidencias:**
 
-Se acordó persistir unicamente los **artefactos computados** por el pipeline:
+| Situación | Estado de cálculo |
+|-----------|------------------|
+| Calculado con índice fuente en `ok` o `rellenado` | `ok` |
+| Calculado con índice fuente en `parcial` | `parcial` |
 
-- el **resultado del calculo** (`ResultadoCalculo`);
-- los **artefactos de validacion** definidos formalmente en la seccion 11 (`ResumenValidacion`, `ReporteDetalladoValidacion`, `DiagnosticoFaltantes`).
+## 7. Prioridades no funcionales
 
-La trazabilidad de los insumos queda cubierta por las rutas registradas en `ManifestCorrida`. No se persisten copias de los archivos fuente porque el flujo de uso esperado es local: el usuario gestiona sus propios archivos y los reemplaza cuando hay actualizaciones.
+1. **Reproducibilidad** — mismos insumos producen mismo resultado.
+2. **Trazabilidad** — cada resultado lleva manifiesto con fuentes, versión, tipo y fecha.
+3. **Facilidad de uso** — acceso uniforme a resultados, diagnósticos y manifiesto en todos los tipos de salida.
+4. **Flexibilidad** — historia multi-canasta en una sola operación; cálculo unitario o combinado.
+5. **Rendimiento** — eficiencia en cálculos sobre conjuntos grandes de datos.
 
-La persistencia es **opcional por corrida**. El caso de uso acepta un parametro `persistir: bool`. Cuando `persistir=False`, el pipeline corre completo en memoria y devuelve `ResultadoCorrida` sin escribir nada a disco — util para exploracion en notebooks. Cuando `persistir=True`, se escriben todos los artefactos y metadatos a disco.
+## 8. Períodos
 
-## 8. Prioridades no funcionales de la version 1
+El sistema usa dos tipos de período:
 
-Las prioridades no funcionales acordadas para la `v1` son:
+- **Quincenal** — formato: `1Q Ene 2020`, `2Q Jul 2024`.
+- **Mensual** — formato: `Ene 2020`.
 
-1. **reproducibilidad**
-2. **trazabilidad**
-3. **facilidad de uso**
-4. **flexibilidad**
-5. **velocidad**
+El formato es insensible a mayúsculas. Las series de entrada son siempre quincenales;
+los datos mensuales se obtienen mediante conversión explícita.
 
-### 8.1 Interpretacion en este contexto
+## 9. Validación
 
-- **Reproducibilidad**: con los mismos insumos, el sistema debe producir el mismo resultado.
-- **Trazabilidad**: debe ser posible identificar que archivo se uso, que pasos se aplicaron y por que un periodo fallo o quedo en `null`.
-- **Facilidad de uso**: el flujo de importacion, calculo y validacion debe ser claro para el usuario.
-- **Flexibilidad**: el sistema debe poder crecer despues hacia otras canastas, sin que esa necesidad domine la `v1`.
-- **Velocidad**: es deseable, pero no es la prioridad principal en esta etapa.
+La validación contrasta resultados replicados contra lo publicado por el INEGI vía su API
+pública. Requiere token INEGI configurado (ver §10).
 
-## 9. Serie normalizada minima
+Los tipos de índice con validación disponible son: INPC general, y por componente y
+subcomponente de inflación.
 
-La normalizacion de series, en esta etapa, se entiende como:
+Si la API del INEGI no está disponible, el error se propaga al llamador — no se produce
+resultado de validación. Esta condición no afecta el resultado de cálculo ya obtenido.
 
-- limpiar el archivo descargado;
-- eliminar texto y metadatos que no aportan al calculo;
-- dejar la informacion en un formato estable para el sistema.
+### 9.1 Validación de índices
 
-### 9.1 Metadatos que pueden venir en los archivos crudos
+Contrasta el índice replicado contra el publicado por el INEGI por período y tipo.
+Produce el valor publicado, el error absoluto y el estado de validación para cada período.
 
-Cuando el archivo se descarga **con metadatos**, puede incluir:
+### 9.2 Validación de variaciones
 
-- `titulo`
-- `periodo disponible`
-- `cifra`
-- `unidad`
-- `base`
-- `aviso`
-- `tipo de informacion`
-- `serie`
-- valores numericos de las series
+Solo soporta los tipos con equivalente disponible en el INEGI:
 
-Cuando se descarga **sin metadatos**, puede incluir:
+| Tipo de variación | Equivalente INEGI |
+|-------------------|-------------------|
+| Periódica quincenal | Periódica |
+| Periódica mensual | Periódica |
+| Periódica anual | Interanual |
+| Acumulada anual | Acumulada anual |
 
-- `titulo`
-- `cifra`
-- `serie`
-- valores numericos de las series
+Produce el valor publicado, el error absoluto y el estado de validación para cada período.
 
-En ambos casos, la normalizacion debe quedarse solo con lo necesario para calcular.
+### 9.3 Validación de incidencias
 
-### 9.2 Forma conceptual del dato elemental
+Solo soporta:
 
-Sin importar si el archivo viene horizontal o vertical, el dato elemental que interesa al sistema es:
+| Tipo de incidencia | Equivalente INEGI |
+|--------------------|-------------------|
+| Periódica mensual | Periódica |
 
-- un generico;
-- un periodo;
-- un valor de indice.
+Produce el valor publicado, el error absoluto y el estado de validación para cada período.
 
-### 9.3 Formato normalizado minimo acordado
+### 9.4 Estados del sistema
 
-La `SerieNormalizada` usa formato **ancho**:
+#### Estado de cálculo — índices
 
-- `generico_limpio` como índice del DataFrame;
-- una columna por periodo (objetos `Periodo`);
-- valores `float64` o `NaN` cuando falta el índice.
+| Valor | Significado |
+|-------|-------------|
+| `ok` | Calculado completo sin imputación |
+| `rellenado` | Algún genérico imputado; resultado utilizable |
+| `parcial` | Solo 1 quincena disponible al convertir a mensual |
+| `sin_datos` | Ninguna quincena disponible al convertir a mensual |
+| `fallida` | Cálculo intentado y fallido; sin valor replicado |
 
-El dato elemental (generico + periodo + valor) está implícito en la estructura: cada celda `[generico_limpio, Periodo]` contiene el valor de índice correspondiente.
+#### Estado de cálculo — variaciones e incidencias
 
-Este formato fue elegido sobre el formato largo (columnas `generico_limpio`, `periodo`, `indice`) porque hace el cálculo Laspeyres eficiente — la agregación es una multiplicación matricial directa entre ponderadores y la matriz de índices.
+| Valor | Significado |
+|-------|-------------|
+| `ok` | Calculado con índice fuente en `ok` o `rellenado` |
+| `parcial` | Calculado con índice fuente en `parcial` |
 
-`generico_original` no es una columna del DataFrame. Vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), disponible para trazabilidad cuando se necesita reconstruir el nombre original.
+#### Estado de validación
 
-En este contexto, `generico_limpio` representa el texto util derivado de la columna `Título` del archivo de series una vez removido el contenido contextual que no aporta al calculo, conservando solo la parte necesaria para identificar el generico.
-
-### 9.4 Alcance de `periodo`
-
-El campo `periodo` no es un string sino un objeto `Periodo` con atributos `año`, `mes` y `quincena`. Se representa como etiqueta legible:
-
-- `1Q Ene 2020`
-- `2Q Jul 2024`
-
-Es decir:
-
-- `1Q` o `2Q`: primera o segunda quincena;
-- mes;
-- año.
-
-El tipo propio permite sorting natural, uso como clave de diccionario y conversión a `pd.Timestamp` para graficación.
-
-## 10. Canastas del sistema
-
-En el sistema deben distinguirse dos artefactos relacionados con las canastas:
-
-- `canasta_intermedia`
-- `canasta_canonica`
-
-### 10.1 Canasta intermedia
-
-La `canasta_intermedia` es un artefacto de preparacion de insumos.
-
-Su funcion es:
-
-- conservar el resultado del pipeline de extraccion y rectificacion;
-- servir como punto de trazabilidad entre los archivos oficiales del INEGI y la representacion final usada por el sistema;
-- documentar el paso previo a la construccion de la canasta usada por el calculo.
-
-La `canasta_intermedia`:
-
-- se obtiene a partir de archivos oficiales, principalmente `.xlsx`;
-- se contrasta y rectifica con los manuales publicados por el INEGI;
-- es la entrada operativa de canasta para la `v1`;
-- **no** es la entrada final del motor de calculo.
-
-En esta etapa del analisis de requerimientos, la `canasta_intermedia` se declara como artefacto existente, pero **no** se fija formalmente su esquema como contrato estable del sistema.
-
-### 10.2 Canasta canonica
-
-La `canasta_canonica` es la representacion interna estable de una canasta ya lista para ser usada por el calculo.
-
-Su objetivo es:
-
-- dar al sistema un formato unico y predecible para trabajar;
-- evitar que el motor de calculo dependa del formato de extraccion;
-- separar la preparacion de insumos del calculo del indice.
-
-La `canasta_canonica` **si** constituye un contrato del sistema.
-
-En `v1`, la `canasta_canonica` debe construirse a partir de la `canasta_intermedia` antes de que el sistema realice el calculo.
-
-### 10.3 Esquema de la canasta canonica
-
-La `canasta_canonica` debe manejar un **esquema unico comun** para todas las versiones de canasta.
-
-Cuando una columna no aplique a una version especifica, su valor debe quedar en `null`.
-
-Para el calculo del `INPC general` en la `v1`, las columnas minimas necesarias de la `canasta_canonica` son:
-
-- `generico`
-- `ponderador`
-
-`version` no es una columna del DataFrame sino un atributo separado de `CanastaCanonica`, accesible via propiedad de solo lectura. Ver diseño §5.1.
-
-Las demas columnas se conservan como parte del contrato canonico del sistema, aunque no sean estrictamente necesarias para el calculo del `INPC general` en esta etapa.
-
-Las columnas acordadas son:
-
-- `generico`
-- `ponderador`
-- `encadenamiento`
-- `COG`
-- `CCIF division`
-- `CCIF grupo`
-- `CCIF clase`
-- `inflacion componente`
-- `inflacion subcomponente`
-- `inflacion agrupacion`
-- `SCIAN sector`
-- `SCIAN rama`
-- `durabilidad`
-- `canasta basica`
-- `canasta consumo minimo`
-
-### 10.4 Reglas de contenido y tipos de la canasta canonica
-
-- `generico`
-  - texto
-  - se asume ya limpio y listo para ser usado en el sistema
-
-- `ponderador`
-  - texto decimal exacto
-  - se conserva asi para respetar la precision extraida del archivo oficial
-
-- `encadenamiento`
-  - texto decimal exacto o `null`
-  - se conserva asi por la misma razon que `ponderador`
-
-- `COG`
-  - texto
-
-- `CCIF division`
-  - texto
-
-- `CCIF grupo`
-  - texto
-
-- `CCIF clase`
-  - texto
-
-- `inflacion componente`
-  - texto
-
-- `inflacion subcomponente`
-  - texto
-
-- `inflacion agrupacion`
-  - texto
-
-- `SCIAN sector`
-  - texto
-  - conserva el numero y el nombre del sector en una sola columna
-
-- `SCIAN rama`
-  - texto
-  - conserva el codigo y el nombre de la rama en una sola columna
-
-- `durabilidad`
-  - texto o `null`
-  - vacio cuando no aplica a la version
-
-- `canasta basica`
-  - texto
-  - `"X"` si pertenece, `""` si no
-
-- `canasta consumo minimo`
-  - texto o `null`
-  - `"X"` si pertenece, `""` o `null` si no aplica a la version
-
-### 10.5 Criterios adicionales
-
-- `generico_original` **no** forma parte de la canasta canonica.
-- el campo `generico` de la canasta canonica representa el mismo concepto que `generico_limpio` en la serie normalizada: un identificador textual ya depurado y listo para usarse en la correspondencia entre ambos insumos.
-
-## 11. Validacion
-
-La validacion del sistema debe contrastar el `INPC` replicado por el proyecto contra lo publicado por el INEGI.
-
-Esta seccion constituye la definicion formal de los artefactos, estados y reglas de comportamiento asociados a la validacion del sistema.
-
-En esta etapa, se acuerda que:
-
-- la validacion se realiza usando la API del INEGI;
-- la validacion es un componente distinto del calculo;
-- un fallo en la obtencion de datos de validacion **no** invalida automaticamente el calculo del INPC.
-
-### 11.1 Artefactos de validacion
-
-Se definen tres artefactos de validacion:
-
-- `resumen_validacion`
-- `reporte_detallado_validacion`
-- `diagnostico_faltantes`
-
-### 11.2 Resumen de validacion
-
-El `resumen_validacion` debe ser:
-
-- compacto;
-- una fila por corrida;
-- util para evaluar rapidamente el resultado general de la corrida.
-
-Las columnas acordadas son:
-
-- `version`
-- `tipo`
-- `periodo_inicio`
-- `periodo_fin`
-- `total_periodos_esperados`
-- `total_periodos_calculados`
-- `total_periodos_con_null`
-- `error_absoluto_max`
-- `error_relativo_max`
-- `total_faltantes_indice`
-- `total_faltantes_ponderador`
-- `estado_validacion_global`
-- `estado_corrida`
-
-### 11.3 Reporte detallado de validacion
-
-El `reporte_detallado_validacion` debe contener una fila por periodo y servir para diagnostico fino del calculo y la comparacion.
-
-Las columnas acordadas son:
-
-- `periodo`
-- `version`
-- `inpc_replicado`
-- `inpc_inegi`
-- `error_absoluto`
-- `error_relativo`
-- `estado_calculo`
-- `motivo_error`
-- `estado_validacion`
-- `total_genericos_esperados`
-- `total_genericos_con_indice`
-- `total_genericos_sin_indice`
-- `cobertura_genericos_pct`
-- `ponderador_total_esperado`
-- `ponderador_total_cubierto`
-
-### 11.4 Diagnostico de faltantes
-
-El `diagnostico_faltantes` debe contener una fila por faltante detectado y permitir trazabilidad de la corrida mediante un identificador propio.
-
-En esta etapa, `id_corrida` se entiende como un identificador de la ejecucion a la que pertenece el artefacto, sin implicar todavia la existencia de un artefacto separado de registro de corridas en la `v1`.
-
-Las columnas acordadas son:
-
-- `id_corrida`
-- `version`
-- `periodo`
-- `generico`
-- `nivel_faltante`
-- `tipo_faltante`
-- `detalle`
-
-Reglas para su uso:
-
-- si falta un indice:
-  - `periodo` lleva el periodo afectado;
-  - `nivel_faltante = periodo`;
-  - `tipo_faltante = indice`.
-
-- si falta un ponderador:
-  - `periodo = null`;
-  - `nivel_faltante = estructural`;
-  - `tipo_faltante = ponderador`.
-
-### 11.5 Estados del sistema asociados a validacion
-
-#### Estado de calculo
-
-Los valores acordados para `estado_calculo` son:
-
-- `ok`
-- `null_por_faltantes`
-- `fallida`
-
-#### Estado de validacion
-
-Los valores acordados para `estado_validacion` son:
-
-- `ok`
-- `diferencia_detectada`
-- `no_disponible`
-
-#### Estado de validacion global
-
-El campo `estado_validacion_global` representa el resultado global de la validacion contra lo publicado por el INEGI a nivel corrida.
-
-Los valores acordados para `estado_validacion_global` son:
-
-- `ok`
-- `ok_parcial`
-- `diferencia_detectada`
-- `no_disponible`
-
-Su interpretacion es la siguiente:
-
-- `ok`
-  - cuando la validacion contra el INEGI estuvo disponible para todos los periodos comparables y no se detectaron diferencias.
-
-- `ok_parcial`
-  - cuando entre los periodos con `estado_calculo == 'ok'`, al menos uno paso la tolerancia y al menos uno no pudo ser comparado (`no_disponible`).
-
-- `diferencia_detectada`
-  - cuando la validacion contra el INEGI estuvo disponible y se detectaron diferencias.
-
-- `no_disponible`
-  - cuando no fue posible obtener los datos de validacion desde la API del INEGI.
-
-#### Estado de corrida
-
-Los valores acordados para `estado_corrida` son:
-
-- `ok`
-- `ok_parcial`
-- `fallida`
-
-Su interpretacion es la siguiente:
-
-- `ok`
-  - cuando la corrida produce resultados completos y utilizables, sin faltantes estructurales ni periodos en `null`.
-
-- `ok_parcial`
-  - cuando la corrida produce resultados utilizables, pero con algunos periodos en `null` por faltantes de indice. El estado de la validacion contra el INEGI se reporta por separado en `estado_validacion_global`.
-
-- `fallida`
-  - cuando todos los periodos del calculo producen `estado_calculo != 'ok'`. Los errores de importacion o preparacion de insumos lanzan una excepcion que interrumpe la corrida antes de producir artefactos — en esos casos no se genera ningun `ResultadoCorrida`.
-
-### 11.6 Falla de la API del INEGI
-
-Si la obtencion de datos de validacion desde la API del INEGI falla:
-
-- la corrida **continua**;
-- el calculo del INPC **si se entrega**;
-- la validacion se considera **no disponible**.
-
-En ese caso, el sistema debe producir:
-
-- `inpc_inegi = null`
-- `error_absoluto = null`
-- `error_relativo = null`
-- `estado_validacion = no_disponible`
-
-## 12. Manejo general de errores
-
-Ademas de las reglas de faltantes en ponderadores y series ya definidas en la seccion de validez del calculo, la `v1` debe contemplar errores generales de importacion y preparacion de insumos.
-
-En todos los casos listados a continuacion, la corrida debe **fallar inmediatamente**.
-
-### 12.1 Archivo no encontrado
-
-Si el archivo de series o el archivo de canasta no existe:
-
-- la corrida falla inmediatamente.
-
-### 12.2 Archivo vacio
-
-Si el archivo existe pero no contiene datos utiles:
-
-- la corrida falla inmediatamente.
-
-### 12.3 Archivo corrupto o mal formado
-
-Si el archivo no puede ser interpretado como un CSV estructuralmente valido para el sistema:
-
-- la corrida falla inmediatamente.
-
-Para `v1` no se acuerdan recuperaciones parciales sobre archivos dudosos mas alla del comportamiento normal esperado por el lector.
-
-### 12.4 Encoding no legible
-
-Para los archivos de series del INEGI, el sistema debe:
-
-1. intentar lectura con `utf-8`;
-2. intentar lectura con `cp1252`;
-3. intentar un fallback controlado como `latin-1`.
-
-Si aun asi no se puede leer el archivo:
-
-- la corrida falla inmediatamente.
-
-### 12.5 Orientacion no detectable
-
-Si el sistema no puede determinar si el archivo de series esta en formato horizontal o vertical:
-
-- la corrida falla inmediatamente.
-
-### 12.6 Columnas minimas faltantes
-
-Si faltan columnas minimas requeridas por el proceso:
-
-- la corrida falla inmediatamente.
-
-En el caso de las series, una de las columnas esperadas en el archivo crudo es literalmente:
-
-- `Título`
-
-### 12.7 Canasta no soportada
-
-Si se solicita una version de canasta fuera del conjunto soportado por el sistema:
-
-- la corrida falla inmediatamente.
-
-En esta etapa, las versiones previstas por el sistema son:
-
-- `2010`
-- `2013`
-- `2018`
-- `2024`
-
-No obstante, no todas forman parte del alcance operativo de la `v1`. Ese alcance se define en las secciones `2` y `13`.
-
-### 12.8 Periodo no interpretable
-
-Si el sistema detecta una etiqueta temporal que no puede interpretar como un periodo valido del tipo esperado:
-
-- la corrida falla inmediatamente.
-
-### 12.9 Correspondencia insuficiente entre serie y canasta
-
-Antes del calculo, el sistema debe poder establecer una correspondencia valida entre:
-
-- los genericos de la serie;
-- y los genericos de la canasta.
-
-Si esa correspondencia no produce una base minima valida para calcular el INPC:
-
-- la corrida falla inmediatamente.
-
-En esta etapa del analisis de requerimientos, esta regla se expresa como una necesidad de correspondencia valida entre ambos insumos, sin fijar todavia el mecanismo tecnico especifico que se usara para implementarla.
-
-## 13. Alcance por version y exclusiones
-
-Esta seccion documenta que cubre cada version publicada o prevista, y que queda fuera del alcance actual del proyecto.
-
-### 13.0 Historial de alcance por version
-
-| Version | Alcance acumulado                                                                                                                                |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| v1.0.0  | Generacion del INPC general (canasta 2018) y comparacion contra lo publicado por el INEGI via API                                                |
-| v1.0.1  | v1.0.0 + guias de descarga de series y ponderadores + herramienta de acondicionamiento de ponderadores                                           |
-| v1.1.0  | v1.0.1 + calculo de subindices por clasificacion de canasta (COG, CCIF, inflacion, SCIAN, durabilidad)                                           |
-| v1.1.1  | v1.1.0 + documentacion publica (contexto, metodologia INEGI, metodologia replica) + demo ejecutable                                              |
-| v1.2.0  | v1.1.1 + canasta 2024 con Laspeyres encadenado + imputación bfill/ffill de faltantes en series + `combinar` para series históricas continuas     |
-| v1.2.1  | v1.2.0 + tabla de renombres 1:1 entre canastas (`RENOMBRES_INDICES`) + normalización cross-versión en `combinar`                                 |
-| v1.2.2  | v1.2.1 + variaciones periódicas, acumuladas anuales y desde periodo base (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`) |
-| v1.2.3  | v1.2.2 + `PeriodoMensual` + `a_mensual()` + variaciones mensuales + `validar_mensual(resultado, token)` + `validar_quincenal(resultado, token)`  |
-| v1.2.4  | v1.2.3 + `validar_variaciones_mensual(rv, token)` + `validar_variaciones_quincenal(rv, token)` + estado `fuera_de_rango_inegi`                   |
-| v1.2.5  | v1.2.4 + `incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde` (multi-canasta 2018+2024) + `validar_incidencias_mensual`      |
-| v1.3.0  | v1.2.5 + canastas 2010 y 2013 + serie histórica 2010-2024 con `ejecutar_historico` y rebase a base 2018                                          |
-
-### 13.1 Subindices
-
-~~La `v1` no incluye subindices.~~ Incorporado en **v1.1.0**.
-
-La v1.1.0 incluye:
-
-- calculo de subindices por columna de clasificacion de la canasta;
-- comparacion contra lo publicado por el INEGI cuando el tipo lo permite (inflacion componente, inflacion subcomponente).
-
-No incluye todavia:
-
-- ~~incidencias por subindice.~~ Incorporado en **v1.2.5** (`incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde`, `validar_incidencias_mensual`).
-- ~~variaciones por subindice.~~ Incorporado en **v1.2.2**.
-
-### 13.2 Incidencias y variaciones
-
-~~Ninguna version prevista hasta v1.3.0 incluye variaciones.~~ Incorporado en **v1.2.2** (`variacion_periodica`, `variacion_desde`, `variacion_acumulada_anual`).
-
-~~Ninguna version prevista hasta v1.3.0 incluye incidencias.~~ Incorporado en **v1.2.5** (`incidencia_periodica`, `incidencia_acumulada_anual`, `incidencia_desde`, `validar_incidencias_mensual`).
-
-### 13.3 Operacion sobre canastas 2010 y 2013
-
-Incorporado en **v1.3.0**. Las versiones anteriores operan unicamente sobre:
-
-- canasta 2018 (desde v1.0.0);
-- canasta 2024 (desde v1.2.0).
-
-La v1.3.0 agrega:
-
-- lectura operativa de series BIE 2010/2013 con formato jerarquico sin clave terminal de generico;
-- calculo directo para canasta 2010 en la referencia original `2Q Dic 2010 = 100`;
-- calculo encadenado para canasta 2013 usando `encadenamiento` como factor de alineacion por generico (`serie / f_k`);
-- empalme real 2010->2013 en `2Q Mar 2013`;
-- rebase endogeno del bloque 2010+2013 a `2Q Jul 2018 = 100`;
-- fachada `Corrida.ejecutar_historico(...)` para construir el historico 2010-2024.
-
-La equivalencia entre el proceso exploratorio y la implementacion quedo verificada
-para el rango `2Q Dic 2010` a `2Q Jul 2018`: 183 periodos comunes, sin diferencias
-de `version`, `tipo` ni `estado_calculo`, y diferencia maxima en
-`indice_replicado` de `5.852029971720185e-11`.
-
-### 13.4 Uso directo de archivos oficiales `.xlsx` y `.pdf`
-
-Ninguna version prevista incluye el uso directo de:
-
-- archivos `.xlsx`;
-- archivos `.pdf`;
-
-como entradas operativas principales del sistema.
-
-Esos archivos siguen siendo fuentes oficiales de informacion, pero pertenecen al proceso de preparacion de insumos previo al uso principal del sistema.
+| Valor | Significado |
+|-------|-------------|
+| `ok` | Diferencia dentro de tolerancia |
+| `diferencia_detectada` | Diferencia fuera de tolerancia |
+| `diferencia_por_parcial` | Diferencia asociada a período `parcial` |
+| `fuera_rango_inegi` | Período fuera del rango publicado por INEGI |
+| `sin_calculo` | Período sin resultado replicado comparable |
+| `no_disponible` | INEGI no tiene dato para ese período |
+
+## 10. Configuración de sesión
+
+El sistema permite configurar tres parámetros en sesión:
+
+| Parámetro | Default | Descripción |
+|-----------|---------|-------------|
+| Tolerancia de índice | 0.0009 | Umbral de error absoluto para validación de índices |
+| Tolerancia de derivados | 0.009 | Umbral de error absoluto para variaciones e incidencias (pp) |
+| Timeout de API | 10 s | Tiempo límite para llamadas a la API del INEGI |
+
+Las tolerancias y el timeout pueden ajustarse y restaurarse a sus valores por defecto en cualquier momento.
+
+El token de acceso a la API del INEGI puede configurarse mediante variable de entorno
+o directamente en sesión. Si no está configurado al intentar validar, la operación falla.
+La caché de respuestas de la API puede vaciarse explícitamente.
+
+## 11. Manejo general de errores
+
+Los errores de importación y cálculo interrumpen la corrida inmediatamente.
+
+| Condición | Comportamiento |
+|-----------|---------------|
+| Archivo no encontrado | Falla inmediata |
+| Archivo vacío | Falla inmediata |
+| Archivo corrupto o mal formado | Falla inmediata |
+| Encoding no decodificable (utf-8, cp1252, latin-1) | Falla inmediata |
+| Orientación de serie no detectable | Falla inmediata |
+| Columnas mínimas faltantes en canasta | Falla inmediata |
+| Versión de canasta no soportada | Falla inmediata |
+| Ponderador inválido, no positivo o suma incorrecta | Falla inmediata |
+| Período no interpretable | Falla inmediata |
+| Correspondencia insuficiente entre serie y canasta | Falla inmediata |
+| Serie sin filas útiles para cálculo | Falla inmediata |
+
+Los errores de validación (API no disponible o respuesta inválida) no interrumpen el
+resultado de cálculo ya obtenido, pero sí impiden producir el resultado de validación.
+
+## 12. Exclusiones permanentes
+
+- Replicar levantamiento de precios o índices elementales.
+- Leer archivos `.xlsx` o `.pdf` como entradas operativas principales.
+- Calcular índices para versiones de canasta distintas a 2010, 2013, 2018 y 2024.
+- Persistir artefactos a disco automáticamente.
