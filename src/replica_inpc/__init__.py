@@ -10,7 +10,7 @@ import sys
 from types import ModuleType
 
 from replica_inpc.api import config as _config
-from replica_inpc.api.config import limpiar_cache, set_token
+from replica_inpc.api.config import limpiar_cache, mostrar_config, reset_config, set_token
 from replica_inpc.api.flujos import calcular_historia
 from replica_inpc.api.incidencias import (
     incidencia_acumulada,
@@ -74,6 +74,11 @@ from replica_inpc.dominio.periodos import (
 )
 from replica_inpc.dominio.tipos import VersionCanasta
 
+# Declaraciones para el type checker — runtime manejado por _ReplicaModule proxy.
+tolerancia_indice: float
+tolerancia_derivados: float
+timeout_api: int
+
 __all__ = [
     # tipos de periodo
     "PeriodoMensual",
@@ -82,6 +87,8 @@ __all__ = [
     "periodo_desde_str",
     # config
     "limpiar_cache",
+    "mostrar_config",
+    "reset_config",
     "set_token",
     # insumos
     "cargar_canasta",
