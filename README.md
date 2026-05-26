@@ -62,6 +62,8 @@ El cálculo requiere dos archivos por versión de canasta: series de genéricos 
 
 ## Quickstart
 
+En un archivo notebook.ipynb en la raiz del proyecto escribes lo siguiente:
+
 ```python
 import replica_inpc as rep
 
