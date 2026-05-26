@@ -99,14 +99,13 @@ class CalcularHistoria:
         for version, resultado in resultados[1:]:
             acc = empalmar([acc, resultado], forzar=True, version_nombres=version)
 
+        ref_rebase = periodo_referencia
+        if periodicidad == "mensual" and isinstance(periodo_referencia, PeriodoMensual):
+            ref_rebase = PeriodoQuincenal(periodo_referencia.año, periodo_referencia.mes, 2)
+        acc = rebasar(acc, ref_rebase)
         if periodicidad == "mensual":
             acc = a_mensual(acc)
-            # "2Q Jul 2018" (quincenal) → "Jul 2018" (mensual) para que el rebase funcione
-            if isinstance(periodo_referencia, PeriodoQuincenal):
-                periodo_referencia = PeriodoMensual(
-                    periodo_referencia.año, periodo_referencia.mes
-                )
-        return rebasar(acc, periodo_referencia)
+        return acc
 
     @staticmethod
     def _validar(insumos: list[tuple[VersionCanasta, Path, Path]], periodicidad: str) -> None:

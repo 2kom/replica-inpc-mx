@@ -449,10 +449,14 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     if not manifiesto_filtrado:
         manifiesto_filtrado = resultado.manifiesto
 
+    ref = resultado.periodo_referencia
+    if isinstance(ref, PeriodoQuincenal):
+        ref = PeriodoMensual(ref.año, ref.mes)
+
     return ResultadoIndice(
         df_result,
         manifiesto_filtrado,
         _reporte_a_mensual(df_result, resultado.reporte),
         resultado.diagnostico,
-        periodo_referencia=None,
+        periodo_referencia=ref,
     )

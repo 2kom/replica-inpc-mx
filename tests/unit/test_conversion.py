@@ -590,10 +590,19 @@ def test_a_mensual_propaga_manifiesto() -> None:
     assert rm.manifiesto == r.manifiesto
 
 
-def test_a_mensual_periodo_referencia_es_none() -> None:
+def test_a_mensual_periodo_referencia_convierte_a_mensual() -> None:
     r = _resultado(
         [(_q1, "INPC", 100.0, "ok", None), (_q2, "INPC", 102.0, "ok", None)],
         periodo_referencia=_q1,
+    )
+    rm = a_mensual(r)
+    assert rm.periodo_referencia == PeriodoMensual(_q1.año, _q1.mes)
+
+
+def test_a_mensual_sin_periodo_referencia_queda_none() -> None:
+    r = _resultado(
+        [(_q1, "INPC", 100.0, "ok", None), (_q2, "INPC", 102.0, "ok", None)],
+        periodo_referencia=None,
     )
     rm = a_mensual(r)
     assert rm.periodo_referencia is None
