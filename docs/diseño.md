@@ -45,6 +45,7 @@ El historial de cambios vive en git.
     - [6.5 incidencias.py](#65-incidenciaspy)
     - [6.6 validaciones.py](#66-validacionespy)
     - [6.7 flujos.py](#67-flujospy)
+    - [6.8 consultas.py](#68-consultaspy)
   - [7. Aplicación](#7-aplicación)
     - [7.1 Puertos](#71-puertos)
     - [7.2 Casos de uso](#72-casos-de-uso)
@@ -219,6 +220,7 @@ replica-inpc-mx/
 │       │   ├── __init__.py
 │       │   ├── _periodos.py
 │       │   ├── config.py
+│       │   ├── consultas.py
 │       │   ├── flujos.py
 │       │   ├── incidencias.py
 │       │   ├── indices.py
@@ -2557,6 +2559,116 @@ insumos = [
     (2024, "ponderadores_2024.csv", "series_2024.csv"),
 ]
 historico = rep.calcular_historia(insumos)
+```
+
+---
+
+### 6.8 consultas.py
+
+Consulta directa de series publicadas por INEGI. Sin comparación contra resultado replicado — devuelve el dato oficial como `pd.DataFrame`. Requiere token configurado (ver §6.1).
+
+**consultar_indice**
+
+```python
+def consultar_indice(
+    tipo: str,
+    periodicidad: Literal["mensual", "quincenal"] = "mensual",
+) -> pd.DataFrame:
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+| `periodicidad` | `Literal["mensual", "quincenal"]` | frecuencia del histórico a devolver; default `"mensual"` |
+
+Devuelve DataFrame indexado por `periodo` (`PeriodoMensual` o `PeriodoQuincenal`), columnas = nombres publicados por INEGI según `tipo` (`"INPC"`, `"subyacente"`, etc.). El índice cubre el rango completo desde el primer hasta el último periodo que INEGI tiene en su serie; periodos intermedios sin dato aparecen como `NaN` (gap visible). Periodos anteriores al inicio de la serie simplemente no existen en el resultado.
+
+| Condición | Error |
+| --- | --- |
+| `tipo` sin indicador INEGI | `ErrorConfiguracion` |
+| `periodicidad` inválida | `ErrorConfiguracion` |
+| token no configurado | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta inesperada INEGI | `RespuestaInvalida` |
+
+```python
+rep.consultar_indice("inpc")                               # mensual, columna "INPC"
+rep.consultar_indice("inflacion componente", "quincenal")  # cols "subyacente", "no subyacente"
+```
+
+---
+
+**consultar_variacion**
+
+```python
+def consultar_variacion(
+    tipo: str,
+    periodicidad: Literal["mensual", "quincenal"] = "mensual",
+    frecuencia: Literal["mensual", "quincenal", "anual", "acumulada_anual"] = "mensual",
+) -> pd.DataFrame:
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+| `periodicidad` | `Literal["mensual", "quincenal"]` | frecuencia del histórico; default `"mensual"` |
+| `frecuencia` | `Literal["mensual", "quincenal", "anual", "acumulada_anual"]` | tipo de variación; default `"mensual"` — ver tabla de mapeo |
+
+**Mapeo `frecuencia` → serie BIE**
+
+| `frecuencia` | `periodicidad` requerida | Serie BIE | Significado |
+| --- | --- | --- | --- |
+| `"mensual"` | `"mensual"` | `periodica` | vs mes anterior |
+| `"quincenal"` | `"quincenal"` | `periodica` | vs quincena anterior |
+| `"anual"` | cualquiera | `interanual` | vs mismo periodo año anterior |
+| `"acumulada_anual"` | cualquiera | `acumulada_anual` | vs diciembre año anterior |
+
+Devuelve DataFrame indexado por `periodo`, columnas = nombres según `tipo`. Mismo comportamiento de rango completo que `consultar_indice`: gaps internos visibles como `NaN`, pre-historia ausente.
+
+| Condición | Error |
+| --- | --- |
+| `frecuencia="mensual"` con `periodicidad="quincenal"` | `ErrorConfiguracion` |
+| `frecuencia="quincenal"` con `periodicidad="mensual"` | `ErrorConfiguracion` |
+| `tipo` sin indicador INEGI | `ErrorConfiguracion` |
+| token no configurado | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta inesperada INEGI | `RespuestaInvalida` |
+
+```python
+rep.consultar_variacion("inpc")                                # mensual, vs mes anterior
+rep.consultar_variacion("inpc", "quincenal", "quincenal")      # quincenal, vs quincena anterior
+rep.consultar_variacion("inpc", "mensual", "anual")            # mensual, vs mismo mes año anterior
+rep.consultar_variacion("inpc", "mensual", "acumulada_anual")  # mensual, vs dic año anterior
+```
+
+---
+
+**consultar_incidencia**
+
+```python
+def consultar_incidencia(
+    tipo: str,
+) -> pd.DataFrame:
+```
+
+| Parámetro | Tipo | Contrato |
+| --- | --- | --- |
+| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+
+INEGI solo publica incidencias mensuales y de tipo `"periodica"` — no hay parámetros adicionales.
+
+Devuelve DataFrame indexado por `PeriodoMensual`, columnas = nombres según `tipo` (`"INPC"`, `"subyacente"`, etc.). Rango completo desde el primer hasta el último periodo publicado; gaps internos visibles como `NaN`.
+
+| Condición | Error |
+| --- | --- |
+| `tipo` sin indicador INEGI | `ErrorConfiguracion` |
+| token no configurado | `ErrorConfiguracion` |
+| API no responde / HTTP error | `FuenteNoDisponible` |
+| respuesta inesperada INEGI | `RespuestaInvalida` |
+
+```python
+rep.consultar_incidencia("inpc")                  # columna "INPC"
+rep.consultar_incidencia("inflacion componente")  # cols "subyacente", "no subyacente"
 ```
 
 ---

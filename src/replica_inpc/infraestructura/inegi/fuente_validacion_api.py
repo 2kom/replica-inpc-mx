@@ -179,6 +179,32 @@ _URL = (
 _Periodo = PeriodoQuincenal | PeriodoMensual
 
 
+def _rango_completo(historico: dict[_Periodo, float | None]) -> list[_Periodo]:
+    """Genera todos los periodos entre min y max del histórico, inclusive.
+
+    Periodos faltantes en `historico` dentro del rango se incluyen con `None`,
+    haciendo visibles los gaps en el DataFrame resultante.
+    """
+    if not historico:
+        return []
+    min_p = min(historico)
+    max_p = max(historico)
+    if isinstance(min_p, PeriodoMensual):
+        return [  # type: ignore[return-value]
+            PeriodoMensual(a, m)
+            for a in range(min_p.año, max_p.año + 1)
+            for m in range(1, 13)
+            if min_p <= PeriodoMensual(a, m) <= max_p  # type: ignore[operator]
+        ]
+    return [  # type: ignore[return-value]
+        PeriodoQuincenal(a, m, q)
+        for a in range(min_p.año, max_p.año + 1)
+        for m in range(1, 13)
+        for q in (1, 2)
+        if min_p <= PeriodoQuincenal(a, m, q) <= max_p  # type: ignore[operator]
+    ]
+
+
 class FuenteValidacionApi:
     """Adaptador que obtiene índices publicados por el INEGI vía su API.
 
@@ -197,9 +223,7 @@ class FuenteValidacionApi:
         self._tipo = tipo
         self._timeout = timeout
 
-    def obtener_indices(
-        self, periodos: list[_Periodo]
-    ) -> dict[str, dict[_Periodo, float | None]]:
+    def obtener_indices(self, periodos: list[_Periodo]) -> dict[str, dict[_Periodo, float | None]]:
         """Devuelve el valor publicado por el INEGI por índice y por periodo.
 
         Detecta automáticamente si los periodos son mensuales o quincenales y
@@ -238,11 +262,7 @@ class FuenteValidacionApi:
         periodos >= min(historico) — ausencia de clave indica fuera_de_rango_inegi.
         """
         es_quincenal = bool(periodos) and isinstance(periodos[0], PeriodoQuincenal)
-        mapa = (
-            _VARIACIONES_POR_TIPO_QUINCENAL
-            if es_quincenal
-            else _VARIACIONES_POR_TIPO_MENSUAL
-        )
+        mapa = _VARIACIONES_POR_TIPO_QUINCENAL if es_quincenal else _VARIACIONES_POR_TIPO_MENSUAL
         if tipo_variacion not in mapa:
             raise ErrorConfiguracion(
                 f"tipo_variacion '{tipo_variacion}' no válido. Valores soportados: {list(mapa)}"
@@ -302,6 +322,90 @@ class FuenteValidacionApi:
                 }
             else:
                 resultado[nombre] = {}
+        return resultado
+
+    def historico_indices(
+        self, periodicidad: Literal["mensual", "quincenal"]
+    ) -> dict[str, dict[_Periodo, float | None]]:
+        """Devuelve el histórico completo de índices sin filtro de periodo.
+
+        Cubre desde el primer hasta el último periodo que INEGI tiene en su
+        serie. Periodos intermedios sin dato aparecen con valor `None`.
+        """
+        es_mensual = periodicidad == "mensual"
+        if es_mensual and self._tipo not in _INDICADORES_MENSUALES:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicador mensual INEGI disponible. "
+                f"Tipos con indicador mensual: {list(_INDICADORES_MENSUALES)}"
+            )
+        indicadores = (
+            _INDICADORES_MENSUALES[self._tipo]
+            if es_mensual
+            else _INDICADORES_QUINCENALES[self._tipo]
+        )
+        resultado: dict[str, dict[_Periodo, float | None]] = {}
+        for nombre, indicador in indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            rango = _rango_completo(historico)
+            resultado[nombre] = {p: historico.get(p) for p in rango}
+        return resultado
+
+    def historico_variaciones(
+        self,
+        periodicidad: Literal["mensual", "quincenal"],
+        tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
+    ) -> dict[str, dict[_Periodo, float | None]]:
+        """Devuelve el histórico completo de variaciones sin filtro de periodo."""
+        mapa = (
+            _VARIACIONES_POR_TIPO_QUINCENAL
+            if periodicidad == "quincenal"
+            else _VARIACIONES_POR_TIPO_MENSUAL
+        )
+        if tipo_variacion not in mapa:
+            raise ErrorConfiguracion(
+                f"tipo_variacion '{tipo_variacion}' no válido. Valores soportados: {list(mapa)}"
+            )
+        indicadores_tipo = mapa[tipo_variacion]
+        if self._tipo not in indicadores_tipo:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicadores de variación "
+                f"'{tipo_variacion}'. Tipos soportados: {list(indicadores_tipo)}"
+            )
+        indicadores = indicadores_tipo[self._tipo]
+        resultado: dict[str, dict[_Periodo, float | None]] = {}
+        for nombre, indicador in indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            rango = _rango_completo(historico)
+            resultado[nombre] = {p: historico.get(p) for p in rango}
+        return resultado
+
+    def historico_incidencias(
+        self, tipo_incidencia: Literal["periodica"]
+    ) -> dict[str, dict[_Periodo, float | None]]:
+        """Devuelve el histórico completo de incidencias sin filtro de periodo."""
+        if tipo_incidencia not in _INCIDENCIAS_POR_TIPO:
+            raise ErrorConfiguracion(
+                f"tipo_incidencia '{tipo_incidencia}' no válido. "
+                f"Valores soportados: {list(_INCIDENCIAS_POR_TIPO)}"
+            )
+        indicadores_tipo = _INCIDENCIAS_POR_TIPO[tipo_incidencia]
+        if self._tipo not in indicadores_tipo:
+            raise ErrorConfiguracion(
+                f"tipo '{self._tipo}' no tiene indicadores de incidencia "
+                f"'{tipo_incidencia}'. Tipos soportados: {list(indicadores_tipo)}"
+            )
+        indicadores = indicadores_tipo[self._tipo]
+        resultado: dict[str, dict[_Periodo, float | None]] = {}
+        for nombre, indicador in indicadores.items():
+            if indicador not in self._cache:
+                self._cache[indicador] = self._fetch(indicador)
+            historico = self._cache[indicador]
+            rango = _rango_completo(historico)
+            resultado[nombre] = {p: historico.get(p) for p in rango}
         return resultado
 
     def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:

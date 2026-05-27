@@ -11,6 +11,11 @@ from types import ModuleType
 
 from replica_inpc.api import config as _config
 from replica_inpc.api.config import limpiar_cache, mostrar_config, reset_config, set_token
+from replica_inpc.api.consultas import (
+    consultar_incidencia,
+    consultar_indice,
+    consultar_variacion,
+)
 from replica_inpc.api.flujos import calcular_historia
 from replica_inpc.api.incidencias import (
     incidencia_acumulada,
@@ -121,6 +126,10 @@ __all__ = [
     "validar_incidencia",
     "validar_indice",
     "validar_variacion",
+    # consultas INEGI
+    "consultar_incidencia",
+    "consultar_indice",
+    "consultar_variacion",
     # flujos
     "calcular_historia",
     # errores

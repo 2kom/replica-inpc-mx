@@ -383,6 +383,47 @@ rep.timeout_api          = 10       # default; segundos por llamada a INEGI
 
 ---
 
+## Flujo 7 — Consulta directa a INEGI
+
+Descarga el histórico publicado por INEGI para una serie, sin compararlo contra ningún resultado calculado. Requiere token de API.
+
+```python
+import replica_inpc as rep
+
+rep.set_token("mi-token-inegi")
+
+# Índice mensual (todos los periodos disponibles en BIE)
+df = rep.consultar_indice("inpc")
+df = rep.consultar_indice("inflacion componente", "quincenal")
+
+# Variación
+df = rep.consultar_variacion("inpc")                                # mensual, vs mes anterior
+df = rep.consultar_variacion("inpc", "quincenal", "quincenal")      # quincenal, vs quincena anterior
+df = rep.consultar_variacion("inpc", "mensual", "anual")            # mensual, vs mismo mes año anterior
+df = rep.consultar_variacion("inpc", "mensual", "acumulada_anual")  # mensual, vs dic año anterior
+
+# Incidencia (solo mensual; INEGI no publica quincenales)
+df = rep.consultar_incidencia("inpc")
+df = rep.consultar_incidencia("inflacion componente")
+```
+
+El DataFrame devuelto tiene índice `periodo` (`PeriodoMensual` o `PeriodoQuincenal`) y columnas según `tipo` (`"INPC"`, `"subyacente"`, etc.). Cubre el rango completo desde el primer hasta el último periodo que INEGI tiene en su serie. Periodos intermedios sin dato publicado aparecen como `NaN`; periodos anteriores al inicio de la serie no existen en el resultado.
+
+**Tipos válidos:** `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`.
+
+**Errores posibles:**
+
+| condición | error |
+|---|---|
+| token no configurado | `ErrorConfiguracion` |
+| `tipo` sin indicador INEGI | `ErrorConfiguracion` |
+| `periodicidad` o `frecuencia` inválida | `ErrorConfiguracion` |
+| `frecuencia="mensual"` con `periodicidad="quincenal"` | `ErrorConfiguracion` |
+| API INEGI sin respuesta | `FuenteNoDisponible` |
+| respuesta INEGI con formato inesperado | `RespuestaInvalida` |
+
+---
+
 ## Referencia rápida de errores
 
 | error | cuándo ocurre |
