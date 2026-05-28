@@ -615,6 +615,22 @@ def _parsear_ccif_2013(lineas: list[str]) -> list[dict]:
     return resultados
 
 
+def _resolver_sector_rango(sector: str, rama: str) -> str:
+    """Deriva sector específico cuando sector es rango (e.g. '31-33 ...')."""
+    m_rango = re.match(r"^(\d{2})-(\d{2})\s+(.*)", sector)
+    if not m_rango or not rama:
+        return sector
+    m_rama = re.match(r"^(\d{2})", rama)
+    if not m_rama:
+        return sector
+    inicio = int(m_rango.group(1))
+    fin = int(m_rango.group(2))
+    cod = int(m_rama.group(1))
+    if inicio <= cod <= fin:
+        return f"{m_rama.group(1)} {m_rango.group(3)}"
+    return sector
+
+
 def _parsear_scian_2013(lineas: list[str]) -> list[dict]:
     sector = ""
     rama = ""
@@ -630,7 +646,7 @@ def _parsear_scian_2013(lineas: list[str]) -> list[dict]:
         # Rama: "Rama 1111. Nombre pond factor"
         m_rama = _RE_RAMA_2013.match(linea)
         if m_rama:
-            rama = f"{m_rama.group(1)} {m_rama.group(2)}"
+            rama = f"{m_rama.group(1)} {m_rama.group(2).rstrip('.')}"
             continue
 
         # Sector: "11. Nombre pond factor"
@@ -669,7 +685,7 @@ def _parsear_scian_2013(lineas: list[str]) -> list[dict]:
         resultados.append(
             {
                 "generico": concepto,
-                "SCIAN sector": sector,
+                "SCIAN sector": _resolver_sector_rango(sector, rama),
                 "SCIAN rama": rama,
             }
         )
