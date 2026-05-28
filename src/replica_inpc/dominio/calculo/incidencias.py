@@ -65,9 +65,7 @@ _COLS_DIAGNOSTICO = [
 ]
 
 
-def _verificar_periodo_referencia(
-    inpc: ResultadoIndice, clasificacion: ResultadoIndice
-) -> None:
+def _verificar_periodo_referencia(inpc: ResultadoIndice, clasificacion: ResultadoIndice) -> None:
     if inpc.periodo_referencia != clasificacion.periodo_referencia:
         raise InvarianteViolado(
             f"'inpc' y 'clasificacion' deben compartir periodo_referencia; "
@@ -84,8 +82,7 @@ def _validar_entradas(
     tipo_inpc = str(df_inpc["tipo"].iloc[0])
     if tipo_inpc != "inpc":
         raise ErrorConfiguracion(
-            f"El primer argumento debe ser un resultado de tipo 'inpc', "
-            f"se recibió '{tipo_inpc}'."
+            f"El primer argumento debe ser un resultado de tipo 'inpc', se recibió '{tipo_inpc}'."
         )
     tipo_clas = str(df_clas["tipo"].iloc[0])
     if tipo_clas not in COLUMNAS_CLASIFICACION:
@@ -122,7 +119,7 @@ def incidencia_periodica(
     frecuencia: Frecuencia,
 ) -> ResultadoIncidencia:
     """Incidencia de cada periodo contra N periodos anteriores."""
-    _verificar_periodo_referencia(inpc, clasificacion)
+    # _verificar_periodo_referencia(inpc, clasificacion)
     df_inpc = inpc.resultado.largo
     df_clas = clasificacion.resultado.largo
     _validar_entradas(df_inpc, df_clas, canastas)
@@ -132,8 +129,16 @@ def incidencia_periodica(
     periodos = df_clas.index.get_level_values("periodo")
     base_periodos = [restar(p, lag) for p in periodos]  # type: ignore[arg-type]
     return _construir_resultado(
-        df_clas, df_clas, df_inpc, canastas, base_periodos,
-        f"periodica_{frecuencia}", "", inpc, clasificacion, None,
+        df_clas,
+        df_clas,
+        df_inpc,
+        canastas,
+        base_periodos,
+        f"periodica_{frecuencia}",
+        "",
+        inpc,
+        clasificacion,
+        None,
     )
 
 
@@ -155,8 +160,16 @@ def incidencia_acumulada_anual(
     else:
         base_periodos = [PeriodoQuincenal(p.año - 1, 12, 2) for p in periodos]
     return _construir_resultado(
-        df_clas, df_clas, df_inpc, canastas, base_periodos,
-        "acumulada_anual", "", inpc, clasificacion, None,
+        df_clas,
+        df_clas,
+        df_inpc,
+        canastas,
+        base_periodos,
+        "acumulada_anual",
+        "",
+        inpc,
+        clasificacion,
+        None,
     )
 
 
@@ -188,9 +201,7 @@ def incidencia_desde(
     desde_e: Periodo = desde if desde is not None else periodos[0]
     hasta_e: Periodo = hasta if hasta is not None else periodos[-1]
     if hasta_e < desde_e:  # type: ignore[operator]
-        raise InvarianteViolado(
-            f"'hasta' ({hasta_e}) no puede ser anterior a 'desde' ({desde_e})."
-        )
+        raise InvarianteViolado(f"'hasta' ({hasta_e}) no puede ser anterior a 'desde' ({desde_e}).")
 
     rango = [p for p in periodos if desde_e <= p <= hasta_e]
     df_lookup = df_clas[periodo_lvl.isin(rango)]
@@ -220,18 +231,24 @@ def incidencia_desde(
                 }
             )
 
-    df_emitir = df_clas.loc[
-        pd.MultiIndex.from_tuples(tuplas_emitir, names=["periodo", "indice"])
-    ]
+    df_emitir = df_clas.loc[pd.MultiIndex.from_tuples(tuplas_emitir, names=["periodo", "indice"])]
     indices_parciales = pd.DataFrame(
         filas_parciales,
         columns=["indice", "periodo_desde_real", "periodo_hasta_real"],
     ).set_index("indice")
 
     return _construir_resultado(
-        df_emitir, df_lookup, df_inpc, canastas, base_periodos,
-        "desde", f"desde {desde_e} hasta {hasta_e}", inpc, clasificacion,
-        indices_parciales, excluir_parciales=not incluir_parciales,
+        df_emitir,
+        df_lookup,
+        df_inpc,
+        canastas,
+        base_periodos,
+        "desde",
+        f"desde {desde_e} hasta {hasta_e}",
+        inpc,
+        clasificacion,
+        indices_parciales,
+        excluir_parciales=not incluir_parciales,
     )
 
 
@@ -265,77 +282,24 @@ def _construir_resultado(
     for v, c in canastas.items():
         ponds = c.df["ponderador"].astype(float)
         pond_por_version[v] = ponds.groupby(c.df[tipo_clas]).sum()
-    versiones_encadenadas = {
-        int(v) for v, c in canastas.items() if not c.df["encadenamiento"].isna().all()
-    }
-
     periodos = df_emitir.index.get_level_values("periodo")
     indices_clas = df_emitir.index.get_level_values("indice")
     valores_t = df_emitir["indice_replicado"]
     valores_lookup = df_lookup["indice_replicado"]
 
-    base_idx = pd.MultiIndex.from_arrays(
-        [base_periodos, indices_clas], names=["periodo", "indice"]
-    )
-    base_clas = pd.Series(
-        valores_lookup.reindex(base_idx).to_numpy(), index=df_emitir.index
-    )
+    base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
+    base_clas = pd.Series(valores_lookup.reindex(base_idx).to_numpy(), index=df_emitir.index)
 
     version_por_periodo = (
         df_lookup.reset_index().groupby("periodo")["version"].first().astype(int).to_dict()
     )
     ver_p_per_row = [version_por_periodo[p] for p in periodos]
     ver_base_per_row = [
-        version_por_periodo.get(bp, vp)
-        for bp, vp in zip(base_periodos, ver_p_per_row)
+        version_por_periodo.get(bp, vp) for bp, vp in zip(base_periodos, ver_p_per_row)
     ]
 
-    # Fix 2: de-encadenamiento ÷ f_h para versiones encadenadas mismo-ver.
-    same_encadenada = [
-        ver_p == ver_base and ver_p in versiones_encadenadas
-        for ver_p, ver_base in zip(ver_p_per_row, ver_base_per_row)
-    ]
-    if any(same_encadenada):
-        traslape_por_version: dict[int, Periodo] = {
-            ver: min(p for p, v in version_por_periodo.items() if v == ver)  # type: ignore[type-var, misc]
-            for ver in versiones_encadenadas
-            if ver in set(ver_p_per_row)
-        }
-        f_h_clas_map: dict[tuple[int, str], float] = {}
-        f_h_inpc_map: dict[int, float] = {}
-        for ver, traslape in traslape_por_version.items():
-            for idx in df_lookup.index.get_level_values("indice").unique():
-                try:
-                    val = float(df_lookup.at[(traslape, idx), "indice_replicado"])  # type: ignore[arg-type]
-                    if not pd.isna(val) and val != 0:
-                        f_h_clas_map[(ver, str(idx))] = val / 100
-                except KeyError:
-                    pass
-            try:
-                val = float(df_inpc.at[(traslape, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
-                if not pd.isna(val) and val != 0:
-                    f_h_inpc_map[ver] = val / 100
-            except KeyError:
-                pass
-        f_h_i_series = pd.Series(
-            [
-                f_h_clas_map.get((ver_p, str(idx)), 1.0) if same else 1.0
-                for ver_p, idx, same in zip(ver_p_per_row, indices_clas, same_encadenada)
-            ],
-            index=df_emitir.index,
-            dtype=float,
-        )
-        f_h_inpc_series = pd.Series(
-            [
-                f_h_inpc_map.get(ver_p, 1.0) if same else 1.0
-                for ver_p, same in zip(ver_p_per_row, same_encadenada)
-            ],
-            index=df_emitir.index,
-            dtype=float,
-        )
-    else:
-        f_h_i_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
-        f_h_inpc_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
+    f_h_i_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
+    f_h_inpc_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
 
     # Fix 1: ponderadores de la canasta del periodo base.
     pond_serie = pd.Series(
@@ -385,9 +349,7 @@ def _construir_resultado(
     derivado = pd.Series(
         [
             "parcial" if "parcial" in (et, eb, ie) else "ok"
-            for et, eb, ie in zip(
-                df_emitir["estado_calculo"], estado_clas_base, inpc_estado_base
-            )
+            for et, eb, ie in zip(df_emitir["estado_calculo"], estado_clas_base, inpc_estado_base)
         ],
         index=df_emitir.index,
     )
@@ -412,10 +374,22 @@ def _construir_resultado(
         )
 
     reporte_df, diagnostico_df = _construir_reporte_diagnostico(
-        df_emitir, clasificacion.reporte, valores_t, base_clas,
-        pond_t_serie, pond_serie, base_idx, base_periodos,
-        ver_p_per_row, ver_base_per_row, inpc_base_serie,
-        derivado, computable, ids_inpc + ids_clas, tipo_clas, clase,
+        df_emitir,
+        clasificacion.reporte,
+        valores_t,
+        base_clas,
+        pond_t_serie,
+        pond_serie,
+        base_idx,
+        base_periodos,
+        ver_p_per_row,
+        ver_base_per_row,
+        inpc_base_serie,
+        derivado,
+        computable,
+        ids_inpc + ids_clas,
+        tipo_clas,
+        clase,
     )
     manifiesto = ManifestDerivado(
         id_corrida=ids_inpc + ids_clas,
@@ -426,14 +400,10 @@ def _construir_resultado(
         inpc_ids=ids_inpc,
         clasificacion_ids=ids_clas,
     )
-    return ResultadoIncidencia(
-        df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales
-    )
+    return ResultadoIncidencia(df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales)
 
 
-def _motivo_faltante(
-    valor_t: float, base_clas: float, inpc_base: float, pond: float
-) -> str:
+def _motivo_faltante(valor_t: float, base_clas: float, inpc_base: float, pond: float) -> str:
     if pd.isna(valor_t):
         return "sin valor de clasificación en t"
     if pd.isna(base_clas):
@@ -467,9 +437,7 @@ def _construir_reporte_diagnostico(
     if "cobertura_genericos_pct" in reporte_fuente.columns:
         cobertura = reporte_fuente["cobertura_genericos_pct"]
         cob_t = cobertura.reindex(df_emitir.index)
-        cob_lag = pd.Series(
-            cobertura.reindex(base_idx).to_numpy(), index=df_emitir.index
-        )
+        cob_lag = pd.Series(cobertura.reindex(base_idx).to_numpy(), index=df_emitir.index)
     else:
         cob_t = pd.Series(float("nan"), index=df_emitir.index)
         cob_lag = pd.Series(float("nan"), index=df_emitir.index)

@@ -113,6 +113,14 @@ def empalmar(
             f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
         )
 
+    tipos_periodo = {
+        type(r._df_completo.index.get_level_values("periodo")[0]) for r in resultados
+    }
+    if len(tipos_periodo) > 1:
+        raise InvarianteViolado(
+            "empalmar requiere que todos los inputs tengan la misma periodicidad "
+            "(quincenales o mensuales); no se pueden mezclar."
+        )
     primer_periodo = resultados[0]._df_completo.index.get_level_values("periodo")[0]
     if not isinstance(primer_periodo, PeriodoQuincenal):
         warnings.warn(

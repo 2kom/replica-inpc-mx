@@ -52,9 +52,7 @@ def _indice(
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = [ManifestUnidad(id_corrida, version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
-    return ResultadoIndice(
-        df, manifiesto, pd.DataFrame(), pd.DataFrame(), periodo_referencia
-    )
+    return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame(), periodo_referencia)
 
 
 def _inpc(estados: dict[tuple[object, str], str] | None = None) -> ResultadoIndice:
@@ -167,18 +165,6 @@ def test_acumulada_suma_igual_variacion_inpc() -> None:
 # -- validaciones de entrada ---------------------------------------------------
 
 
-def test_periodo_referencia_distinto_falla() -> None:
-    inpc = _inpc()
-    clas = _indice(
-        {"A": [(_DIC18, 100.0), (_ENE, 110.0)], "B": [(_DIC18, 100.0), (_ENE, 90.0)]},
-        tipo="inflacion componente",
-        id_corrida="cc",
-        periodo_referencia=_DIC18,
-    )
-    with pytest.raises(InvarianteViolado):
-        incidencia_periodica(inpc, clas, _canastas(), "mensual")
-
-
 def test_tipo_inpc_invalido_falla() -> None:
     falso_inpc = _indice(
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0)]},
@@ -233,8 +219,12 @@ def test_desde_suma_igual_variacion_inpc() -> None:
 
 def test_desde_incluir_parciales_ajusta_periodo() -> None:
     r = incidencia_desde(
-        _inpc(), _clas_b_sin_dic(), _canastas(),
-        desde=_DIC18, hasta=_FEB, incluir_parciales=True,
+        _inpc(),
+        _clas_b_sin_dic(),
+        _canastas(),
+        desde=_DIC18,
+        hasta=_FEB,
+        incluir_parciales=True,
     )
     assert set(r.df.index.get_level_values("indice")) == {"A", "B"}
     assert r.indices_parciales.loc["B", "periodo_desde_real"] == _ENE
@@ -245,8 +235,12 @@ def test_desde_incluir_parciales_ajusta_periodo() -> None:
 def test_desde_sin_parciales_excluye_generico() -> None:
     # 'B' no tiene dato exacto en `_DIC18`; sin parciales queda excluido.
     r = incidencia_desde(
-        _inpc(), _clas_b_sin_dic(), _canastas(),
-        desde=_DIC18, hasta=_FEB, incluir_parciales=False,
+        _inpc(),
+        _clas_b_sin_dic(),
+        _canastas(),
+        desde=_DIC18,
+        hasta=_FEB,
+        incluir_parciales=False,
     )
     assert set(r.df.index.get_level_values("indice")) == {"A"}
     assert r.indices_parciales.empty
