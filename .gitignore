@@ -212,6 +212,12 @@ __marimo__/
 # Analisis requerimientos
 docs/requerimientos
 
+# Tools
+tools/test
+
+# Notebook
+notebook.ipynb
+
 # Data
 data/
 output/
@@ -228,8 +234,6 @@ CLAUDE.md
 .codex
 .codex/
 
-# Notebook
-notebook.ipynb
+# Gemini AI
+.antigravitycli/
 
-# Tools
-tools/test
