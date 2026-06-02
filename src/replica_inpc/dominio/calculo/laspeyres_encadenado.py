@@ -72,9 +72,12 @@ def _construir_df_resultado(
     version: VersionCanasta,
     periodos_null: pd.Series,
     periodos_rellenados: set[object] | None = None,
+    indice_incidencia: pd.Series | None = None,
 ) -> pd.DataFrame:
     if periodos_rellenados is None:
         periodos_rellenados = set()
+    if indice_incidencia is None:
+        indice_incidencia = resultado
     idx = pd.MultiIndex.from_tuples(
         [(p, indice) for p in resultado.index],
         names=["periodo", "indice"],
@@ -84,6 +87,7 @@ def _construir_df_resultado(
             "version": version,
             "tipo": tipo,
             "indice_replicado": resultado.values,
+            "indice_incidencia": indice_incidencia.values,
             "estado_calculo": "ok",
             "motivo_error": None,
         },
@@ -93,6 +97,7 @@ def _construir_df_resultado(
     if periodos_null_idx:
         df.loc[periodos_null_idx, "estado_calculo"] = "sin_datos"
         df.loc[periodos_null_idx, "indice_replicado"] = None
+        df.loc[periodos_null_idx, "indice_incidencia"] = None
         df.loc[periodos_null_idx, "motivo_error"] = "faltantes en serie"
     periodos_null_set = {p for p, _ in periodos_null_idx}
     periodos_rel_idx = [
@@ -125,7 +130,13 @@ def _calcular_df_t1(
         factor_h = 1.0
     resultado = i_tramo * factor_h
     return _construir_df_resultado(
-        resultado, indice, tipo, version, periodos_null, periodos_rellenados
+        resultado,
+        indice,
+        tipo,
+        version,
+        periodos_null,
+        periodos_rellenados,
+        indice_incidencia=i_tramo,
     )
 
 
@@ -149,7 +160,13 @@ def _calcular_df_t2(
         factor_h = float((ponderadores * f_k).sum() / ponderadores.sum())
     resultado = i_tramo * factor_h
     return _construir_df_resultado(
-        resultado, indice, tipo, version, periodos_null, periodos_rellenados
+        resultado,
+        indice,
+        tipo,
+        version,
+        periodos_null,
+        periodos_rellenados,
+        indice_incidencia=i_tramo,
     )
 
 
@@ -285,6 +302,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                     "version": canasta.version,
                     "tipo": tipo,
                     "indice_replicado": df_stacked.where(~null_bool).values,
+                    "indice_incidencia": i_tramo_mat.T.stack().where(~null_bool).values,
                     "estado_calculo": estado_arr,
                     "motivo_error": motivo_arr,
                 },

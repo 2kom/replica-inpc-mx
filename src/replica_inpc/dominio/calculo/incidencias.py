@@ -7,17 +7,21 @@ resultado de clasificación (`COG`, `CCIF division`, etc.):
 - `incidencia_acumulada_anual` — enero..periodo vs diciembre del año anterior.
 - `incidencia_desde` — incidencia total de un rango; una fila por genérico.
 
-Conserva los dos arreglos del cálculo v1:
+Corrige la escala de los índices antes de descomponer:
 
 - Fix 1: los ponderadores son los de la canasta del periodo base.
-- Fix 2: de-encadenamiento (÷ f_h) para versiones que usan
-  `LaspeyresEncadenado` cuando base y `t` son de la misma canasta.
+- `indice_incidencia` (= i_tramo de-encadenado, materializado en la fuente) se usa en
+  comparaciones within-canasta (`version_t == version_base`): es exacto e invariante al
+  rebase. En comparaciones cross-canasta se usa `indice_replicado` visible (continuo) y
+  la fila se marca `es_cross_canasta` / `garantia_aditiva`, porque la descomposición
+  aditiva exacta entre canastas no es posible con un solo vector de ponderadores.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.calculo._temporal import (
@@ -48,6 +52,7 @@ _COLS_REPORTE = [
     "ponderador_lag",
     "version_t",
     "version_lag",
+    "es_cross_canasta",
     "cobertura_pct_t",
     "cobertura_pct_lag",
 ]
@@ -62,6 +67,7 @@ _COLS_DIAGNOSTICO = [
     "periodo_lag",
     "version_t",
     "version_lag",
+    "es_cross_canasta",
 ]
 
 
@@ -119,7 +125,7 @@ def incidencia_periodica(
     frecuencia: Frecuencia,
 ) -> ResultadoIncidencia:
     """Incidencia de cada periodo contra N periodos anteriores."""
-    # _verificar_periodo_referencia(inpc, clasificacion)
+    _verificar_periodo_referencia(inpc, clasificacion)
     df_inpc = inpc.resultado.largo
     df_clas = clasificacion.resultado.largo
     _validar_entradas(df_inpc, df_clas, canastas)
@@ -265,7 +271,7 @@ def _construir_resultado(
     indices_parciales: pd.DataFrame | None,
     excluir_parciales: bool = False,
 ) -> ResultadoIncidencia:
-    """Núcleo del cálculo de incidencias (Fix 1 + Fix 2).
+    """Núcleo del cálculo de incidencias (Fix 1 + selección por fila de la escala).
 
     `df_emitir` aporta las filas `(periodo, indice)` de salida; `df_lookup`
     aporta los valores de los periodos base. `base_periodos` da, por cada fila
@@ -284,11 +290,7 @@ def _construir_resultado(
         pond_por_version[v] = ponds.groupby(c.df[tipo_clas]).sum()
     periodos = df_emitir.index.get_level_values("periodo")
     indices_clas = df_emitir.index.get_level_values("indice")
-    valores_t = df_emitir["indice_replicado"]
-    valores_lookup = df_lookup["indice_replicado"]
-
     base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
-    base_clas = pd.Series(valores_lookup.reindex(base_idx).to_numpy(), index=df_emitir.index)
 
     version_por_periodo = (
         df_lookup.reset_index().groupby("periodo")["version"].first().astype(int).to_dict()
@@ -298,8 +300,31 @@ def _construir_resultado(
         version_por_periodo.get(bp, vp) for bp, vp in zip(base_periodos, ver_p_per_row)
     ]
 
-    f_h_i_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
-    f_h_inpc_series = pd.Series(1.0, index=df_emitir.index, dtype=float)
+    # Selección de la escala por fila. Within-canasta usa indice_incidencia (= i_tramo
+    # de-encadenado, invariante al rebase); cross-canasta usa indice_replicado visible
+    # (continuo) porque i_tramo es discontinuo en la junta. Detección robusta: solo es
+    # cross si ambas versiones existen y difieren.
+    col_inc = (
+        "indice_incidencia" if "indice_incidencia" in df_emitir.columns else "indice_replicado"
+    )
+    col_inc_lk = (
+        "indice_incidencia" if "indice_incidencia" in df_lookup.columns else "indice_replicado"
+    )
+    col_inc_inpc = (
+        "indice_incidencia" if "indice_incidencia" in df_inpc.columns else "indice_replicado"
+    )
+    ver_t_row = df_emitir["version"].to_numpy()
+    ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
+    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
+    cross_serie = pd.Series(cross, index=df_emitir.index)
+
+    valores_t = pd.Series(
+        np.where(cross, df_emitir["indice_replicado"].to_numpy(), df_emitir[col_inc].to_numpy()),
+        index=df_emitir.index,
+    )
+    base_rep = df_lookup["indice_replicado"].reindex(base_idx).to_numpy()
+    base_inc = df_lookup[col_inc_lk].reindex(base_idx).to_numpy()
+    base_clas = pd.Series(np.where(cross, base_rep, base_inc), index=df_emitir.index)
 
     # Fix 1: ponderadores de la canasta del periodo base.
     pond_serie = pd.Series(
@@ -319,28 +344,27 @@ def _construir_resultado(
         dtype=float,
     )
 
-    inpc_val_cache: dict[Periodo, float] = {}
+    inpc_rep_cache: dict[Periodo, float] = {}
+    inpc_inc_cache: dict[Periodo, float] = {}
     inpc_estado_cache: dict[Periodo, object] = {}
     for bp in set(base_periodos):
         try:
-            inpc_val_cache[bp] = float(df_inpc.at[(bp, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
+            inpc_rep_cache[bp] = float(df_inpc.at[(bp, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
+            inpc_inc_cache[bp] = float(df_inpc.at[(bp, "INPC"), col_inc_inpc])  # type: ignore[arg-type]
             inpc_estado_cache[bp] = df_inpc.at[(bp, "INPC"), "estado_calculo"]
         except KeyError:
-            inpc_val_cache[bp] = float("nan")
+            inpc_rep_cache[bp] = float("nan")
+            inpc_inc_cache[bp] = float("nan")
             inpc_estado_cache[bp] = None
-    inpc_base_serie = pd.Series(
-        [inpc_val_cache[bp] for bp in base_periodos], index=df_emitir.index, dtype=float
-    )
+    inpc_rep_arr = np.array([inpc_rep_cache[bp] for bp in base_periodos], dtype=float)
+    inpc_inc_arr = np.array([inpc_inc_cache[bp] for bp in base_periodos], dtype=float)
+    inpc_base_serie = pd.Series(np.where(cross, inpc_rep_arr, inpc_inc_arr), index=df_emitir.index)
     inpc_estado_base = pd.Series(
         [inpc_estado_cache[bp] for bp in base_periodos], index=df_emitir.index
     )
 
-    # inc_i = w_i * (I_t/f_h_i - I_base/f_h_i) / (INPC_base/f_h_INPC)
-    incidencia_pp = (
-        (valores_t / f_h_i_series - base_clas / f_h_i_series)
-        * pond_serie
-        / (inpc_base_serie / f_h_inpc_series)
-    )
+    # inc_i = w_base_i * (J_t - J_base) / J_INPC_base   (J por selección por fila)
+    incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
 
     estado_clas_base = pd.Series(
         df_lookup["estado_calculo"].reindex(base_idx).to_numpy(), index=df_emitir.index
@@ -361,6 +385,10 @@ def _construir_resultado(
             "incidencia_pp": incidencia_pp,
             "estado_calculo": derivado,
             "version_t": df_emitir["version"],
+            "es_cross_canasta": cross_serie,
+            "garantia_aditiva": pd.Series(
+                np.where(cross, "no_garantizada", "exacta"), index=df_emitir.index
+            ),
         },
         index=df_emitir.index,
     )[computable]
@@ -384,6 +412,7 @@ def _construir_resultado(
         base_periodos,
         ver_p_per_row,
         ver_base_per_row,
+        cross_serie,
         inpc_base_serie,
         derivado,
         computable,
@@ -426,6 +455,7 @@ def _construir_reporte_diagnostico(
     base_periodos: list[Periodo],
     ver_p_per_row: list[int],
     ver_base_per_row: list[int],
+    cross_serie: pd.Series,
     inpc_base_serie: pd.Series,
     derivado: pd.Series,
     computable: pd.Series,
@@ -465,6 +495,7 @@ def _construir_reporte_diagnostico(
             "ponderador_lag": pond_lag.to_numpy(),
             "version_t": ver_p_per_row,
             "version_lag": ver_base_per_row,
+            "es_cross_canasta": cross_serie.to_numpy(),
             "cobertura_pct_t": cob_t.to_numpy(),
             "cobertura_pct_lag": cob_lag.to_numpy(),
         },
@@ -485,6 +516,7 @@ def _construir_reporte_diagnostico(
             "periodo_lag": base_periodos,
             "version_t": ver_p_per_row,
             "version_lag": ver_base_per_row,
+            "es_cross_canasta": cross_serie.to_numpy(),
         },
         index=df_emitir.index,
         columns=_COLS_DIAGNOSTICO,

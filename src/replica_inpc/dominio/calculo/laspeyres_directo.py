@@ -41,6 +41,7 @@ def _calcular_df(
     periodos_null = df_serie.isnull().any(axis=0)
     ponderadores = df_canasta["ponderador"].astype(float)
     resultado = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
+    indice_incidencia = resultado  # nivel crudo, antes de factor_h
     if referencia_empalme is not None:
         traslape = RANGOS_VALIDOS[version][0]
         if traslape not in resultado.index:
@@ -57,6 +58,7 @@ def _calcular_df(
             "version": version,
             "tipo": tipo,
             "indice_replicado": resultado.values,
+            "indice_incidencia": indice_incidencia.values,
             "estado_calculo": "ok",
             "motivo_error": None,
         },
@@ -66,6 +68,7 @@ def _calcular_df(
     if periodos_null_idx:
         df.loc[periodos_null_idx, "estado_calculo"] = "sin_datos"
         df.loc[periodos_null_idx, "indice_replicado"] = None
+        df.loc[periodos_null_idx, "indice_incidencia"] = None
         df.loc[periodos_null_idx, "motivo_error"] = "faltantes en serie"
     periodos_null_set = {p for p, _ in periodos_null_idx}
     periodos_rel_idx = [
@@ -137,6 +140,7 @@ class LaspeyresDirecto(CalculadorBase):
             pond_sum = weighted.groupby(cat_por_gen).sum()  # cat × periodo
             pond_total = pond.groupby(cat_por_gen).sum()  # cat
             resultado_mat = pond_sum.divide(pond_total, axis=0)  # cat × periodo
+            resultado_mat_crudo = resultado_mat.copy()  # nivel crudo, antes de factor_h
 
             # referencia_empalme por categoría (solo LaspeyresDirecto usado como T0 de encadenado)
             if self._referencia_empalme:
@@ -179,6 +183,9 @@ class LaspeyresDirecto(CalculadorBase):
                     "version": canasta.version,
                     "tipo": tipo,
                     "indice_replicado": df_stacked.where(~null_bool).values,
+                    "indice_incidencia": (
+                        resultado_mat_crudo.T.stack().reindex(idx).where(~null_bool).values
+                    ),
                     "estado_calculo": estado_arr,
                     "motivo_error": motivo_arr,
                 },

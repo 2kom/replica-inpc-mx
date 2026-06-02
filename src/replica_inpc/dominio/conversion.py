@@ -113,9 +113,7 @@ def empalmar(
             f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
         )
 
-    tipos_periodo = {
-        type(r._df_completo.index.get_level_values("periodo")[0]) for r in resultados
-    }
+    tipos_periodo = {type(r._df_completo.index.get_level_values("periodo")[0]) for r in resultados}
     if len(tipos_periodo) > 1:
         raise InvarianteViolado(
             "empalmar requiere que todos los inputs tengan la misma periodicidad "
@@ -420,6 +418,17 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     indice_replicado[~any_fallida & both_ok] = val_avg[~any_fallida & both_ok]
     indice_replicado[~any_fallida & one_ok] = val_one[~any_fallida & one_ok]
 
+    # indice_incidencia: mismo promedio simple que indice_replicado, mismas mascaras.
+    # Fallback resuelto una sola vez (resultados sin la columna usan indice_replicado).
+    col_inc = "indice_incidencia" if "indice_incidencia" in q1_r.columns else "indice_replicado"
+    j1 = q1_r[col_inc]
+    j2 = q2_r[col_inc]
+    val_avg_inc = (j1 + j2) / 2
+    val_one_inc = j1.fillna(j2)
+    indice_incidencia = pd.Series(float("nan"), index=all_groups)
+    indice_incidencia[~any_fallida & both_ok] = val_avg_inc[~any_fallida & both_ok]
+    indice_incidencia[~any_fallida & one_ok] = val_one_inc[~any_fallida & one_ok]
+
     motivo_q1 = q1_r["motivo_error"]
     motivo_q2 = q2_r["motivo_error"]
     motivo_fallida_s = motivo_q1.where(fallida_q1, motivo_q2)
@@ -438,6 +447,7 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
             "version": version.values,
             "tipo": tipo.values,
             "indice_replicado": indice_replicado.values,
+            "indice_incidencia": indice_incidencia.values,
             "estado_calculo": estado_calculo.values,
             "motivo_error": motivo_error.values,
         },
