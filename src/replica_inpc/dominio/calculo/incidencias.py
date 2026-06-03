@@ -10,11 +10,12 @@ resultado de clasificación (`COG`, `CCIF division`, etc.):
 Corrige la escala de los índices antes de descomponer:
 
 - Fix 1: los ponderadores son los de la canasta del periodo base.
-- `indice_incidencia` (= i_tramo de-encadenado, materializado en la fuente) se usa en
-  comparaciones within-canasta (`version_t == version_base`): es exacto e invariante al
-  rebase. En comparaciones cross-canasta se usa `indice_replicado` visible (continuo) y
-  la fila se marca `es_cross_canasta` / `garantia_aditiva`, porque la descomposición
-  aditiva exacta entre canastas no es posible con un solo vector de ponderadores.
+- `indice_incidencia` (= i_tramo de-encadenado, columna interna de `ResultadoIndice`)
+  se usa en comparaciones within-canasta (`version_t == version_base`): es exacto e
+  invariante al rebase. En comparaciones cross-canasta se usa `indice_replicado` visible
+  (continuo), porque la descomposición aditiva exacta entre canastas no es posible con un
+  solo vector de ponderadores; esas filas son detectables por `version_t != version_lag`
+  en `.reporte` (la decisión interna no emite columna dedicada).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from replica_inpc.dominio.calculo._temporal import (
     restar_meses,
     restar_quincenas,
 )
+from replica_inpc.dominio.conversion import _construir_mapa_renombre
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
@@ -52,7 +54,6 @@ _COLS_REPORTE = [
     "ponderador_lag",
     "version_t",
     "version_lag",
-    "es_cross_canasta",
     "cobertura_pct_t",
     "cobertura_pct_lag",
 ]
@@ -67,7 +68,6 @@ _COLS_DIAGNOSTICO = [
     "periodo_lag",
     "version_t",
     "version_lag",
-    "es_cross_canasta",
 ]
 
 
@@ -126,8 +126,8 @@ def incidencia_periodica(
 ) -> ResultadoIncidencia:
     """Incidencia de cada periodo contra N periodos anteriores."""
     _verificar_periodo_referencia(inpc, clasificacion)
-    df_inpc = inpc.resultado.largo
-    df_clas = clasificacion.resultado.largo
+    df_inpc = inpc._completo
+    df_clas = clasificacion._completo
     _validar_entradas(df_inpc, df_clas, canastas)
     lag, mensual = _lag_y_mensual(df_clas, frecuencia)
     restar = restar_meses if mensual else restar_quincenas
@@ -155,8 +155,8 @@ def incidencia_acumulada_anual(
 ) -> ResultadoIncidencia:
     """Incidencia de cada periodo contra diciembre del año anterior."""
     _verificar_periodo_referencia(inpc, clasificacion)
-    df_inpc = inpc.resultado.largo
-    df_clas = clasificacion.resultado.largo
+    df_inpc = inpc._completo
+    df_clas = clasificacion._completo
     _validar_entradas(df_inpc, df_clas, canastas)
     mensual = es_mensual(df_clas)
 
@@ -194,8 +194,8 @@ def incidencia_desde(
     registra en `indices_parciales`.
     """
     _verificar_periodo_referencia(inpc, clasificacion)
-    df_inpc = inpc.resultado.largo
-    df_clas = clasificacion.resultado.largo
+    df_inpc = inpc._completo
+    df_clas = clasificacion._completo
     _validar_entradas(df_inpc, df_clas, canastas)
 
     periodo_lvl = df_clas.index.get_level_values("periodo")
@@ -284,26 +284,53 @@ def _construir_resultado(
     ids_inpc = [m.id_corrida for m in inpc.manifiesto]
     ids_clas = [m.id_corrida for m in clasificacion.manifiesto]
 
+    # El resultado de clasificación ya viene normalizado al vocabulario canónico `vc` que usó
+    # empalmar. Los ponderadores se indexan con el nombre NATIVO de cada canasta, así que se
+    # renombran a `vc`. Sin esto, una categoría renombrada entre versiones (ej. "comunicaciones"
+    # 2018 → "informacion y comunicacion" 2024) no se encontraría al buscar el ponderador base
+    # cross-canasta y la fila caería como "sin ponderador".
+    #
+    # `vc` NO se infiere como max(version) — eso falla con empalmar(version_nombres custom). Se
+    # infiere como la versión `v` cuyos nombres de índice (filas versión `v`) están todos en los
+    # nombres nativos de canasta[v]: la canónica cumple por identidad, y una versión con
+    # categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Si varias
+    # cumplen, no hay renombres entre ellas y el mapa queda vacío, así que da igual (max).
+    completo_clas = clasificacion._completo
+    nombres_por_version = {
+        int(v): set(sub.index.get_level_values("indice"))
+        for v, sub in completo_clas.groupby("version")
+    }
+    candidatos_vc = [
+        v
+        for v, nombres in nombres_por_version.items()
+        if v in canastas and nombres <= set(canastas[v].df[tipo_clas])
+    ]
+    vc = max(candidatos_vc) if candidatos_vc else int(completo_clas["version"].max())
     pond_por_version: dict[int, pd.Series] = {}
     for v, c in canastas.items():
-        ponds = c.df["ponderador"].astype(float)
-        pond_por_version[v] = ponds.groupby(c.df[tipo_clas]).sum()
-    periodos = df_emitir.index.get_level_values("periodo")
+        ponds = c.df["ponderador"].astype(float).groupby(c.df[tipo_clas]).sum()
+        mapa = _construir_mapa_renombre(tipo_clas, int(v), vc)
+        if mapa:
+            ponds = ponds.rename(index=mapa).groupby(level=0).sum()
+        pond_por_version[v] = ponds
     indices_clas = df_emitir.index.get_level_values("indice")
     base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
 
-    version_por_periodo = (
-        df_lookup.reset_index().groupby("periodo")["version"].first().astype(int).to_dict()
-    )
-    ver_p_per_row = [version_por_periodo[p] for p in periodos]
-    ver_base_per_row = [
-        version_por_periodo.get(bp, vp) for bp, vp in zip(base_periodos, ver_p_per_row)
-    ]
+    # Versión POR FILA (periodo, indice), nunca por periodo: en una frontera de canasta
+    # coexisten índices de versiones distintas, y groupby("periodo").first() los clasificaría
+    # mal — etiqueta equivocada y, peor, el ponderador base se buscaría en la canasta
+    # equivocada (una alta within-canasta caería como "sin ponderador"). ver_base hace
+    # fallback a ver_t cuando el periodo base no existe en el lookup.
+    ver_t_row = df_emitir["version"].to_numpy()
+    ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
+    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
+    ver_base_arr = np.where(pd.notna(ver_b_row), ver_b_row, ver_t_row)
+    ver_p_per_row = [int(v) for v in ver_t_row]
+    ver_base_per_row = [int(v) for v in ver_base_arr]
 
     # Selección de la escala por fila. Within-canasta usa indice_incidencia (= i_tramo
     # de-encadenado, invariante al rebase); cross-canasta usa indice_replicado visible
-    # (continuo) porque i_tramo es discontinuo en la junta. Detección robusta: solo es
-    # cross si ambas versiones existen y difieren.
+    # (continuo) porque i_tramo es discontinuo en la junta.
     col_inc = (
         "indice_incidencia" if "indice_incidencia" in df_emitir.columns else "indice_replicado"
     )
@@ -313,10 +340,6 @@ def _construir_resultado(
     col_inc_inpc = (
         "indice_incidencia" if "indice_incidencia" in df_inpc.columns else "indice_replicado"
     )
-    ver_t_row = df_emitir["version"].to_numpy()
-    ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
-    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
-    cross_serie = pd.Series(cross, index=df_emitir.index)
 
     valores_t = pd.Series(
         np.where(cross, df_emitir["indice_replicado"].to_numpy(), df_emitir[col_inc].to_numpy()),
@@ -385,10 +408,6 @@ def _construir_resultado(
             "incidencia_pp": incidencia_pp,
             "estado_calculo": derivado,
             "version_t": df_emitir["version"],
-            "es_cross_canasta": cross_serie,
-            "garantia_aditiva": pd.Series(
-                np.where(cross, "no_garantizada", "exacta"), index=df_emitir.index
-            ),
         },
         index=df_emitir.index,
     )[computable]
@@ -412,7 +431,6 @@ def _construir_resultado(
         base_periodos,
         ver_p_per_row,
         ver_base_per_row,
-        cross_serie,
         inpc_base_serie,
         derivado,
         computable,
@@ -455,7 +473,6 @@ def _construir_reporte_diagnostico(
     base_periodos: list[Periodo],
     ver_p_per_row: list[int],
     ver_base_per_row: list[int],
-    cross_serie: pd.Series,
     inpc_base_serie: pd.Series,
     derivado: pd.Series,
     computable: pd.Series,
@@ -495,7 +512,6 @@ def _construir_reporte_diagnostico(
             "ponderador_lag": pond_lag.to_numpy(),
             "version_t": ver_p_per_row,
             "version_lag": ver_base_per_row,
-            "es_cross_canasta": cross_serie.to_numpy(),
             "cobertura_pct_t": cob_t.to_numpy(),
             "cobertura_pct_lag": cob_lag.to_numpy(),
         },
@@ -516,7 +532,6 @@ def _construir_reporte_diagnostico(
             "periodo_lag": base_periodos,
             "version_t": ver_p_per_row,
             "version_lag": ver_base_per_row,
-            "es_cross_canasta": cross_serie.to_numpy(),
         },
         index=df_emitir.index,
         columns=_COLS_DIAGNOSTICO,

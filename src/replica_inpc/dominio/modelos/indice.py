@@ -57,7 +57,22 @@ class ResultadoIndice(Resultado):
 
     @property
     def resultado(self) -> Vista:
-        return Vista(self._df_completo, ["indice_replicado"])
+        # `indice_incidencia` es columna interna (la consume el motor de incidencias vía
+        # `_completo`); no se expone en la vista pública.
+        return Vista(
+            self._df_completo.drop(columns=["indice_incidencia"], errors="ignore"),
+            ["indice_replicado"],
+        )
+
+    @property
+    def _completo(self) -> pd.DataFrame:
+        """Vista interna con todas las columnas, incl. `indice_incidencia`.
+
+        Uso exclusivo del motor de incidencias (`calculo/incidencias.py`); no es API
+        pública. `indice_incidencia` es el índice de-encadenado que preserva la
+        aditividad `Σ inc = var`.
+        """
+        return self._df_completo
 
     @property
     def reporte(self) -> pd.DataFrame:

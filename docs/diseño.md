@@ -95,6 +95,7 @@ El historial de cambios vive en git.
     - [11.28 Re-export de errores y tipos en `replica_inpc/__init__.py`](#1128-re-export-de-errores-y-tipos-en-replica_inpc__init__py)
     - [11.29 `a_mensual` — filtrado de manifiestos huérfanos](#1129-a_mensual--filtrado-de-manifiestos-huérfanos)
     - [11.30 `ManifestUnidad.ruta_canasta` y `ruta_series` opcionales](#1130-manifestunidadruta_canasta-y-ruta_series-opcionales)
+    - [11.31 `indice_incidencia` y de-encadenamiento de incidencias](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)
   - [12. Gaps conocidos](#12-gaps-conocidos)
     - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
     - [12.2 Detección dinámica del header en `LectorSeriesCsv`](#122-detección-dinámica-del-header-en-lectorseriescsv)
@@ -874,6 +875,8 @@ Antes del cálculo cada calculador aplica en orden:
 
 Catálogo `estado_calculo` completo en [5.1](#51-semántica-compartida).
 
+**Columna `indice_incidencia`.** Junto a `indice_replicado`, cada calculador puebla la columna interna `indice_incidencia` (no expuesta en ninguna vista pública; ver [5.7](#57-resultadoindice)) en la escala compatible con Laspeyres que usan las incidencias ([11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)): los encadenados (T1/T2) guardan `i_tramo` — el nivel **antes** de multiplicar por `factor_h`; los directos guardan el nivel crudo, que coincide con `indice_replicado` salvo cuando el directo actúa como T0 de un encadenado, donde también es el nivel antes de `factor_h`. Periodos `sin_datos`/`fallida` → `NaN`.
+
 ---
 
 ### 5.7 ResultadoIndice
@@ -918,6 +921,8 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 | `indice_replicado` | `float` | `estado_calculo` = `sin_datos` o `fallida` |
 | `estado_calculo` | `str` | nunca |
 | `motivo_error` | `str` | `estado_calculo` = `ok`, `parcial` o `rellenado` |
+
+**Columna interna `indice_incidencia`.** El `_df_completo` subyacente carga, además de las columnas de arriba, una columna interna `indice_incidencia` — el índice de-encadenado que el motor de incidencias usa para preservar la aditividad (ver [5.11](#511-cálculo-de-variaciones-e-incidencias) y [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)). **No se expone en ninguna vista pública**: `.resultado` (`Vista`) la excluye explícitamente, y `.df`/`.resumen`/`.reporte` tampoco la traen. El motor la lee por un accesor interno (`._completo`). La pueblan los calculadores ([5.6](#56-calculadores-de-índice)); `empalmar`/`rebasar` la preservan sin reescalarla (el rebase NO la toca) y `a_mensual` la promedia explícito ([5.10](#510-conversión-y-combinación)).
 
 **`.resumen` — esquema**
 
@@ -1344,6 +1349,8 @@ Reglas de agregación por `(mes, indice)` (prioridad descendente):
 | ninguna `fallida`, solo una con valor | valor de la quincena disponible | `parcial` |
 | ninguna `fallida`, ninguna con valor | `NaN` | `sin_datos` |
 
+La columna interna `indice_incidencia` ([5.7](#57-resultadoindice)) se promedia con las **mismas** máscaras que `indice_replicado`. Como `a_mensual` reconstruye el `df_result`, debe agregarla de forma explícita — a diferencia de `empalmar`/`rebasar`, que la arrastran/preservan sin tocarla (el rebase NO la reescala, así la incidencia queda invariante al rebase; ver [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)).
+
 Retorno: `ResultadoIndice` con periodos `PeriodoMensual` y `.periodo_referencia = None`. El `None` es invariante — el promedio destruye la escala del rebase original; usar siempre `a_mensual` antes de `rebasar` cuando se necesitan datos mensuales rebased.
 
 Único mecanismo para obtener datos mensuales — nunca cargar CSV mensuales directamente.
@@ -1450,12 +1457,17 @@ incidencia_desde(
 
 Combinan un resultado `tipo = "inpc"` con un resultado de clasificación (`COG`, `CCIF division`, etc.) para calcular la contribución de cada categoría a la variación del INPC. Propiedad clave de `incidencia_acumulada_anual`: la suma de `incidencia_pp` de todos los genéricos en un periodo es igual a la variación acumulada anual del INPC en ese periodo.
 
-Fórmula: `inc_i = w_i × (I_t / f_h_i − I_base / f_h_i) / (INPC_base / f_h_INPC)`
+Fórmula: `inc_i = w_i × (J_i(t) − J_i(base)) / J_INPC(base)`, donde `J` es la escala **seleccionada por fila** (ver Fix 2 abajo): `indice_incidencia` de-encadenado en filas within-canasta, `indice_replicado` visible en filas cross-canasta. La selección por fila es el contrato, no una excepción.
 
 Dos correcciones vs. la fórmula naive:
 
 - **Fix 1** — `w_i` usa los ponderadores de la canasta del **periodo base**, no del periodo `t`.
-- **Fix 2** — de-encadenamiento: cuando `t` y `base` son de la misma versión y esa versión usa `LaspeyresEncadenado`, se divide por `f_h_i` (valor replicado en el traslape ÷ 100). Versiones con `LaspeyresDirecto` tienen `f_h_i = 1`.
+- **Fix 2** — de-encadenamiento vía `indice_incidencia`. Las incidencias comparan diferencias de nivel, así que un factor de escala propio de cada subíndice (encadenamiento o rebase) rompe la aditividad `Σ_i inc_i = var_INPC`. Para evitarlo, en filas **within-canasta** el cálculo evita el `indice_replicado` visible y usa la columna interna `indice_incidencia`, materializada en la fuente (`= i_tramo` en calculadores encadenados, `= nivel crudo` en directos; ver [5.6](#56-calculadores-de-índice) y [5.7](#57-resultadoindice)). En esa escala `Σ_i w_i · J_i = 100 · J_INPC` se cumple exacta, independiente de `factor_h` y del rebase. En filas **cross-canasta** usa el `indice_replicado` visible deliberadamente, para no cruzar escalas internas discontinuas (ver selección por fila abajo).
+
+**Selección de escala por fila** `(periodo, indice)` — clave: la detección es por fila, no por periodo (en la frontera coexisten índices de dos versiones):
+
+- `version_t == version_base` (within-canasta) → usa `indice_incidencia`. Exacto e invariante al rebase. T1 (2013) y T2 (2024) son ambos exactos: al materializar `i_tramo` ya no se reconstruye `factor_h`, no hay aproximación `/100`.
+- `version_t != version_base` (cross-canasta) → usa `indice_replicado` visible. `i_tramo` es escala interna de cada tramo, discontinua en la junta (cruzarla daría incidencias de ~−29 pp). Esa fila queda con `Σ inc = var` no garantizado; el cálculo no emite columna dedicada — el consumidor la detecta por `version_t != version_lag` en `.reporte` (que incluye todas las filas; `.diagnostico` solo trae las no computables, así que una fila cross computable no aparece ahí). La descomposición cross-canasta exacta por segmentos está diferida a Fase 2 (ver [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)).
 
 | Condición | Función | Error |
 | --- | --- | --- |
@@ -2213,6 +2225,8 @@ p, i, v = rep.inflacion_maxima(variaciones, indice="Alimentos")
 ### 6.5 incidencias.py
 
 Cálculo y análisis de incidencias. Misma estructura que §6.4: funciones de serie (devuelven `ResultadoIncidencia`) y funciones de análisis (escalares o `pd.DataFrame`).
+
+Las funciones de serie consumen la columna interna `indice_incidencia` (de-encadenada, vía `ResultadoIndice._completo`) y eligen la escala por fila `(periodo, indice)`: within-canasta usa `indice_incidencia` (exacto); cross-canasta usa el índice visible (sin garantía aditiva, detectable por `version_t != version_lag` en `.reporte`). No se agrega ninguna columna nueva a `.resultado`. Detalle del contrato en el Fix 2 de [5.11](#511-cálculo-de-variaciones-e-incidencias) y la decisión en [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias).
 
 **Parámetros comunes a las funciones de serie**
 
@@ -3887,6 +3901,35 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 **Decisión:** `ruta_canasta: Path | None = None` y `ruta_series: Path | None = None` en `ManifestUnidad`. Los calculadores (`LaspeyresDirecto`, `LaspeyresEncadenadoT1/T2`) no reciben rutas — operan sobre `CanastaCanonica` y `SerieNormalizada` ya en memoria. Solo la capa I/O (`LectorCanastaCsv`, `cargar_canasta`, `cargar_serie`) conoce la ruta de origen e inyecta los campos al construir el manifiesto.
 
 **Razón:** los calculadores son funciones puras que transforman objetos de dominio; inyectarles rutas de filesystem viola la separación de capas — el dominio no debe conocer infraestructura. Con los campos opcionales, el manifiesto puede construirse tanto desde la capa I/O (con ruta) como desde código que genera datos directamente (sin ruta, p. ej. tests o notebooks con DataFrames manuales).
+
+---
+
+### 11.31 `indice_incidencia` y de-encadenamiento de incidencias
+
+**Decisión:** la incidencia se calcula con `inc_i = w_i × (J_i(t) − J_i(base)) / J_INPC(base)`, donde `J` es la escala **seleccionada por fila** `(periodo, indice)` — ese es el contrato, no una excepción: en filas within-canasta `J = indice_incidencia` (de-encadenado); en filas cross-canasta `J = indice_replicado` visible. `indice_incidencia` se materializa en la fuente: `= i_tramo` en los calculadores encadenados (antes de `factor_h`), `= nivel crudo` en los directos. Vive en `ResultadoIndice._df_completo`, **fuera de toda vista pública** (`.resultado`/`.df`/`.resumen`/`.reporte` no la exponen); el motor de incidencias la lee por un accesor interno (`ResultadoIndice._completo`).
+
+**Razón — por qué hace falta.** La incidencia compara diferencias de nivel (`I_i(t) − I_i(base)`), no cocientes. El rebase multiplica cada subíndice por un factor propio `k_i = valor_base / I_i(R)`; el encadenamiento lo multiplica por `factor_h_i`. Ambos rompen la identidad de aditividad:
+
+```text
+inc'_i = (s_i / s_INPC) · inc_i      con  s_i = factor de escala propio de i
+Σ_i inc'_i ≠ var_INPC                cuando  s_i ≠ s_INPC
+```
+
+Las variaciones sobreviven (el factor se cancela en el cociente); las incidencias no. Llevar cada índice a la escala interna del tramo `J_i = I_visible_i / s_i` restaura `Σ_i w_i · J_i = 100 · J_INPC` exacta.
+
+**Razón — por qué materializar en la fuente y no leer `factor_h` tarde.** El atajo de "leer `f_h = I(traslape)/100` al consumir" tiene dos defectos: (1) es exacto solo para T2 (2024); para T1 (2013) el factor real es `referencia / i_tramo(2Q Mar 2013)`, no `/100`; (2) hace un lookup quincenal del traslape que lanza `KeyError` sobre resultados mensuales (`a_mensual` reindexar a `PeriodoMensual`) y caería en silencio a `f_h = 1`, justo el bug que pretendía resolver. Materializar `i_tramo` en el calculador es exacto para T1 y T2 por igual y no requiere lookup posterior. Con `i_tramo` materializado, **la distinción T1/T2 deja de importar para incidencias** (sigue importando solo para construir el índice visible).
+
+**Invariancia al rebase.** `rebasar` reescala `indice_replicado` pero **no** toca `indice_incidencia`. Como `J` ya está en la escala compatible, queda invariante al rebase por construcción — sin depender de leer ningún factor. `empalmar` arrastra la columna por fila; `a_mensual` la promedia explícito ([5.10](#510-conversión-y-combinación)).
+
+**Cross-canasta: prohibido `i_tramo`, se usa el visible.** `i_tramo` es una escala interna de cada tramo, discontinua en la junta de canastas (`J_INPC ≈ 142` en el último periodo de 2018 vs `≈ 100.7` en el primero de 2024). Calcular una incidencia que cruce la junta con esos dos `J` daría un total implícito de `100.7/142 − 1 ≈ −0.29` — catastróficamente erróneo, no una pequeña falta de aditividad. Por eso la **selección de escala es por fila** `(periodo, indice)`, no por periodo (en la frontera coexisten índices de dos versiones): si `version_t == version_base` se usa `indice_incidencia`; si difieren, se usa el `indice_replicado` visible. La fila cross queda con `Σ inc = var` no garantizado.
+
+**Por qué sin columna dedicada para marcar el cruce.** Una versión previa emitía columnas `es_cross_canasta`/`garantia_aditiva`, pero son **exactamente** redundantes con `version_t`/`version_lag`: `es_cross_canasta ≡ (version_t != version_lag)`. El consumidor detecta el cruce con `version_t != version_lag` en `.reporte` (incluye todas las filas; `.diagnostico` solo trae las no computables). No se agrega columna nueva. Tampoco se reusa `estado_calculo = "parcial"` (ya significa "una sola quincena disponible", [11.9](#119-reglas-de-estado_calculo)). Surfacear el cruce en `ValidacionIncidencia` —donde no hay `version_lag`— para explicar diferencias vs INEGI queda como posible mejora futura.
+
+**Versión por fila, no por periodo.** `version_t`/`version_lag` (y el `cross` que selecciona la escala, y la versión de canasta de la que se toma el ponderador base en el Fix 1) se derivan **por fila** `(periodo, indice)`: `version_t` de `df_emitir["version"]`, `version_lag` de `df_lookup["version"].reindex(base_idx)` (con fallback a `version_t` cuando el periodo base no existe). Nunca por periodo: usar `groupby("periodo").first()` clasificaría mal las filas en un periodo frontera donde coexisten índices de dos versiones — daría una etiqueta falsa y, peor, buscaría el ponderador base en la canasta equivocada, tirando como no computable una alta within-canasta que sí tiene ponderador en su propia versión. Por eso `version_t != version_lag` coincide exactamente con la decisión real de escala.
+
+**Vocabulario del ponderador alineado al del resultado.** El resultado de clasificación ya viene normalizado al vocabulario canónico que usó `empalmar` (`version_nombres`, default = versión más alta presente; ver [11.22](#1122-renombres_indices-y-normalización-cross-versión)), pero las canastas que recibe el cálculo de incidencias mantienen el nombre **nativo** de cada versión. Antes de buscar el ponderador base (Fix 1), `pond_por_version[v]` se renombra al vocabulario canónico con `_construir_mapa_renombre(tipo, v, vc)`. Sin esto, una categoría **renombrada** entre canastas (ej. `comunicaciones` 2018 → `informacion y comunicacion` 2024) se buscaría con el nombre canónico contra un índice nativo y la fila cross caería como "sin ponderador". `vc` no se infiere como `max(version)` (eso fallaría con `empalmar(version_nombres=...)` custom), sino como la versión `v` cuyos nombres de índice (filas versión `v`) están **todos** contenidos en los nombres nativos de `canasta[v]`: la canónica cumple por identidad, y una versión con categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Así soporta cualquier `version_nombres` válido de `empalmar`.
+
+**Diferido a Fase 2.** La descomposición cross-canasta **exacta** existe pero no está implementada: parte la comparación en cada traslape y encadena contribuciones segmentarias `var(b,t) = Σ_m S_m · inc_segmento_m` con `S_m = INPC(inicio_m) / INPC(b)`, asignando a un vocabulario canónico con una matriz `A_{h,g,m}` (`Σ_h A = 1` ⟹ total exacto) que operacionalice las tablas de `correspondencia_canastas.py` hoy inertes (`RENOMBRES_GENERICOS`, `DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`). Eso es Fase 2, con su propia validación contra las incidencias publicadas por INEGI (BIE). Fase 1 (esta sección) usa el índice visible en esas filas, sin garantía aditiva.
 
 ---
 
