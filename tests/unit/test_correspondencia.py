@@ -8,6 +8,10 @@ import pandas as pd
 import pytest
 
 from replica_inpc.dominio.correspondencia import alinear_genericos
+from replica_inpc.dominio.correspondencia_canastas import (
+    RENOMBRES_INDICES,
+    validar_renombres_indices,
+)
 from replica_inpc.dominio.errores import CorrespondenciaInsuficiente
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
@@ -97,3 +101,59 @@ def test_alinear_genericos_insuficiente():
     # La función falla cuando falta un genérico requerido por la canasta.
     with pytest.raises(CorrespondenciaInsuficiente):
         alinear_genericos(canasta, serie_faltante)
+
+
+# -- invariantes de RENOMBRES_INDICES -----------------------------------------
+#
+# El loader normaliza el punto final de las ramas SCIAN (rstrip('.')). Un mapa de
+# renombre que apunte a un nombre con punto, o que renombre un nombre a sí mismo,
+# es residuo obsoleto: corrompe el alineamiento de ponderadores en incidencias
+# (queda "sin ponderador") y genera nombres fantasma en `empalmar`.
+
+
+def test_renombres_indices_sin_artefacto_de_punto():
+    con_punto = [
+        (tipo, version, origen, destino)
+        for tipo, por_version in RENOMBRES_INDICES.items()
+        for version, mapa in por_version.items()
+        for origen, destino in mapa.items()
+        if origen.endswith(".") or destino.endswith(".")
+    ]
+    assert con_punto == []
+
+
+def test_renombres_indices_sin_renombre_identidad():
+    identidades = [
+        (tipo, version, origen)
+        for tipo, por_version in RENOMBRES_INDICES.items()
+        for version, mapa in por_version.items()
+        for origen, destino in mapa.items()
+        if origen == destino
+    ]
+    assert identidades == []
+
+
+class _CanastaFalsa:
+    def __init__(self, nombres: list[str], tipo: str = "T") -> None:
+        self.df = pd.DataFrame({tipo: nombres})
+
+
+def test_validar_renombres_indices_detecta_obsoleto():
+    canastas = {
+        2013: _CanastaFalsa(["a", "b"]),
+        2018: _CanastaFalsa(["a", "B2"]),
+    }
+    renombres = {"T": {2013: {"b": "B2", "a": "FANTASMA"}}}
+    problemas = validar_renombres_indices(canastas, renombres)
+    # "b" -> "B2" es válido; "a" -> "FANTASMA" tiene destino ausente en 2018.
+    assert any("FANTASMA" in p for p in problemas)
+    assert all("B2" not in p for p in problemas)
+
+
+def test_validar_renombres_indices_consistente_no_reporta():
+    canastas = {
+        2013: _CanastaFalsa(["a", "b"]),
+        2018: _CanastaFalsa(["a", "B2"]),
+    }
+    renombres = {"T": {2013: {"b": "B2"}}}
+    assert validar_renombres_indices(canastas, renombres) == []

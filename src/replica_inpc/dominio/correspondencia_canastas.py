@@ -305,19 +305,6 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
         }
     },
     "SCIAN rama": {
-        2010: {
-            # El CSV de la canasta 2010 exporta estos 6 índices sin punto final.
-            # El CSV de la canasta 2013 tiene punto final en los mismos índices
-            # (artefacto de exportación; el contenido de genéricos es idéntico).
-            # Sin este mapa, empalmar([r_2010, r_2013]) trata ambas variantes como
-            # índices distintos → duplicado al aplicar el mapa 2013→2018.
-            "2211 generacion, transmision y distribucion de energia electrica": "2211 generacion, transmision y distribucion de energia electrica.",
-            "2221 captacion, tratamiento y suministro de agua": "2221 captacion, tratamiento y suministro de agua.",
-            "8122 lavanderias y tintorerias": "8122 lavanderias y tintorerias.",
-            "8123 servicios funerarios y administracion de cementerios": "8123 servicios funerarios y administracion de cementerios.",
-            "8124 estacionamientos y pensiones para vehiculos automotores": "8124 estacionamientos y pensiones para vehiculos automotores.",
-            "9312 administracion publica en general": "9312 administracion publica en general.",
-        },
         2013: {
             # Renombres 2013 -> 2018 incluidos cuando hay continuidad clara de
             # rama: mismo codigo SCIAN, o cambio oficial de codigo, y genericos
@@ -337,20 +324,16 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             #   renombre SCIAN semantico limpio.
             # - 7221/7225: continuidad operativa por genericos INPC completos,
             #   aunque cambia el titulo SCIAN de restaurantes a preparacion de alimentos.
-            # - 8121: continuidad operativa por mismo codigo y fusion documentada
-            #   de "sala de belleza" en "sala de belleza y masajes".
             # - 5241 y 6112: cambio oficial de titulo; cada rama contiene un
             #   unico generico, igual entre canastas.
-            # - 8122, 8123, 8124 y 9312: solo normalizan punto final en la
-            #   canasta 2013; el contenido de genericos es identico.
             #
             # No se incluyen casos con traslape parcial de genericos. Por ejemplo:
             # 3118, 3119 y 3399 mezclan genericos comunes con genericos nuevos,
             # eliminados o reasignados; no son renombres 1:1 de rama.
             # 5171/5172 se reestructura hacia 5173; 7222 se reestructura
             # parcialmente hacia 7223.
-            "2211 generacion, transmision y distribucion de energia electrica.": "2211 generacion, transmision, distribucion y comercializacion de energia electrica",
-            "2221 captacion, tratamiento y suministro de agua.": "2213 captacion, tratamiento y suministro de agua",
+            "2211 generacion, transmision y distribucion de energia electrica": "2211 generacion, transmision, distribucion y comercializacion de energia electrica",
+            "2221 captacion, tratamiento y suministro de agua": "2213 captacion, tratamiento y suministro de agua",
             "3114 conservacion de frutas, verduras y alimentos preparados": "3114 conservacion de frutas, verduras, guisos y otros alimentos preparados",  # no es 1:1 en contenido de genericos
             "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales",  # no es 1:1 en contenido de genericos
             "3151 fabricacion de prendas de vestir de punto": "3151 fabricacion de prendas de vestir de tejido de punto",  # no es 1:1 en contenido de genericos
@@ -359,11 +342,6 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "5412 servicios de contabilidad, auditoria y servicios relacionados": "5411 servicios legales",  # continuidad por generico INPC exacto: "servicios profesionales"; no es renombre SCIAN semantico limpio
             "6112 escuelas de educacion post bachillerato": "6112 escuelas de educacion tecnica superior",
             "7221 restaurantes con servicio completo": "7225 servicios de preparacion de alimentos y bebidas alcoholicas y no alcoholicas",  # continuidad completa por genericos INPC; no es renombre SCIAN literal
-            "8121 salones y clinicas de belleza, baños publicos y bolerias.": "8121 salones y clinicas de belleza, baños publicos y bolerias",  # continuidad por fusion documentada: "sala de belleza" -> "sala de belleza y masajes"
-            "8122 lavanderias y tintorerias.": "8122 lavanderias y tintorerias",
-            "8123 servicios funerarios y administracion de cementerios.": "8123 servicios funerarios y administracion de cementerios",
-            "8124 estacionamientos y pensiones para vehiculos automotores.": "8124 estacionamientos y pensiones para vehiculos automotores",
-            "9312 administracion publica en general.": "9312 administracion publica en general",
         },
         2018: {
             "3111 elaboracion de alimentos para animales": "3111 elaboracion de alimentos balanceados para animales",
@@ -497,3 +475,51 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
 # - Conclusion: 7223 no es renombre 1:1 desde 2013; es reagrupacion o fusion
 #   parcial desde 3119 y 7222. Desde 2018 a 2024 se mantiene estable con los
 #   mismos cinco genericos.
+
+
+_ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
+
+
+def validar_renombres_indices(canastas, renombres=None) -> list[str]:
+    """Verifica que cada renombre de `RENOMBRES_INDICES` exista en las canastas.
+
+    Para `RENOMBRES_INDICES[tipo][version] = {origen: destino}`, el `origen`
+    debe ser un nombre nativo de la canasta `version` y el `destino` un nombre
+    nativo de la versión siguiente. Devuelve una lista de descripciones de las
+    entradas inconsistentes (vacía si todas son válidas).
+
+    Pensada para correrse tras regenerar los ponderadores: si la herramienta de
+    extracción cambia un nombre de categoría, las entradas que apuntaban al
+    nombre viejo quedan obsoletas y aquí saltan, en vez de corromper en silencio
+    el alineamiento de ponderadores en incidencias o producir nombres fantasma
+    en `empalmar`. `canastas` es `{version: canasta}`; cada canasta expone `.df`
+    con una columna por tipo de clasificación.
+    """
+    renombres = RENOMBRES_INDICES if renombres is None else renombres
+    problemas: list[str] = []
+    for tipo, por_version in renombres.items():
+        for version, mapa in por_version.items():
+            if version not in _ORDEN_VERSIONES:
+                continue
+            i = _ORDEN_VERSIONES.index(version)
+            destino_version = _ORDEN_VERSIONES[i + 1] if i + 1 < len(_ORDEN_VERSIONES) else None
+            can_o = canastas.get(version)
+            can_d = canastas.get(destino_version) if destino_version is not None else None
+            if can_o is None or can_d is None:
+                continue
+            if tipo not in can_o.df.columns or tipo not in can_d.df.columns:
+                continue
+            nativos_o = set(can_o.df[tipo])
+            nativos_d = set(can_d.df[tipo])
+            for origen, destino in mapa.items():
+                if origen not in nativos_o:
+                    problemas.append(
+                        f"[{tipo}][{version}->{destino_version}] origen ausente en "
+                        f"canasta {version}: {origen!r}"
+                    )
+                if destino not in nativos_d:
+                    problemas.append(
+                        f"[{tipo}][{version}->{destino_version}] destino ausente en "
+                        f"canasta {destino_version}: {destino!r}"
+                    )
+    return problemas
