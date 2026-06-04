@@ -13,7 +13,12 @@ from typing import TypeAlias, cast
 import pandas as pd
 import pytest
 
-from replica_inpc.dominio.calculo.incidencias import incidencia_periodica
+from replica_inpc.dominio.calculo.incidencias import (
+    _es_content_exact,
+    _segmentos_entre,
+    incidencia_desde,
+    incidencia_periodica,
+)
 from replica_inpc.dominio.calculo.laspeyres_directo import LaspeyresDirecto
 from replica_inpc.dominio.calculo.laspeyres_encadenado import LaspeyresEncadenadoT2
 from replica_inpc.dominio.conversion import (
@@ -328,10 +333,11 @@ def test_cross_canasta_detectable_y_usa_visible() -> None:
     canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
     res = incidencia_periodica(inpc, clas, canastas, "mensual")
     largo = res.resultado.largo
-    # solo FEB es computable (ENE no tiene base) y cruza canastas: sin columna dedicada,
-    # detectable por version_t != version_lag en .reporte
+    # FEB cruza canastas y es mensual SIN _frontera → cae a cross_sin_frontera: emite el
+    # valor VISIBLE (no NaN), detectable por version_t != version_lag y por el marcador.
     reporte = res.reporte
     assert reporte.at[(_FEB, "A"), "version_t"] != reporte.at[(_FEB, "A"), "version_lag"]
+    assert reporte.at[(_FEB, "A"), "metodo_incidencia"] == "cross_sin_frontera"
     # usó indice_replicado (visible=142), no i_tramo (100): contribución != 0
     assert cast(float, largo.at[(_FEB, "A"), "incidencia_pp"]) != pytest.approx(0.0)
 
@@ -411,7 +417,10 @@ def test_vc_inferido_soporta_version_nombres_no_max() -> None:
     )
     # vocabulario 2018: nombre nativo_2018 incluso en la fila versión 2024
     clas = _res_multi(
-        [(feb, nativo_2018, 2018, 100.0, 100.0, "ok"), (mar, nativo_2018, 2024, 104.0, 104.0, "ok")],
+        [
+            (feb, nativo_2018, 2018, 100.0, 100.0, "ok"),
+            (mar, nativo_2018, 2024, 104.0, 104.0, "ok"),
+        ],
         tipo="CCIF division",
         id_corrida="cc",
     )
@@ -431,3 +440,356 @@ def test_periodica_verifica_periodo_referencia() -> None:
     clas = _clas_within()  # periodo_referencia = None
     with pytest.raises(InvarianteViolado):
         incidencia_periodica(inpc, clas, {2018: _canasta_comp()}, "mensual")
+
+
+# -- Fase 2A: incidencia cross-canasta exacta por segmentos ---------------------
+
+_B_Q = PeriodoQuincenal(2024, 6, 2)  # 2018, pre-junta
+_E24 = PeriodoQuincenal(2024, 7, 2)  # junta 2018→2024 (la posee 2018)
+_T_Q = PeriodoQuincenal(2024, 8, 1)  # 2024, post-junta
+
+
+def _con_frontera(r: ResultadoIndice, frontera: pd.DataFrame | None) -> ResultadoIndice:
+    return ResultadoIndice(
+        r._df_completo,
+        r.manifiesto,
+        r.reporte,
+        r.diagnostico,
+        periodo_referencia=r.periodo_referencia,
+        frontera=frontera,
+    )
+
+
+def _fr(filas: list[tuple[Periodo, str, int, int, float, float]]) -> pd.DataFrame:
+    """Construye una tabla `_frontera`. filas = (e, indice, v_old, v_new, inc_old, rep_old)."""
+    return pd.DataFrame(
+        [
+            {
+                "periodo": e,
+                "indice": ind,
+                "version_old": vo,
+                "version_new": vn,
+                "indice_incidencia_old": inc,
+                "indice_replicado_old": rep,
+            }
+            for e, ind, vo, vn, inc, rep in filas
+        ]
+    ).set_index(["periodo", "indice"])
+
+
+def _inpc_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
+    """INPC con escala consistente (★) cruzando la junta 2018→2024.
+
+    J_INPC: b=102, e=104, t(2024)=101. visible: b=102, e=104, t=104/100*101=105.04.
+    Si `e` es None, omite la fila de junta (caso mensual; va a `_frontera`).
+    """
+    filas = [(b, "INPC", 2018, 102.0, 102.0, "ok"), (t, "INPC", 2024, 105.04, 101.0, "ok")]
+    if e is not None:
+        filas.insert(1, (e, "INPC", 2018, 104.0, 104.0, "ok"))
+    return _res_multi(filas, tipo="inpc", id_corrida="ci")
+
+
+def _clas_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
+    """Componente A/B consistente con `_inpc_cross_2seg` (w_A=60, w_B=40)."""
+    filas = [
+        (b, "A", 2018, 110.0, 110.0, "ok"),
+        (b, "B", 2018, 90.0, 90.0, "ok"),
+        (t, "A", 2024, 109.2, 105.0, "ok"),  # 105 * 1.04
+        (t, "B", 2024, 98.8, 95.0, "ok"),  # 95 * 1.04
+    ]
+    if e is not None:
+        filas[2:2] = [(e, "A", 2018, 120.0, 120.0, "ok"), (e, "B", 2018, 80.0, 80.0, "ok")]
+    return _res_multi(filas, tipo="inflacion componente", id_corrida="cc")
+
+
+def test_cross_segmentado_quincenal_es_aditivo() -> None:
+    inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
+    clas = _clas_cross_2seg(_B_Q, _E24, _T_Q)
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc, clas, canastas, desde=_B_Q, hasta=_T_Q)
+    largo = res.resultado.largo
+    inc_a = cast(float, largo.at[(_T_Q, "A"), "incidencia_pp"])
+    inc_b = cast(float, largo.at[(_T_Q, "B"), "incidencia_pp"])
+    assert inc_a == pytest.approx(912 / 102)
+    assert inc_b == pytest.approx(-608 / 102)
+    var = (105.04 / 102 - 1) * 100
+    assert inc_a + inc_b == pytest.approx(var, abs=1e-9)
+    assert res.reporte.at[(_T_Q, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_segmentado_periodica_quincenal_base_junta() -> None:
+    # incidencia_periodica quincenal: base de _T_Q = _E24 (la junta). b==e → seg1=0.
+    inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
+    clas = _clas_cross_2seg(_B_Q, _E24, _T_Q)
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_periodica(inpc, clas, canastas, "quincenal")
+    largo = res.resultado.largo
+    suma = cast(float, largo.at[(_T_Q, "A"), "incidencia_pp"]) + cast(
+        float, largo.at[(_T_Q, "B"), "incidencia_pp"]
+    )
+    var = (105.04 / 104 - 1) * 100  # vs la junta
+    assert suma == pytest.approx(var, abs=1e-9)
+    assert res.reporte.at[(_T_Q, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_segmentado_mensual_con_frontera() -> None:
+    jun, ago = PeriodoMensual(2024, 6), PeriodoMensual(2024, 8)
+    inpc = _con_frontera(
+        _inpc_cross_2seg(jun, None, ago),
+        _fr([(_E24, "INPC", 2018, 2024, 104.0, 104.0)]),
+    )
+    clas = _con_frontera(
+        _clas_cross_2seg(jun, None, ago),
+        _fr(
+            [
+                (_E24, "A", 2018, 2024, 120.0, float("nan")),
+                (_E24, "B", 2018, 2024, 80.0, float("nan")),
+            ]
+        ),
+    )
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc, clas, canastas, desde=jun, hasta=ago)
+    largo = res.resultado.largo
+    inc_a = cast(float, largo.at[(ago, "A"), "incidencia_pp"])
+    inc_b = cast(float, largo.at[(ago, "B"), "incidencia_pp"])
+    assert inc_a == pytest.approx(912 / 102)
+    assert inc_b == pytest.approx(-608 / 102)
+    assert inc_a + inc_b == pytest.approx((105.04 / 102 - 1) * 100, abs=1e-9)
+    assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_mensual_sin_frontera_emite_visible() -> None:
+    jun, ago = PeriodoMensual(2024, 6), PeriodoMensual(2024, 8)
+    inpc = _inpc_cross_2seg(jun, None, ago)  # sin _frontera
+    clas = _clas_cross_2seg(jun, None, ago)
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc, clas, canastas, desde=jun, hasta=ago)
+    largo = res.resultado.largo
+    assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_sin_frontera"
+    # valor visible (no segmentado): 60*(109.2-110)/102, NO 912/102
+    assert cast(float, largo.at[(ago, "A"), "incidencia_pp"]) == pytest.approx(
+        60 * (109.2 - 110) / 102
+    )
+
+
+def test_rebase_mensual_preserva_cross_segmentado() -> None:
+    jun, ago = PeriodoMensual(2024, 6), PeriodoMensual(2024, 8)
+    inpc = _con_frontera(
+        _inpc_cross_2seg(jun, None, ago), _fr([(_E24, "INPC", 2018, 2024, 104.0, 104.0)])
+    )
+    clas = _con_frontera(
+        _clas_cross_2seg(jun, None, ago),
+        _fr(
+            [
+                (_E24, "A", 2018, 2024, 120.0, float("nan")),
+                (_E24, "B", 2018, 2024, 80.0, float("nan")),
+            ]
+        ),
+    )
+    inpc_r = rebasar(inpc, jun)  # k_INPC = 100/102; reescala INPC_visible y su frontera
+    clas_r = rebasar(clas, jun)  # k_K propios; preserva indice_incidencia_old
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc_r, clas_r, canastas, desde=jun, hasta=ago)
+    largo = res.resultado.largo
+    # Σ inc == var SIGUE sosteniéndose tras el rebase (k cancela en S_m).
+    suma = cast(float, largo.at[(ago, "A"), "incidencia_pp"]) + cast(
+        float, largo.at[(ago, "B"), "incidencia_pp"]
+    )
+    assert suma == pytest.approx(304 / 102, abs=1e-9)
+    assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_tres_segmentos_aditivo() -> None:
+    # Rango 2013 → 2024 cruza 2 juntas (2QJul2018, 2QJul2024): 3 segmentos, Σ_m S_m.
+    # El tramo 2013 es el PRIMER segmento (lado viejo, J de dato) → exacto, NO cross_t1_diferido.
+    b = PeriodoQuincenal(2018, 1, 2)  # 2013
+    e1 = PeriodoQuincenal(2018, 7, 2)  # junta 2013→2018
+    e2 = PeriodoQuincenal(2024, 7, 2)  # junta 2018→2024
+    t = PeriodoQuincenal(2024, 8, 1)  # 2024
+    inpc = _res_multi(
+        [
+            (b, "INPC", 2013, 102.0, 102.0, "ok"),
+            (e1, "INPC", 2013, 104.0, 104.0, "ok"),
+            (e2, "INPC", 2018, 108.16, 104.0, "ok"),  # vis = 104 * 1.04
+            (t, "INPC", 2024, 109.2416, 101.0, "ok"),  # vis = 101 * 1.0816
+        ],
+        tipo="inpc",
+        id_corrida="ci",
+    )
+    clas = _res_multi(
+        [
+            (b, "A", 2013, 110.0, 110.0, "ok"),
+            (b, "B", 2013, 90.0, 90.0, "ok"),
+            (e1, "A", 2013, 120.0, 120.0, "ok"),
+            (e1, "B", 2013, 80.0, 80.0, "ok"),
+            (e2, "A", 2018, 124.8, 120.0, "ok"),  # 120 * 1.04
+            (e2, "B", 2018, 83.2, 80.0, "ok"),
+            (t, "A", 2024, 113.568, 105.0, "ok"),  # 105 * 1.0816
+            (t, "B", 2024, 102.752, 95.0, "ok"),
+        ],
+        tipo="inflacion componente",
+        id_corrida="cc",
+    )
+    canastas = {2013: _canasta_comp(2013), 2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc, clas, canastas, desde=b, hasta=t)
+    largo = res.resultado.largo
+    suma = cast(float, largo.at[(t, "A"), "incidencia_pp"]) + cast(
+        float, largo.at[(t, "B"), "incidencia_pp"]
+    )
+    var = (109.2416 / 102 - 1) * 100
+    assert suma == pytest.approx(var, abs=1e-9)
+    # 2013 es el primer segmento (lado viejo, J de dato) → exacto, no aprox.
+    assert res.reporte.at[(t, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_t1_diferido_cruza_2010_2013() -> None:
+    # Rango 2010 → 2013 cruza la junta 2Q Mar 2013: el tramo 2013 (T1) es el LADO NUEVO,
+    # pero su i_tramo NO ancla en 100 (el contrato J(e)=100 es solo de directo/T2). La
+    # segmentación no aplica → cae al visible (Fase 1) marcado cross_t1_diferido. Exacto → 2B.
+    b = PeriodoQuincenal(2013, 1, 2)  # 2010, pre-junta
+    e = PeriodoQuincenal(2013, 3, 2)  # junta 2010→2013 (la posee 2010)
+    t = PeriodoQuincenal(2013, 4, 1)  # 2013, post-junta
+    inpc = _res_multi(
+        [
+            (b, "INPC", 2010, 102.0, 102.0, "ok"),
+            (e, "INPC", 2010, 104.0, 104.0, "ok"),
+            (t, "INPC", 2013, 105.04, 101.0, "ok"),
+        ],
+        tipo="inpc",
+        id_corrida="ci",
+    )
+    clas = _res_multi(
+        [
+            (b, "A", 2010, 110.0, 110.0, "ok"),
+            (b, "B", 2010, 90.0, 90.0, "ok"),
+            (e, "A", 2010, 120.0, 120.0, "ok"),
+            (e, "B", 2010, 80.0, 80.0, "ok"),
+            (t, "A", 2013, 109.2, 105.0, "ok"),
+            (t, "B", 2013, 98.8, 95.0, "ok"),
+        ],
+        tipo="inflacion componente",
+        id_corrida="cc",
+    )
+    canastas = {2010: _canasta_comp(2010), 2013: _canasta_comp(2013)}
+    res = incidencia_desde(inpc, clas, canastas, desde=b, hasta=t)
+    largo = res.resultado.largo
+    assert res.reporte.at[(t, "A"), "metodo_incidencia"] == "cross_t1_diferido"
+    # emite el VISIBLE (Fase 1), NO el segmentado: 60*(109.2-110)/102 con ponderador base 2010.
+    assert cast(float, largo.at[(t, "A"), "incidencia_pp"]) == pytest.approx(
+        60 * (109.2 - 110) / 102
+    )
+
+
+def _canasta_cb(version: int) -> CanastaCanonica:
+    """Canasta 'canasta basica' content-exact (mismas categorías ambas versiones)."""
+    df = pd.DataFrame(
+        {
+            "ponderador": ["60.0", "40.0"],
+            "encadenamiento": [float("nan"), float("nan")],
+            "canasta basica": ["dentro", "fuera"],
+        },
+        index=pd.Index(["gen_a", "gen_b"], name="generico"),
+    )
+    return CanastaCanonica(df, version)  # type: ignore[arg-type]
+
+
+def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
+    # Alcance ampliado (decisión usuario, opción B): cualquier tipo content-exact obtiene
+    # segmentación exacta, no solo componente/subcomponente. 'canasta basica' es content-exact
+    # con los CSV reales → cross_segmentado. (Sin indicador BIE; exactitud algebraica.)
+    canastas = {2018: _canasta_cb(2018), 2024: _canasta_cb(2024)}
+    assert _es_content_exact("canasta basica", canastas) is True
+    inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
+    clas = _res_multi(
+        [
+            (_B_Q, "dentro", 2018, 110.0, 110.0, "ok"),
+            (_B_Q, "fuera", 2018, 90.0, 90.0, "ok"),
+            (_E24, "dentro", 2018, 120.0, 120.0, "ok"),
+            (_E24, "fuera", 2018, 80.0, 80.0, "ok"),
+            (_T_Q, "dentro", 2024, 109.2, 105.0, "ok"),
+            (_T_Q, "fuera", 2024, 98.8, 95.0, "ok"),
+        ],
+        tipo="canasta basica",
+        id_corrida="cc",
+    )
+    res = incidencia_desde(inpc, clas, canastas, desde=_B_Q, hasta=_T_Q)
+    largo = res.resultado.largo
+    suma = cast(float, largo.at[(_T_Q, "dentro"), "incidencia_pp"]) + cast(
+        float, largo.at[(_T_Q, "fuera"), "incidencia_pp"]
+    )
+    assert suma == pytest.approx((105.04 / 102 - 1) * 100, abs=1e-9)
+    assert res.reporte.at[(_T_Q, "dentro"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_visible_no_content_exact() -> None:
+    # tipo no content-exact (un genérico cruza de categoría) → cross_visible (Fase 1).
+    can2018 = CanastaCanonica(
+        pd.DataFrame(
+            {
+                "ponderador": ["60.0", "40.0"],
+                "encadenamiento": [None, None],
+                "SCIAN rama": ["X", "Y"],
+            },
+            index=["g1", "g2"],
+        ),
+        2018,
+    )
+    can2024 = CanastaCanonica(
+        pd.DataFrame(
+            {
+                "ponderador": ["60.0", "40.0"],
+                "encadenamiento": [None, None],
+                "SCIAN rama": ["Y", "X"],
+            },
+            index=["g1", "g2"],  # g1 cruza X→Y: NO content-exact
+        ),
+        2024,
+    )
+    assert _es_content_exact("SCIAN rama", {2018: can2018, 2024: can2024}) is False
+    inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
+    clas = _res_multi(
+        [
+            (_B_Q, "X", 2018, 110.0, 110.0, "ok"),
+            (_E24, "X", 2018, 120.0, 120.0, "ok"),
+            (_T_Q, "X", 2024, 109.2, 105.0, "ok"),
+        ],
+        tipo="SCIAN rama",
+        id_corrida="cc",
+    )
+    res = incidencia_desde(inpc, clas, {2018: can2018, 2024: can2024}, desde=_B_Q, hasta=_T_Q)
+    assert res.reporte.at[(_T_Q, "X"), "metodo_incidencia"] == "cross_visible"
+
+
+def test_es_content_exact_componente_true() -> None:
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    assert _es_content_exact("inflacion componente", canastas) is True
+
+
+def test_es_content_exact_categoria_distinta_false() -> None:
+    # conjunto de categorías distinto entre versiones → no content-exact.
+    can2018 = _canasta_comp(2018)  # {A, B}
+    can2024 = _canasta_solo_a(2024)  # {A}
+    assert _es_content_exact("inflacion componente", {2018: can2018, 2024: can2024}) is False
+
+
+def test_segmentos_entre_dos_y_tres_segmentos() -> None:
+    dos = _segmentos_entre(2018, 2024, _B_Q, _T_Q)
+    assert [s[0] for s in dos] == [2018, 2024]
+    assert dos[0][2] == PeriodoQuincenal(2024, 7, 2)  # fin seg1 = junta
+    assert dos[1][3] is True  # inicio seg2 es junta nueva
+    tres = _segmentos_entre(2013, 2024, _B_Q, _T_Q)
+    assert [s[0] for s in tres] == [2013, 2018, 2024]
+
+
+def test_segmentos_entre_sin_cruce_lanza() -> None:
+    with pytest.raises(InvarianteViolado):
+        _segmentos_entre(2024, 2024, _B_Q, _T_Q)
+    with pytest.raises(InvarianteViolado):
+        _segmentos_entre(2024, 2018, _T_Q, _B_Q)
+
+
+def test_metodo_incidencia_no_en_largo_si_en_reporte() -> None:
+    res = incidencia_periodica(_inpc_within(), _clas_within(), {2018: _canasta_comp()}, "mensual")
+    assert "metodo_incidencia" not in res.resultado.largo.columns
+    assert "metodo_incidencia" in res.reporte.columns
+    assert res.reporte.at[(_ENE, "A"), "metodo_incidencia"] == "within"

@@ -8,10 +8,58 @@ from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
-_ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
+_ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
+
+# Juntas de canasta: (periodo_quincenal_enlace, version_old, version_new). El enlace es el
+# límite inferior del tramo nuevo; el tramo viejo lo posee en el empalme.
+_JUNTAS_FRONTERA: list[tuple[PeriodoQuincenal, VersionCanasta, VersionCanasta]] = [
+    (RANGOS_VALIDOS[v_new][0], v_old, v_new)
+    for v_old, v_new in zip(_ORDEN_VERSIONES, _ORDEN_VERSIONES[1:])
+]
+
+
+def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
+    """Extrae anclas de junta de un df quincenal empalmado (Fase 2A).
+
+    Por cada junta `e` presente y que separe dos versiones presentes, guarda los valores
+    del tramo viejo en `e` (que el empalme le asigna al tramo anterior). Devuelve `None`
+    si no hay junta activa (resultado de un solo tramo o sin enlace). Para el INPC guarda
+    `indice_replicado_old` (= INPC_visible(e)); para clasificación lo deja NaN — no se
+    guarda INPC_visible en la frontera de clasificación (ver docs/diseño §11.31).
+    """
+    es_inpc = str(df["tipo"].iloc[0]) == "inpc"
+    tiene_inc = "indice_incidencia" in df.columns
+    periodos = set(df.index.get_level_values("periodo"))
+    versiones = {int(v) for v in df["version"].unique()}
+    filas: list[dict[str, object]] = []
+    for e, v_old, v_new in _JUNTAS_FRONTERA:
+        if e not in periodos or v_old not in versiones or v_new not in versiones:
+            continue
+        sub = df[df.index.get_level_values("periodo") == e]
+        indices = sub.index.get_level_values("indice")
+        reps = sub["indice_replicado"].to_numpy()
+        incs = sub["indice_incidencia"].to_numpy() if tiene_inc else reps
+        versions = sub["version"].to_numpy()
+        for ind, rep, inc, ver in zip(indices, reps, incs, versions):
+            filas.append(
+                {
+                    "periodo": e,
+                    "indice": ind,
+                    "version_old": int(ver),
+                    "version_new": int(v_new),
+                    "indice_incidencia_old": inc,
+                    "indice_replicado_old": (
+                        float(rep) if es_inpc and pd.notna(rep) else float("nan")
+                    ),
+                }
+            )
+    if not filas:
+        return None
+    return pd.DataFrame(filas).set_index(["periodo", "indice"])
+
 
 _COLS_REPORTE_STRUCT = ("genericos_esperados", "ponderador_esperado")
 _COLS_REPORTE_MIN = ("genericos_con_indice", "cobertura_genericos_pct", "ponderador_cubierto")
@@ -233,12 +281,29 @@ def empalmar(
     refs_explicitas = [r.periodo_referencia for r in ordenados if r.periodo_referencia is not None]
     periodo_referencia_out = refs_explicitas[-1] if refs_explicitas else None
 
+    # Propagar/renombrar `_frontera` si algún tramo la trae (caso secundario: el flujo
+    # canónico es a_mensual(empalmar(...)), donde aún es None). Se renombra con el mismo
+    # mapa RENOMBRES_INDICES que el resto del resultado para que empate con `df_emitir`.
+    fronteras_df: list[pd.DataFrame] = []
+    for r in ordenados:
+        fr = r._frontera
+        if fr is None:
+            continue
+        version_origen = max(m.version for m in r.manifiesto)
+        mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
+        fronteras_df.append(_aplicar_renombre(fr, mapa))
+    frontera_out: pd.DataFrame | None = None
+    if fronteras_df:
+        frontera_out = pd.concat(fronteras_df)
+        frontera_out = frontera_out[~frontera_out.index.duplicated(keep="first")]
+
     return ResultadoIndice(
         df_combinado,
         manifiesto_combinado,
         reporte_combinado,
         diag_combinado,
         periodo_referencia=periodo_referencia_out,
+        frontera=frontera_out,
     )
 
 
@@ -308,12 +373,26 @@ def rebasar(
             stacklevel=2,
         )
 
+    # Reescalar la frontera: el campo visible (`indice_replicado_old` = INPC_visible(e))
+    # se multiplica por el mismo factor `k` por índice; `indice_incidencia_old` queda
+    # intacto (es de-encadenado, invariante al rebase). En la frontera de clasificación
+    # `indice_replicado_old` es NaN, así que no se toca nada visible ahí.
+    frontera_out = resultado._frontera
+    if frontera_out is not None and factores:
+        frontera_out = frontera_out.copy()
+        ind_fr = frontera_out.index.get_level_values("indice")
+        f_fr = pd.Series([factores.get(i, float("nan")) for i in ind_fr], index=frontera_out.index)
+        frontera_out["indice_replicado_old"] = (
+            frontera_out["indice_replicado_old"].astype(float) * f_fr
+        )
+
     return ResultadoIndice(
         df,
         resultado.manifiesto,
         resultado.reporte,
         resultado.diagnostico,
         periodo_referencia=periodo_referencia,
+        frontera=frontera_out,
     )
 
 
@@ -477,4 +556,5 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
         _reporte_a_mensual(df_result, resultado.reporte),
         resultado.diagnostico,
         periodo_referencia=ref,
+        frontera=_construir_frontera(df),
     )

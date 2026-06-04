@@ -20,6 +20,7 @@ class ResultadoIndice(Resultado):
         reporte_df: pd.DataFrame,
         diagnostico_df: pd.DataFrame,
         periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
+        frontera: pd.DataFrame | None = None,
     ) -> None:
         if not manifiesto:
             raise InvarianteViolado("ResultadoIndice.manifiesto no puede estar vacío")
@@ -46,6 +47,14 @@ class ResultadoIndice(Resultado):
         self._reporte_df = reporte_df
         self._diagnostico_df = diagnostico_df
         self._periodo_referencia = periodo_referencia
+        # Anclas de junta de canasta para reconstrucción cross-canasta mensual (Fase 2A).
+        # `None` en quincenal y en resultados directos sin junta. Lo crea `a_mensual`.
+        # Esquema: MultiIndex (periodo, indice); columnas
+        # [version_old, version_new, indice_incidencia_old, indice_replicado_old].
+        # INPC: una fila por junta (indice="INPC"), `indice_replicado_old`=INPC_visible(e).
+        # Clasificación: una fila por (junta, categoría); `indice_replicado_old` queda NaN
+        # (no se guarda INPC_visible en la frontera de clasificación; ver docs/diseño §11.31).
+        self._frontera = frontera
 
     @property
     def manifiesto(self) -> list[ManifestUnidad]:
