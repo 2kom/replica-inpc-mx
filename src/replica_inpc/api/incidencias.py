@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from replica_inpc.api._periodos import parsear_periodo
 from replica_inpc.dominio.calculo.incidencias import (
     incidencia_acumulada_anual as _incidencia_acumulada_anual,
 )
@@ -18,6 +17,7 @@ from replica_inpc.dominio.consulta import incidencias as _consulta
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
+from replica_inpc.dominio.periodos import periodo_desde_str
 
 # -- series --------------------------------------------------------------------
 
@@ -54,8 +54,8 @@ def incidencia_desde(
         inpc,
         clasificacion,
         canastas,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         incluir_parciales,
     )
 
@@ -65,7 +65,7 @@ def incidencia_desde(
 
 def incidencia_en(resultado: ResultadoIncidencia, periodo: str) -> pd.DataFrame:
     """Incidencia de todas las categorías en `periodo`; índice = `indice`."""
-    return _consulta.incidencia_en(resultado, parsear_periodo(periodo))
+    return _consulta.incidencia_en(resultado, periodo_desde_str(periodo))
 
 
 def incidencia_acumulada(
@@ -78,8 +78,8 @@ def incidencia_acumulada(
     """Incidencia acumulada del rango para `indice`."""
     return _consulta.incidencia_acumulada(
         resultado,
-        parsear_periodo(desde),
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde),
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice=indice,
     )
 
@@ -94,8 +94,8 @@ def incidencia_promedio(
     """Media aritmética de `incidencia_pp` en el rango para `indice`."""
     return _consulta.incidencia_promedio(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice=indice,
     )
 
@@ -109,8 +109,8 @@ def mayor_incidencia(
     """`(periodo, indice, incidencia_pp)` del máximo en el rango."""
     periodo, idx, valor = _consulta.mayor_incidencia(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice,
     )
     return str(periodo), idx, valor
@@ -125,8 +125,8 @@ def menor_incidencia(
     """`(periodo, indice, incidencia_pp)` del mínimo en el rango."""
     periodo, idx, valor = _consulta.menor_incidencia(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice,
     )
     return str(periodo), idx, valor

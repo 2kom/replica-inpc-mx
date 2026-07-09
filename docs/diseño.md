@@ -219,7 +219,6 @@ replica-inpc-mx/
 │       ├── __init__.py
 │       ├── api/
 │       │   ├── __init__.py
-│       │   ├── _periodos.py
 │       │   ├── config.py
 │       │   ├── consultas.py
 │       │   ├── flujos.py
@@ -562,7 +561,7 @@ Invariantes:
 
 Definidos en `periodos.py`. Value objects sortables, hashables y convertibles a `pd.Timestamp`. Usados como claves del MultiIndex en `ResultadoIndice`, como columnas de `SerieNormalizada` y como argumentos en funciones de variación e incidencia.
 
-El dominio recibe siempre objetos `Periodo*` — nunca strings. La conversión de strings a periodos ocurre en la API pública.
+El dominio recibe siempre objetos `Periodo*` — nunca strings. La conversión de strings a periodos ocurre en la API pública, que delega en `desde_str`/`periodo_desde_str` (dominio) — insensibles a mayúsculas de forma nativa, no por normalización externa.
 
 **`PeriodoQuincenal`**
 
@@ -577,10 +576,10 @@ PeriodoQuincenal(2024, 7, 2)  # → "2Q Jul 2024"
 | `año`, `mes`, `quincena` | `int` | atributos de instancia |
 | `__str__` | `str` | `"1Q Ene 2024"` |
 | `__repr__` | `str` | `"PeriodoQuincenal(2024, 1, 1)"` |
-| `.desde_str(texto)` | classmethod → `PeriodoQuincenal` | texto en formato `"1Q Mes AAAA"`; lanza `PeriodoNoInterpretable` si falla |
+| `.desde_str(texto)` | classmethod → `PeriodoQuincenal` | texto en formato `"1Q Mes AAAA"`, insensible a mayúsculas; lanza `PeriodoNoInterpretable` si el texto no es interpretable, `InvarianteViolado` si es interpretable pero algún componente está fuera de rango |
 | `.to_timestamp()` | `pd.Timestamp` | 1Q → día 15 del mes; 2Q → último día del mes |
 
-Constructor lanza `ValueError` si `quincena ∉ {1, 2}`, `mes ∉ 1–12` o `año ≤ 0`. (Excepción consciente — ver §1.4.)
+Constructor lanza `InvarianteViolado` si `quincena ∉ {1, 2}`, `mes ∉ 1–12` o `año ≤ 0` (ver §1.4).
 
 **`PeriodoMensual`**
 
@@ -595,10 +594,10 @@ PeriodoMensual(2024, 7)  # → "Jul 2024"
 | `año`, `mes` | `int` | atributos de instancia |
 | `__str__` | `str` | `"Jul 2024"` |
 | `__repr__` | `str` | `"PeriodoMensual(2024, 7)"` |
-| `.desde_str(texto)` | classmethod → `PeriodoMensual` | texto en formato `"Mes AAAA"`; lanza `PeriodoNoInterpretable` si falla |
+| `.desde_str(texto)` | classmethod → `PeriodoMensual` | texto en formato `"Mes AAAA"`, insensible a mayúsculas; lanza `PeriodoNoInterpretable` si el texto no es interpretable, `InvarianteViolado` si es interpretable pero algún componente está fuera de rango |
 | `.to_timestamp()` | `pd.Timestamp` | último día del mes |
 
-Constructor lanza `ValueError` si `mes ∉ 1–12` o `año ≤ 0`.
+Constructor lanza `InvarianteViolado` si `mes ∉ 1–12` o `año ≤ 0` (ver §1.4).
 
 Comparación cross-type (`PeriodoQuincenal` vs `PeriodoMensual`) → `NotImplemented` → `TypeError` en runtime. Un `ResultadoIndice` nunca mezcla los dos tipos en su índice.
 
@@ -608,7 +607,7 @@ Comparación cross-type (`PeriodoQuincenal` vs `PeriodoMensual`) → `NotImpleme
 def periodo_desde_str(texto: str) -> PeriodoQuincenal | PeriodoMensual: ...
 ```
 
-Detecta el formato por número de palabras: 3 palabras → `PeriodoQuincenal`; 2 palabras → `PeriodoMensual`. Lanza `PeriodoNoInterpretable` si el texto no encaja en ninguno.
+Detecta el formato por número de palabras: 3 palabras → `PeriodoQuincenal`; 2 palabras → `PeriodoMensual`. Lanza `PeriodoNoInterpretable` si el texto no encaja en ninguno; `InvarianteViolado` propaga sin envolver si el texto encaja pero algún componente está fuera de rango.
 
 ```python
 periodo_desde_str("1Q Ene 2024")  # → PeriodoQuincenal(2024, 1, 1)
@@ -2008,6 +2007,7 @@ Devuelve `ResultadoIndice` reescalado; `.periodo_referencia` seteado al periodo 
 | Condición | Error |
 | --- | --- |
 | `periodo_referencia` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo_referencia` interpretable pero fuera de rango | `InvarianteViolado` |
 | periodo no existe en `resultado` | `InvarianteViolado` |
 | índice en `periodo_referencia` es NaN (`sin_datos` o `fallida`) | `InvarianteViolado` |
 
@@ -2095,6 +2095,7 @@ Variación total del rango `[desde, hasta]`; una fila por índice.
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
 
@@ -2121,6 +2122,7 @@ Variación de todas las categorías en `periodo`. Índice = `indice`, columna = 
 | Condición | Error |
 | --- | --- |
 | `periodo` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo` interpretable pero fuera de rango | `InvarianteViolado` |
 | `periodo` no existe en resultado | `InvarianteViolado` |
 
 **inflacion_acumulada**
@@ -2146,6 +2148,7 @@ Variación total del rango para `indice`. `indice` es keyword-only.
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
@@ -2177,6 +2180,7 @@ Inflación promedio del rango para `indice`. `indice` es keyword-only. `tcac` = 
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
 
@@ -2211,6 +2215,7 @@ def inflacion_minima(
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
 
@@ -2304,6 +2309,7 @@ Incidencia total del rango `[desde, hasta]`; una fila por genérico. A diferenci
 | --- | --- |
 | `inpc.periodo_referencia != clasificacion.periodo_referencia` | `InvarianteViolado` |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
 
@@ -2330,6 +2336,7 @@ Incidencia de todas las categorías en `periodo`. Índice = `indice`, columna = 
 | Condición | Error |
 | --- | --- |
 | `periodo` con formato inválido | `PeriodoNoInterpretable` |
+| `periodo` interpretable pero fuera de rango | `InvarianteViolado` |
 | `periodo` no existe en resultado | `InvarianteViolado` |
 
 **incidencia_acumulada**
@@ -2355,6 +2362,7 @@ Incidencia acumulada del rango para `indice`. `indice` es keyword-only.
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
@@ -2384,6 +2392,7 @@ Media aritmética de `incidencia_pp` en el rango para `indice`. `indice` es keyw
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
 
@@ -2416,6 +2425,7 @@ def menor_incidencia(
 | Condición | Error |
 | --- | --- |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | `desde` o `hasta` no existe en resultado | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
 
@@ -3060,7 +3070,7 @@ Dos estrategias determinísticas según formato:
 
 **Normalización de nombres:** eliminar tildes vocálicas, conservar `ñ`, eliminar puntuación, minúsculas. Resultado: `generico_limpio`; nombre original: `generico_original`. Implementada en `infraestructura/csv/_utils.py`.
 
-**Parseo de periodos:** `"1Q Ene 2018"` → `PeriodoQuincenal(2018, 1, 1)`. Mes en español abreviado (`Ene`…`Dic`). Internamente usa `periodo_desde_str`; si el string no puede parsearse lanza `PeriodoNoInterpretable`.
+**Parseo de periodos:** `"1Q Ene 2018"` → `PeriodoQuincenal(2018, 1, 1)`. Mes en español abreviado (`Ene`…`Dic`), insensible a mayúsculas. Internamente usa `periodo_desde_str`; si el string no puede parsearse lanza `PeriodoNoInterpretable`; si es interpretable pero algún componente está fuera de rango lanza `InvarianteViolado`.
 
 **Adaptador**
 
@@ -3077,6 +3087,7 @@ class LectorSeriesCsv:
 | encoding no decodificable | `EncodingNoLegible` |
 | orientación no detectable | `OrientacionNoDetectable` |
 | columna de periodo no parseable | `PeriodoNoInterpretable` |
+| columna de periodo interpretable pero fuera de rango | `InvarianteViolado` |
 | ninguna estrategia produce genéricos válidos | `SerieVacia` |
 
 ---
@@ -3323,8 +3334,7 @@ Esto mantiene los casos de uso independientes de las librerías concretas y hace
 
 | Componente | Tipo | Archivo |
 | --- | --- | --- |
-| `PeriodoQuincenal`, `PeriodoMensual` | Unit | `test_periodos.py` |
-| Manejo de periodos en `api/` | Unit | `test_api_periodos.py` |
+| `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` (incl. insensibilidad a mayúsculas y espacios) | Unit | `test_periodos.py` |
 | `correspondencia.py` | Unit | `test_correspondencia.py` |
 | `LaspeyresDirecto` | Unit | `test_calculo_laspeyres_directo.py` |
 | `LaspeyresEncadenado` | Unit | `test_calculo_laspeyres_encadenado.py` |

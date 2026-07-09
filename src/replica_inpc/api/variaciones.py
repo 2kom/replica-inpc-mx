@@ -6,7 +6,6 @@ from typing import Literal
 
 import pandas as pd
 
-from replica_inpc.api._periodos import parsear_periodo
 from replica_inpc.dominio.calculo.variaciones import (
     variacion_acumulada_anual as _variacion_acumulada_anual,
 )
@@ -19,6 +18,7 @@ from replica_inpc.dominio.calculo.variaciones import (
 from replica_inpc.dominio.consulta import variaciones as _consulta
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
+from replica_inpc.dominio.periodos import periodo_desde_str
 
 # -- series --------------------------------------------------------------------
 
@@ -42,8 +42,8 @@ def variacion_desde(
     """Variación total del rango `[desde, hasta]`; una fila por índice."""
     return _variacion_desde(
         resultado,
-        parsear_periodo(desde),
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde),
+        periodo_desde_str(hasta) if hasta is not None else None,
         incluir_parciales,
     )
 
@@ -53,7 +53,7 @@ def variacion_desde(
 
 def inflacion_en(resultado: ResultadoVariacion, periodo: str) -> pd.DataFrame:
     """Variación de todas las categorías en `periodo`; índice = `indice`."""
-    return _consulta.inflacion_en(resultado, parsear_periodo(periodo))
+    return _consulta.inflacion_en(resultado, periodo_desde_str(periodo))
 
 
 def inflacion_acumulada(
@@ -66,8 +66,8 @@ def inflacion_acumulada(
     """Variación total del rango para `indice`."""
     return _consulta.inflacion_acumulada(
         resultado,
-        parsear_periodo(desde),
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde),
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice=indice,
     )
 
@@ -83,8 +83,8 @@ def inflacion_promedio(
     """Inflación promedio del rango para `indice` (TCAC o media simple)."""
     return _consulta.inflacion_promedio(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice=indice,
         metodo=metodo,
     )
@@ -99,8 +99,8 @@ def inflacion_maxima(
     """`(periodo, indice, variacion_pp)` del máximo en el rango."""
     periodo, idx, valor = _consulta.inflacion_maxima(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice,
     )
     return str(periodo), idx, valor
@@ -115,8 +115,8 @@ def inflacion_minima(
     """`(periodo, indice, variacion_pp)` del mínimo en el rango."""
     periodo, idx, valor = _consulta.inflacion_minima(
         resultado,
-        parsear_periodo(desde) if desde is not None else None,
-        parsear_periodo(hasta) if hasta is not None else None,
+        periodo_desde_str(desde) if desde is not None else None,
+        periodo_desde_str(hasta) if hasta is not None else None,
         indice,
     )
     return str(periodo), idx, valor

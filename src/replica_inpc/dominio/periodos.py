@@ -31,6 +31,10 @@ def _ultimo_dia(año: int, mes: int) -> int:
     return calendar.monthrange(año, mes)[1]
 
 
+def _normalizar_espacios(texto: str) -> str:
+    return " ".join(texto.split())
+
+
 def _validar_año_mes(año: int, mes: int) -> None:
     if mes not in _MESES_INV:
         raise InvarianteViolado(f"mes debe estar entre 1 y 12, se recibio {mes}")
@@ -100,7 +104,8 @@ class PeriodoQuincenal:
         Args:
             periodo_str: Texto en formato `"1Q Mes AAAA"`, por ejemplo
                 `"2Q Jul 2024"`. El mes es insensible a mayúsculas
-                (`"jul"`, `"JUL"`, `"Jul"` son equivalentes).
+                (`"jul"`, `"JUL"`, `"Jul"` son equivalentes) y se toleran
+                espacios extra o al inicio/final.
 
         Returns:
             El periodo interpretado desde `periodo_str`.
@@ -114,7 +119,7 @@ class PeriodoQuincenal:
         Ver: docs/diseño.md §5.3, §9.1
         """
         try:
-            quincena_str, mes_str, año_str = periodo_str.split(" ")
+            quincena_str, mes_str, año_str = _normalizar_espacios(periodo_str).split(" ")
             if not quincena_str[:-1].isdigit() or quincena_str[-1:].upper() != "Q":
                 raise ValueError(f"quincena invalida: '{quincena_str}'")
             quincena = int(quincena_str[:-1])
@@ -185,7 +190,8 @@ class PeriodoMensual:
         Args:
             periodo_str: Texto en formato `"Mes AAAA"`, por ejemplo `"Jul 2024"`.
                 El mes es insensible a mayúsculas (`"jul"`, `"JUL"`, `"Jul"`
-                son equivalentes).
+                son equivalentes) y se toleran espacios extra o al
+                inicio/final.
 
         Raises:
             PeriodoNoInterpretable: Si el texto no corresponde a un periodo válido.
@@ -195,7 +201,7 @@ class PeriodoMensual:
         Ver: docs/diseño.md §9.1
         """
         try:
-            mes_str, año_str = periodo_str.split(" ")
+            mes_str, año_str = _normalizar_espacios(periodo_str).split(" ")
             mes = _MESES[mes_str.capitalize()]
             año = int(año_str)
             return cls(año, mes)
@@ -220,11 +226,16 @@ def periodo_desde_str(texto: str) -> PeriodoQuincenal | PeriodoMensual:
     - ``"1Q Ene 2024"`` -> `PeriodoQuincenal`
     - ``"Ene 2024"`` -> `PeriodoMensual`
 
+    Insensible a mayúsculas y tolera espacios extra o al inicio/final.
+
     Raises:
         PeriodoNoInterpretable: Si el texto no corresponde a ningún formato reconocido.
+        InvarianteViolado: Si el texto encaja en un formato pero algún
+            componente está fuera de rango.
 
     Ver: docs/diseño.md §5.3
     """
+    texto = _normalizar_espacios(texto)
     partes = texto.split(" ")
     if len(partes) == 3:
         return PeriodoQuincenal.desde_str(texto)

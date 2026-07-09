@@ -106,6 +106,11 @@ def test_periodo_desde_str_invariante_violado_propaga_limpio(texto):
         periodo_desde_str(texto)
 
 
+def test_periodo_desde_str_normaliza_espacios_extra():
+    p = periodo_desde_str("  2q   jul   2018 ")
+    assert p == PeriodoQuincenal(2018, 7, 2)
+
+
 @pytest.mark.parametrize("op", [operator.le, operator.gt, operator.ge])
 def test_cross_type_operadores_derivados_lanzan_typeerror(op):
     # <=, >, >= son derivados por total_ordering a partir de __lt__/__eq__
@@ -156,6 +161,11 @@ def test_desde_str_insensible_a_mayusculas(mes_str):
 def test_desde_str_quincena_insensible_a_mayusculas(quincena_str):
     p = PeriodoQuincenal.desde_str(f"{quincena_str} Ene 2024")
     assert p.quincena == int(quincena_str[0])
+
+
+def test_desde_str_normaliza_espacios_extra():
+    p = PeriodoQuincenal.desde_str("  2Q   Jul   2018 ")
+    assert p == PeriodoQuincenal(2018, 7, 2)
 
 
 @pytest.mark.parametrize(
@@ -300,6 +310,11 @@ def test_mensual_desde_str():
 def test_mensual_desde_str_insensible_a_mayusculas(mes_str):
     p = PeriodoMensual.desde_str(f"{mes_str} 2024")
     assert p.mes == 12
+
+
+def test_mensual_desde_str_normaliza_espacios_extra():
+    p = PeriodoMensual.desde_str("  Jul   2018 ")
+    assert p == PeriodoMensual(2018, 7)
 
 
 def test_mensual_desde_str_año_invalido_lanza_invariante_violado():

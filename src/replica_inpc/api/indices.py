@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from replica_inpc.api._periodos import parsear_periodo
 from replica_inpc.aplicacion.casos_uso.calcular_historia import (
     _referencias_normalizadas,
 )
@@ -14,6 +13,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.dominio.periodos import periodo_desde_str
 from replica_inpc.dominio.tipos import VersionCanasta
 
 # Versiones cuyo calculador encadenado exige un resultado de referencia.
@@ -62,7 +62,7 @@ def rebasar(
     valor_referencia: float = 100.0,
 ) -> ResultadoIndice:
     """Reexpresa los índices a una nueva referencia."""
-    return _rebasar(resultado, parsear_periodo(periodo_referencia), valor_referencia)
+    return _rebasar(resultado, periodo_desde_str(periodo_referencia), valor_referencia)
 
 
 def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:

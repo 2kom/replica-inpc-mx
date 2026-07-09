@@ -5,11 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from replica_inpc.api._periodos import parsear_periodo
 from replica_inpc.aplicacion.casos_uso.calcular_historia import CalcularHistoria
 from replica_inpc.dominio.errores import ErrorConfiguracion, PeriodoNoInterpretable
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoQuincenal, periodo_desde_str
 from replica_inpc.dominio.tipos import VersionCanasta
 from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
@@ -32,7 +31,7 @@ def calcular_historia(
     la conversión a periodo mensual ocurre automáticamente.
     """
     try:
-        periodo_referencia = parsear_periodo(referencia)
+        periodo_referencia = periodo_desde_str(referencia)
     except PeriodoNoInterpretable as exc:
         raise ErrorConfiguracion(
             f"referencia '{referencia}' no es un periodo interpretable."
@@ -40,7 +39,7 @@ def calcular_historia(
     if not isinstance(periodo_referencia, PeriodoQuincenal):
         raise ErrorConfiguracion(
             f"referencia '{referencia}' debe estar en formato quincenal "
-            f"(\"NQ Mmm AAAA\", por ejemplo \"2Q Jul 2018\"); "
+            f'("NQ Mmm AAAA", por ejemplo "2Q Jul 2018"); '
             f"los calculos internos son siempre quincenales."
         )
 

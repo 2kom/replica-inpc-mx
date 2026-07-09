@@ -260,6 +260,7 @@ p, i, v = rep.inflacion_minima(vars_m, indice="INPC")   # en toda la serie para 
 | condición | error |
 |---|---|
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 | periodo no existe en resultado | `InvarianteViolado` |
 | `indice` no existe en resultado | `InvarianteViolado` |
 | `desde` posterior a `hasta` | `InvarianteViolado` |
@@ -330,6 +331,7 @@ p, i, v = rep.menor_incidencia(inc_m)
 | falta `canastas[v]` para alguna versión en clasificación | `ErrorConfiguracion` |
 | `tipo` de clasificación no reconocido | `ErrorConfiguracion` |
 | `desde`/`hasta` con formato inválido | `PeriodoNoInterpretable` |
+| `desde`/`hasta` interpretable pero fuera de rango | `InvarianteViolado` |
 
 ---
 
