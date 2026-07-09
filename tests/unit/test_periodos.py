@@ -1,3 +1,5 @@
+import operator
+
 import pandas as pd
 import pytest
 
@@ -79,6 +81,46 @@ def test_periodo_desde_str_invalido():
         periodo_desde_str("formato totalmente incorrecto aqui")
 
 
+def test_periodo_desde_str_una_palabra_invalido():
+    with pytest.raises(PeriodoNoInterpretable):
+        periodo_desde_str("2024")
+
+
+@pytest.mark.parametrize(
+    "texto,cls_esperada,mes_esperado",
+    [
+        ("2q jul 2024", PeriodoQuincenal, 7),
+        ("DIC 2024", PeriodoMensual, 12),
+    ],
+)
+def test_periodo_desde_str_insensible_a_mayusculas(texto, cls_esperada, mes_esperado):
+    p = periodo_desde_str(texto)
+    assert isinstance(p, cls_esperada)
+    assert p.mes == mes_esperado
+
+
+@pytest.mark.parametrize("texto", ["3Q Ene 2024", "1Q Ene 0", "Ene 0"])
+def test_periodo_desde_str_invariante_violado_propaga_limpio(texto):
+    # el dispatcher no debe re-envolver InvarianteViolado en PeriodoNoInterpretable
+    with pytest.raises(InvarianteViolado):
+        periodo_desde_str(texto)
+
+
+@pytest.mark.parametrize("op", [operator.le, operator.gt, operator.ge])
+def test_cross_type_operadores_derivados_lanzan_typeerror(op):
+    # <=, >, >= son derivados por total_ordering a partir de __lt__/__eq__
+    p_q = PeriodoQuincenal(2024, 7, 1)
+    p_m = PeriodoMensual(2024, 7)
+    with pytest.raises(TypeError):
+        op(p_q, p_m)
+
+
+@pytest.mark.parametrize("p", [PeriodoQuincenal(2024, 7, 1), PeriodoMensual(2024, 7)])
+def test_orden_contra_tipo_ajeno_lanza_typeerror(p):
+    with pytest.raises(TypeError):
+        p < 5  # type: ignore[operator]
+
+
 # --- PeriodoQuincenal ---
 
 
@@ -104,11 +146,49 @@ def test_desde_str_valido():
     assert p.quincena == 1
 
 
-def test_desde_str_quincena_invalida_lanza_periodo_no_interpretable():
-    # la InvarianteViolado del __init__ queda envuelta por el except generico de
-    # desde_str: misma violacion, excepcion distinta segun la ruta de entrada
+@pytest.mark.parametrize("mes_str", ["jul", "JUL", "Jul", "jUL"])
+def test_desde_str_insensible_a_mayusculas(mes_str):
+    p = PeriodoQuincenal.desde_str(f"2Q {mes_str} 2024")
+    assert p.mes == 7
+
+
+@pytest.mark.parametrize("quincena_str", ["1q", "1Q", "2q", "2Q"])
+def test_desde_str_quincena_insensible_a_mayusculas(quincena_str):
+    p = PeriodoQuincenal.desde_str(f"{quincena_str} Ene 2024")
+    assert p.quincena == int(quincena_str[0])
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "1XYZ Ene 2024",  # digito valido + basura en vez de "Q"
+        "199 Ene 2024",  # digitos validos sin sufijo "Q"
+        "QQ Ene 2024",  # sin digito
+        "Q Ene 2024",  # solo la letra, sin digito
+    ],
+)
+def test_desde_str_quincena_token_malformado_lanza_periodo_no_interpretable(texto):
     with pytest.raises(PeriodoNoInterpretable):
+        PeriodoQuincenal.desde_str(texto)
+
+
+def test_desde_str_quincena_multidigito_fuera_de_rango_lanza_invariante_violado():
+    # "12Q": digito completo (12) se parsea, no se trunca a "1"; 12 esta fuera
+    # de rango -> InvarianteViolado, no aceptado silenciosamente como quincena=1
+    with pytest.raises(InvarianteViolado):
+        PeriodoQuincenal.desde_str("12Q Ene 2024")
+
+
+def test_desde_str_quincena_invalida_lanza_invariante_violado():
+    # texto interpretable, valor fuera de rango: InvarianteViolado del __init__
+    # sale sin envolver, misma excepcion que la ruta de construccion directa
+    with pytest.raises(InvarianteViolado):
         PeriodoQuincenal.desde_str("3Q Ene 2024")
+
+
+def test_desde_str_año_invalido_lanza_invariante_violado():
+    with pytest.raises(InvarianteViolado):
+        PeriodoQuincenal.desde_str("1Q Ene 0")
 
 
 def test_str():
@@ -214,6 +294,17 @@ def test_mensual_desde_str():
     p = PeriodoMensual.desde_str("Jul 2024")
     assert p.año == 2024
     assert p.mes == 7
+
+
+@pytest.mark.parametrize("mes_str", ["dic", "DIC", "Dic", "dIC"])
+def test_mensual_desde_str_insensible_a_mayusculas(mes_str):
+    p = PeriodoMensual.desde_str(f"{mes_str} 2024")
+    assert p.mes == 12
+
+
+def test_mensual_desde_str_año_invalido_lanza_invariante_violado():
+    with pytest.raises(InvarianteViolado):
+        PeriodoMensual.desde_str("Ene 0")
 
 
 def test_periodo_desde_str_mensual():

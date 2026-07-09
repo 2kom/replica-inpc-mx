@@ -7,6 +7,7 @@ import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoInterpretable
 
+# Meses str -> int
 _MESES: dict[str, int] = {
     "Ene": 1,
     "Feb": 2,
@@ -22,6 +23,7 @@ _MESES: dict[str, int] = {
     "Dic": 12,
 }
 
+# Meses int -> str
 _MESES_INV: dict[int, str] = {v: k for k, v in _MESES.items()}
 
 
@@ -97,7 +99,8 @@ class PeriodoQuincenal:
 
         Args:
             periodo_str: Texto en formato `"1Q Mes AAAA"`, por ejemplo
-                `"2Q Jul 2024"`.
+                `"2Q Jul 2024"`. El mes es insensible a mayúsculas
+                (`"jul"`, `"JUL"`, `"Jul"` son equivalentes).
 
         Returns:
             El periodo interpretado desde `periodo_str`.
@@ -105,16 +108,22 @@ class PeriodoQuincenal:
         Raises:
             PeriodoNoInterpretable: Si el texto no corresponde a un periodo
                 válido o usa un mes fuera del catálogo esperado.
+            InvarianteViolado: Si el texto es interpretable pero algún
+                componente (año, mes o quincena) está fuera de rango.
 
-        Ver: docs/diseño.md §5.3
+        Ver: docs/diseño.md §5.3, §9.1
         """
         try:
             quincena_str, mes_str, año_str = periodo_str.split(" ")
-            quincena = int(quincena_str[0])
-            mes = _MESES[mes_str]
+            if not quincena_str[:-1].isdigit() or quincena_str[-1:].upper() != "Q":
+                raise ValueError(f"quincena invalida: '{quincena_str}'")
+            quincena = int(quincena_str[:-1])
+            mes = _MESES[mes_str.capitalize()]
             año = int(año_str)
             return cls(año, mes, quincena)
-        except Exception as e:
+        except InvarianteViolado:
+            raise
+        except (KeyError, ValueError) as e:
             raise PeriodoNoInterpretable(
                 f"Formato de periodo inválido: '{periodo_str}'. Se esperaba formato '1Q Mes AAAA' o '2Q Mes AAAA'"
             ) from e
@@ -175,16 +184,24 @@ class PeriodoMensual:
 
         Args:
             periodo_str: Texto en formato `"Mes AAAA"`, por ejemplo `"Jul 2024"`.
+                El mes es insensible a mayúsculas (`"jul"`, `"JUL"`, `"Jul"`
+                son equivalentes).
 
         Raises:
             PeriodoNoInterpretable: Si el texto no corresponde a un periodo válido.
+            InvarianteViolado: Si el texto es interpretable pero año o mes
+                están fuera de rango.
+
+        Ver: docs/diseño.md §9.1
         """
         try:
             mes_str, año_str = periodo_str.split(" ")
-            mes = _MESES[mes_str]
+            mes = _MESES[mes_str.capitalize()]
             año = int(año_str)
             return cls(año, mes)
-        except Exception as e:
+        except InvarianteViolado:
+            raise
+        except (KeyError, ValueError) as e:
             raise PeriodoNoInterpretable(
                 f"Formato de periodo mensual inválido: '{periodo_str}'. Se esperaba formato 'Mes AAAA'"
             ) from e
