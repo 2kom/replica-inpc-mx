@@ -237,3 +237,6 @@ CLAUDE.md
 # Gemini AI
 .antigravitycli/
 
+# graphifyy
+.graphifyignore
+graphify-out/
