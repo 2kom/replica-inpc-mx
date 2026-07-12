@@ -197,10 +197,16 @@ PRECISION_DECIMALES: dict[int, int] = {
 
 
 def columnas_xlsx(version: int) -> list[str]:
-    """Columnas que se extraen del xlsx para esta versión."""
+    """Columnas que se extraen del xlsx para esta versión.
+
+    Ver: tools/uso_generar_canasta.md §Resumen de fuentes por version y columna
+    """
     return [col for col, fuente in FUENTES[version].items() if fuente == "xlsx"]
 
 
 def columnas_pdf(version: int) -> list[str]:
-    """Columnas que se extraen del pdf para esta versión."""
+    """Columnas que se extraen del pdf para esta versión.
+
+    Ver: tools/uso_generar_canasta.md §Resumen de fuentes por version y columna
+    """
     return [col for col, fuente in FUENTES[version].items() if fuente == "pdf"]
