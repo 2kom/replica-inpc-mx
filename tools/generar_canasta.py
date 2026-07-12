@@ -17,6 +17,10 @@ from pathlib import Path
 
 
 def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Define y parsea los flags del CLI, valida su combinación.
+
+    Ver: tools/uso_generar_canasta.md §Sintaxis del CLI
+    """
     parser = argparse.ArgumentParser(
         description="Genera archivos CSV de canastas INPC a partir de fuentes INEGI.",
     )
@@ -71,6 +75,10 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Valida requeridos, existencia y tipo (archivo vs directorio) de rutas por modo.
+
+    Ver: tools/uso_generar_canasta.md §Validaciones del CLI
+    """
     if args.sincronizar:
         if not args.csv_fuente or not args.csv_destino:
             parser.error("--sincronizar requiere --csv-fuente y --csv-destino.")
@@ -105,6 +113,10 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 
 
 def _ejecutar_xlsx(args: argparse.Namespace) -> None:
+    """Extrae, normaliza y escribe la canasta a partir de un xlsx solo.
+
+    Ver: tools/uso_generar_canasta.md §1. Extraccion solo `xlsx`
+    """
     from canasta_inpc.escribir import escribir_csv
     from canasta_inpc.extraer_xlsx import extraer_xlsx
     from canasta_inpc.normalizar import normalizar_genericos
@@ -119,6 +131,10 @@ def _ejecutar_xlsx(args: argparse.Namespace) -> None:
 
 
 def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
+    """Extrae de xlsx y pdf, cruza genéricos y resuelve diferencias antes de escribir.
+
+    Ver: tools/uso_generar_canasta.md §2. Extraccion `xlsx` + `pdf`
+    """
     from canasta_inpc.escribir import escribir_csv
     from canasta_inpc.extraer_pdf import extraer_pdf
     from canasta_inpc.extraer_xlsx import extraer_xlsx
@@ -142,12 +158,20 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 
 
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
+    """Copia clasificaciones SCIAN de la canasta 2013 a la 2010.
+
+    Ver: tools/uso_generar_canasta.md §3. Sincronizacion SCIAN 2013 -> 2010
+    """
     from canasta_inpc.sincronizar import sincronizar_scian
 
     sincronizar_scian(args.csv_fuente, args.csv_destino)
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Punto de entrada del CLI: parsea args y despacha al modo correspondiente.
+
+    Ver: tools/uso_generar_canasta.md §Modos de uso
+    """
     args = parsear_args(argv)
 
     if not args.sincronizar:
