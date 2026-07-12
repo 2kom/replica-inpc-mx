@@ -76,8 +76,12 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             parser.error("--sincronizar requiere --csv-fuente y --csv-destino.")
         if not args.csv_fuente.exists():
             parser.error(f"No se encontró --csv-fuente: {args.csv_fuente}")
+        if not args.csv_fuente.is_file():
+            parser.error(f"--csv-fuente debe ser un archivo, no un directorio: {args.csv_fuente}")
         if not args.csv_destino.exists():
             parser.error(f"No se encontró --csv-destino: {args.csv_destino}")
+        if not args.csv_destino.is_file():
+            parser.error(f"--csv-destino debe ser un archivo, no un directorio: {args.csv_destino}")
         return
 
     if not args.version:
@@ -86,12 +90,18 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("--xlsx es obligatorio para extracción.")
     if not args.salida:
         parser.error("-o es obligatorio para extracción.")
-    if args.pdf and not args.xlsx:
-        parser.error("--pdf requiere --xlsx.")
     if not args.xlsx.exists():
         parser.error(f"No se encontró --xlsx: {args.xlsx}")
+    if not args.xlsx.is_file():
+        parser.error(f"--xlsx debe ser un archivo, no un directorio: {args.xlsx}")
+    if args.salida.exists() and not args.salida.is_dir():
+        parser.error(f"-o debe ser un directorio: {args.salida}")
     if args.pdf and not args.pdf.exists():
         parser.error(f"No se encontró --pdf: {args.pdf}")
+    if args.pdf and not args.pdf.is_file():
+        parser.error(f"--pdf debe ser un archivo, no un directorio: {args.pdf}")
+    if args.preferir and not args.pdf:
+        parser.error("--preferir requiere --pdf.")
 
 
 def _ejecutar_xlsx(args: argparse.Namespace) -> None:
@@ -140,7 +150,8 @@ def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     args = parsear_args(argv)
 
-    args.salida.mkdir(parents=True, exist_ok=True) if not args.sincronizar else None
+    if not args.sincronizar:
+        args.salida.mkdir(parents=True, exist_ok=True)
 
     if args.sincronizar:
         _ejecutar_sincronizacion(args)
