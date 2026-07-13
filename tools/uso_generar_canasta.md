@@ -269,27 +269,55 @@ Si alguna columna no existe en el DataFrame intermedio, `escribir.py` la crea va
 
 ## Normalizacion de texto
 
-Antes de escribir el CSV final, la herramienta normaliza textos con estas reglas:
+Dos pasos distintos, en dos momentos distintos del pipeline — no una sola
+receta de 5 reglas:
 
-- convierte a minusculas;
-- colapsa espacios repetidos;
-- quita tildes vocalicas;
-- conserva la enie;
-- elimina prefijos numericos del inicio en la mayoria de columnas de texto, por ejemplo `1.`, `01-`, `2)`.
+**1. Estandar de comparacion** (`normalizar_celda`/`normalizar_genericos`),
+corre ANTES del cruce xlsx/pdf (`cruzar_genericos` en `matching.py`) y
+tambien dentro de la extraccion de pdf (`extraer_pdf.py`, para cruzar CCIF
+contra SCIAN/COG del mismo documento):
 
-Excepciones:
+1. convierte a minusculas;
+2. colapsa espacios repetidos y quita NBSP;
+3. quita tildes vocalicas (conserva la enie);
+4. quita signos de puntuacion (comas, puntos, parentesis, punto y coma, etc.),
+   conserva letras/digitos/espacios; recolapsa espacios si quedan dobles.
+
+Este es el MISMO estandar que usa `src/replica_inpc/infraestructura/csv/_utils.py._normalizar()`
+al cargar canasta y series para el calculo — ver `data/reglas_codigo` o el
+modulo fuente para el detalle de esa funcion. El genérico pasa por estas 4
+reglas aqui (al generar el CSV, para poder cruzar xlsx con pdf) Y de nuevo
+por la limpieza fuerte de `_utils` (al cargar, para poder cruzar canasta con
+serie) — es intencional: `tools/` es standalone y no puede compartir codigo
+con `src/`, y la serie del BIE nunca pasa por `tools/`, solo por `_utils`.
+
+**2. Prefijo numerico** (`quitar_prefijos`), corre DESPUES, sobre el
+dataframe ya resuelto (post `resolver_diferencias`), justo antes de escribir
+el CSV — NO es parte del estandar de comparacion, porque el generico nunca
+trae prefijo en la practica y ninguna columna de clasificacion se compara
+por texto durante el cruce (`cruzar_genericos` solo compara `generico` y
+`ponderador`). Quita prefijos como `1.`, `01-`, `2)` al inicio del texto, en
+la mayoria de columnas de texto, ver excepcion abajo. Las columnas de
+clasificacion (`COG`, `CCIF *`, categorias de inflacion) NO se vuelven a
+tocar despues de este paso al cargar — lo que escribe `tools/` aqui es la
+forma final.
+
+Excepciones (aplican a AMBOS pasos salvo donde se indique):
 
 - `ponderador` no se normaliza;
 - `encadenamiento` no se normaliza;
 - `canasta basica` no se normaliza;
 - `canasta consumo minimo` no se normaliza;
-- `SCIAN sector` y `SCIAN rama` conservan su prefijo/codigo numerico.
+- `SCIAN sector` y `SCIAN rama` conservan su prefijo/codigo numerico (paso 2
+  no aplica), pero SI pasan por el paso 1 (pierden puntuacion interna).
 
 Consecuencia practica:
 
-- los textos del CSV final quedan en minusculas;
-- `CCIF division`, `CCIF grupo`, `CCIF clase`, `COG` y categorias de inflacion salen normalizadas;
-- `SCIAN sector` y `SCIAN rama` salen normalizadas, pero con codigo al inicio;
+- los textos del CSV final quedan en minusculas, sin tildes, sin puntuacion;
+- `CCIF division`, `CCIF grupo`, `CCIF clase`, `COG` y categorias de inflacion
+  salen normalizadas y sin prefijo numerico;
+- `SCIAN sector` y `SCIAN rama` salen normalizadas y sin puntuacion interna,
+  pero con codigo al inicio;
 - las marcas de pertenencia salen como `X` o vacio.
 
 ## Versiones soportadas
