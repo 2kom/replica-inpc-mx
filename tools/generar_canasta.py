@@ -113,22 +113,10 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 
 
 def _ejecutar_xlsx(args: argparse.Namespace) -> None:
-    """Extrae, normaliza y escribe la canasta a partir de un xlsx solo.
+    """Extrae, normaliza y escribe los genericos y ponderadores de la canasta a partir de un xlsx solo de una version dada.
 
     Ver: tools/uso_generar_canasta.md §1. Extraccion solo `xlsx`
     """
-    from canasta_inpc.escribir import escribir_csv
-    from canasta_inpc.extraer_xlsx import extraer_xlsx
-    from canasta_inpc.normalizar import normalizar_genericos, quitar_prefijos
-    from canasta_inpc.registro import escribir_registro_xlsx
-
-    df = extraer_xlsx(args.xlsx, args.version)
-    df = normalizar_genericos(df)
-    df = quitar_prefijos(df)
-
-    ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
-    escribir_csv(df, ruta_csv, args.version)
-    escribir_registro_xlsx(df, args, ruta_csv)
 
 
 def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
@@ -136,27 +124,6 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 
     Ver: tools/uso_generar_canasta.md §2. Extraccion `xlsx` + `pdf`
     """
-    from canasta_inpc.escribir import escribir_csv
-    from canasta_inpc.extraer_pdf import extraer_pdf
-    from canasta_inpc.extraer_xlsx import extraer_xlsx
-    from canasta_inpc.matching import cruzar_genericos
-    from canasta_inpc.normalizar import normalizar_genericos, quitar_prefijos
-    from canasta_inpc.registro import escribir_registro_pdf
-    from canasta_inpc.resolver import resolver_diferencias
-
-    df_xlsx = extraer_xlsx(args.xlsx, args.version)
-    df_xlsx = normalizar_genericos(df_xlsx)
-
-    df_pdf = extraer_pdf(args.pdf, args.version)
-    df_pdf = normalizar_genericos(df_pdf)
-
-    df_combinado, diferencias = cruzar_genericos(df_xlsx, df_pdf, args.version)
-    df_final = resolver_diferencias(df_combinado, diferencias, args.preferir)
-    df_final = quitar_prefijos(df_final)
-
-    ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
-    escribir_csv(df_final, ruta_csv, args.version)
-    escribir_registro_pdf(df_xlsx, df_pdf, df_final, diferencias, args, ruta_csv)
 
 
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
@@ -164,9 +131,6 @@ def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
 
     Ver: tools/uso_generar_canasta.md §3. Sincronizacion SCIAN 2013 -> 2010
     """
-    from canasta_inpc.sincronizar import sincronizar_scian
-
-    sincronizar_scian(args.csv_fuente, args.csv_destino)
 
 
 def main(argv: list[str] | None = None) -> None:
