@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
@@ -45,7 +47,10 @@ class LayoutXlsx:
     col_canasta_consumo_minimo: int | None  # columna con la marca "X" de canasta consumo minimo; None si la version no lo tiene
     # columna -> (inflacion componente, inflacion subcomponente, inflacion agrupacion)
     # se recorre buscando cual columna trae la marca "X" en la fila del generico
-    agrupaciones: dict[int, tuple[str, str, str]]
+    # Mapping (no dict) + MappingProxyType al construir: frozen=True solo bloquea
+    # reasignar el atributo, no mutar un dict compartido a nivel de modulo por
+    # dentro -- ver tests/unit/tools/test_esquema.py
+    agrupaciones: Mapping[int, tuple[str, str, str]]
 
 
 # fmt: off
@@ -55,7 +60,7 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
         col_generico=2, col_grupo=1,
         col_ponderador=3, col_encadenamiento=None,
         col_canasta_basica=19, col_canasta_consumo_minimo=None,
-        agrupaciones={
+        agrupaciones=MappingProxyType({
             6:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             7:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             9:  ("subyacente", "servicios", "vivienda"),
@@ -65,14 +70,14 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
             15: ("no subyacente", "agropecuarios", "pecuarios"),
             17: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "energeticos"),
             18: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "tarifas autorizadas por el gobierno"),
-        },
+        }),
     ),
     2013: LayoutXlsx(
         hoja_cog="Ponderadores INPC INEGI", hoja_ccif="Ponderadores INPC COICOP INEGI",
         col_generico=2, col_grupo=1,
         col_ponderador=3, col_encadenamiento=4,
         col_canasta_basica=20, col_canasta_consumo_minimo=None,
-        agrupaciones={
+        agrupaciones=MappingProxyType({
             7:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             8:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             10: ("subyacente", "servicios", "vivienda"),
@@ -82,14 +87,14 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
             16: ("no subyacente", "agropecuarios", "pecuarios"),
             18: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "energeticos"),
             19: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "tarifas autorizadas por el gobierno"),
-        },
+        }),
     ),
     2018: LayoutXlsx(
         hoja_cog="Objeto de gasto", hoja_ccif="CCIF",
         col_generico=1, col_grupo=None,
         col_ponderador=2, col_encadenamiento=None,
         col_canasta_basica=19, col_canasta_consumo_minimo=None,
-        agrupaciones={
+        agrupaciones=MappingProxyType({
             5:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             6:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             8:  ("subyacente", "servicios", "educacion colegiaturas"),
@@ -99,14 +104,14 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
             14: ("no subyacente", "agropecuarios", "pecuarios"),
             16: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "energeticos"),
             17: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "tarifas autorizadas por el gobierno"),
-        },
+        }),
     ),
     2024: LayoutXlsx(
         hoja_cog="Objeto de gasto", hoja_ccif="CCIF",
         col_generico=1, col_grupo=None,
         col_ponderador=2, col_encadenamiento=3,
         col_canasta_basica=20, col_canasta_consumo_minimo=21,
-        agrupaciones={
+        agrupaciones=MappingProxyType({
             6:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             7:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             9:  ("subyacente", "servicios", "educacion colegiaturas"),
@@ -116,7 +121,7 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
             15: ("no subyacente", "agropecuarios", "pecuarios"),
             17: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "energeticos"),
             18: ("no subyacente", "energeticos y tarifas autorizadas por el gobierno", "tarifas autorizadas por el gobierno"),
-        },
+        }),
     ),
 }
 # fmt: on
