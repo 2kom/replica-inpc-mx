@@ -106,8 +106,10 @@ Sobrescribe las columnas `SCIAN sector` y `SCIAN rama` de `ponderadores_2010.csv
 ## Documentación de la herramienta
 
 Pendiente — se completa a medida que se reconstruye cada módulo (ver
-`tools/canasta_inpc/`). Hoy `esquema.py` está implementado; el resto de la
-lógica de extracción/cruce/registro todavía no.
+`tools/canasta_inpc/`). Hoy `esquema.py`, `utilidades.py` y
+`extraccion_xlsx.py` están implementados (modo extracción solo `xlsx`
+funcional de punta a punta); cruce con `pdf`, sincronización SCIAN y
+registro JSON todavía no.
 
 ### Esquema del CSV de salida
 
@@ -137,7 +139,10 @@ columnas fijas, en este orden (`COLUMNAS_BASE` en
 - sin acentos, salvo la ñ;
 - sin signos de puntuación, espacios simples entre palabras (ni dobles, ni al
   inicio/final);
-- si no hay información para una columna, el valor es un string vacío `""`.
+- si no hay información para una columna, el valor es un string vacío `""`;
+- si el DataFrame trae columnas fuera de estas 15, `guardar_csv` las descarta
+  e imprime una advertencia (no lanza excepción) — decisión deliberada, no
+  se valida el esquema del lado de quien arma el DataFrame.
 
 **Reglas por columna:**
 
@@ -199,8 +204,15 @@ correcto. Detalle de columnas/posiciones (implementación, no uso) vive en
 | 2018 | `Objeto de gasto` | `CCIF` |
 | 2024 | `Objeto de gasto` | `CCIF` |
 
-### Modos de extracción, cruce xlsx+pdf, sincronización SCIAN, registro JSON
+### Notas de la extracción solo `xlsx`
 
-_Pendiente_ — módulos aún no reconstruidos (`extraccion_xlsx.py`,
-`extraer_pdf.py`, `matching.py`, `resolver.py`, `sincronizar.py`,
-`escribir.py`, `registro.py`).
+- `CCIF division` **siempre** queda sin prefijo numérico en este modo (aunque
+  el xlsx de 2024 sí lo traiga) — el prefijo consistente en las 4 versiones
+  lo repone `extraer_pdf.py`, no la extracción de xlsx. Ver §Fuentes por
+  columna y versión.
+- Sin registro JSON todavía en este modo — `registro.py` no existe.
+
+### Modos pendientes: cruce xlsx+pdf, sincronización SCIAN, registro JSON
+
+_Pendiente_ — módulos aún no reconstruidos (`extraer_pdf.py`, `matching.py`,
+`resolver.py`, `sincronizar.py`, `registro.py`).

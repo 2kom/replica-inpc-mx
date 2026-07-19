@@ -115,8 +115,18 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 def _ejecutar_xlsx(args: argparse.Namespace) -> None:
     """Extrae, normaliza y escribe los genericos y ponderadores de la canasta a partir de un xlsx solo de una version dada.
 
-    Ver: tools/uso_generar_canasta.md §1. Extraccion solo `xlsx`
+    Ver: tools/uso_generar_canasta.md §Notas de la extracción solo `xlsx`
     """
+    from canasta_inpc.extraccion_xlsx import extraer_xlsx
+    from canasta_inpc.utilidades import guardar_csv
+
+    df = extraer_xlsx(args.xlsx, args.version)
+    ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
+    guardar_csv(df, ruta_csv, args.version)
+
+    print(f"Versión: {args.version}")
+    print(f"Genéricos extraídos: {len(df)}")
+    print(f"CSV: {ruta_csv}")
 
 
 def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:

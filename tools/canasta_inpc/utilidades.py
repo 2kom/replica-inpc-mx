@@ -60,7 +60,15 @@ def quitar_prefijo_numerico(texto: str) -> str:
 def guardar_csv(df: pd.DataFrame, ruta: Path, version: VersionCanasta) -> None:
     """Completa el esquema fijo de 15 columnas y escribe el CSV.
 
+    Advierte (no lanza) si `df` trae columnas fuera de `COLUMNAS_BASE`: se
+    descartan igual, sin validación dura (el esquema de columnas ya se
+    sostiene por construcción en quien arma el df).
     Ver: tools/uso_generar_canasta.md §Esquema del CSV de salida.
     """
+    sobrantes = set(df.columns) - set(COLUMNAS_BASE)
+    if sobrantes:
+        print(
+            f"[canasta_inpc] Advertencia: columnas fuera de esquema descartadas: {sorted(sobrantes)}"
+        )
     df = df.reindex(columns=COLUMNAS_BASE, fill_value="")
     df.to_csv(ruta, index=False)
