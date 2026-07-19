@@ -19,7 +19,7 @@ from pathlib import Path
 def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Define y parsea los flags del CLI, valida su combinación.
 
-    Ver: tools/uso_generar_canasta.md §Sintaxis del CLI
+    Ver: tools/uso_generar_canasta.md §Comando funcional, §Diseño futuro: PDF y sincronización
     """
     parser = argparse.ArgumentParser(
         description="Genera archivos CSV de canastas INPC a partir de fuentes INEGI.",
@@ -77,7 +77,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     """Valida requeridos, existencia y tipo (archivo vs directorio) de rutas por modo.
 
-    Ver: tools/uso_generar_canasta.md §Validaciones del CLI
+    Ver: tools/uso_generar_canasta.md §Limitaciones actuales, §Validaciones ya activas para estos modos
     """
     if args.sincronizar:
         if not args.csv_fuente or not args.csv_destino:
@@ -118,35 +118,33 @@ def _ejecutar_xlsx(args: argparse.Namespace) -> None:
     Ver: tools/uso_generar_canasta.md §Notas de la extracción solo `xlsx`
     """
     from canasta_inpc.extraccion_xlsx import extraer_xlsx
+    from canasta_inpc.registro import escribir_registro_xlsx
     from canasta_inpc.utilidades import guardar_csv
 
     df = extraer_xlsx(args.xlsx, args.version)
     ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
     guardar_csv(df, ruta_csv, args.version)
-
-    print(f"Versión: {args.version}")
-    print(f"Genéricos extraídos: {len(df)}")
-    print(f"CSV: {ruta_csv}")
+    escribir_registro_xlsx(df, args, ruta_csv)
 
 
 def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
     """Extrae de xlsx y pdf, cruza genéricos y resuelve diferencias antes de escribir.
 
-    Ver: tools/uso_generar_canasta.md §2. Extraccion `xlsx` + `pdf`
+    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización
     """
 
 
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
     """Copia clasificaciones SCIAN de la canasta 2013 a la 2010.
 
-    Ver: tools/uso_generar_canasta.md §3. Sincronizacion SCIAN 2013 -> 2010
+    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización
     """
 
 
 def main(argv: list[str] | None = None) -> None:
     """Punto de entrada del CLI: parsea args y despacha al modo correspondiente.
 
-    Ver: tools/uso_generar_canasta.md §Modos de uso
+    Ver: tools/uso_generar_canasta.md §Estado actual
     """
     args = parsear_args(argv)
 

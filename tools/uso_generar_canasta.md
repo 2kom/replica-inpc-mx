@@ -2,9 +2,18 @@
 
 ## Objetivo
 
-`tools/generar_canasta.py` genera un archivo CSV que es la canasta intermedia que luego se utilizara para la canasta canonica que es con la que se haran los calculos
+Genera una canasta intermedia en CSV, utilizada después para construir la
+canasta canónica del cálculo del INPC.
 
-## Requisitos
+## Estado actual
+
+Hoy solo funciona de punta a punta el **modo de extracción `xlsx`** (sin
+`pdf`). El CLI ya acepta `--pdf` y `--sincronizar`, pero sus modos
+(`_ejecutar_xlsx_pdf`, `_ejecutar_sincronizacion`) todavía no tienen cuerpo:
+la corrida termina sin error y sin generar ningún archivo. Ver §Diseño
+futuro: PDF y sincronización.
+
+## Instalación
 
 - Ejecutar el comando desde la raíz del repo:
 
@@ -22,100 +31,62 @@ pip install -e '.[ponderadores]'
 Eso instala, entre otras, las librerías que usa esta herramienta:
 
 - `openpyxl`
-- `pdfplumber`
+- `pdfplumber` (para cuando exista extracción de `pdf`, ver §Diseño futuro)
 
-## Cómo se usa esta herramienta?
+## Comando funcional
 
-### Sintaxis
-
-```bash
-python tools/generar_canasta.py [-h] [--version {2010,2013,2018,2024}] [--xlsx XLSX] \
-                                [--pdf PDF] [-o SALIDA] [--preferir {pdf,csv}] \
-                                [--sincronizar] [--csv-fuente CSV_FUENTE] \
-                                [--csv-destino CSV_DESTINO]
-```
-
-### Parámetros
-
-| Parámetro | Aplica a | Descripción |
-| --- | --- | --- |
-| `--version` | extracción | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. |
-| `--xlsx` | extracción | Ruta al archivo xlsx de ponderadores. |
-| `--pdf` | extracción, opcional | Ruta al archivo pdf de anexos. |
-| `-o` | extracción | Directorio de salida para el CSV y el registro JSON. Se crea automáticamente si no existe. |
-| `--preferir {pdf,csv}` | extracción, requiere `--pdf` | Preferencia automática para resolver diferencias de nombre/clasificación entre `xlsx` y `pdf` — no aplica a diferencias de `ponderador`, esas solo se reportan (el valor final siempre queda el del `xlsx`). |
-| `--sincronizar` | sincronización | Activa el modo de copia de SCIAN 2013 -> 2010. |
-| `--csv-fuente` | sincronización | CSV de canasta 2013 ya generado (fuente). |
-| `--csv-destino` | sincronización | CSV de canasta 2010 ya generado (destino, se sobrescribe). |
-
-### Modos
-
-El modo se decide por los flags presentes:
-
-- **`--sincronizar`** presente -> modo sincronización.
-- **`--pdf`** presente (sin `--sincronizar`) -> modo extracción `xlsx + pdf`.
-- Si no -> modo extracción solo `xlsx`.
-
-### Validaciones
-
-En modo sincronización, la herramienta exige:
-
-- `--csv-fuente` y `--csv-destino` (ambos);
-- que `--csv-fuente` exista y sea un archivo (no un directorio);
-- que `--csv-destino` exista y sea un archivo (no un directorio).
-
-En modo extracción, la herramienta exige:
-
-- `--version`, `--xlsx` y `-o`;
-- que `--xlsx` exista y sea un archivo;
-- que `-o`, si ya existe, sea un directorio;
-- que `--pdf`, si se pasa, exista y sea un archivo;
-- que `--preferir` solo se use junto con `--pdf`.
-
-Si falta algo o una ruta no es válida, el CLI corta con un mensaje de error puntual (no lanza traceback).
-
-### Ejemplos
-
-Extracción solo `xlsx`:
+Hoy el único comando que produce salida real es la extracción solo `xlsx`:
 
 ```bash
 python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx -o salida/
 ```
 
-Nos devuelve un archivo `ponderadores_2018.csv` en `salida/`, además de un JSON de registro con el resumen de la extracción.
+### Parámetros
 
-Extracción `xlsx` + `pdf`, con `--preferir` para evitar prompts interactivos:
+| Parámetro | Descripción |
+| --- | --- |
+| `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. |
+| `--xlsx` | Ruta al archivo xlsx de ponderadores. |
+| `-o` | Directorio de salida para el CSV y el registro JSON. Se crea automáticamente si no existe. |
 
-```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx \
-  --pdf ruta/a/pdf/anexo_2018.pdf --preferir pdf -o salida/
-```
+### Archivos generados
 
-Nos devuelve un archivo `ponderadores_2018.csv` en `salida/`, con las diferencias de nombre/clasificación resueltas a favor de lo encontrado en el pdf, además de un JSON de registro con el resumen del cruce y las diferencias encontradas.
+Esta corrida deja en `salida/`:
 
-Sincronización SCIAN 2013 → 2010:
+- `ponderadores_{version}.csv` — la canasta intermedia. Ver §Esquema del
+  CSV de salida para el detalle de columnas.
+- `xlsx_{version}_{fecha}.json` — un registro con el resumen de la
+  extracción. Ver §Registro JSON.
 
-```bash
-python tools/generar_canasta.py --sincronizar \
-  --csv-fuente salida/ponderadores_2013.csv \
-  --csv-destino salida/ponderadores_2010.csv
-```
+## Limitaciones actuales
 
-Sobrescribe las columnas `SCIAN sector` y `SCIAN rama` de `ponderadores_2010.csv` (destino) con los valores de `ponderadores_2013.csv` (fuente); no genera ningún archivo nuevo ni JSON de registro.
+- `--pdf`, `--preferir`, `--sincronizar`, `--csv-fuente` y `--csv-destino`
+  son aceptados por el parser (incluida su validación de rutas), pero el
+  modo correspondiente no hace nada todavía: la corrida termina sin error y
+  sin generar ni CSV ni JSON. Si no estás seguro de qué modo vas a disparar,
+  usá solo `--version`, `--xlsx` y `-o`.
+- Para el modo `xlsx` que sí funciona, la herramienta exige:
+  - `--version`, `--xlsx` y `-o`;
+  - que `--xlsx` exista y sea un archivo (no un directorio);
+  - que `-o`, si ya existe, sea un directorio.
+- Si falta algo o una ruta no es válida en estos chequeos, el CLI corta con
+  un mensaje de error puntual, sin traceback. Esto aplica solo a la
+  validación de argumentos — un fallo interno durante la extracción (xlsx
+  corrupto, hoja con nombre distinto al esperado, etc.) sí puede mostrar un
+  traceback normal de Python.
 
-## Documentación de la herramienta
+## Documentación interna
 
-Pendiente — se completa a medida que se reconstruye cada módulo (ver
-`tools/canasta_inpc/`). Hoy `esquema.py`, `utilidades.py` y
-`extraccion_xlsx.py` están implementados (modo extracción solo `xlsx`
-funcional de punta a punta); cruce con `pdf`, sincronización SCIAN y
-registro JSON todavía no.
+_A partir de acá es referencia para quien toca el código de
+`tools/canasta_inpc/`, no hace falta para usar la herramienta._
 
 ### Esquema del CSV de salida
 
-Sin importar la versión o el modo, el CSV final siempre tiene estas 15
-columnas fijas, en este orden (`COLUMNAS_BASE` en
-`tools/canasta_inpc/esquema.py`):
+El CSV final siempre tiene estas 15 columnas fijas, en este orden
+(`COLUMNAS_BASE` en `tools/canasta_inpc/esquema.py`) — esto describe el
+contrato final del pipeline completo; hoy, con solo el modo `xlsx`
+implementado, varias columnas quedan vacías porque su única fuente posible
+es `pdf` o `sync` (ver §Fuentes por columna y versión):
 
 1. `generico`
 2. `ponderador`
@@ -151,7 +122,7 @@ columnas fijas, en este orden (`COLUMNAS_BASE` en
 | `generico` | Reglas generales; solo se eliminan prefijos numéricos estructurales, nunca números que sean parte del nombre. |
 | `ponderador`, `encadenamiento` | Se guardan en `str`, con todos los decimales tal cual vienen en el xlsx (sin redondear/truncar), punto decimal. |
 | `COG`, `inflacion *`, `durabilidad` | Reglas generales + se elimina el prefijo numérico estructural (ej. `"01 alimentos"` → `"alimentos"`). |
-| `CCIF *` | Reglas generales, sin eliminar el prefijo numérico (ej. `"01.1.1 alimentos ..."` se conserva tal cual). |
+| `CCIF *` | Reglas generales, sin eliminar el prefijo numérico en el contrato final (ej. `"01.1.1 alimentos ..."` se conserva tal cual) — **hoy, en el modo solo `xlsx`, `CCIF division` sale sin prefijo**, ver §Notas de la extracción solo `xlsx`. |
 | `SCIAN *` | Reglas generales; código y nombre separados por un espacio simple. `SCIAN sector` inicia con código de 2 dígitos; `SCIAN rama` con código de exactamente 4 dígitos. |
 | `canasta basica`, `canasta consumo minimo` | Categorías binarias, ver abajo. |
 
@@ -208,11 +179,83 @@ correcto. Detalle de columnas/posiciones (implementación, no uso) vive en
 
 - `CCIF division` **siempre** queda sin prefijo numérico en este modo (aunque
   el xlsx de 2024 sí lo traiga) — el prefijo consistente en las 4 versiones
-  lo repone `extraer_pdf.py`, no la extracción de xlsx. Ver §Fuentes por
-  columna y versión.
-- Sin registro JSON todavía en este modo — `registro.py` no existe.
+  lo deberá reponer `extraer_pdf.py` cuando exista, no la extracción de
+  xlsx. Ver §Fuentes por columna y versión.
 
-### Modos pendientes: cruce xlsx+pdf, sincronización SCIAN, registro JSON
+### Registro JSON (modo solo `xlsx`)
+
+Cada corrida escribe `{salida}/xlsx_{version}_{YYYYMMDD_HHMMSS_ffffff}.json` además
+del CSV (`escribir_registro_xlsx` en `tools/canasta_inpc/registro.py`):
+
+| Campo | Contenido |
+| --- | --- |
+| `tipo` | Siempre `"xlsx"`. |
+| `xlsx`, `csv` | Rutas de entrada/salida usadas en la corrida. |
+| `version` | Versión de canasta. |
+| `genericos` | Cantidad de genéricos extraídos. |
+| `ponderadores`, `encadenamientos` | Cantidad con valor no vacío; `encadenamientos` es `null` en versiones sin esa columna (2010/2018). |
+| `clasificaciones` | Por cada columna de clasificación presente (`COG`, `CCIF division`, `inflacion *`, `canasta *`): cuántos genéricos la tienen y qué categorías únicas aparecen. |
+| `genericos_detalle` | Un `{generico, ponderador, [encadenamiento]}` por fila — útil para diffear entre corridas sin abrir el CSV. |
+
+## Diseño futuro: PDF y sincronización
 
 _Pendiente_ — módulos aún no reconstruidos (`extraer_pdf.py`, `matching.py`,
-`resolver.py`, `sincronizar.py`, `registro.py`).
+`resolver.py`, `sincronizar.py`). Lo de acá describe la intención del CLI,
+no algo que hoy genere resultados.
+
+### Parámetros previstos
+
+| Parámetro | Aplica a | Descripción |
+| --- | --- | --- |
+| `--pdf` | extracción, opcional | Ruta al archivo pdf de anexos. |
+| `--preferir {pdf,csv}` | extracción, requiere `--pdf` | Preferencia automática para resolver diferencias de nombre/clasificación entre `xlsx` y `pdf` — no aplica a diferencias de `ponderador`, esas solo se reportan (el valor final siempre queda el del `xlsx`). |
+| `--sincronizar` | sincronización | Activa el modo de copia de SCIAN 2013 -> 2010. |
+| `--csv-fuente` | sincronización | CSV de canasta 2013 ya generado (fuente). |
+| `--csv-destino` | sincronización | CSV de canasta 2010 ya generado (destino, se sobrescribirá). |
+
+El modo se decide por los flags presentes:
+
+- **`--sincronizar`** presente -> modo sincronización.
+- **`--pdf`** presente (sin `--sincronizar`) -> modo extracción `xlsx + pdf`.
+
+### Validaciones ya activas para estos modos
+
+Aunque los modos no hacen nada todavía, el parser ya valida sus argumentos:
+
+En modo sincronización:
+
+- `--csv-fuente` y `--csv-destino` (ambos) son obligatorios;
+- `--csv-fuente` debe existir y ser un archivo (no un directorio);
+- `--csv-destino` debe existir y ser un archivo (no un directorio).
+
+En modo extracción con `--pdf`:
+
+- `--pdf`, si se pasa, debe existir y ser un archivo;
+- `--preferir` solo puede usarse junto con `--pdf`.
+
+### Ejemplos de la sintaxis prevista (no generan salida todavía)
+
+Extracción `xlsx` + `pdf`, con `--preferir` para evitar prompts interactivos:
+
+```bash
+python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx \
+  --pdf ruta/a/pdf/anexo_2018.pdf --preferir pdf -o salida/
+```
+
+Cuando esté implementado, debería devolver un archivo `ponderadores_2018.csv`
+en `salida/`, con las diferencias de nombre/clasificación resueltas a favor
+de lo encontrado en el pdf, además de un JSON de registro con el resumen del
+cruce y las diferencias encontradas.
+
+Sincronización SCIAN 2013 → 2010:
+
+```bash
+python tools/generar_canasta.py --sincronizar \
+  --csv-fuente salida/ponderadores_2013.csv \
+  --csv-destino salida/ponderadores_2010.csv
+```
+
+Cuando esté implementado, debería sobrescribir las columnas `SCIAN sector` y
+`SCIAN rama` de `ponderadores_2010.csv` (destino) con los valores de
+`ponderadores_2013.csv` (fuente); sin generar ningún archivo nuevo ni JSON
+de registro.
