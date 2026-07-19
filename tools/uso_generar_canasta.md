@@ -152,12 +152,11 @@ columnas fijas, en este orden (`COLUMNAS_BASE` en
 
 **Columnas binarias (`canasta basica`, `canasta consumo minimo`):**
 
-- `"x"` si el genérico pertenece, `"-"` si no pertenece;
-- si la columna tiene información, todas sus filas deben ser exclusivamente
-  `"x"` o `"-"` — no se permiten strings vacíos;
-- si no hay información para la columna completa, es un error, salvo la
-  excepción conocida: `canasta consumo minimo` no tiene información antes de
-  2024, así que en 2010/2013/2018 toda la columna es `""`.
+- `"X"` si el genérico pertenece, `"-"` si no pertenece;
+- se asume que no hay datos faltantes dentro de una columna con información
+  (sin validación);
+- `canasta consumo minimo` no tiene información antes de 2024, así que en
+  2010/2013/2018 toda la columna es `""`.
 
 ### Fuentes por columna y versión
 

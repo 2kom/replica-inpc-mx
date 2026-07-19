@@ -3,26 +3,6 @@ from typing import Literal
 
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
-# para guardar el contenido de las columnas se siguen las siguientes reglas generales
-# (estas reglas no aplican a los encabezados):
-# - las columnas fijas se guardan en el mismo orden que COLUMNAS_BASE
-# - todo debe estar en minusculas
-# - sin acentos exceptuando la ñ
-# - sin caracteres especiales (no signos de puntuación), y con espacios simples (no dobles) entre palabras ni al inicio ni al final
-# - si no hay informacion de una columna, simplemente es un string vacio ""
-
-# - genericos: sigue las reglas generales; solo se eliminan prefijos numericos estructurales, no los numeros que formen parte del nombre
-# - ponderadores, encadenamiento: se guardan en str con todos los decimales que vienen en el xlsx, sin redondear ni truncar, tal cual viene en el XML crudo o str(cell.value) (si viene en notacion cientifica, asi se guarda, si viene con 20 decimales, asi se guarda), y con punto decimal (no coma)
-# - COG, inflacion *, durabilidad: sigue las reglas generales; solo se eliminan prefijos numericos estructurales. ejemplo "01 alimentos" -> "alimentos"
-# - CCIF *: sigue las reglas generales; sin eliminacion de prefijos numericos estructurales. ejemplo "01 alimentos ...", "01.1 alimentos ...", "01.1.1 alimentos ..."
-# - SCIAN *: sigue las reglas generales; el codigo y el nombre se separan por un espacio simple
-#   - SCIAN sector: inicia con un codigo de 2 digitos (por ejemplo, "31 industrias manufactureras")
-#   - SCIAN rama: inicia con un codigo de exactamente 4 digitos (por ejemplo, "3111 elaboracion de alimentos para animales")
-# - canasta *: son categorias binarias y se guardan como str: "x" si pertenece y "-" si no pertenece
-#   - si la columna tiene informacion, todas sus filas deben contener exclusivamente "x" o "-"; no se permiten strings vacios
-#   - si no hay informacion para la columna completa, lanzar error
-#   - canasta consumo minimo no tiene informacion antes de 2024, por lo que toda la columna contiene "" en 2010, 2013 y 2018
-
 COLUMNAS_BASE: tuple[str, ...] = (
     "generico",
     "ponderador",
@@ -42,6 +22,7 @@ COLUMNAS_BASE: tuple[str, ...] = (
 )
 
 
+# fmt: off
 @dataclass(frozen=True)
 class LayoutXlsx:
     """Posiciones de columna (1-indexadas, como en el xlsx) y hojas por version.
@@ -50,6 +31,8 @@ class LayoutXlsx:
     COG, CCIF division, inflacion componente/subcomponente/agrupacion, canasta
     basica y canasta consumo minimo. CCIF grupo/clase, SCIAN sector/rama y
     durabilidad nunca salen del xlsx en ninguna version.
+
+    Ver: tools/uso_generar_canasta.md §Hojas esperadas por version.
     """
 
     hoja_cog: str  # pestaña con generico + ponderador (Objeto de Gasto / COG)
@@ -73,7 +56,7 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
         col_ponderador=3, col_encadenamiento=None,
         col_canasta_basica=19, col_canasta_consumo_minimo=None,
         agrupaciones={
-            6:  ("subyacente", "mercancias", "alimentos, bebidas y tabaco"),
+            6:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             7:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             9:  ("subyacente", "servicios", "vivienda"),
             10: ("subyacente", "servicios", "otros servicios"),
@@ -90,7 +73,7 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
         col_ponderador=3, col_encadenamiento=4,
         col_canasta_basica=20, col_canasta_consumo_minimo=None,
         agrupaciones={
-            7:  ("subyacente", "mercancias", "alimentos, bebidas y tabaco"),
+            7:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             8:  ("subyacente", "mercancias", "mercancias no alimenticias"),
             10: ("subyacente", "servicios", "vivienda"),
             11: ("subyacente", "servicios", "otros servicios"),
@@ -107,9 +90,9 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
         col_ponderador=2, col_encadenamiento=None,
         col_canasta_basica=19, col_canasta_consumo_minimo=None,
         agrupaciones={
-            5:  ("subyacente", "mercancias", "alimentos, bebidas y tabaco"),
+            5:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             6:  ("subyacente", "mercancias", "mercancias no alimenticias"),
-            8:  ("subyacente", "servicios", "educacion (colegiaturas)"),
+            8:  ("subyacente", "servicios", "educacion colegiaturas"),
             9:  ("subyacente", "servicios", "vivienda"),
             10: ("subyacente", "servicios", "otros servicios"),
             13: ("no subyacente", "agropecuarios", "frutas y verduras"),
@@ -124,9 +107,9 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
         col_ponderador=2, col_encadenamiento=3,
         col_canasta_basica=20, col_canasta_consumo_minimo=21,
         agrupaciones={
-            6:  ("subyacente", "mercancias", "alimentos, bebidas y tabaco"),
+            6:  ("subyacente", "mercancias", "alimentos bebidas y tabaco"),
             7:  ("subyacente", "mercancias", "mercancias no alimenticias"),
-            9:  ("subyacente", "servicios", "educacion (colegiaturas)"),
+            9:  ("subyacente", "servicios", "educacion colegiaturas"),
             10: ("subyacente", "servicios", "vivienda"),
             11: ("subyacente", "servicios", "otros servicios"),
             14: ("no subyacente", "agropecuarios", "frutas y verduras"),
