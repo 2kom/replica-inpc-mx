@@ -2,42 +2,31 @@
 
 ## Objetivo
 
-`tools/generar_canasta.py` genera un archivo CSV que es la canasta intermedia
-que usa este repo, esto a partir de archivos oficiales del INEGI. Es el paso
-previo al cálculo: su salida es el insumo que recibe `Corrida.ejecutar()`.
-
-Para obtener el xlsx y el PDF que necesita este script, ver
-[guias/obtener_ponderadores.md](../guias/obtener_ponderadores.md).
-
-La herramienta trabaja en tres modos:
-
-1. Extraccion desde un archivo `.xlsx`.
-2. Extraccion desde un archivo `.xlsx` + enriquecimiento/validacion con un archivo `.pdf` (Anexos del Documento metodologico INPC).
-3. Sincronizacion de `SCIAN sector` y `SCIAN rama` desde la canasta 2013 hacia la 2010.
-
-El resultado principal es un archivo `ponderadores_<version>.csv` con un esquema fijo de 15 columnas. En los modos de extraccion tambien se genera un JSON de registro con resumen, diferencias y warnings.
+`tools/generar_canasta.py` genera un archivo CSV que es la canasta intermedia que luego se utilizara para la canasta canonica que es con la que se haran los calculos
 
 ## Requisitos
 
-- Ejecutar el comando desde la raiz del repo:
+- Ejecutar el comando desde la raíz del repo:
 
 ```bash
 python tools/generar_canasta.py ...
 ```
 
-- Python `>=3.10`.  
-- Dependencias del proyecto mas las dependencias opcionales de ponderadores:
+- Python `>=3.10`.
+- Dependencias del proyecto más las dependencias opcionales de ponderadores:
 
 ```bash
 pip install -e '.[ponderadores]'
 ```
 
-Eso instala, entre otras, las librerias que usa esta herramienta:
+Eso instala, entre otras, las librerías que usa esta herramienta:
 
 - `openpyxl`
 - `pdfplumber`
 
-## Sintaxis del CLI
+## Cómo se usa esta herramienta?
+
+### Sintaxis
 
 ```bash
 python tools/generar_canasta.py [-h] [--version {2010,2013,2018,2024}] [--xlsx XLSX] \
@@ -46,69 +35,65 @@ python tools/generar_canasta.py [-h] [--version {2010,2013,2018,2024}] [--xlsx X
                                 [--csv-destino CSV_DESTINO]
 ```
 
-## Modos de uso
+### Parámetros
 
-### 1. Extraccion solo `xlsx`
+| Parámetro | Aplica a | Descripción |
+| --- | --- | --- |
+| `--version` | extracción | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. |
+| `--xlsx` | extracción | Ruta al archivo xlsx de ponderadores. |
+| `--pdf` | extracción, opcional | Ruta al archivo pdf de anexos. |
+| `-o` | extracción | Directorio de salida para el CSV y el registro JSON. Se crea automáticamente si no existe. |
+| `--preferir {pdf,csv}` | extracción, requiere `--pdf` | Preferencia automática para resolver diferencias de nombre/clasificación entre `xlsx` y `pdf` — no aplica a diferencias de `ponderador`, esas solo se reportan (el valor final siempre queda el del `xlsx`). |
+| `--sincronizar` | sincronización | Activa el modo de copia de SCIAN 2013 -> 2010. |
+| `--csv-fuente` | sincronización | CSV de canasta 2013 ya generado (fuente). |
+| `--csv-destino` | sincronización | CSV de canasta 2010 ya generado (destino, se sobrescribe). |
 
-Usa unicamente el archivo de ponderadores en `xlsx`.
+### Modos
+
+El modo se decide por los flags presentes:
+
+- **`--sincronizar`** presente -> modo sincronización.
+- **`--pdf`** presente (sin `--sincronizar`) -> modo extracción `xlsx + pdf`.
+- Si no -> modo extracción solo `xlsx`.
+
+### Validaciones
+
+En modo sincronización, la herramienta exige:
+
+- `--csv-fuente` y `--csv-destino` (ambos);
+- que `--csv-fuente` exista y sea un archivo (no un directorio);
+- que `--csv-destino` exista y sea un archivo (no un directorio).
+
+En modo extracción, la herramienta exige:
+
+- `--version`, `--xlsx` y `-o`;
+- que `--xlsx` exista y sea un archivo;
+- que `-o`, si ya existe, sea un directorio;
+- que `--pdf`, si se pasa, exista y sea un archivo;
+- que `--preferir` solo se use junto con `--pdf`.
+
+Si falta algo o una ruta no es válida, el CLI corta con un mensaje de error puntual (no lanza traceback).
+
+### Ejemplos
+
+Extracción solo `xlsx`:
 
 ```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/al/archivo.xlsx -o salida/
+python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx -o salida/
 ```
 
-Este modo:
+Nos devuelve un archivo `ponderadores_2018.csv` en `salida/`, además de un JSON de registro con el resumen de la extracción.
 
-- extrae lo que la version puede leerse desde el `xlsx`;
-- normaliza los textos;
-- genera `salida/ponderadores_<version>.csv`;
-- genera `salida/xlsx_<version>_<timestamp>.json`.
-
-Las columnas cuya fuente sea `pdf` o `sync` quedan vacias.
-
-### 2. Extraccion `xlsx` + `pdf`
-
-Usa el `xlsx` como base y el `pdf` para enriquecer y validar clasificaciones.
+Extracción `xlsx` + `pdf`, con `--preferir` para evitar prompts interactivos:
 
 ```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/al/archivo.xlsx \
-  --pdf ruta/al/anexo.pdf -o salida/
+python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx \
+  --pdf ruta/a/pdf/anexo_2018.pdf --preferir pdf -o salida/
 ```
 
-Si quieres evitar preguntas interactivas cuando haya diferencias entre ambas fuentes:
+Nos devuelve un archivo `ponderadores_2018.csv` en `salida/`, con las diferencias de nombre/clasificación resueltas a favor de lo encontrado en el pdf, además de un JSON de registro con el resumen del cruce y las diferencias encontradas.
 
-```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/al/archivo.xlsx \
-  --pdf ruta/al/anexo.pdf --preferir pdf -o salida/
-```
-
-o
-
-```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/al/archivo.xlsx \
-  --pdf ruta/al/anexo.pdf --preferir csv -o salida/
-```
-
-Este modo:
-
-- extrae `xlsx` y `pdf`;
-- normaliza ambas fuentes;
-- cruza por `generico` normalizado;
-- compara `ponderador` con la precision visible del PDF;
-- rellena automaticamente columnas cuya fuente oficial es `pdf`;
-- registra diferencias, faltantes y warnings;
-- genera `salida/ponderadores_<version>.csv`;
-- genera `salida/pdf_<version>_<timestamp>.json`.
-
-Notas importantes:
-
-- `csv` en `--preferir csv` significa "conservar el valor actual de la salida base", que normalmente viene del `xlsx`.
-- Si no pasas `--preferir`, la herramienta pregunta conflicto por conflicto.
-- En la resolucion interactiva, `Enter` elige `pdf`.
-- Las diferencias de `ponderador` no se resuelven automaticamente: se reportan, pero el valor final de `ponderador` sigue siendo el del `xlsx`.
-
-### 3. Sincronizacion SCIAN 2013 -> 2010
-
-Sobrescribe `SCIAN sector` y `SCIAN rama` del CSV 2010 usando como fuente el CSV 2013 ya generado.
+Sincronización SCIAN 2013 → 2010:
 
 ```bash
 python tools/generar_canasta.py --sincronizar \
@@ -116,118 +101,19 @@ python tools/generar_canasta.py --sincronizar \
   --csv-destino salida/ponderadores_2010.csv
 ```
 
-Este modo:
+Sobrescribe las columnas `SCIAN sector` y `SCIAN rama` de `ponderadores_2010.csv` (destino) con los valores de `ponderadores_2013.csv` (fuente); no genera ningún archivo nuevo ni JSON de registro.
 
-- lee ambos CSV;
-- valida que ambos tengan `generico`, `SCIAN sector` y `SCIAN rama`;
-- valida que el CSV fuente tenga SCIAN completo;
-- valida que no haya duplicados tras normalizar `generico`;
-- valida que ambos archivos tengan exactamente el mismo conjunto de genericos;
-- pide confirmacion explicita por stdin;
-- sobrescribe en sitio `SCIAN sector` y `SCIAN rama` del archivo destino.
+## Documentación de la herramienta
 
-Notas importantes:
+Pendiente — se completa a medida que se reconstruye cada módulo (ver
+`tools/canasta_inpc/`). Hoy `esquema.py` está implementado; el resto de la
+lógica de extracción/cruce/registro todavía no.
 
-- Este modo no usa `--version`, `--xlsx`, `--pdf` ni `-o`.
-- Este modo no genera JSON de registro.
-- El archivo `--csv-destino` se reescribe en el mismo path.
-- Si no hay stdin interactivo, la herramienta falla con `RuntimeError`.
+### Esquema del CSV de salida
 
-Para automatizar la confirmacion:
-
-```bash
-printf 's\n' | python tools/generar_canasta.py --sincronizar \
-  --csv-fuente salida/ponderadores_2013.csv \
-  --csv-destino salida/ponderadores_2010.csv
-```
-
-## Parametros
-
-| Parametro | Aplica a | Descripcion |
-| --- | --- | --- |
-| `--version` | extraccion | Version soportada: `2010`, `2013`, `2018`, `2024`. |
-| `--xlsx` | extraccion | Ruta al archivo oficial de ponderadores en `xlsx`. |
-| `--pdf` | extraccion opcional | Ruta al PDF de anexos/metodologia. |
-| `-o` | extraccion | Directorio donde se escriben el CSV y el JSON. Se crea automaticamente si no existe. Ruta recomendada dentro del proyecto: `data/inputs/canastas/`. |
-| `--preferir {pdf,csv}` | `xlsx + pdf` | Resuelve automaticamente diferencias de clasificacion entre ambas fuentes. |
-| `--sincronizar` | sincronizacion | Activa el modo de copia de SCIAN 2013 -> 2010. |
-| `--csv-fuente` | sincronizacion | CSV 2013 ya generado. |
-| `--csv-destino` | sincronizacion | CSV 2010 ya generado y que sera sobrescrito. |
-
-## Validaciones del CLI
-
-### En extraccion
-
-La herramienta exige:
-
-- `--version`
-- `--xlsx`
-- `-o`
-
-Ademas:
-
-- `--version` solo acepta `2010`, `2013`, `2018`, `2024`;
-- `--xlsx` debe existir;
-- si se pasa `--pdf`, tambien debe existir `--xlsx`.
-
-### En sincronizacion
-
-La herramienta exige:
-
-- `--sincronizar`
-- `--csv-fuente`
-- `--csv-destino`
-
-Ademas:
-
-- ambos archivos deben existir;
-- ambos deben tener las columnas requeridas;
-- el CSV fuente debe tener `SCIAN sector` y `SCIAN rama` completos en todos los genericos;
-- los dos archivos deben tener el mismo conjunto de genericos tras normalizacion.
-
-## Archivos generados
-
-### Modo `xlsx`
-
-- CSV final:
-
-```text
-<salida>/ponderadores_<version>.csv
-```
-
-- Registro JSON:
-
-```text
-<salida>/xlsx_<version>_<YYYYMMDD_HHMMSS>.json
-```
-
-### Modo `xlsx + pdf`
-
-- CSV final:
-
-```text
-<salida>/ponderadores_<version>.csv
-```
-
-- Registro JSON:
-
-```text
-<salida>/pdf_<version>_<YYYYMMDD_HHMMSS>.json
-```
-
-### Modo `--sincronizar`
-
-- Reescribe:
-
-```text
-<csv-destino>
-```
-
-- No genera JSON.
-
-## Esquema fijo del CSV de salida
-
-Sin importar la version o el modo, el CSV final siempre se escribe con estas 15 columnas y en este orden:
+Sin importar la versión o el modo, el CSV final siempre tiene estas 15
+columnas fijas, en este orden (`COLUMNAS_BASE` en
+`tools/canasta_inpc/esquema.py`):
 
 1. `generico`
 2. `ponderador`
@@ -245,385 +131,77 @@ Sin importar la version o el modo, el CSV final siempre se escribe con estas 15 
 14. `canasta basica`
 15. `canasta consumo minimo`
 
-Si alguna columna no existe en el DataFrame intermedio, `escribir.py` la crea vacia antes de escribir el CSV.
+**Reglas generales** (no aplican a los encabezados):
 
-## Significado de las columnas
+- todo en minúsculas;
+- sin acentos, salvo la ñ;
+- sin signos de puntuación, espacios simples entre palabras (ni dobles, ni al
+  inicio/final);
+- si no hay información para una columna, el valor es un string vacío `""`.
 
-| Columna | Contenido |
+**Reglas por columna:**
+
+| Columna(s) | Regla |
 | --- | --- |
-| `generico` | Nombre normalizado del generico. |
-| `ponderador` | Ponderador del generico tal como viene del `xlsx`. |
-| `encadenamiento` | Factor de encadenamiento. Solo se llena en 2013 y 2024. |
-| `COG` | Clasificacion por objeto del gasto. |
-| `CCIF division` | Clasificacion de Consumo por Finalidades Division. |
-| `CCIF grupo` | Clasificacion de Consumo por Finalidades Grupo. |
-| `CCIF clase` | Clasificacion de Consumo por Finalidades Clase. |
-| `inflacion componente` | Componentes de inflacion. |
-| `inflacion subcomponente` | Subcomponentes de inflacion. |
-| `inflacion agrupacion` | Agrupaciones de inflacion. |
-| `SCIAN sector` | Sector SCIAN. Conserva el codigo al inicio. |
-| `SCIAN rama` | Rama SCIAN. Conserva el codigo al inicio. |
-| `durabilidad` | Categoria de durabilidad. Solo se llena en 2018 y 2024 cuando se usa `pdf`. |
-| `canasta basica` | `X` si pertenece, vacio si no. |
-| `canasta consumo minimo` | `X` si pertenece, vacio si no. Solo aplica en 2024. |
-
-## Normalizacion de texto
-
-Dos pasos distintos, en dos momentos distintos del pipeline — no una sola
-receta de 5 reglas:
-
-**1. Estandar de comparacion** (`normalizar_celda`/`normalizar_genericos`),
-corre ANTES del cruce xlsx/pdf (`cruzar_genericos` en `matching.py`) y
-tambien dentro de la extraccion de pdf (`extraer_pdf.py`, para cruzar CCIF
-contra SCIAN/COG del mismo documento):
-
-1. convierte a minusculas;
-2. colapsa espacios repetidos y quita NBSP;
-3. quita tildes vocalicas (conserva la enie);
-4. quita signos de puntuacion (comas, puntos, parentesis, punto y coma, etc.),
-   conserva letras/digitos/espacios; recolapsa espacios si quedan dobles.
-
-Este es el MISMO estandar que usa `src/replica_inpc/infraestructura/csv/_utils.py._normalizar()`
-al cargar canasta y series para el calculo — ver `data/reglas_codigo` o el
-modulo fuente para el detalle de esa funcion. El genérico pasa por estas 4
-reglas aqui (al generar el CSV, para poder cruzar xlsx con pdf) Y de nuevo
-por la limpieza fuerte de `_utils` (al cargar, para poder cruzar canasta con
-serie) — es intencional: `tools/` es standalone y no puede compartir codigo
-con `src/`, y la serie del BIE nunca pasa por `tools/`, solo por `_utils`.
-
-**2. Prefijo numerico** (`quitar_prefijos`), corre DESPUES, sobre el
-dataframe ya resuelto (post `resolver_diferencias`), justo antes de escribir
-el CSV — NO es parte del estandar de comparacion, porque el generico nunca
-trae prefijo en la practica y ninguna columna de clasificacion se compara
-por texto durante el cruce (`cruzar_genericos` solo compara `generico` y
-`ponderador`). Quita prefijos como `1.`, `01-`, `2)` al inicio del texto, en
-la mayoria de columnas de texto, ver excepcion abajo. Las columnas de
-clasificacion (`COG`, `CCIF *`, categorias de inflacion) NO se vuelven a
-tocar despues de este paso al cargar — lo que escribe `tools/` aqui es la
-forma final.
-
-Excepciones (aplican a AMBOS pasos salvo donde se indique):
-
-- `ponderador` no se normaliza;
-- `encadenamiento` no se normaliza;
-- `canasta basica` no se normaliza;
-- `canasta consumo minimo` no se normaliza;
-- `SCIAN sector` y `SCIAN rama` conservan su prefijo/codigo numerico (paso 2
-  no aplica), pero SI pasan por el paso 1 (pierden puntuacion interna).
-
-Consecuencia practica:
-
-- los textos del CSV final quedan en minusculas, sin tildes, sin puntuacion;
-- `CCIF division`, `CCIF grupo`, `CCIF clase`, `COG` y categorias de inflacion
-  salen normalizadas y sin prefijo numerico;
-- `SCIAN sector` y `SCIAN rama` salen normalizadas y sin puntuacion interna,
-  pero con codigo al inicio;
-- las marcas de pertenencia salen como `X` o vacio.
-
-## Versiones soportadas
-
-### 2010
-
-Referencia del proyecto: `283` genericos.
-
-Hojas `xlsx` esperadas:
-
-- `Ponderadores INPC INEGI`
-
-Fuente por columna:
-
-- Desde `xlsx`: `generico`, `ponderador`, `COG`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `canasta basica`
-- Desde `pdf`: `CCIF division`, `CCIF grupo`, `CCIF clase`
-- Desde `sync`: `SCIAN sector`, `SCIAN rama`
-
-Columnas que quedan vacias en el CSV final:
-
-- `encadenamiento`
-- `durabilidad`
-- `canasta consumo minimo`
-
-Flujo recomendado:
-
-1. Generar 2013 con `xlsx + pdf`.
-2. Generar 2010 con `xlsx + pdf`.
-3. Ejecutar `--sincronizar` para copiar SCIAN 2013 -> 2010.
-
-Ejemplo:
-
-```bash
-python tools/generar_canasta.py --version 2010 --xlsx tools/test/2010.xlsx \
-  --pdf tools/test/anexo_2010.pdf --preferir pdf -o salida/
-```
-
-### 2013
-
-Referencia del proyecto: `283` genericos.
-
-Hojas `xlsx` esperadas:
-
-- `Ponderadores INPC INEGI`
-- `Ponderadores INPC COICOP INEGI`
-
-Fuente por columna:
-
-- Desde `xlsx`: `generico`, `ponderador`, `encadenamiento`, `COG`, `CCIF division`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `canasta basica`
-- Desde `pdf`: `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama`
-
-Columnas que quedan vacias en el CSV final:
-
-- `durabilidad`
-- `canasta consumo minimo`
-
-Ejemplo:
-
-```bash
-python tools/generar_canasta.py --version 2013 --xlsx tools/test/2013.xlsx \
-  --pdf tools/test/anexo_2013.pdf --preferir pdf -o salida/
-```
-
-### 2018
-
-Referencia del proyecto: `299` genericos.
-
-Hojas `xlsx` esperadas:
-
-- `Objeto de gasto`
-- `CCIF`
-
-Fuente por columna:
-
-- Desde `xlsx`: `generico`, `ponderador`, `COG`, `CCIF division`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `canasta basica`
-- Desde `pdf`: `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama`, `durabilidad`
-
-Columnas que quedan vacias en el CSV final:
-
-- `encadenamiento`
-- `canasta consumo minimo`
-
-Nota:
-
-- El parser PDF 2018 tambien puede extraer `COG`, pero la fuente configurada para el CSV final sigue siendo el `xlsx`. Ese valor del `pdf` sirve sobre todo para contraste y deteccion de diferencias.
-
-Ejemplo:
-
-```bash
-python tools/generar_canasta.py --version 2018 --xlsx tools/test/2018.xlsx \
-  --pdf tools/test/anexo_2018.pdf --preferir pdf -o salida/
-```
-
-### 2024
-
-Referencia del proyecto: `292` genericos.
-
-Hojas `xlsx` esperadas:
-
-- `Objeto de gasto`
-- `CCIF`
-
-Fuente por columna:
-
-- Desde `xlsx`: `generico`, `ponderador`, `encadenamiento`, `COG`, `CCIF division`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion`, `canasta basica`, `canasta consumo minimo`
-- Desde `pdf`: `CCIF grupo`, `CCIF clase`, `SCIAN sector`, `SCIAN rama`, `durabilidad`
-
-Ejemplo:
-
-```bash
-python tools/generar_canasta.py --version 2024 --xlsx tools/test/2024.xlsx \
-  --pdf tools/test/anexo_2024.pdf --preferir pdf -o salida/
-```
-
-### Resumen de fuentes por version y columna
-
-| columna                  | 2010 | 2013 | 2018 | 2024 |
-| ------------------------ | ---- | ---- | ---- | ---- |
-| generico                 | xlsx | xlsx | xlsx | xlsx |
-| ponderador               | xlsx | xlsx | xlsx | xlsx |
-| encadenamiento           |  —   | xlsx |  —   | xlsx |
-| COG                      | xlsx | xlsx | xlsx | xlsx |
-| CCIF division            | pdf  | xlsx | xlsx | xlsx |
-| CCIF grupo               | pdf  | pdf  | pdf  | pdf  |
-| CCIF clase               | pdf  | pdf  | pdf  | pdf  |
-| inflacion componente     | xlsx | xlsx | xlsx | xlsx |
-| inflacion subcomponente  | xlsx | xlsx | xlsx | xlsx |
-| inflacion agrupacion     | xlsx | xlsx | xlsx | xlsx |
-| SCIAN sector             | sync | pdf  | pdf  | pdf  |
-| SCIAN rama               | sync | pdf  | pdf  | pdf  |
-| durabilidad              |  —   |  —   | pdf  | pdf  |
-| canasta basica           | xlsx | xlsx | xlsx | xlsx |
-| canasta consumo minimo   |  —   |  —   |  —   | xlsx |
-
-xlsx = se extrae del archivo xlsx\
-pdf  = se extrae del archivo pdf\
-sync = se copia de otra version (2013 -> 2010 via --sincronizar)\
-—    = sin fuente, columna queda vacia
-
-## Como cruza `xlsx` y `pdf`
-
-El cruce se hace por `generico` ya normalizado. No hay fuzzy matching ni reglas manuales en este paso.
-
-Cuando un generico existe en ambos:
-
-- si una columna cuya fuente es `pdf` viene vacia en la base y con valor en el `pdf`, la herramienta la llena automaticamente;
-- si una clasificacion existe en ambas fuentes y el valor coincide, solo queda registrada como comprobada;
-- si una clasificacion existe en ambas fuentes y el valor difiere, se marca como conflicto y se resuelve con `--preferir` o interactivamente.
-
-Cuando un generico no hace match:
-
-- si esta en `xlsx` pero no en `pdf`, la fila permanece en la salida y se registra un warning;
-- si esta en `pdf` pero no en `xlsx`, no se agrega a la salida y se registra un warning.
-
-## Comparacion de ponderadores
-
-En modo `xlsx + pdf`, la herramienta compara `ponderador` del `xlsx` contra el `ponderador` extraido del `pdf`.
-
-La precision usada es:
-
-- `2010`: 4 decimales
-- `2013`: 5 decimales
-- `2018`: 4 decimales
-- `2024`: 4 decimales
-
-Si no coinciden:
-
-- se registra la diferencia en el JSON y en los warnings de consola;
-- no se reemplaza automaticamente el `ponderador` del `xlsx`.
-
-## Salida por consola
-
-En los modos de extraccion la herramienta imprime un resumen con:
-
-- version;
-- numero de genericos extraidos;
-- cantidad de encadenamientos, cuando aplica;
-- resumen por clasificacion;
-- rutas del CSV y del JSON.
-
-En modo `xlsx + pdf` tambien puede imprimir warnings por:
-
-- genericos del `xlsx` sin match en `pdf`;
-- genericos del `pdf` sin match en `xlsx`;
-- `ponderador` no coincidente;
-- falla en `validacion_conteo`.
-
-En modo `--sincronizar` imprime:
-
-- archivo fuente;
-- archivo destino;
-- cantidad de genericos sincronizados;
-- cantidad de celdas SCIAN actualizadas.
-
-## Recomendaciones operativas
-
-- Usa los archivos oficiales del INEGI correspondientes exactamente a la version que quieres generar.
-- Corre el comando desde la raiz del repo.
-- En automatizacion o CI, usa `--preferir pdf` o `--preferir csv` para evitar prompts interactivos.
-- Para 2010, no des por terminada la salida hasta correr `--sincronizar` con el CSV 2013.
-- Haz respaldo del CSV destino antes de sincronizar, porque se sobrescribe en el mismo path.
-- Si el `pdf` es escaneado, no tiene texto seleccionable o cambia mucho de formato respecto al documento esperado, `pdfplumber` puede no extraer bien y el flujo puede fallar o producir muchos warnings.
-
-## Troubleshooting rapido
-
-### Error: `--version es obligatorio para extraccion`
-
-Falta `--version` en un modo de extraccion.
-
-### Error: `--xlsx es obligatorio para extraccion`
-
-Falta `--xlsx` en un modo de extraccion.
-
-### Error: `-o es obligatorio para extraccion`
-
-Falta el directorio de salida en un modo de extraccion.
-
-### Error: `No se encontro --xlsx` o `No se encontro --pdf`
-
-La ruta no existe o no corresponde al archivo esperado.
-
-### La herramienta pregunta por cada diferencia
-
-Eso es normal cuando usas `xlsx + pdf` sin `--preferir`.
-
-### Error en sincronizacion por stdin
-
-`--sincronizar` requiere confirmacion. Si lo ejecutas sin stdin interactivo, usa:
-
-```bash
-printf 's\n' | python tools/generar_canasta.py --sincronizar \
-  --csv-fuente salida/ponderadores_2013.csv \
-  --csv-destino salida/ponderadores_2010.csv
-```
-
-### Error por genericos duplicados tras normalizar
-
-Dos filas distintas terminan con el mismo `generico` una vez normalizado. Hay que corregir el insumo antes de sincronizar.
-
-### Muchos `sin_match_pdf` o `sin_match_xlsx`
-
-Normalmente indica uno de estos problemas:
-
-- el `pdf` no corresponde a la version del `xlsx`;
-- el `pdf` no es el anexo esperado;
-- el parser encontro cambios de formato que rompen la extraccion;
-- el documento fuente no es el oficial o fue alterado.
-
----
-
-## Flujo interno por modo
-
-### Extraccion solo `xlsx`
-
-1. `extraer_xlsx.py` lee el `xlsx` segun el layout de la version.
-2. `normalizar.py` normaliza `generico` y clasificaciones de texto.
-3. `escribir.py` genera el CSV final de 15 columnas fijas.
-4. `registro.py` genera el JSON de registro tipo `xlsx`.
-
-### Extraccion `xlsx` + `pdf`
-
-1. `extraer_xlsx.py` extrae la base desde el `xlsx`.
-2. `extraer_pdf.py` extrae clasificaciones complementarias desde el `pdf`.
-3. `normalizar.py` normaliza ambas fuentes.
-4. `matching.py` cruza por `generico`, verifica `ponderador` y detecta diferencias.
-5. `resolver.py` decide que valor conservar cuando hay conflicto.
-6. `escribir.py` genera el CSV final.
-7. `registro.py` genera el JSON de registro tipo `pdf`.
-
-### Sincronizacion SCIAN
-
-1. `sincronizar.py` lee ambos CSV.
-2. Valida columnas, duplicados, completitud de SCIAN y correspondencia de genericos.
-3. Pide confirmacion.
-4. Sobrescribe `SCIAN sector` y `SCIAN rama` del destino.
-5. Reescribe el CSV destino con el esquema fijo.
-
-## Registro JSON
-
-### Registro tipo `xlsx`
-
-Se genera en extraccion solo `xlsx` y contiene, entre otros:
-
-- `tipo`
-- `xlsx`
-- `csv`
-- `version`
-- `genericos`
-- `ponderadores`
-- `encadenamientos`
-- `clasificaciones`
-- `genericos_detalle`
-
-### Registro tipo `pdf`
-
-Se genera en extraccion `xlsx + pdf` y contiene, ademas de lo anterior:
-
-- `pdf`
-- `columnas_enriquecidas`
-- `columnas_compartidas`
-- `enriquecimiento`
-- `sin_match_pdf`
-- `sin_match_xlsx`
-- `ponderador_no_coincide`
-- `agregaciones`
-- `diferencias_resueltas`
-- `validacion_conteo`
-
-`validacion_conteo` verifica que todas las columnas cuya fuente es `pdf` hayan quedado pobladas para todos los genericos esperados del CSV final. Si falla, la consola imprime warning.
+| `generico` | Reglas generales; solo se eliminan prefijos numéricos estructurales, nunca números que sean parte del nombre. |
+| `ponderador`, `encadenamiento` | Se guardan en `str`, con todos los decimales tal cual vienen en el xlsx (sin redondear/truncar), punto decimal. |
+| `COG`, `inflacion *`, `durabilidad` | Reglas generales + se elimina el prefijo numérico estructural (ej. `"01 alimentos"` → `"alimentos"`). |
+| `CCIF *` | Reglas generales, sin eliminar el prefijo numérico (ej. `"01.1.1 alimentos ..."` se conserva tal cual). |
+| `SCIAN *` | Reglas generales; código y nombre separados por un espacio simple. `SCIAN sector` inicia con código de 2 dígitos; `SCIAN rama` con código de exactamente 4 dígitos. |
+| `canasta basica`, `canasta consumo minimo` | Categorías binarias, ver abajo. |
+
+**Columnas binarias (`canasta basica`, `canasta consumo minimo`):**
+
+- `"x"` si el genérico pertenece, `"-"` si no pertenece;
+- si la columna tiene información, todas sus filas deben ser exclusivamente
+  `"x"` o `"-"` — no se permiten strings vacíos;
+- si no hay información para la columna completa, es un error, salvo la
+  excepción conocida: `canasta consumo minimo` no tiene información antes de
+  2024, así que en 2010/2013/2018 toda la columna es `""`.
+
+### Fuentes por columna y versión
+
+Para cada columna, en qué archivo(s) es *posible* encontrar el dato —no cuál
+es la fuente final elegida cuando hay más de una opción; esa decisión ocurre
+al cruzar `xlsx` y `pdf` y todavía no está implementada. Ver
+`FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`.
+
+| columna | 2010 | 2013 | 2018 | 2024 |
+| --- | --- | --- | --- | --- |
+| `generico` | xlsx, pdf | xlsx, pdf | xlsx, pdf | xlsx, pdf |
+| `ponderador` | xlsx, pdf | xlsx, pdf | xlsx, pdf | xlsx, pdf |
+| `encadenamiento` | — | xlsx, pdf | — | xlsx |
+| `COG` | xlsx, pdf | xlsx | xlsx, pdf | xlsx |
+| `CCIF division` | pdf | xlsx, pdf | xlsx, pdf | xlsx, pdf |
+| `CCIF grupo` | pdf | pdf | pdf | pdf |
+| `CCIF clase` | pdf | pdf | pdf | pdf |
+| `inflacion componente` | xlsx | xlsx | xlsx | xlsx |
+| `inflacion subcomponente` | xlsx | xlsx | xlsx | xlsx |
+| `inflacion agrupacion` | xlsx | xlsx | xlsx | xlsx |
+| `SCIAN sector` | sync | pdf | pdf | pdf |
+| `SCIAN rama` | sync | pdf | pdf | pdf |
+| `durabilidad` | — | — | pdf | pdf |
+| `canasta basica` | xlsx | xlsx | xlsx | xlsx |
+| `canasta consumo minimo` | — | — | — | xlsx |
+
+`sync` = se copia de otra versión ya generada (2013 → 2010, modo
+`--sincronizar`). `—` = ninguna fuente, columna vacía.
+
+### Hojas esperadas por versión
+
+Referencia rápida para confirmar que el `xlsx` es el archivo oficial
+correcto. Detalle de columnas/posiciones (implementación, no uso) vive en
+`LAYOUTS_XLSX` (`esquema.py`), no acá.
+
+| Versión | Hoja con genérico/ponderador (COG) | Hoja CCIF |
+| --- | --- | --- |
+| 2010 | `Ponderadores INPC INEGI` | no aplica (CCIF sale del pdf) |
+| 2013 | `Ponderadores INPC INEGI` | `Ponderadores INPC COICOP INEGI` |
+| 2018 | `Objeto de gasto` | `CCIF` |
+| 2024 | `Objeto de gasto` | `CCIF` |
+
+### Modos de extracción, cruce xlsx+pdf, sincronización SCIAN, registro JSON
+
+_Pendiente_ — módulos aún no reconstruidos (`extraccion_xlsx.py`,
+`extraer_pdf.py`, `matching.py`, `resolver.py`, `sincronizar.py`,
+`escribir.py`, `registro.py`).
