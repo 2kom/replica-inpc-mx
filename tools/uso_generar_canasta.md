@@ -31,7 +31,15 @@ pip install -e '.[ponderadores]'
 Eso instala, entre otras, las librerías que usa esta herramienta:
 
 - `openpyxl`
-- `pdfplumber` (para cuando exista extracción de `pdf`, ver §Diseño futuro)
+
+Para la extracción de `pdf` (ver §Diseño futuro) hace falta además `pdftotext`,
+que **no se instala vía `pip`** — no hay wheel precompilado en PyPI para
+Windows/Mac, solo código fuente que requiere compilar contra `poppler-cpp`.
+Se instala vía `conda-forge`, que sí trae binarios listos para Linux/Windows/Mac:
+
+```bash
+conda install -c conda-forge pdftotext
+```
 
 ## Comando funcional
 

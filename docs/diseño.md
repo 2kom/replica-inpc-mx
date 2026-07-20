@@ -325,7 +325,10 @@ pandas, numpy, requests, python-dateutil, plotnine, pyarrow, ipython, jupyter, i
 pytest, pytest-mock, ruff, mypy, pandas-stubs, types-requests
 
 **Dependencias de ponderadores** (`[project.optional-dependencies.ponderadores]`):
-openpyxl, pdfplumber
+openpyxl
+
+**Dependencia nativa** (extracción de pdf, instalada vía `conda-forge`, no vía pip):
+pdftotext
 
 ---
 

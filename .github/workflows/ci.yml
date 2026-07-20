@@ -8,15 +8,27 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -el {0}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - name: Configurar conda
+        uses: conda-incubator/setup-miniconda@v4
         with:
           python-version: "3.10"
+          channels: conda-forge
+          activate-environment: replica-inpc
+
+      - name: Instalar pdftotext (conda-forge)
+        run: conda install -y -c conda-forge pdftotext
 
       - name: Instalar dependencias
         run: pip install -e ".[dev,ponderadores]"
@@ -29,3 +41,15 @@ jobs:
 
       - name: Tests
         run: pytest -m "not requires_data"
+
+  all-green:
+    if: always()
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar que todas las combinaciones del matrix pasaron
+        run: |
+          if [ "${{ needs.ci.result }}" != "success" ]; then
+            echo "Al menos una combinación del matrix falló."
+            exit 1
+          fi

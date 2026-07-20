@@ -53,6 +53,10 @@ conda activate replica-inpc
 pip install -e '.[dev]'
 ```
 
+Para generar canastas desde PDF/xlsx oficial de INEGI (`tools/generar_canasta.py`) hace
+falta además una dependencia de `conda-forge` que no se instala vía `pip` — ver
+[tools/uso_generar_canasta.md](tools/uso_generar_canasta.md).
+
 ## Insumos necesarios
 
 El cálculo requiere dos archivos por versión de canasta: series de genéricos y ponderadores.
