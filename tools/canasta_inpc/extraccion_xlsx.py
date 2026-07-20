@@ -33,7 +33,9 @@ def extraer_xlsx(
     if layout.hoja_ccif:
         df_ccif = _leer_hoja(wb[layout.hoja_ccif], layout, _valores_crudos(ruta, layout.hoja_ccif))
         mapa_ccif = dict(zip(df_ccif["generico"], df_ccif["_grupo"]))
-        df["CCIF division"] = df["generico"].map(mapa_ccif).fillna("").apply(quitar_prefijo_numerico)
+        df["CCIF division"] = (
+            df["generico"].map(mapa_ccif).fillna("").apply(quitar_prefijo_numerico)
+        )
     else:
         df["CCIF division"] = ""
 
@@ -157,8 +159,6 @@ def _nombre_archivo_hoja(zf: zipfile.ZipFile, nombre_hoja: str) -> str:
     )
     rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
     destino = next(
-        r.get("Target")
-        for r in rels.iter(f"{{{_NS_PKG_REL}}}Relationship")
-        if r.get("Id") == rid
+        r.get("Target") for r in rels.iter(f"{{{_NS_PKG_REL}}}Relationship") if r.get("Id") == rid
     )
     return f"xl/{destino}"
