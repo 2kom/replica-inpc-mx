@@ -130,8 +130,26 @@ def _ejecutar_xlsx(args: argparse.Namespace) -> None:
 def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
     """Extrae de xlsx y pdf, cruza genéricos y resuelve diferencias antes de escribir.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`
     """
+
+    from canasta_inpc.extraccion_pdf import extraer_pdf
+    from canasta_inpc.extraccion_xlsx import extraer_xlsx
+    from canasta_inpc.match import match_dfs
+    from canasta_inpc.utilidades import guardar_csv
+
+    df_xlsx = extraer_xlsx(args.xlsx, args.version)
+    df_pdf = extraer_pdf(args.pdf, args.version)
+    df_maestro = match_dfs(
+        df_xlsx,
+        df_pdf,
+        args.version,
+        args.preferir,
+    )
+
+    ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
+
+    guardar_csv(df_maestro, ruta_csv, args.version)
 
 
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
