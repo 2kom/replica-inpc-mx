@@ -25,7 +25,7 @@ def match_dfs(
     valor extraido del xlsx); sin `preferir`, discrepancia real = pregunta en
     consola, Enter = pdf.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización.
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
     """
     # paso 0: df maestro vacio, mismo indice que las fuentes ya alineadas (paso 1)
     # paso 1: alinear ambos df por `generico`, orden alfabetico; se asume mismo

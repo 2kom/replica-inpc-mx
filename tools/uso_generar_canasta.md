@@ -8,15 +8,18 @@ canasta canónica del cálculo del INPC.
 ## Estado actual
 
 El **modo de extracción `xlsx`** (sin `pdf`) funciona de punta a punta para
-las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona para **2013**
-únicamente: `extraccion_pdf.py` solo tiene implementada `_extraccion_2013`;
-2010/2018/2024 son stubs que devuelven un DataFrame vacío, así que correr
-`--pdf` con esas versiones falla con `KeyError: 'generico'` en el cruce
-(`match.py`) — no hay guarda todavía que lo impida antes. El modo
-`xlsx + pdf` tampoco escribe registro JSON aún (solo el CSV), a diferencia
-del modo `xlsx` solo. El modo `--sincronizar` (`_ejecutar_sincronizacion`)
-sigue sin cuerpo. Ver §Cruce `xlsx` + `pdf` y §Diseño futuro: sincronización
-y versiones pendientes de `pdf`.
+las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona para **2010 y
+2013**: `extraccion_pdf.py` tiene implementadas `_extraccion_2010` y
+`_extraccion_2013`; 2018/2024 son stubs que devuelven un DataFrame vacío,
+así que correr `--pdf` con esas versiones falla con `KeyError: 'generico'`
+en el cruce (`match.py`) — no hay guarda todavía que lo impida antes. En
+**2010**, `SCIAN sector`/`SCIAN rama` quedan vacíos aunque se use `--pdf`
+(el pdf 2010 no trae SCIAN; `FUENTES_POSIBLES` los marca como `sync`, se
+llenan solo con `--sincronizar`, todavía sin cuerpo). El modo `xlsx + pdf`
+tampoco escribe registro JSON aún (solo el CSV), a diferencia del modo
+`xlsx` solo. El modo `--sincronizar` (`_ejecutar_sincronizacion`) sigue sin
+cuerpo. Ver §Cruce `xlsx` + `pdf` y §Diseño futuro: sincronización y
+versiones pendientes de `pdf`.
 
 ## Instalación
 
@@ -54,7 +57,7 @@ Extracción solo `xlsx`, cualquier versión:
 python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx -o salida/
 ```
 
-Extracción `xlsx + pdf`, solo `--version 2013`:
+Extracción `xlsx + pdf`, `--version 2010` o `2013`:
 
 ```bash
 python tools/generar_canasta.py --version 2013 --xlsx ruta/a/xlsx/2013.xlsx \
@@ -71,7 +74,7 @@ algoritmo.
 
 | Parámetro | Descripción |
 | --- | --- |
-| `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. Con `--pdf`, solo `2013` funciona hoy. |
+| `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. Con `--pdf`, solo `2010`/`2013` funcionan hoy. |
 | `--xlsx` | Ruta al archivo xlsx de ponderadores. |
 | `--pdf` | Opcional. Ruta al **manual completo** de INEGI (no al anexo pre-recortado) — `extraccion_pdf.py` lee un rango de páginas directo del manual. |
 | `--preferir {pdf,csv}` | Opcional, requiere `--pdf`. Preferencia automática para resolver discrepancias del cruce, sin preguntar en consola. |
@@ -91,10 +94,13 @@ registro todavía (pendiente).
 
 ## Limitaciones actuales
 
-- `--pdf` solo funciona con `--version 2013`; con 2010/2018/2024 termina en
-  `KeyError: 'generico'` dentro del cruce (`match.py`), porque
-  `extraccion_pdf.py` solo tiene `_extraccion_2013` implementada — el resto
-  son stubs vacíos.
+- `--pdf` solo funciona con `--version 2010` o `2013`; con 2018/2024 termina
+  en `KeyError: 'generico'` dentro del cruce (`match.py`), porque
+  `extraccion_pdf.py` solo tiene `_extraccion_2010`/`_extraccion_2013`
+  implementadas — el resto son stubs vacíos.
+- Con `--version 2010 --pdf`, `SCIAN sector`/`SCIAN rama` quedan vacíos
+  igual (el pdf 2010 no trae Anexo SCIAN; esas columnas dependen de
+  `--sincronizar`, todavía sin cuerpo).
 - `--sincronizar`, `--csv-fuente` y `--csv-destino` son aceptados por el
   parser (incluida su validación de rutas), pero `_ejecutar_sincronizacion`
   no tiene cuerpo: la corrida termina sin error y sin generar nada.
@@ -107,7 +113,7 @@ registro todavía (pendiente).
   reales de 2013: 283/283 idénticos tras ordenar); si algún genérico
   divergiera en texto entre ambas fuentes, el orden alfabético podría
   desalinear filas sin que el cruce lo detecte. Pendiente re-verificar
-  cuando 2010/2018/2024 tengan extracción `pdf` real.
+  cuando 2018/2024 tengan extracción `pdf` real.
 - Para el modo `xlsx` solo, la herramienta exige:
   - `--version`, `--xlsx` y `-o`;
   - que `--xlsx` exista y sea un archivo (no un directorio);
@@ -181,7 +187,7 @@ es `pdf` o `sync` (ver §Fuentes por columna y versión):
 
 Para cada columna, en qué archivo(s) es *posible* encontrar el dato —no cuál
 es la fuente final elegida cuando hay más de una opción; esa decisión ocurre
-al cruzar `xlsx` y `pdf` (`match.py`, ver §Cruce `xlsx` + `pdf`, hoy solo
+al cruzar `xlsx` y `pdf` (`match.py`, ver §Cruce `xlsx` + `pdf`, hoy 2010 y
 2013). Ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`.
 
 | columna | 2010 | 2013 | 2018 | 2024 |
@@ -222,7 +228,7 @@ correcto. Detalle de columnas/posiciones (implementación, no uso) vive en
 
 - `CCIF division` **siempre** queda sin prefijo numérico en este modo (aunque
   el xlsx de 2024 sí lo traiga) — el prefijo consistente en las 4 versiones lo
-  repone `extraccion_pdf.py` (hoy solo 2013), no la extracción de xlsx. Ver
+  repone `extraccion_pdf.py` (hoy 2010 y 2013), no la extracción de xlsx. Ver
   §Fuentes por columna y versión, §Cruce `xlsx` + `pdf`.
 
 ### Registro JSON (modo solo `xlsx`)
@@ -243,8 +249,8 @@ del CSV (`escribir_registro_xlsx` en `tools/canasta_inpc/registro.py`):
 ## Cruce `xlsx` + `pdf`
 
 Implementado en `tools/canasta_inpc/match.py` (`match_dfs`), disparado por
-`_ejecutar_xlsx_pdf` cuando se pasa `--pdf`. Hoy solo produce resultado real
-con `--version 2013` (ver §Limitaciones actuales).
+`_ejecutar_xlsx_pdf` cuando se pasa `--pdf`. Hoy produce resultado real con
+`--version 2010` o `2013` (ver §Limitaciones actuales).
 
 ### Algoritmo
 
@@ -289,13 +295,12 @@ aparte, sin consultar `--preferir`).
 - `resolver.py` no existe como archivo aparte — su responsabilidad (resolver
   discrepancias) ya vive dentro de `match.py`.
 - Sin registro JSON para este modo (ver §Estado actual).
-- `_extraccion_2010`/`_extraccion_2018`/`_extraccion_2024` de
-  `extraccion_pdf.py` siguen siendo stubs — correr `--pdf` con esas
-  versiones falla.
+- `_extraccion_2018`/`_extraccion_2024` de `extraccion_pdf.py` siguen siendo
+  stubs — correr `--pdf` con esas versiones falla.
 
 ## Diseño futuro: sincronización y versiones pendientes de `pdf`
 
-_Pendiente_ — `sincronizar.py` no existe todavía; `_extraccion_2010/2018/2024`
+_Pendiente_ — `sincronizar.py` no existe todavía; `_extraccion_2018/2024`
 de `extraccion_pdf.py` son stubs. Lo de acá describe la intención del CLI
 para `--sincronizar`, no algo que hoy genere resultados.
 

@@ -7,8 +7,8 @@ pipeline de réplica del INPC.
 
 Uso:
     python tools/generar_canasta.py --version 2018 --xlsx ruta.xlsx -o salida/
-    python tools/generar_canasta.py --version 2018 --xlsx ruta.xlsx --pdf ruta.pdf -o salida/
-    python tools/generar_canasta.py --version 2018 --xlsx ruta.xlsx --pdf ruta.pdf --preferir pdf -o salida/
+    python tools/generar_canasta.py --version 2013 --xlsx ruta.xlsx --pdf ruta.pdf -o salida/
+    python tools/generar_canasta.py --version 2013 --xlsx ruta.xlsx --pdf ruta.pdf --preferir pdf -o salida/
     python tools/generar_canasta.py --sincronizar --csv-fuente ponderadores_2013.csv --csv-destino ponderadores_2010.csv
 """
 
@@ -19,7 +19,8 @@ from pathlib import Path
 def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Define y parsea los flags del CLI, valida su combinación.
 
-    Ver: tools/uso_generar_canasta.md §Comando funcional, §Diseño futuro: PDF y sincronización
+    Ver: tools/uso_generar_canasta.md §Comando funcional, §Cruce `xlsx` + `pdf`,
+    §Diseño futuro: sincronización y versiones pendientes de `pdf`
     """
     parser = argparse.ArgumentParser(
         description="Genera archivos CSV de canastas INPC a partir de fuentes INEGI.",
@@ -39,7 +40,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pdf",
         type=Path,
-        help="Ruta al archivo pdf de anexos.",
+        help="Ruta al manual metodológico completo del INEGI (no al anexo pre-recortado).",
     )
     parser.add_argument(
         "-o",
@@ -50,7 +51,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--preferir",
         choices=["pdf", "csv"],
-        help="Preferencia automática para resolver diferencias de nombre.",
+        help="Preferencia automática para resolver discrepancias del cruce xlsx+pdf (todas las columnas).",
     )
 
     parser.add_argument(
@@ -155,7 +156,7 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
     """Copia clasificaciones SCIAN de la canasta 2013 a la 2010.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización
+    Ver: tools/uso_generar_canasta.md §Diseño futuro: sincronización y versiones pendientes de `pdf`
     """
 
 

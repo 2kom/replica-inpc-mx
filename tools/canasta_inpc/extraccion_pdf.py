@@ -23,9 +23,136 @@ def extraer_pdf(ruta: Path, version: VersionCanasta) -> pd.DataFrame:
 
 
 # 2010
-def _extraccion_2010(ruta: Path) -> pd.DataFrame:
 
-    return pd.DataFrame()
+_PAGINAS_COG_2010 = (61, 66)
+_PAGINAS_CCIF_2010 = (67, 72)
+
+_NUM = r"-?\d+\.\d+"
+_FILA_RE_2010_CCIF = re.compile(rf"^\s*(?P<nombre>\S.*?)\s{{2,}}(?P<ponderador>{_NUM})\s*$")
+_FILA_RE_2010_COG = re.compile(rf"^(?P<nombre>\S.*?)\s+(?P<ponderador>{_NUM})\s*$")
+
+_CCIF_CLASE_RE = re.compile(r"^(\d{2}\.\d\.\d)\s+(.+)$")
+_CCIF_GRUPO_RE = re.compile(r"^(\d{2}\.\d)\s+(.+)$")
+_CCIF_DIVISION_RE = re.compile(r"^(\d{2})\s+(.+)$")
+
+_SALTAR_2010 = {"total", "inpc"}
+
+# categorias COG de 2010 (Anexo D): sin codigo numerico ni palabra clave que
+# las distinga de un generico por regex sola, asi que se detectan contra
+# esta lista fija -- confirmado 1:1 contra el COG real de extraccion_xlsx.py
+_COG_CATEGORIAS_2010 = {
+    "alimentos bebidas y tabaco",
+    "ropa calzado y accesorios",
+    "vivienda",
+    "muebles aparatos y accesorios domesticos",
+    "salud y cuidado personal",
+    "transporte",
+    "educacion y esparcimiento",
+    "otros servicios",
+}
+
+# Anexo D tiene texto justificado -- en modo raw (el que usa _cog_2010) casi
+# no glitchea, salvo estos 3 nombres reales (letras pegadas o partidas por
+# el espaciado de la justificacion, confirmado contra el COG real del xlsx:
+# sin esta correccion, "otros servicios" ni se detecta como categoria y
+# arrastra su ponderador de subtotal como si fuera un generico mas)
+_CORRECCIONES_COG_2010 = {
+    "otroschilesfrescos": "otros chiles frescos",
+    "otrosm ariscos": "otros mariscos",
+    "otrosse rvicios": "otros servicios",
+}
+
+
+def _extraccion_2010(ruta: Path) -> pd.DataFrame:
+    """Extrae CCIF (Anexo E) y COG (Anexo D) del manual completo 2010.
+
+    2010 no trae SCIAN en el pdf (se copia de 2013 via `--sincronizar`, ver
+    `FUENTES_POSIBLES`) ni `encadenamiento` (la version no tiene esa columna
+    en ninguna fuente). Anexo D usa modo `raw` de pdftotext, no `physical`
+    como el resto de la extraccion -- en `physical`, el texto justificado de
+    Anexo D inserta espacios espurios dentro de palabras (ej. "a ccesorios"
+    en vez de "accesorios"), confirmado comparando contra el COG real del
+    xlsx; `raw` lo evita casi por completo.
+
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
+    """
+    with open(ruta, "rb") as f:
+        pdf_physical = pdftotext.PDF(f, physical=True)
+    with open(ruta, "rb") as f:
+        pdf_raw = pdftotext.PDF(f, raw=True)
+
+    ccif = _ccif_2010(_lineas(pdf_physical, *_PAGINAS_CCIF_2010))
+    cog = _cog_2010(_lineas(pdf_raw, *_PAGINAS_COG_2010))
+
+    return ccif.merge(cog, on="generico", how="left")
+
+
+def _ccif_2010(lineas: list[str]) -> pd.DataFrame:
+    """generico/ponderador/CCIF division/grupo/clase del Anexo E.
+
+    A diferencia de 2013, cada fila es una sola linea fisica -- el pdf 2010
+    no tiene el quirk de nombres partidos en 2 lineas, asi que no hace falta
+    reconstruir filas.
+    """
+    division = grupo = clase = ""
+    filas: list[dict] = []
+
+    for linea in lineas:
+        m = _FILA_RE_2010_CCIF.match(linea)
+        if not m:
+            continue
+        nombre, ponderador = m["nombre"], m["ponderador"]
+        if normalizar_texto(nombre) in _SALTAR_2010:
+            continue
+
+        m_clase = _CCIF_CLASE_RE.match(nombre)
+        if m_clase:
+            clase = f"{m_clase[1]} {normalizar_texto(m_clase[2])}"
+            continue
+        m_grupo = _CCIF_GRUPO_RE.match(nombre)
+        if m_grupo:
+            grupo = f"{m_grupo[1]} {normalizar_texto(m_grupo[2])}"
+            clase = ""
+            continue
+        m_division = _CCIF_DIVISION_RE.match(nombre)
+        if m_division:
+            division = f"{m_division[1]} {normalizar_texto(m_division[2])}"
+            grupo = clase = ""
+            continue
+
+        filas.append(
+            {
+                "generico": quitar_prefijo_numerico(normalizar_texto(nombre)),
+                "ponderador": ponderador,
+                "CCIF division": division,
+                "CCIF grupo": grupo,
+                "CCIF clase": clase,
+            }
+        )
+
+    return pd.DataFrame(filas)
+
+
+def _cog_2010(lineas: list[str]) -> pd.DataFrame:
+    """generico/COG del Anexo D."""
+    categoria = ""
+    filas: list[dict] = []
+
+    for linea in lineas:
+        m = _FILA_RE_2010_COG.match(linea)
+        if not m:
+            continue
+        norm = normalizar_texto(m["nombre"])
+        norm = _CORRECCIONES_COG_2010.get(norm, norm)
+        if norm in _SALTAR_2010:
+            continue
+        if norm in _COG_CATEGORIAS_2010:
+            categoria = norm
+            continue
+
+        filas.append({"generico": quitar_prefijo_numerico(norm), "COG": categoria})
+
+    return pd.DataFrame(filas)
 
 
 # ------------------------------------------------------------
@@ -36,15 +163,10 @@ def _extraccion_2010(ruta: Path) -> pd.DataFrame:
 _PAGINAS_CCIF_2013 = (61, 71)
 _PAGINAS_SCIAN_2013 = (72, 82)
 
-_NUM = r"-?\d+\.\d+"
 _FILA_RE = re.compile(
     rf"^\s*(?P<nombre>\S.*?)\s{{2,}}(?P<ponderador>{_NUM})\s+(?P<factor>{_NUM})\s*$"
 )
 _SOLO_NUMEROS_RE = re.compile(rf"^\s*{_NUM}\s+{_NUM}\s*$")
-
-_CCIF_CLASE_RE = re.compile(r"^(\d{2}\.\d\.\d)\s+(.+)$")
-_CCIF_GRUPO_RE = re.compile(r"^(\d{2}\.\d)\s+(.+)$")
-_CCIF_DIVISION_RE = re.compile(r"^(\d{2})\s+(.+)$")
 
 _SCIAN_SECTOR_RE = re.compile(r"^\d{2}(?:-\d{2})?\.\s+(.+)$")
 _SCIAN_RAMA_RE = re.compile(r"^Rama\s+(\d{4})\.\s+(.+)$")
@@ -71,7 +193,7 @@ _SALTAR_2013 = {
 def _extraccion_2013(ruta: Path) -> pd.DataFrame:
     """Extrae CCIF (Anexo I) y SCIAN (Anexo II) del manual completo 2013.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: PDF y sincronización.
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
     """
     with open(ruta, "rb") as f:
         pdf = pdftotext.PDF(f, physical=True)
