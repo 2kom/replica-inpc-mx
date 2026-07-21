@@ -34,15 +34,15 @@ def escribir_registro_xlsx(df: pd.DataFrame, args: argparse.Namespace, ruta_csv:
         "genericos": len(df),
         "ponderadores": int((df["ponderador"] != "").sum()),
         "encadenamientos": int((df["encadenamiento"] != "").sum()) if tiene_enc else None,
-        "clasificaciones": {col: _resumen_clasificacion(df, col) for col in cols_clasificacion},
-        "genericos_detalle": _detalle_genericos(df, tiene_enc),
+        "clasificaciones": {col: _resumir_clasificacion(df, col) for col in cols_clasificacion},
+        "genericos_detalle": _construir_detalle_genericos(df, tiene_enc),
     }
 
     ruta_json.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
     _imprimir_resumen(registro, ruta_csv, ruta_json)
 
 
-def _resumen_clasificacion(df: pd.DataFrame, col: str) -> dict:
+def _resumir_clasificacion(df: pd.DataFrame, col: str) -> dict:
     """Cuenta genericos clasificados y categorias unicas de una columna de clasificacion."""
     no_vacios = df[col][df[col] != ""]
     categorias = sorted(no_vacios.unique().tolist())
@@ -53,7 +53,7 @@ def _resumen_clasificacion(df: pd.DataFrame, col: str) -> dict:
     }
 
 
-def _detalle_genericos(df: pd.DataFrame, tiene_enc: bool) -> list[dict]:
+def _construir_detalle_genericos(df: pd.DataFrame, tiene_enc: bool) -> list[dict]:
     """Arma una entrada {generico, ponderador, [encadenamiento]} por fila."""
     detalle = []
     for _, row in df.iterrows():

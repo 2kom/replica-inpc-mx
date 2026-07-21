@@ -52,7 +52,7 @@ def match_dfs(
             if columna in _COLUMNAS_FILA:
                 # grupo A: generico/ponderador/encadenamiento -- fila por fila,
                 # discrepancia real se resuelve una por una
-                df_maestro[columna] = _resolucion_fila(
+                df_maestro[columna] = _resolver_fila(
                     df_xlsx[columna],
                     df_pdf[columna],
                     numerica=columna in _COLUMNAS_NUMERICAS,
@@ -62,7 +62,7 @@ def match_dfs(
                 # grupo B: columnas categoricas -- discrepancias se agrupan
                 # por par unico (valor_xlsx, valor_pdf), se resuelve una vez
                 # por par, no una vez por fila
-                df_maestro[columna] = _resolucion_categoria(
+                df_maestro[columna] = _resolver_categoria(
                     df_xlsx[columna], df_pdf[columna], preferir=preferir
                 )
         elif "xlsx" in origenes:
@@ -82,7 +82,7 @@ def match_dfs(
     return df_maestro
 
 
-def _resolucion_fila(
+def _resolver_fila(
     col_xlsx: pd.Series, col_pdf: pd.Series, numerica: bool, preferir: Preferencia | None
 ) -> pd.Series:
     """Compara fila por fila; discrepancia real se resuelve a mano, una por una (Enter = pdf).
@@ -117,7 +117,7 @@ def _resolucion_fila(
     return resultado
 
 
-def _resolucion_categoria(
+def _resolver_categoria(
     col_xlsx: pd.Series, col_pdf: pd.Series, preferir: Preferencia | None
 ) -> pd.Series:
     """Compara columna categorica; discrepancias se agrupan por par unico (xlsx, pdf).

@@ -11,12 +11,12 @@ from canasta_inpc.utilidades import normalizar_texto, quitar_prefijo_numerico
 def extraer_pdf(ruta: Path, version: VersionCanasta) -> pd.DataFrame:
 
     if version == 2010:
-        return _extraccion_2010(ruta)
+        return _extraer_2010(ruta)
     if version == 2013:
-        return _extraccion_2013(ruta)
+        return _extraer_2013(ruta)
     if version == 2018:
-        return _extraccion_2018(ruta)
-    return _extraccion_2024(ruta)
+        return _extraer_2018(ruta)
+    return _extraer_2024(ruta)
 
 
 # ------------------------------------------------------------
@@ -51,7 +51,7 @@ _COG_CATEGORIAS_2010 = {
     "otros servicios",
 }
 
-# Anexo D tiene texto justificado -- en modo raw (el que usa _cog_2010) casi
+# Anexo D tiene texto justificado -- en modo raw (el que usa _extraer_cog_2010) casi
 # no glitchea, salvo estos 3 nombres reales (letras pegadas o partidas por
 # el espaciado de la justificacion, confirmado contra el COG real del xlsx:
 # sin esta correccion, "otros servicios" ni se detecta como categoria y
@@ -63,7 +63,7 @@ _CORRECCIONES_COG_2010 = {
 }
 
 
-def _extraccion_2010(ruta: Path) -> pd.DataFrame:
+def _extraer_2010(ruta: Path) -> pd.DataFrame:
     """Extrae CCIF (Anexo E) y COG (Anexo D) del manual completo 2010.
 
     2010 no trae SCIAN en el pdf (se copia de 2013 via `--sincronizar`, ver
@@ -81,13 +81,13 @@ def _extraccion_2010(ruta: Path) -> pd.DataFrame:
     with open(ruta, "rb") as f:
         pdf_raw = pdftotext.PDF(f, raw=True)
 
-    ccif = _ccif_2010(_lineas(pdf_physical, *_PAGINAS_CCIF_2010))
-    cog = _cog_2010(_lineas(pdf_raw, *_PAGINAS_COG_2010))
+    ccif = _extraer_ccif_2010(_extraer_lineas(pdf_physical, *_PAGINAS_CCIF_2010))
+    cog = _extraer_cog_2010(_extraer_lineas(pdf_raw, *_PAGINAS_COG_2010))
 
     return ccif.merge(cog, on="generico", how="left")
 
 
-def _ccif_2010(lineas: list[str]) -> pd.DataFrame:
+def _extraer_ccif_2010(lineas: list[str]) -> pd.DataFrame:
     """generico/ponderador/CCIF division/grupo/clase del Anexo E.
 
     A diferencia de 2013, cada fila es una sola linea fisica -- el pdf 2010
@@ -133,7 +133,7 @@ def _ccif_2010(lineas: list[str]) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
-def _cog_2010(lineas: list[str]) -> pd.DataFrame:
+def _extraer_cog_2010(lineas: list[str]) -> pd.DataFrame:
     """generico/COG del Anexo D."""
     categoria = ""
     filas: list[dict] = []
@@ -190,7 +190,7 @@ _SALTAR_2013 = {
 }
 
 
-def _extraccion_2013(ruta: Path) -> pd.DataFrame:
+def _extraer_2013(ruta: Path) -> pd.DataFrame:
     """Extrae CCIF (Anexo I) y SCIAN (Anexo II) del manual completo 2013.
 
     Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
@@ -198,13 +198,13 @@ def _extraccion_2013(ruta: Path) -> pd.DataFrame:
     with open(ruta, "rb") as f:
         pdf = pdftotext.PDF(f, physical=True)
 
-    ccif = _ccif_2013(_lineas(pdf, *_PAGINAS_CCIF_2013))
-    scian = _scian_2013(_lineas(pdf, *_PAGINAS_SCIAN_2013))
+    ccif = _extraer_ccif_2013(_extraer_lineas(pdf, *_PAGINAS_CCIF_2013))
+    scian = _extraer_scian_2013(_extraer_lineas(pdf, *_PAGINAS_SCIAN_2013))
 
     return ccif.merge(scian, on="generico", how="left")
 
 
-def _lineas(pdf: "pdftotext.PDF", desde: int, hasta: int) -> list[str]:
+def _extraer_lineas(pdf: "pdftotext.PDF", desde: int, hasta: int) -> list[str]:
     """Texto de las paginas `desde`-`hasta` (1-indexadas, inclusivas), separado por linea."""
     lineas: list[str] = []
     for i in range(desde - 1, hasta):
@@ -260,7 +260,7 @@ def _reconstruir_filas(lineas: list[str]) -> list[tuple[str, str, str]]:
     return filas
 
 
-def _ccif_2013(lineas: list[str]) -> pd.DataFrame:
+def _extraer_ccif_2013(lineas: list[str]) -> pd.DataFrame:
     """generico/ponderador/encadenamiento/CCIF division/grupo/clase del Anexo I."""
     division = grupo = clase = ""
     filas: list[dict] = []
@@ -298,7 +298,7 @@ def _ccif_2013(lineas: list[str]) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
-def _scian_2013(lineas: list[str]) -> pd.DataFrame:
+def _extraer_scian_2013(lineas: list[str]) -> pd.DataFrame:
     """generico/SCIAN sector/SCIAN rama del Anexo II.
 
     El codigo de `SCIAN sector` se deduce de los primeros 2 digitos de la
@@ -340,15 +340,211 @@ def _scian_2013(lineas: list[str]) -> pd.DataFrame:
 
 
 # 2018
-def _extraccion_2018(ruta: Path) -> pd.DataFrame:
 
-    return pd.DataFrame()
+_PAGINAS_CCIF_2018 = (91, 98)
+_PAGINAS_COG_2018 = (99, 107)
+_PAGINAS_SCIAN_2018 = (108, 115)
+
+_DURABILIDAD_2018 = r"No duradero|Duradero|Semiduradero|Servicio"
+_FILA_RE_2018_CCIF = re.compile(
+    rf"^\s*(?P<nombre>\S.*?)\s{{2,}}(?:(?P<durabilidad>{_DURABILIDAD_2018})\s{{2,}})?(?P<ponderador>{_NUM})\s*$"
+)
+_FILA_RE_2018 = re.compile(rf"^\s*(?P<nombre>\S.*?)\s{{2,}}{_NUM}\s*$")
+_NIVEL_RE_2018_COG = re.compile(r"^(?P<codigo>\d+(?:\.\d+)*)\.\s+(?P<nombre>.+)$")
+_GENERICO_RE_2018 = re.compile(r"^\d{3}\s")
+_SCIAN_SECTOR_RE_2018 = re.compile(r"^\d{2}\s")
+_SCIAN_RAMA_RE_2018 = re.compile(r"^\d{4}\s")
+
+# a diferencia de 2010/2013 (paginacion continua), el pdf 2018 salta la
+# numeracion impresa 2 veces (91->93, 109->111 en paginas reales) -- las
+# paginas de arriba ya son las REALES del pdf (verificadas con pdftotext),
+# no las impresas en el pie de pagina que dio el usuario (93-100/101-109/
+# 111-118): coinciden con cada Anexo completo una vez ajustado el salto
+_RUIDO_RE_2018 = re.compile(
+    r"Canasta del INPC clasificada"
+    r"|INEGI\. Índice Nacional de Precios"
+    r"|Nota: La suma de los parciales"
+    r"|Total general"
+    r"|\(Continúa\)"
+    r"|^\s*Anexo [A-Z]\."
+    r"|^\s*julio de 2018\s*$"
+    r"|^\s*\d{1,3}\s*$"
+)
+
+
+def _extraer_2018(ruta: Path) -> pd.DataFrame:
+    """Extrae CCIF (Anexo C), COG (Anexo D) y SCIAN (Anexo E) del manual completo 2018.
+
+    A diferencia de 2010/2013 (2 anexos), 2018 combina 3: Anexo C aporta
+    generico/ponderador/durabilidad/CCIF division/grupo/clase, Anexo D aporta
+    COG, Anexo E aporta SCIAN sector/rama. Sin `encadenamiento` (la version no
+    tiene esa columna en ninguna fuente). SCIAN usa codigo numerico simple
+    sin puntuacion en los 3 niveles (2/3/4 digitos); CCIF solo division es
+    sin punto (2 digitos, igual a 2010/2013) -- grupo/clase SI llevan punto
+    jerarquico ("02.1"/"02.1.1"), se distinguen de division/generico por
+    forma via `_CCIF_GRUPO_RE`/`_CCIF_CLASE_RE`. Objeto del gasto (COG) es
+    la excepcion con punto final en vez de interno ("1."/"1.1."/"1.1.1."),
+    de la cual solo el nivel 1 (las 8 categorias reales) importa para la
+    columna COG.
+
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
+    """
+    with open(ruta, "rb") as f:
+        pdf = pdftotext.PDF(f, physical=True)
+
+    ccif = _extraer_ccif_2018(_extraer_lineas(pdf, *_PAGINAS_CCIF_2018))
+    cog = _extraer_cog_2018(_extraer_lineas(pdf, *_PAGINAS_COG_2018))
+    scian = _extraer_scian_2018(_extraer_lineas(pdf, *_PAGINAS_SCIAN_2018))
+
+    return ccif.merge(cog, on="generico", how="left").merge(scian, on="generico", how="left")
+
+
+def _extraer_ccif_2018(lineas: list[str]) -> pd.DataFrame:
+    """generico/ponderador/durabilidad/CCIF division/grupo/clase del Anexo C."""
+    division = grupo = clase = ""
+    filas: list[dict] = []
+
+    for linea in lineas:
+        if _RUIDO_RE_2018.search(linea):
+            continue
+
+        m = _FILA_RE_2018_CCIF.match(linea)
+        if not m:
+            continue
+        nombre = m["nombre"]
+
+        m_clase = _CCIF_CLASE_RE.match(nombre)
+        if m_clase:
+            clase = f"{m_clase[1]} {normalizar_texto(m_clase[2])}"
+            continue
+        m_grupo = _CCIF_GRUPO_RE.match(nombre)
+        if m_grupo:
+            grupo = f"{m_grupo[1]} {normalizar_texto(m_grupo[2])}"
+            clase = ""
+            continue
+        m_division = _CCIF_DIVISION_RE.match(nombre)
+        if m_division:
+            division = f"{m_division[1]} {normalizar_texto(m_division[2])}"
+            grupo = clase = ""
+            continue
+
+        filas.append(
+            {
+                "generico": quitar_prefijo_numerico(normalizar_texto(nombre)),
+                "ponderador": m["ponderador"],
+                "durabilidad": normalizar_texto(m["durabilidad"]) if m["durabilidad"] else "",
+                "CCIF division": division,
+                "CCIF grupo": grupo,
+                "CCIF clase": clase,
+            }
+        )
+
+    return pd.DataFrame(filas)
+
+
+def _extraer_cog_2018(lineas: list[str]) -> pd.DataFrame:
+    """generico/COG del Anexo D.
+
+    A diferencia de CCIF/SCIAN (codigo simple sin puntuacion), el Anexo D
+    tiene 5 niveles de linea con la misma forma "codigo nombre ... valor":
+    categoria/subcategoria/sub-subcategoria (jerarquia con punto final,
+    "1."/"1.1."/"1.1.1.") y grupo/generico (2/3 digitos, sin punto). Solo
+    categoria (nivel 1 -- las 8 reales) y generico importan para la columna
+    COG; subcategoria/sub-subcategoria/grupo se ignoran (no aportan nada que
+    se use).
+    """
+    categoria = ""
+    filas: list[dict] = []
+
+    for linea in lineas:
+        if _RUIDO_RE_2018.search(linea):
+            continue
+
+        m = _FILA_RE_2018.match(linea)
+        if not m:
+            continue
+        nombre = m["nombre"]
+
+        m_nivel = _NIVEL_RE_2018_COG.match(nombre)
+        if m_nivel:
+            if "." not in m_nivel["codigo"]:
+                categoria = normalizar_texto(m_nivel["nombre"])
+            continue
+
+        if _GENERICO_RE_2018.match(nombre):
+            filas.append(
+                {
+                    "generico": quitar_prefijo_numerico(normalizar_texto(nombre)),
+                    "COG": categoria,
+                }
+            )
+
+    return pd.DataFrame(filas)
+
+
+def _extraer_scian_2018(lineas: list[str]) -> pd.DataFrame:
+    """generico/SCIAN sector/rama del Anexo E.
+
+    A diferencia de 2013 (que usa la palabra "Rama" + punto final como
+    marcador), 2018 solo usa la cantidad de digitos del codigo para
+    diferenciar sector (2)/rama (4)/generico (3), sin puntuacion. 2 nombres
+    de sector y 2 de rama se parten en 2 lineas fisicas (texto largo
+    envolviendo la columna, con el ponderador ya capturado en la primera
+    linea) -- se reconstruyen con lookahead de 1 linea via
+    `_con_continuacion_2018`.
+    """
+    sector_codigo = sector_nombre = ""
+    rama_codigo = rama_nombre = ""
+    filas: list[dict] = []
+
+    i = 0
+    while i < len(lineas):
+        linea = lineas[i]
+        if _RUIDO_RE_2018.search(linea):
+            i += 1
+            continue
+
+        m = _FILA_RE_2018.match(linea)
+        if not m:
+            i += 1
+            continue
+        nombre = m["nombre"]
+        codigo, _, resto = nombre.partition(" ")
+
+        if _SCIAN_RAMA_RE_2018.match(nombre):
+            resto, i = _con_continuacion_2018(resto, lineas, i)
+            rama_codigo, rama_nombre = codigo, resto
+        elif _SCIAN_SECTOR_RE_2018.match(nombre):
+            resto, i = _con_continuacion_2018(resto, lineas, i)
+            sector_codigo, sector_nombre = codigo, resto
+        elif _GENERICO_RE_2018.match(nombre):
+            filas.append(
+                {
+                    "generico": quitar_prefijo_numerico(normalizar_texto(nombre)),
+                    "SCIAN sector": f"{sector_codigo} {normalizar_texto(sector_nombre)}",
+                    "SCIAN rama": f"{rama_codigo} {normalizar_texto(rama_nombre)}",
+                }
+            )
+        i += 1
+
+    return pd.DataFrame(filas)
+
+
+def _con_continuacion_2018(nombre: str, lineas: list[str], i: int) -> tuple[str, int]:
+    """Pega la linea `i+1` a `nombre` si no es ruido ni matchea ninguna fila -- caso real:
+    nombre de sector/rama partido en 2 lineas fisicas, con el ponderador ya en la primera."""
+    if i + 1 >= len(lineas):
+        return nombre, i
+    siguiente = lineas[i + 1].strip()
+    if not siguiente or _RUIDO_RE_2018.search(siguiente) or _FILA_RE_2018.match(siguiente):
+        return nombre, i
+    return f"{nombre} {siguiente}", i + 1
 
 
 # ------------------------------------------------------------
 
 
 # 2024
-def _extraccion_2024(ruta: Path) -> pd.DataFrame:
+def _extraer_2024(ruta: Path) -> pd.DataFrame:
 
     return pd.DataFrame()

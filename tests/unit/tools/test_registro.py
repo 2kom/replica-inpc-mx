@@ -8,9 +8,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from canasta_inpc.registro import (
-    _detalle_genericos,
+    _construir_detalle_genericos,
     _imprimir_resumen,
-    _resumen_clasificacion,
+    _resumir_clasificacion,
     escribir_registro_xlsx,
 )
 
@@ -26,12 +26,12 @@ def _leer_json(ruta_salida: Path) -> dict:
     return json.loads(archivo.read_text(encoding="utf-8"))
 
 
-# -- _resumen_clasificacion ---------------------------------------------
+# -- _resumir_clasificacion ---------------------------------------------
 
 
-def test_resumen_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
+def test_resumir_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
     df = pd.DataFrame({"COG": ["alimentos", "alimentos", "vivienda", ""]})
-    resumen = _resumen_clasificacion(df, "COG")
+    resumen = _resumir_clasificacion(df, "COG")
     assert resumen == {
         "genericos_clasificados": 3,
         "categorias_unicas": 2,
@@ -39,45 +39,49 @@ def test_resumen_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
     }
 
 
-def test_resumen_clasificacion_categorias_vienen_ordenadas() -> None:
+def test_resumir_clasificacion_categorias_vienen_ordenadas() -> None:
     df = pd.DataFrame({"COG": ["vivienda", "alimentos", "transporte"]})
-    assert _resumen_clasificacion(df, "COG")["categorias"] == [
+    assert _resumir_clasificacion(df, "COG")["categorias"] == [
         "alimentos",
         "transporte",
         "vivienda",
     ]
 
 
-def test_resumen_clasificacion_columna_totalmente_vacia() -> None:
+def test_resumir_clasificacion_columna_totalmente_vacia() -> None:
     df = pd.DataFrame({"COG": ["", "", ""]})
-    assert _resumen_clasificacion(df, "COG") == {
+    assert _resumir_clasificacion(df, "COG") == {
         "genericos_clasificados": 0,
         "categorias_unicas": 0,
         "categorias": [],
     }
 
 
-# -- _detalle_genericos ---------------------------------------------------
+# -- _construir_detalle_genericos ---------------------------------------------------
 
 
-def test_detalle_genericos_sin_encadenamiento() -> None:
+def test_construir_detalle_genericos_sin_encadenamiento() -> None:
     df = pd.DataFrame({"generico": ["arroz", "frijol"], "ponderador": ["0.5", "0.3"]})
-    assert _detalle_genericos(df, tiene_enc=False) == [
+    assert _construir_detalle_genericos(df, tiene_enc=False) == [
         {"generico": "arroz", "ponderador": "0.5"},
         {"generico": "frijol", "ponderador": "0.3"},
     ]
 
 
-def test_detalle_genericos_con_encadenamiento() -> None:
+def test_construir_detalle_genericos_con_encadenamiento() -> None:
     df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": ["1.01"]})
-    assert _detalle_genericos(df, tiene_enc=True) == [
+    assert _construir_detalle_genericos(df, tiene_enc=True) == [
         {"generico": "arroz", "ponderador": "0.5", "encadenamiento": "1.01"}
     ]
 
 
-def test_detalle_genericos_respeta_orden_de_filas() -> None:
+def test_construir_detalle_genericos_respeta_orden_de_filas() -> None:
     df = pd.DataFrame({"generico": ["c", "a", "b"], "ponderador": ["1", "2", "3"]})
-    assert [d["generico"] for d in _detalle_genericos(df, tiene_enc=False)] == ["c", "a", "b"]
+    assert [d["generico"] for d in _construir_detalle_genericos(df, tiene_enc=False)] == [
+        "c",
+        "a",
+        "b",
+    ]
 
 
 # -- _imprimir_resumen ----------------------------------------------------

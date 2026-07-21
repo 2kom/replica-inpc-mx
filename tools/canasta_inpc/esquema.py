@@ -51,6 +51,7 @@ class LayoutXlsx:
     # reasignar el atributo, no mutar un dict compartido a nivel de modulo por
     # dentro -- ver tests/unit/tools/test_esquema.py
     agrupaciones: Mapping[int, tuple[str, str, str]]
+# fmt: on
 
 
 # fmt: off
@@ -128,8 +129,8 @@ LAYOUTS_XLSX: dict[VersionCanasta, LayoutXlsx] = {
 
 
 # fuentes POSIBLES de cada columna por version -- no es "de aqui sale el valor
-# final" (esa decision es de matching.py/resolver.py cuando corre xlsx+pdf
-# junto), es "en cuales archivos se puede encontrar". Sirve para saber que
+# final" (esa decision es de match.py cuando corre xlsx+pdf junto), es "en
+# cuales archivos se puede encontrar". Sirve para saber que
 # columnas se pueden cruzar/validar entre xlsx y pdf y cuales no tienen con
 # que comparar (una sola fuente posible, o ninguna).
 # frozenset vacio == "-": ninguna fuente, la columna queda vacia en el csv.

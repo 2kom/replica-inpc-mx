@@ -20,7 +20,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Define y parsea los flags del CLI, valida su combinación.
 
     Ver: tools/uso_generar_canasta.md §Comando funcional, §Cruce `xlsx` + `pdf`,
-    §Diseño futuro: sincronización y versiones pendientes de `pdf`
+    §Diseño futuro: sincronización y versión 2024 pendiente de `pdf`
     """
     parser = argparse.ArgumentParser(
         description="Genera archivos CSV de canastas INPC a partir de fuentes INEGI.",
@@ -156,7 +156,7 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
     """Copia clasificaciones SCIAN de la canasta 2013 a la 2010.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: sincronización y versiones pendientes de `pdf`
+    Ver: tools/uso_generar_canasta.md §Diseño futuro: sincronización y versión 2024 pendiente de `pdf`
     """
 
 

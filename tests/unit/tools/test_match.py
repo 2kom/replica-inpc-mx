@@ -8,9 +8,9 @@ from canasta_inpc.match import (
     _decimales,
     _mas_preciso,
     _preguntar,
-    _resolucion_categoria,
-    _resolucion_fila,
     _resolver,
+    _resolver_categoria,
+    _resolver_fila,
     match_dfs,
 )
 
@@ -165,49 +165,49 @@ def test_resolver_sin_preferir_delega_a_preguntar(monkeypatch: pytest.MonkeyPatc
     assert _resolver("valor_xlsx", "valor_pdf", None) == "valor_xlsx"
 
 
-# -- _resolucion_fila -----------------------------------------------------
+# -- _resolver_fila -----------------------------------------------------
 
 
-def test_resolucion_fila_valores_iguales_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_fila_valores_iguales_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["arroz", "frijol"])
     col_pdf = pd.Series(["arroz", "frijol"])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
     assert list(resultado) == ["arroz", "frijol"]
 
 
-def test_resolucion_fila_numerica_dentro_de_tolerancia_no_pregunta(
+def test_resolver_fila_numerica_dentro_de_tolerancia_no_pregunta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["1.23456"])
     col_pdf = pd.Series(["1.2346"])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
     assert list(resultado) == ["1.23456"]  # se queda con el mas preciso, sin preguntar
 
 
-def test_resolucion_fila_numerica_fuera_de_tolerancia_pregunta(
+def test_resolver_fila_numerica_fuera_de_tolerancia_pregunta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llamadas = _respuestas(monkeypatch, ["pdf"])
     col_xlsx = pd.Series(["1.0"])
     col_pdf = pd.Series(["2.0"])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
     assert list(resultado) == ["2.0"]
     assert len(llamadas) == 1
 
 
-def test_resolucion_fila_no_numerica_ignora_tolerancia(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_fila_no_numerica_ignora_tolerancia(monkeypatch: pytest.MonkeyPatch) -> None:
     # generico no pasa por _coinciden_por_redondeo aunque los valores fueran numericos
     llamadas = _respuestas(monkeypatch, ["xlsx"])
     col_xlsx = pd.Series(["aceite"])
     col_pdf = pd.Series(["aceite comestible"])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
     assert list(resultado) == ["aceite"]
     assert len(llamadas) == 1
 
 
-def test_resolucion_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
+def test_resolver_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # --preferir no tiene excepcion para ponderador/encadenamiento (la doc vieja decia
@@ -215,55 +215,55 @@ def test_resolucion_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["1.0"])
     col_pdf = pd.Series(["2.0"])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=True, preferir="csv")
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir="csv")
     assert list(resultado) == ["1.0"]
 
 
-def test_resolucion_fila_preserva_indice_original() -> None:
+def test_resolver_fila_preserva_indice_original() -> None:
     col_xlsx = pd.Series(["a", "b"], index=[5, 9])
     col_pdf = pd.Series(["a", "b"], index=[5, 9])
-    resultado = _resolucion_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
     assert list(resultado.index) == [5, 9]
 
 
-# -- _resolucion_categoria -------------------------------------------------
+# -- _resolver_categoria -------------------------------------------------
 
 
-def test_resolucion_categoria_filas_iguales_no_preguntan(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_categoria_filas_iguales_no_preguntan(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["alimentos", "alimentos"])
     col_pdf = pd.Series(["alimentos", "alimentos"])
-    resultado = _resolucion_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
     assert list(resultado) == ["alimentos", "alimentos"]
 
 
-def test_resolucion_categoria_pregunta_una_vez_por_par_no_por_fila(
+def test_resolver_categoria_pregunta_una_vez_por_par_no_por_fila(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llamadas = _respuestas(monkeypatch, ["", ""])
     col_xlsx = pd.Series(["ropa y calzado"] * 3 + ["otro"])
     col_pdf = pd.Series(["prendas de vestir y calzado"] * 3 + ["otro pdf"])
-    resultado = _resolucion_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
     assert len(llamadas) == 2  # 2 pares unicos, no 4 filas
     assert list(resultado) == ["prendas de vestir y calzado"] * 3 + ["otro pdf"]
 
 
-def test_resolucion_categoria_aplica_eleccion_distinta_por_par(
+def test_resolver_categoria_aplica_eleccion_distinta_por_par(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # pares ordenados alfabeticamente: ("a","b") antes que ("c","d")
     _respuestas(monkeypatch, ["xlsx", ""])
     col_xlsx = pd.Series(["a", "c"])
     col_pdf = pd.Series(["b", "d"])
-    resultado = _resolucion_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
     assert list(resultado) == ["a", "d"]
 
 
-def test_resolucion_categoria_preferir_csv_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_categoria_preferir_csv_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["ropa y calzado"])
     col_pdf = pd.Series(["prendas de vestir y calzado"])
-    resultado = _resolucion_categoria(col_xlsx, col_pdf, preferir="csv")
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="csv")
     assert list(resultado) == ["ropa y calzado"]
 
 
