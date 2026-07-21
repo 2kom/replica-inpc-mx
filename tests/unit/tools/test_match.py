@@ -147,6 +147,25 @@ def test_preguntar_muestra_ambos_valores_antes_de_preguntar(
     assert "pdf:  valor de pdf" in salida
 
 
+def test_preguntar_imprime_la_eleccion_final_con_enter(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Enter (default = pdf) tambien debe confirmar que se eligio, no solo
+    # cuando la respuesta es explicita -- sin esto, quien corre la tool no
+    # sabe que quedo en el csv sin volver a mirar el archivo
+    monkeypatch.setattr("builtins.input", lambda _="": "")
+    _preguntar("valor de xlsx", "valor de pdf")
+    assert "elegido: pdf" in capsys.readouterr().out
+
+
+def test_preguntar_imprime_la_eleccion_final_explicita(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda _="": "xlsx")
+    _preguntar("valor de xlsx", "valor de pdf")
+    assert "elegido: xlsx" in capsys.readouterr().out
+
+
 # -- _resolver ----------------------------------------------------------------
 
 
@@ -233,7 +252,7 @@ def test_resolver_categoria_filas_iguales_no_preguntan(monkeypatch: pytest.Monke
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["alimentos", "alimentos"])
     col_pdf = pd.Series(["alimentos", "alimentos"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
     assert list(resultado) == ["alimentos", "alimentos"]
 
 
@@ -243,7 +262,7 @@ def test_resolver_categoria_pregunta_una_vez_por_par_no_por_fila(
     llamadas = _respuestas(monkeypatch, ["", ""])
     col_xlsx = pd.Series(["ropa y calzado"] * 3 + ["otro"])
     col_pdf = pd.Series(["prendas de vestir y calzado"] * 3 + ["otro pdf"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
     assert len(llamadas) == 2  # 2 pares unicos, no 4 filas
     assert list(resultado) == ["prendas de vestir y calzado"] * 3 + ["otro pdf"]
 
@@ -255,7 +274,7 @@ def test_resolver_categoria_aplica_eleccion_distinta_por_par(
     _respuestas(monkeypatch, ["xlsx", ""])
     col_xlsx = pd.Series(["a", "c"])
     col_pdf = pd.Series(["b", "d"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
     assert list(resultado) == ["a", "d"]
 
 
@@ -263,8 +282,58 @@ def test_resolver_categoria_preferir_csv_no_pregunta(monkeypatch: pytest.MonkeyP
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["ropa y calzado"])
     col_pdf = pd.Series(["prendas de vestir y calzado"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="csv")
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="csv", columna="COG")
     assert list(resultado) == ["ropa y calzado"]
+
+
+def test_resolver_categoria_ccif_ignora_prefijo_numerico_al_comparar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # xlsx nunca trae el prefijo (extraccion_xlsx.py lo quita siempre), pdf
+    # siempre si (extraccion_pdf.py lo conserva) -- esa diferencia sola NO es
+    # una discrepancia real, no debe preguntar (bug real encontrado corriendo
+    # la tool contra 2018: decenas de prompts espurios solo por el prefijo)
+    _sin_prompt(monkeypatch)
+    col_xlsx = pd.Series(["alimentos y bebidas no alcoholicas"] * 2)
+    col_pdf = pd.Series(["01 alimentos y bebidas no alcoholicas"] * 2)
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
+    assert list(resultado) == ["01 alimentos y bebidas no alcoholicas"] * 2
+
+
+def test_resolver_categoria_ccif_detecta_divergencia_real_de_nombre(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # caso real 2018: "ropa y calzado" (xlsx) vs "prendas de vestir y calzado"
+    # (pdf, nombre CCIF oficial) -- divergen en el nombre, no solo el
+    # prefijo, si debe preguntar
+    llamadas = _respuestas(monkeypatch, [""])
+    col_xlsx = pd.Series(["ropa y calzado"])
+    col_pdf = pd.Series(["03 prendas de vestir y calzado"])
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
+    assert len(llamadas) == 1
+    assert list(resultado) == ["03 prendas de vestir y calzado"]
+
+
+def test_resolver_categoria_ccif_ignora_codigo_jerarquico_con_puntos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # CCIF grupo/clase traen codigo con puntos ("01.1", "01.1.1"), no solo
+    # simple ("01") -- el stripper de comparacion debe pelar ambos niveles
+    _sin_prompt(monkeypatch)
+    col_xlsx = pd.Series(["aceites y grasas"])
+    col_pdf = pd.Series(["01.1 aceites y grasas"])
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF grupo")
+    assert list(resultado) == ["01.1 aceites y grasas"]
+
+
+def test_resolver_categoria_imprime_genericos_afectados(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _respuestas(monkeypatch, [""])
+    col_xlsx = pd.Series(["ropa y calzado"] * 3)
+    col_pdf = pd.Series(["03 prendas de vestir y calzado"] * 3)
+    _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
+    assert "afecta a 3 generico(s)" in capsys.readouterr().out
 
 
 # -- match_dfs --------------------------------------------------------------
@@ -344,13 +413,29 @@ def test_match_dfs_preferir_pdf_repone_prefijo_de_ccif_division() -> None:
     assert fila_aceite["CCIF division"].iloc[0] == "01 alimentos"
 
 
-def test_match_dfs_sin_preferir_pregunta_solo_las_discrepancias_reales(
+def test_match_dfs_sin_preferir_no_pregunta_si_ccif_solo_difiere_en_prefijo(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # generico coincide (xlsx sin prefijo vs pdf con prefijo es el UNICO par
-    # de CCIF division en las 2 filas) -- 1 sola pregunta, el resto de
-    # columnas cruzadas coincide exacto o dentro de tolerancia de redondeo
-    llamadas = _respuestas(monkeypatch, [""])
+    # CCIF division de las fixtures difiere solo en el prefijo numerico
+    # ("alimentos" xlsx vs "01 alimentos" pdf) -- eso no es una discrepancia
+    # real (ver _resolver_categoria), cero preguntas; el resto de columnas
+    # cruzadas coincide exacto o dentro de tolerancia de redondeo
+    _sin_prompt(monkeypatch)
     resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir=None)
-    assert len(llamadas) == 1
     assert list(resultado["CCIF division"]) == ["01 alimentos", "01 alimentos"]
+
+
+def test_match_dfs_sin_preferir_pregunta_divergencia_real_de_nombre_ccif(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # a diferencia del test de arriba, acá el nombre real difiere (no solo el
+    # prefijo) -- caso real 2018 "ropa y calzado" vs "prendas de vestir y calzado"
+    llamadas = _respuestas(monkeypatch, [""])
+    df_xlsx = _xlsx_2013()
+    df_xlsx["CCIF division"] = ["ropa y calzado", "ropa y calzado"]
+    df_pdf = _pdf_2013()
+    df_pdf["CCIF division"] = ["03 prendas de vestir y calzado"] * 2
+
+    resultado = match_dfs(df_xlsx, df_pdf, 2013, preferir=None)
+    assert len(llamadas) == 1
+    assert list(resultado["CCIF division"]) == ["03 prendas de vestir y calzado"] * 2

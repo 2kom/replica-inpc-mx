@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 import pandas as pd
@@ -10,6 +11,21 @@ Preferencia = Literal["pdf", "csv"]
 # el resto de columnas con ambas fuentes se comparan agrupando por par unico (grupo B)
 _COLUMNAS_FILA = {"generico", "ponderador", "encadenamiento"}
 _COLUMNAS_NUMERICAS = {"ponderador", "encadenamiento"}
+
+# CCIF division/grupo/clase es la unica familia donde xlsx y pdf difieren a
+# proposito en el prefijo numerico (contrato: extraccion_xlsx.py SIEMPRE lo
+# quita, extraccion_pdf.py SIEMPRE lo conserva, ver utilidades.py) -- sin
+# ignorar el prefijo al comparar, CUALQUIER division/grupo/clase sin
+# divergencia real de nombre dispara una pregunta espuria (confirmado
+# corriendo la tool real contra 2018: decenas de prompts por solo el
+# prefijo). El codigo puede ser jerarquico ("01", "01.1", "01.1.1"), a
+# diferencia de `quitar_prefijo_numerico` que solo pela un nivel simple
+_COLUMNAS_CCIF = {"CCIF division", "CCIF grupo", "CCIF clase"}
+_PATRON_CODIGO_CCIF = re.compile(r"^\d+(\.\d+)*\s+")
+
+
+def _sin_codigo_ccif(texto: str) -> str:
+    return _PATRON_CODIGO_CCIF.sub("", texto, count=1)
 
 
 def match_dfs(
@@ -63,7 +79,7 @@ def match_dfs(
                 # por par unico (valor_xlsx, valor_pdf), se resuelve una vez
                 # por par, no una vez por fila
                 df_maestro[columna] = _resolver_categoria(
-                    df_xlsx[columna], df_pdf[columna], preferir=preferir
+                    df_xlsx[columna], df_pdf[columna], preferir=preferir, columna=columna
                 )
         elif "xlsx" in origenes:
             # grupo C: solo el xlsx trae esta columna en esta version -- se
@@ -118,16 +134,28 @@ def _resolver_fila(
 
 
 def _resolver_categoria(
-    col_xlsx: pd.Series, col_pdf: pd.Series, preferir: Preferencia | None
+    col_xlsx: pd.Series, col_pdf: pd.Series, preferir: Preferencia | None, columna: str
 ) -> pd.Series:
     """Compara columna categorica; discrepancias se agrupan por par unico (xlsx, pdf).
 
     Se pregunta (o se resuelve con `preferir`) una sola vez por cada par
     distinto de valores encontrados, y la eleccion se aplica a todas las
-    filas que comparten ese par.
+    filas que comparten ese par. En `CCIF division`/`grupo`/`clase`, la
+    comparacion ignora el prefijo numerico (`_COLUMNAS_CCIF`): xlsx nunca lo
+    trae y pdf siempre si, esa diferencia por si sola no es una discrepancia
+    real -- el valor final sigue siendo el crudo (con prefijo si vino de pdf,
+    que es el default cuando no hay discrepancia real).
     """
-    # 3.2: filas iguales pasan derecho, da igual de cual fuente
-    difieren = col_xlsx != col_pdf
+    if columna in _COLUMNAS_CCIF:
+        clave_xlsx = col_xlsx.apply(_sin_codigo_ccif)
+        clave_pdf = col_pdf.apply(_sin_codigo_ccif)
+    else:
+        clave_xlsx, clave_pdf = col_xlsx, col_pdf
+
+    # 3.2: filas iguales (segun la clave de comparacion) pasan derecho, da
+    # igual de cual fuente -- default pdf, que ya trae el prefijo correcto
+    # en CCIF
+    difieren = clave_xlsx != clave_pdf
     resultado = col_pdf.copy()
 
     # discrepancias agrupadas por par unico (valor_xlsx, valor_pdf) -- si 5
@@ -136,7 +164,10 @@ def _resolver_categoria(
     pares = {(x, p) for x, p in zip(col_xlsx[difieren], col_pdf[difieren])}
     elecciones = {}
     for valor_xlsx, valor_pdf in sorted(pares):
-        print(f"Discrepancia de categoria (columna '{col_xlsx.name}'):")
+        afectados = int(((col_xlsx == valor_xlsx) & (col_pdf == valor_pdf)).sum())
+        print(
+            f"Discrepancia de categoria (columna '{columna}'), afecta a {afectados} generico(s):"
+        )
         elecciones[(valor_xlsx, valor_pdf)] = _resolver(valor_xlsx, valor_pdf, preferir)
 
     for i in col_xlsx[difieren].index:
@@ -159,7 +190,9 @@ def _preguntar(valor_xlsx: object, valor_pdf: object) -> object:
     print(f"  xlsx: {valor_xlsx}")
     print(f"  pdf:  {valor_pdf}")
     eleccion = input("con cual quedarse (Enter = pdf): ").strip().lower()
-    return valor_xlsx if eleccion in ("xlsx", "x") else valor_pdf
+    fuente = "xlsx" if eleccion in ("xlsx", "x") else "pdf"
+    print(f"  elegido: {fuente}")
+    return valor_xlsx if fuente == "xlsx" else valor_pdf
 
 
 def _decimales(valor: str) -> int:
