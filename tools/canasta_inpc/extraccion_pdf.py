@@ -545,6 +545,139 @@ def _con_continuacion_2018(nombre: str, lineas: list[str], i: int) -> tuple[str,
 
 
 # 2024
-def _extraer_2024(ruta: Path) -> pd.DataFrame:
 
-    return pd.DataFrame()
+_PAGINAS_CCIF_2024 = (91, 100)
+_PAGINAS_SCIAN_2024 = (101, 109)
+
+_TIPO_SECTOR_2024 = r"Primario|Secundario|Terciario"
+_FILA_RE_2024_SCIAN = re.compile(
+    rf"^(?P<nombre>\S.*?)(?:\s+(?P<tipo>{_TIPO_SECTOR_2024}))?\s+(?P<ponderador>{_NUM})\s*$"
+)
+_SOLO_NUM_RE_2024 = re.compile(rf"^\s*{_NUM}\s*$")
+
+_RUIDO_RE_2024 = re.compile(
+    r"Canasta del INPC clasificada"
+    r"|INEGI\. Índice Nacional de Precios"
+    r"|Total general"
+    r"|\(Continúa\)"
+    r"|^[A-Z]\.\s"
+    r"|relativos a la segunda quincena"
+    r"|Nota:"
+    r"|^\s*\d{1,3}\s*$"
+)
+
+# 2 de los 5 nombres de sector/rama que se parten en varias lineas fisicas
+# (ver _reconstruir_scian_2024) cortan a MITAD DE PALABRA en vez de en un
+# limite de palabra -- pdftotext (modo raw) no distingue los dos casos, la
+# reconstruccion por defecto (unir con espacio) los deja mal
+# ("comesti bles", "interna cionales"). Confirmado 1:1 contra el SCIAN real
+# de data/tests/ponderadores/ponderadores_2024.csv -- son los unicos 2 casos
+# reales, mismo patron que _CORRECCIONES_COG_2010.
+_CORRECCIONES_SCIAN_2024 = {
+    "comesti bles": "comestibles",
+    "interna cionales": "internacionales",
+}
+
+
+def _extraer_2024(ruta: Path) -> pd.DataFrame:
+    """Extrae CCIF (Anexo C) y SCIAN (Anexo D) del manual completo 2024.
+
+    Sin `COG` (a diferencia de 2010/2018, `FUENTES_POSIBLES[2024]["COG"]` es
+    solo `xlsx` -- el manual 2024 no tiene anexo COG aparte) ni
+    `canasta consumo minimo` (esa version SI la tiene, pero solo en el xlsx).
+    El Anexo C usa la misma clasificacion "CCIF 2018" que el manual 2018
+    (confirmado por el titulo del anexo: "por la CCIF 2018"), con formato
+    identico de linea -- se reusa `_extraer_ccif_2018` tal cual, sin
+    duplicar la funcion. El Anexo D (SCIAN 2023, no 2007) usa modo `raw` en
+    vez de `physical` (el que usa CCIF) porque en `physical` los nombres de
+    sector/rama que se parten en 2+ lineas quedan con el ponderador
+    intercalado ENTRE las 2 mitades del nombre (mismo quirk que 2013); en
+    `raw` el orden queda texto-texto-numero (mas simple de reconstruir, ver
+    `_reconstruir_scian_2024`), a costa de perder el espaciado ancho entre
+    columnas (nombre/tipo de sector economico/ponderador quedan separados
+    por un solo espacio, no por varios).
+
+    Ver: tools/uso_generar_canasta.md §Cruce `xlsx` + `pdf`.
+    """
+    with open(ruta, "rb") as f:
+        pdf_physical = pdftotext.PDF(f, physical=True)
+    with open(ruta, "rb") as f:
+        pdf_raw = pdftotext.PDF(f, raw=True)
+
+    ccif = _extraer_ccif_2018(_extraer_lineas(pdf_physical, *_PAGINAS_CCIF_2024))
+    scian = _extraer_scian_2024(_extraer_lineas(pdf_raw, *_PAGINAS_SCIAN_2024))
+
+    return ccif.merge(scian, on="generico", how="left")
+
+
+def _extraer_scian_2024(lineas: list[str]) -> pd.DataFrame:
+    """generico/SCIAN sector/rama del Anexo D.
+
+    Mismo mecanismo de codigo por cantidad de digitos que 2018 (sector 2,
+    rama 4, generico 3, sin puntuacion, reusa `_SCIAN_SECTOR_RE_2018`/
+    `_SCIAN_RAMA_RE_2018`/`_GENERICO_RE_2018`). Cada fila generico trae
+    ademas "Primario"/"Secundario"/"Terciario" (sector economico) entre el
+    nombre y el ponderador -- no forma parte de `COLUMNAS_BASE`, se descarta
+    (capturado por `_FILA_RE_2024_SCIAN` pero nunca leido).
+    """
+    sector_codigo = sector_nombre = ""
+    rama_codigo = rama_nombre = ""
+    filas: list[dict] = []
+
+    for nombre, _ in _reconstruir_scian_2024(lineas):
+        if _SCIAN_RAMA_RE_2018.match(nombre):
+            codigo, _, resto = nombre.partition(" ")
+            rama_codigo, rama_nombre = codigo, resto
+        elif _SCIAN_SECTOR_RE_2018.match(nombre):
+            codigo, _, resto = nombre.partition(" ")
+            sector_codigo, sector_nombre = codigo, resto
+        elif _GENERICO_RE_2018.match(nombre):
+            filas.append(
+                {
+                    "generico": quitar_prefijo_numerico(normalizar_texto(nombre)),
+                    "SCIAN sector": f"{sector_codigo} {normalizar_texto(sector_nombre)}",
+                    "SCIAN rama": f"{rama_codigo} {normalizar_texto(rama_nombre)}",
+                }
+            )
+
+    return pd.DataFrame(filas)
+
+
+def _reconstruir_scian_2024(lineas: list[str]) -> list[tuple[str, str]]:
+    """Filtra ruido y arma (nombre, ponderador) por fila del Anexo D (modo raw).
+
+    A diferencia de 2013/2018 (ponderador intercalado o pegado al texto), acá
+    el orden es texto(+texto...)-numero: nombres largos de sector/rama se
+    parten en 2+ lineas de puro texto, con el ponderador solo DESPUES de
+    todas ellas. Se acumula el nombre parcial hasta encontrar la linea que
+    trae el numero (sola, o como cierre normal de una fila de una sola
+    linea).
+    """
+    filas: list[tuple[str, str]] = []
+    nombre_parcial: str | None = None
+
+    for linea in lineas:
+        if _RUIDO_RE_2024.search(linea):
+            continue
+
+        m = _FILA_RE_2024_SCIAN.match(linea)
+        if m:
+            nombre = f"{nombre_parcial} {m['nombre']}" if nombre_parcial else m["nombre"]
+            for buscar, reemplazo in _CORRECCIONES_SCIAN_2024.items():
+                nombre = nombre.replace(buscar, reemplazo)
+            filas.append((nombre, m["ponderador"]))
+            nombre_parcial = None
+            continue
+
+        if _SOLO_NUM_RE_2024.match(linea) and nombre_parcial is not None:
+            for buscar, reemplazo in _CORRECCIONES_SCIAN_2024.items():
+                nombre_parcial = nombre_parcial.replace(buscar, reemplazo)
+            filas.append((nombre_parcial, linea.strip()))
+            nombre_parcial = None
+            continue
+
+        texto = linea.strip()
+        if texto:
+            nombre_parcial = f"{nombre_parcial} {texto}" if nombre_parcial else texto
+
+    return filas

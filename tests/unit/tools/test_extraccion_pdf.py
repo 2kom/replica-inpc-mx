@@ -16,8 +16,8 @@ _DIR_MANUALES = Path(__file__).parent.parent.parent.parent / "data" / "tests" / 
 _DIR_XLSX = Path(__file__).parent.parent.parent.parent / "data" / "tests" / "xlsx"
 _DIR_REFERENCIA = Path(__file__).parent.parent.parent.parent / "data" / "tests" / "ponderadores"
 
-_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018)
-_CONTEO_ESPERADO: dict[VersionCanasta, int] = {2010: 283, 2013: 283, 2018: 299}
+_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
+_CONTEO_ESPERADO: dict[VersionCanasta, int] = {2010: 283, 2013: 283, 2018: 299, 2024: 292}
 
 # el pdf imprime menos decimales que el xml crudo del xlsx -- no se espera
 # igualdad exacta, match.py resuelve esto con tolerancia de redondeo al
@@ -25,9 +25,9 @@ _CONTEO_ESPERADO: dict[VersionCanasta, int] = {2010: 283, 2013: 283, 2018: 299}
 # esta cantidad de decimales y que su valor coincide con el redondeo exacto
 # del xlsx a esa precision (no solo "cerca", que un bug de redondeo
 # incorrecto podria pasar igual con una tolerancia laxa)
-_PRECISION_PONDERADOR: dict[VersionCanasta, int] = {2010: 4, 2013: 5, 2018: 4}
+_PRECISION_PONDERADOR: dict[VersionCanasta, int] = {2010: 4, 2013: 5, 2018: 4, 2024: 4}
 
-_DURABILIDAD_2018 = frozenset({"duradero", "no duradero", "semiduradero", "servicio"})
+_DURABILIDAD = frozenset({"duradero", "no duradero", "semiduradero", "servicio"})
 
 _COG_CATEGORIAS = frozenset(
     {
@@ -127,14 +127,39 @@ def test_2010_no_produce_encadenamiento_ni_scian() -> None:
 
 
 @pytest.mark.requires_data
-def test_2018_no_produce_encadenamiento_pero_si_scian() -> None:
-    # a diferencia de 2010, el manual 2018 SI tiene Anexo E (SCIAN) propio --
-    # solo encadenamiento esta ausente (la version no tiene esa columna en
-    # ninguna fuente, ni xlsx ni pdf)
-    columnas = _extraer(2018).columns
+@pytest.mark.parametrize("version", [2018, 2024])
+def test_2018_y_2024_no_producen_encadenamiento_pero_si_scian(version: VersionCanasta) -> None:
+    # a diferencia de 2010, estos manuales SI tienen anexo SCIAN propio --
+    # solo encadenamiento esta ausente (ninguna de las 2 versiones tiene esa
+    # columna en el pdf; 2024 la tiene en el xlsx, ver FUENTES_POSIBLES)
+    columnas = _extraer(version).columns
     assert "encadenamiento" not in columnas
     assert "SCIAN sector" in columnas
     assert "SCIAN rama" in columnas
+
+
+_COLUMNAS_PDF_2024 = frozenset(
+    {
+        "generico",
+        "ponderador",
+        "durabilidad",
+        "CCIF division",
+        "CCIF grupo",
+        "CCIF clase",
+        "SCIAN sector",
+        "SCIAN rama",
+    }
+)
+
+
+@pytest.mark.requires_data
+def test_2024_columnas_son_exactamente_las_esperadas() -> None:
+    # FUENTES_POSIBLES 2024: encadenamiento/COG/canasta basica/canasta
+    # consumo minimo son xlsx-only (el manual 2024 no tiene anexo COG
+    # aparte, a diferencia de 2010 y 2018) -- afirmar el conjunto exacto en
+    # vez de solo las columnas conocidas cubre también cualquier columna
+    # inesperada que aparezca por error
+    assert set(_extraer(2024).columns) == _COLUMNAS_PDF_2024
 
 
 # -- ponderador / encadenamiento ------------------------------------------
@@ -212,6 +237,16 @@ def test_ccif_division_2018_coincide_con_xlsx_salvo_29_divergencias_conocidas() 
 
 
 @pytest.mark.requires_data
+def test_ccif_division_2024_coincide_con_xlsx_sin_divergencias() -> None:
+    # a diferencia de 2018 (29 divergencias reales de nombre), 2024 reusa
+    # _extraer_ccif_2018 sobre el mismo Anexo C "por la CCIF 2018" -- acá
+    # coincide exacto con el xlsx, sin snapshot de divergencias
+    m = _cruce_con_xlsx(2024)
+    sin_prefijo = m["CCIF division_pdf"].apply(quitar_prefijo_numerico)
+    assert (sin_prefijo == m["CCIF division_xlsx"]).all()
+
+
+@pytest.mark.requires_data
 def test_ccif_jerarquia_2010_coincide_con_la_referencia() -> None:
     # 2010 no tiene CCIF en el xlsx (sin hoja) -- se compara contra el csv
     # de referencia historico en vez de contra extraccion_xlsx
@@ -222,30 +257,30 @@ def test_ccif_jerarquia_2010_coincide_con_la_referencia() -> None:
 
 
 @pytest.mark.requires_data
-@pytest.mark.parametrize("version", [2013, 2018])
+@pytest.mark.parametrize("version", [2013, 2018, 2024])
 @pytest.mark.parametrize("columna", ["CCIF grupo", "CCIF clase"])
 def test_ccif_grupo_clase_nunca_vacios(version: VersionCanasta, columna: str) -> None:
     assert (_extraer(version)[columna] != "").all()
 
 
 @pytest.mark.requires_data
-@pytest.mark.parametrize("version", [2013, 2018])
+@pytest.mark.parametrize("version", [2013, 2018, 2024])
 @pytest.mark.parametrize("columna", ["CCIF grupo", "CCIF clase"])
 def test_ccif_grupo_clase_coincide_con_la_referencia(version: VersionCanasta, columna: str) -> None:
     # a diferencia de "division" (que sí tiene divergencias reales de nombre
-    # en 2018, ver test de arriba), grupo/clase coinciden exacto en 2013 y
-    # 2018 -- verificado contra data/tests/ponderadores/ antes de agregar
-    # este test, 0 diferencias en ambas versiones
+    # en 2018, ver test de arriba), grupo/clase coinciden exacto en 2013,
+    # 2018 y 2024 -- verificado contra data/tests/ponderadores/ antes de
+    # agregar este test, 0 diferencias en las 3 versiones
     m = _cruce_con_referencia(version)
     sin_codigo = m[f"{columna}_pdf"].apply(_sin_codigo_ccif)
     assert (sin_codigo == m[f"{columna}_ref"]).all()
 
 
-# -- SCIAN (2013 y 2018) --------------------------------------------------
+# -- SCIAN (2013, 2018 y 2024) --------------------------------------------
 
 
 @pytest.mark.requires_data
-@pytest.mark.parametrize("version", [2013, 2018])
+@pytest.mark.parametrize("version", [2013, 2018, 2024])
 def test_scian_coincide_con_la_referencia(version: VersionCanasta) -> None:
     m = _cruce_con_referencia(version)
     assert (m["SCIAN sector_pdf"] == m["SCIAN sector_ref"]).all()
@@ -253,10 +288,32 @@ def test_scian_coincide_con_la_referencia(version: VersionCanasta) -> None:
 
 
 @pytest.mark.requires_data
-@pytest.mark.parametrize("version", [2013, 2018])
+@pytest.mark.parametrize("version", [2013, 2018, 2024])
 @pytest.mark.parametrize("columna", ["SCIAN sector", "SCIAN rama"])
 def test_scian_nunca_vacio(version: VersionCanasta, columna: str) -> None:
     assert (_extraer(version)[columna] != "").all()
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize(
+    ("generico", "fragmento_correcto", "fragmento_roto"),
+    [
+        ("carne de cerdo", "comestibles", "comesti bles"),
+        ("tramites vehiculares", "internacionales", "interna cionales"),
+    ],
+)
+def test_scian_2024_corrige_nombres_partidos_a_mitad_de_palabra(
+    generico: str, fragmento_correcto: str, fragmento_roto: str
+) -> None:
+    # modo raw del Anexo D parte 2 nombres de sector/rama a mitad de palabra
+    # al reconstruir el wrap ("comesti"+"bles", "interna"+"cionales") --
+    # _CORRECCIONES_SCIAN_2024 los arregla; confirmado 1:1 contra el SCIAN
+    # real de data/tests/ponderadores/ponderadores_2024.csv
+    df = _extraer(2024).set_index("generico")
+    sector = str(df.loc[generico, "SCIAN sector"])
+    rama = str(df.loc[generico, "SCIAN rama"])
+    assert fragmento_correcto in f"{sector} {rama}"
+    assert fragmento_roto not in f"{sector} {rama}"
 
 
 # -- COG (2010 y 2018) --------------------------------------------------
@@ -310,23 +367,26 @@ def test_cog_2018_detecta_las_8_categorias() -> None:
     assert set(_extraer(2018)["COG"]) == _COG_CATEGORIAS
 
 
-# -- durabilidad (solo 2018) --------------------------------------------
+# -- durabilidad (2018 y 2024) -------------------------------------------
 
 
 @pytest.mark.requires_data
-def test_durabilidad_2018_coincide_con_la_referencia() -> None:
-    m = _cruce_con_referencia(2018)
+@pytest.mark.parametrize("version", [2018, 2024])
+def test_durabilidad_coincide_con_la_referencia(version: VersionCanasta) -> None:
+    m = _cruce_con_referencia(version)
     assert (m["durabilidad_pdf"] == m["durabilidad_ref"]).all()
 
 
 @pytest.mark.requires_data
-def test_durabilidad_2018_nunca_vacia() -> None:
-    assert (_extraer(2018)["durabilidad"] != "").all()
+@pytest.mark.parametrize("version", [2018, 2024])
+def test_durabilidad_nunca_vacia(version: VersionCanasta) -> None:
+    assert (_extraer(version)["durabilidad"] != "").all()
 
 
 @pytest.mark.requires_data
-def test_durabilidad_2018_solo_trae_valores_esperados() -> None:
-    assert set(_extraer(2018)["durabilidad"]) == _DURABILIDAD_2018
+@pytest.mark.parametrize("version", [2018, 2024])
+def test_durabilidad_solo_trae_valores_esperados(version: VersionCanasta) -> None:
+    assert set(_extraer(version)["durabilidad"]) == _DURABILIDAD
 
 
 # -- reproducibilidad ---------------------------------------------------

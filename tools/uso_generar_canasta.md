@@ -8,19 +8,15 @@ canasta canónica del cálculo del INPC.
 ## Estado actual
 
 El **modo de extracción `xlsx`** (sin `pdf`) funciona de punta a punta para
-las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona para **2010,
-2013 y 2018**: `extraccion_pdf.py` tiene implementadas `_extraer_2010`,
-`_extraer_2013` y `_extraer_2018`; 2024 sigue siendo un stub que devuelve un
-DataFrame vacío, así que correr `--pdf --version 2024` falla con
-`KeyError: 'generico'` en el cruce (`match.py`) — no hay guarda todavía que
-lo impida antes. En **2010**, `SCIAN sector`/`SCIAN rama` quedan vacíos
-aunque se use `--pdf` (el pdf 2010 no trae SCIAN; `FUENTES_POSIBLES` los
-marca como `sync`, se llenan solo con `--sincronizar`, todavía sin cuerpo).
-El modo `xlsx + pdf`
+las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona también para las
+**4 versiones**: `extraccion_pdf.py` tiene implementadas `_extraer_2010`,
+`_extraer_2013`, `_extraer_2018` y `_extraer_2024`. En **2010**, `SCIAN
+sector`/`SCIAN rama` quedan vacíos aunque se use `--pdf` (el pdf 2010 no trae
+SCIAN; `FUENTES_POSIBLES` los marca como `sync`, se llenan solo con
+`--sincronizar`, todavía sin cuerpo). El modo `xlsx + pdf`
 tampoco escribe registro JSON aún (solo el CSV), a diferencia del modo
 `xlsx` solo. El modo `--sincronizar` (`_ejecutar_sincronizacion`) sigue sin
-cuerpo. Ver §Cruce `xlsx` + `pdf` y §Diseño futuro: sincronización y
-versión 2024 pendiente de `pdf`.
+cuerpo. Ver §Cruce `xlsx` + `pdf` y §Diseño futuro: sincronización.
 
 ## Instalación
 
@@ -58,7 +54,7 @@ Extracción solo `xlsx`, cualquier versión:
 python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx -o salida/
 ```
 
-Extracción `xlsx + pdf`, `--version 2010`, `2013` o `2018`:
+Extracción `xlsx + pdf`, cualquier versión:
 
 ```bash
 python tools/generar_canasta.py --version 2013 --xlsx ruta/a/xlsx/2013.xlsx \
@@ -75,7 +71,7 @@ algoritmo.
 
 | Parámetro | Descripción |
 | --- | --- |
-| `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. Con `--pdf`, `2010`/`2013`/`2018` funcionan hoy, `2024` no. |
+| `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. Con `--pdf`, las 4 funcionan. |
 | `--xlsx` | Ruta al archivo xlsx de ponderadores. |
 | `--pdf` | Opcional. Ruta al **manual completo** de INEGI (no al anexo pre-recortado) — `extraccion_pdf.py` lee un rango de páginas directo del manual. |
 | `--preferir {pdf,csv}` | Opcional, requiere `--pdf`. Preferencia automática para resolver discrepancias del cruce, sin preguntar en consola. |
@@ -95,9 +91,6 @@ registro todavía (pendiente).
 
 ## Limitaciones actuales
 
-- `--pdf` funciona con `--version 2010`, `2013` o `2018`; con `2024` termina
-  en `KeyError: 'generico'` dentro del cruce (`match.py`), porque
-  `_extraer_2024` de `extraccion_pdf.py` sigue siendo un stub vacío.
 - Con `--version 2010 --pdf`, `SCIAN sector`/`SCIAN rama` quedan vacíos
   igual (el pdf 2010 no trae Anexo SCIAN; esas columnas dependen de
   `--sincronizar`, todavía sin cuerpo).
@@ -111,9 +104,9 @@ registro todavía (pendiente).
   a la fila `i` del otro — sin verificarlo. Esto vale porque en teoría el
   texto de `generico` es el mismo entre `xlsx` y `pdf` (confirmado con datos
   reales de 2013: 283/283 idénticos tras ordenar; también verificado en 2018:
-  299/299); si algún genérico divergiera en texto entre ambas fuentes, el
-  orden alfabético podría desalinear filas sin que el cruce lo detecte.
-  Pendiente re-verificar cuando 2024 tenga extracción `pdf` real.
+  299/299 y en 2024: 292/292); si algún genérico divergiera en texto entre
+  ambas fuentes, el orden alfabético podría desalinear filas sin que el
+  cruce lo detecte.
 - Para el modo `xlsx` solo, la herramienta exige:
   - `--version`, `--xlsx` y `-o`;
   - que `--xlsx` exista y sea un archivo (no un directorio);
@@ -187,8 +180,8 @@ es `pdf` o `sync` (ver §Fuentes por columna y versión):
 
 Para cada columna, en qué archivo(s) es *posible* encontrar el dato —no cuál
 es la fuente final elegida cuando hay más de una opción; esa decisión ocurre
-al cruzar `xlsx` y `pdf` (`match.py`, ver §Cruce `xlsx` + `pdf`, hoy 2010,
-2013 y 2018). Ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`.
+al cruzar `xlsx` y `pdf` (`match.py`, ver §Cruce `xlsx` + `pdf`, las 4
+versiones). Ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`.
 
 | columna | 2010 | 2013 | 2018 | 2024 |
 | --- | --- | --- | --- | --- |
@@ -228,8 +221,8 @@ correcto. Detalle de columnas/posiciones (implementación, no uso) vive en
 
 - `CCIF division` **siempre** queda sin prefijo numérico en este modo (aunque
   el xlsx de 2024 sí lo traiga) — el prefijo consistente en las 4 versiones lo
-  repone `extraccion_pdf.py` (hoy 2010, 2013 y 2018), no la extracción de
-  xlsx. Ver §Fuentes por columna y versión, §Cruce `xlsx` + `pdf`.
+  repone `extraccion_pdf.py`, no la extracción de xlsx. Ver §Fuentes por
+  columna y versión, §Cruce `xlsx` + `pdf`.
 
 ### Registro JSON (modo solo `xlsx`)
 
@@ -250,7 +243,7 @@ del CSV (`escribir_registro_xlsx` en `tools/canasta_inpc/registro.py`):
 
 Implementado en `tools/canasta_inpc/match.py` (`match_dfs`), disparado por
 `_ejecutar_xlsx_pdf` cuando se pasa `--pdf`. Hoy produce resultado real con
-`--version 2010`, `2013` o `2018` (ver §Limitaciones actuales).
+las 4 versiones.
 
 ### Algoritmo
 
@@ -295,14 +288,11 @@ aparte, sin consultar `--preferir`).
 - `resolver.py` no existe como archivo aparte — su responsabilidad (resolver
   discrepancias) ya vive dentro de `match.py`.
 - Sin registro JSON para este modo (ver §Estado actual).
-- `_extraer_2024` de `extraccion_pdf.py` sigue siendo un stub — correr
-  `--pdf --version 2024` falla.
 
-## Diseño futuro: sincronización y versión 2024 pendiente de `pdf`
+## Diseño futuro: sincronización
 
-_Pendiente_ — `sincronizar.py` no existe todavía; `_extraer_2024`
-de `extraccion_pdf.py` es un stub. Lo de acá describe la intención del CLI
-para `--sincronizar`, no algo que hoy genere resultados.
+_Pendiente_ — `sincronizar.py` no existe todavía. Lo de acá describe la
+intención del CLI para `--sincronizar`, no algo que hoy genere resultados.
 
 ### Parámetros previstos (sincronización)
 
