@@ -174,9 +174,9 @@ def test_resolver_preferir_pdf_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> N
     assert _resolver("valor_xlsx", "valor_pdf", "pdf") == "valor_pdf"
 
 
-def test_resolver_preferir_csv_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_preferir_xlsx_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
-    assert _resolver("valor_xlsx", "valor_pdf", "csv") == "valor_xlsx"
+    assert _resolver("valor_xlsx", "valor_pdf", "xlsx") == "valor_xlsx"
 
 
 def test_resolver_sin_preferir_delega_a_preguntar(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -234,7 +234,7 @@ def test_resolver_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["1.0"])
     col_pdf = pd.Series(["2.0"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir="csv")
+    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir="xlsx")
     assert list(resultado) == ["1.0"]
 
 
@@ -278,11 +278,11 @@ def test_resolver_categoria_aplica_eleccion_distinta_por_par(
     assert list(resultado) == ["a", "d"]
 
 
-def test_resolver_categoria_preferir_csv_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_categoria_preferir_xlsx_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["ropa y calzado"])
     col_pdf = pd.Series(["prendas de vestir y calzado"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="csv", columna="COG")
+    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="xlsx", columna="COG")
     assert list(resultado) == ["ropa y calzado"]
 
 
@@ -346,7 +346,7 @@ def test_match_dfs_columna_de_una_sola_fuente_se_copia_directo(
     # distintos por generico confirman que el mapeo sobrevive al ordenamiento interno
     # de match_dfs, no solo que la columna "se llena" con un valor cualquiera
     _sin_prompt(monkeypatch)
-    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="csv").set_index("generico")
+    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="xlsx").set_index("generico")
     assert resultado.loc["pan", "COG"] == "panaderia"
     assert resultado.loc["aceite", "COG"] == "aceites y grasas"
 

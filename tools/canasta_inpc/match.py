@@ -5,7 +5,7 @@ import pandas as pd
 
 from canasta_inpc.esquema import COLUMNAS_BASE, FUENTES_POSIBLES, VersionCanasta
 
-Preferencia = Literal["pdf", "csv"]
+Preferencia = Literal["pdf", "xlsx"]
 
 # columnas que se comparan fila por fila cuando ambas fuentes las traen (grupo A);
 # el resto de columnas con ambas fuentes se comparan agrupando por par unico (grupo B)
@@ -37,7 +37,7 @@ def match_dfs(
     """Cruza extracciones xlsx y pdf en un df maestro, resolviendo discrepancias.
 
     `preferir` salta las preguntas interactivas y resuelve automatico ("pdf" o
-    "csv", el valor viene tal cual del flag `--preferir` del CLI, "csv" =
+    "xlsx", el valor viene tal cual del flag `--preferir` del CLI, "xlsx" =
     valor extraido del xlsx); sin `preferir`, discrepancia real = pregunta en
     consola, Enter = pdf.
 
@@ -165,9 +165,7 @@ def _resolver_categoria(
     elecciones = {}
     for valor_xlsx, valor_pdf in sorted(pares):
         afectados = int(((col_xlsx == valor_xlsx) & (col_pdf == valor_pdf)).sum())
-        print(
-            f"Discrepancia de categoria (columna '{columna}'), afecta a {afectados} generico(s):"
-        )
+        print(f"Discrepancia de categoria (columna '{columna}'), afecta a {afectados} generico(s):")
         elecciones[(valor_xlsx, valor_pdf)] = _resolver(valor_xlsx, valor_pdf, preferir)
 
     for i in col_xlsx[difieren].index:
@@ -180,7 +178,7 @@ def _resolver(valor_xlsx: object, valor_pdf: object, preferir: Preferencia | Non
     """Resuelve una discrepancia puntual: automatico si viene `preferir`, si no, pregunta en consola."""
     if preferir == "pdf":
         return valor_pdf
-    if preferir == "csv":
+    if preferir == "xlsx":
         return valor_xlsx
     return _preguntar(valor_xlsx, valor_pdf)
 

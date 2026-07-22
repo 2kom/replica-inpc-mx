@@ -61,11 +61,10 @@ python tools/generar_canasta.py --version 2013 --xlsx ruta/a/xlsx/2013.xlsx \
   --pdf ruta/al/manual/completo/2013.pdf -o salida/
 ```
 
-Con `--preferir {pdf,csv}` se salta las preguntas interactivas del cruce y
-resuelve todas las discrepancias automático hacia esa fuente (`csv` = valor
-extraído del `xlsx`). Sin `--preferir`, cada discrepancia real se pregunta en
-consola (Enter = `pdf`). Ver §Cruce `xlsx` + `pdf` para el detalle del
-algoritmo.
+Con `--preferir {pdf,xlsx}` se salta las preguntas interactivas del cruce y
+resuelve todas las discrepancias automático hacia esa fuente. Sin
+`--preferir`, cada discrepancia real se pregunta en consola (Enter = `pdf`).
+Ver §Cruce `xlsx` + `pdf` para el detalle del algoritmo.
 
 ### Parámetros
 
@@ -74,7 +73,7 @@ algoritmo.
 | `--version` | Versión de canasta a extraer: `2010`, `2013`, `2018`, `2024`. Con `--pdf`, las 4 funcionan. |
 | `--xlsx` | Ruta al archivo xlsx de ponderadores. |
 | `--pdf` | Opcional. Ruta al **manual completo** de INEGI (no al anexo pre-recortado) — `extraccion_pdf.py` lee un rango de páginas directo del manual. |
-| `--preferir {pdf,csv}` | Opcional, requiere `--pdf`. Preferencia automática para resolver discrepancias del cruce, sin preguntar en consola. |
+| `--preferir {pdf,xlsx}` | Opcional, requiere `--pdf`. Preferencia automática para resolver discrepancias del cruce, sin preguntar en consola. |
 | `-o` | Directorio de salida para el CSV (y el registro JSON, solo en modo `xlsx` sin `pdf` — ver §Estado actual). Se crea automáticamente si no existe. |
 
 ### Archivos generados
@@ -276,9 +275,9 @@ las 4 versiones.
 
 ### `--preferir`
 
-`--preferir pdf` o `--preferir csv` salta todos los prompts y resuelve
-automático hacia esa fuente (`csv` = valor extraído del `xlsx`) — aplica
-igual a **todas** las columnas cruzadas, incluido `ponderador`/
+`--preferir pdf` o `--preferir xlsx` salta todos los prompts y resuelve
+automático hacia esa fuente — aplica igual a **todas** las columnas
+cruzadas, incluido `ponderador`/
 `encadenamiento` (no hay excepción: una discrepancia numérica real sigue el
 mismo `--preferir` que el resto, solo la tolerancia de redondeo se resuelve
 aparte, sin consultar `--preferir`).

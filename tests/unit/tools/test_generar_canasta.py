@@ -194,7 +194,7 @@ def test_preferir_sin_pdf_es_error(capsys: pytest.CaptureFixture[str], tmp_path:
     assert "--preferir requiere --pdf" in err
 
 
-def test_preferir_csv_valido_con_pdf(tmp_path: Path) -> None:
+def test_preferir_xlsx_valido_con_pdf(tmp_path: Path) -> None:
     xlsx = _xlsx(tmp_path)
     pdf = _pdf(tmp_path)
     args = parsear_args(
@@ -206,12 +206,12 @@ def test_preferir_csv_valido_con_pdf(tmp_path: Path) -> None:
             "--pdf",
             str(pdf),
             "--preferir",
-            "csv",
+            "xlsx",
             "-o",
             str(tmp_path),
         ]
     )
-    assert args.preferir == "csv"
+    assert args.preferir == "xlsx"
 
 
 # -- modo: sincronización -------------------------------------------------------

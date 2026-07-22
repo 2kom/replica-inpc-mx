@@ -50,7 +50,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--preferir",
-        choices=["pdf", "csv"],
+        choices=["pdf", "xlsx"],
         help="Preferencia automática para resolver discrepancias del cruce xlsx+pdf (todas las columnas).",
     )
 
