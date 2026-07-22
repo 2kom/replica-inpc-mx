@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from canasta_inpc.registro import (
-    _construir_detalle_genericos,
+    _construir_detalle_genericos_xlsx,
     _imprimir_resumen,
     _resumir_clasificacion,
     escribir_registro_xlsx,
@@ -35,17 +35,17 @@ def test_resumir_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
     assert resumen == {
         "genericos_clasificados": 3,
         "categorias_unicas": 2,
-        "categorias": ["alimentos", "vivienda"],
+        "categorias": {"alimentos": 2, "vivienda": 1},
     }
 
 
-def test_resumir_clasificacion_categorias_vienen_ordenadas() -> None:
-    df = pd.DataFrame({"COG": ["vivienda", "alimentos", "transporte"]})
-    assert _resumir_clasificacion(df, "COG")["categorias"] == [
-        "alimentos",
-        "transporte",
-        "vivienda",
-    ]
+def test_resumir_clasificacion_categorias_cuentan_genericos_por_categoria() -> None:
+    df = pd.DataFrame({"COG": ["vivienda", "alimentos", "transporte", "alimentos"]})
+    assert _resumir_clasificacion(df, "COG")["categorias"] == {
+        "vivienda": 1,
+        "alimentos": 2,
+        "transporte": 1,
+    }
 
 
 def test_resumir_clasificacion_columna_totalmente_vacia() -> None:
@@ -53,31 +53,31 @@ def test_resumir_clasificacion_columna_totalmente_vacia() -> None:
     assert _resumir_clasificacion(df, "COG") == {
         "genericos_clasificados": 0,
         "categorias_unicas": 0,
-        "categorias": [],
+        "categorias": {},
     }
 
 
-# -- _construir_detalle_genericos ---------------------------------------------------
+# -- _construir_detalle_genericos_xlsx ---------------------------------------------------
 
 
-def test_construir_detalle_genericos_sin_encadenamiento() -> None:
+def test_construir_detalle_genericos_xlsx_sin_encadenamiento() -> None:
     df = pd.DataFrame({"generico": ["arroz", "frijol"], "ponderador": ["0.5", "0.3"]})
-    assert _construir_detalle_genericos(df, tiene_enc=False) == [
+    assert _construir_detalle_genericos_xlsx(df, tiene_enc=False) == [
         {"generico": "arroz", "ponderador": "0.5"},
         {"generico": "frijol", "ponderador": "0.3"},
     ]
 
 
-def test_construir_detalle_genericos_con_encadenamiento() -> None:
+def test_construir_detalle_genericos_xlsx_con_encadenamiento() -> None:
     df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": ["1.01"]})
-    assert _construir_detalle_genericos(df, tiene_enc=True) == [
+    assert _construir_detalle_genericos_xlsx(df, tiene_enc=True) == [
         {"generico": "arroz", "ponderador": "0.5", "encadenamiento": "1.01"}
     ]
 
 
-def test_construir_detalle_genericos_respeta_orden_de_filas() -> None:
+def test_construir_detalle_genericos_xlsx_respeta_orden_de_filas() -> None:
     df = pd.DataFrame({"generico": ["c", "a", "b"], "ponderador": ["1", "2", "3"]})
-    assert [d["generico"] for d in _construir_detalle_genericos(df, tiene_enc=False)] == [
+    assert [d["generico"] for d in _construir_detalle_genericos_xlsx(df, tiene_enc=False)] == [
         "c",
         "a",
         "b",
