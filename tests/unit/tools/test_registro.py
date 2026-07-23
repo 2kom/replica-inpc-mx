@@ -10,11 +10,14 @@ import pytest
 from canasta_inpc.match import Resolucion, ResultadoMatch
 from canasta_inpc.registro import (
     _construir_detalle_genericos_pdf,
+    _construir_detalle_genericos_sincronizacion,
     _construir_detalle_genericos_xlsx,
+    _imprimir_resumen_sincronizacion,
     _imprimir_resumen_xlsx,
     _resumir_clasificacion_pdf,
     _resumir_clasificacion_xlsx,
     escribir_registro_pdf,
+    escribir_registro_sincronizacion,
     escribir_registro_xlsx,
 )
 
@@ -56,6 +59,11 @@ def _leer_json(ruta_salida: Path) -> dict:
 
 def _leer_json_pdf(ruta_salida: Path) -> dict:
     (archivo,) = ruta_salida.glob("pdf_*.json")
+    return json.loads(archivo.read_text(encoding="utf-8"))
+
+
+def _leer_json_sincronizacion(directorio: Path) -> dict:
+    (archivo,) = directorio.glob("sincronizacion_*.json")
     return json.loads(archivo.read_text(encoding="utf-8"))
 
 
@@ -493,3 +501,195 @@ def test_escribir_registro_pdf_encadenamiento_presente_si_version_lo_tiene(
         "origen": "ambas",
         "metodo": "igual",
     }
+
+
+# -- _construir_detalle_genericos_sincronizacion -----------------------------
+
+
+def test_construir_detalle_genericos_sincronizacion_incluye_cambio() -> None:
+    df = pd.DataFrame(
+        {
+            "generico": ["arroz", "frijol"],
+            "SCIAN sector": ["11 agricultura", "11 agricultura"],
+            "SCIAN rama": ["1111 arroz", "1121 frijol"],
+        }
+    )
+    cambios = {"arroz": True, "frijol": False}
+    detalle = _construir_detalle_genericos_sincronizacion(df, cambios)
+    assert detalle == [
+        {
+            "generico": "arroz",
+            "SCIAN sector": "11 agricultura",
+            "SCIAN rama": "1111 arroz",
+            "cambio": True,
+        },
+        {
+            "generico": "frijol",
+            "SCIAN sector": "11 agricultura",
+            "SCIAN rama": "1121 frijol",
+            "cambio": False,
+        },
+    ]
+
+
+# -- _imprimir_resumen_sincronizacion ----------------------------------------
+
+
+def test_imprimir_resumen_sincronizacion_incluye_conteo_y_celdas(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    registro: dict = {"genericos": 283, "celdas_actualizadas": 12, "clasificaciones": {}}
+    _imprimir_resumen_sincronizacion(registro, Path("a.csv"), Path("a.json"))
+    salida = capsys.readouterr().out
+    assert "283 genericos sincronizados" in salida
+    assert "celdas actualizadas: 12" in salida
+
+
+# -- escribir_registro_sincronizacion ----------------------------------------
+
+
+def _df_sincronizacion() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "generico": ["arroz", "frijol"],
+            "SCIAN sector": ["11 agricultura", "11 agricultura"],
+            "SCIAN rama": ["1111 arroz", "1121 frijol"],
+        }
+    )
+
+
+def test_escribir_registro_sincronizacion_nombre_de_archivo_con_timestamp(
+    tmp_path: Path,
+) -> None:
+    csv_destino = tmp_path / "ponderadores_2010.csv"
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": True, "frijol": False},
+        2,
+        tmp_path / "ponderadores_2013.csv",
+        csv_destino,
+    )
+    (archivo,) = list(tmp_path.glob("*.json"))
+    assert re.match(r"^sincronizacion_\d{8}_\d{6}_\d{6}\.json$", archivo.name)
+
+
+def test_escribir_registro_sincronizacion_se_escribe_junto_a_csv_destino(
+    tmp_path: Path,
+) -> None:
+    # no hay -o en este modo -- el json va en el mismo directorio de
+    # --csv-destino, aunque --csv-fuente viva en otro lado
+    otro_dir = tmp_path / "otro"
+    otro_dir.mkdir()
+    dir_destino = tmp_path / "salida"
+    dir_destino.mkdir()
+    csv_destino = dir_destino / "ponderadores_2010.csv"
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": False, "frijol": False},
+        0,
+        otro_dir / "ponderadores_2013.csv",
+        csv_destino,
+    )
+    assert list(otro_dir.glob("*.json")) == []
+    assert len(list(dir_destino.glob("sincronizacion_*.json"))) == 1
+
+
+def test_escribir_registro_sincronizacion_campos_basicos_del_json(tmp_path: Path) -> None:
+    csv_fuente = tmp_path / "ponderadores_2013.csv"
+    csv_destino = tmp_path / "ponderadores_2010.csv"
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(), {"arroz": True, "frijol": False}, 2, csv_fuente, csv_destino
+    )
+    registro = _leer_json_sincronizacion(tmp_path)
+    assert registro["tipo"] == "sincronizacion"
+    assert registro["csv_fuente"] == str(csv_fuente)
+    assert registro["csv_destino"] == str(csv_destino)
+    assert registro["version_fuente"] == 2013
+    assert registro["version_destino"] == 2010
+    assert registro["genericos"] == 2
+    assert registro["celdas_actualizadas"] == 2
+
+
+def test_escribir_registro_sincronizacion_clasificaciones_reusa_resumen_xlsx(
+    tmp_path: Path,
+) -> None:
+    # mismo shape que _resumir_clasificacion_xlsx (genericos_clasificados,
+    # categorias_unicas, categorias) -- no reinventa nada nuevo
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": True, "frijol": False},
+        1,
+        tmp_path / "f.csv",
+        tmp_path / "d.csv",
+    )
+    registro = _leer_json_sincronizacion(tmp_path)
+    assert set(registro["clasificaciones"]) == {"SCIAN sector", "SCIAN rama"}
+    assert registro["clasificaciones"]["SCIAN sector"] == {
+        "genericos_clasificados": 2,
+        "categorias_unicas": 1,
+        "categorias": {"11 agricultura": 2},
+    }
+
+
+def test_escribir_registro_sincronizacion_genericos_detalle_incluye_cambio(
+    tmp_path: Path,
+) -> None:
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": True, "frijol": False},
+        1,
+        tmp_path / "f.csv",
+        tmp_path / "d.csv",
+    )
+    detalle = _leer_json_sincronizacion(tmp_path)["genericos_detalle"]
+    assert detalle[0] == {
+        "generico": "arroz",
+        "SCIAN sector": "11 agricultura",
+        "SCIAN rama": "1111 arroz",
+        "cambio": True,
+    }
+    assert detalle[1]["cambio"] is False
+
+
+def test_escribir_registro_sincronizacion_preserva_acentos_sin_escapar(
+    tmp_path: Path,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "generico": ["educacion (colegiaturas)"],
+            "SCIAN sector": ["61 servicios educativos"],
+            "SCIAN rama": ["6111 educación básica"],
+        }
+    )
+    escribir_registro_sincronizacion(
+        df, {"educacion (colegiaturas)": False}, 0, tmp_path / "f.csv", tmp_path / "d.csv"
+    )
+    (archivo,) = list(tmp_path.glob("*.json"))
+    assert "educación básica" in archivo.read_text(encoding="utf-8")
+
+
+def test_escribir_registro_sincronizacion_imprime_resumen_a_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": True, "frijol": False},
+        2,
+        tmp_path / "f.csv",
+        tmp_path / "d.csv",
+    )
+    salida = capsys.readouterr().out
+    assert "2 genericos sincronizados" in salida
+    assert "celdas actualizadas: 2" in salida
+
+
+def test_escribir_registro_sincronizacion_devuelve_ruta_del_json(tmp_path: Path) -> None:
+    ruta = escribir_registro_sincronizacion(
+        _df_sincronizacion(),
+        {"arroz": False, "frijol": False},
+        0,
+        tmp_path / "f.csv",
+        tmp_path / "d.csv",
+    )
+    assert ruta.exists()
+    assert ruta.parent == tmp_path

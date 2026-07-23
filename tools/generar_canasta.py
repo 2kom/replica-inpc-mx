@@ -20,7 +20,7 @@ def parsear_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Define y parsea los flags del CLI, valida su combinación.
 
     Ver: tools/uso_generar_canasta.md §Comando funcional, §Cruce `xlsx` + `pdf`,
-    §Diseño futuro: sincronización
+    §Sincronización SCIAN 2013 → 2010
     """
     parser = argparse.ArgumentParser(
         description="Genera archivos CSV de canastas INPC a partir de fuentes INEGI.",
@@ -81,6 +81,10 @@ def _validar_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     Ver: tools/uso_generar_canasta.md §Limitaciones actuales, §Validaciones ya activas para estos modos
     """
     if args.sincronizar:
+        if args.salida:
+            parser.error(
+                "-o no aplica con --sincronizar (el registro se escribe junto a --csv-destino)."
+            )
         if not args.csv_fuente or not args.csv_destino:
             parser.error("--sincronizar requiere --csv-fuente y --csv-destino.")
         if not args.csv_fuente.exists():
@@ -158,8 +162,19 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:
     """Copia clasificaciones SCIAN de la canasta 2013 a la 2010.
 
-    Ver: tools/uso_generar_canasta.md §Diseño futuro: sincronización
+    Ver: tools/uso_generar_canasta.md §Sincronización SCIAN 2013 → 2010
     """
+    from canasta_inpc.registro import escribir_registro_sincronizacion
+    from canasta_inpc.sincronizar import sincronizar_scian
+
+    resultado = sincronizar_scian(args.csv_fuente, args.csv_destino)
+    escribir_registro_sincronizacion(
+        resultado.df,
+        resultado.cambios,
+        resultado.celdas_actualizadas,
+        args.csv_fuente,
+        args.csv_destino,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:

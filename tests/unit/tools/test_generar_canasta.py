@@ -229,6 +229,24 @@ def test_sincronizar_valido(tmp_path: Path) -> None:
     assert args.sincronizar is True
 
 
+def test_sincronizar_rechaza_salida(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    fuente = _csv(tmp_path, "2013.csv")
+    destino = _csv(tmp_path, "2010.csv")
+    err = _error(
+        capsys,
+        [
+            "--sincronizar",
+            "--csv-fuente",
+            str(fuente),
+            "--csv-destino",
+            str(destino),
+            "-o",
+            str(tmp_path),
+        ],
+    )
+    assert "-o no aplica con --sincronizar" in err
+
+
 def test_sincronizar_falta_csv_fuente(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     destino = _csv(tmp_path, "2010.csv")
     err = _error(capsys, ["--sincronizar", "--csv-destino", str(destino)])
@@ -419,3 +437,97 @@ def test_ejecutar_xlsx_pdf_produce_json_valido_sin_mockear_el_registro(
     assert registro["genericos"] == 2
     assert {d["generico"] for d in registro["genericos_detalle"]} == {"aceite", "pan"}
     assert "COG" in registro["clasificaciones"]
+
+
+# -- _ejecutar_sincronizacion: wiring completo (sincronizar_scian real) --------
+
+
+def _csv_scian(tmp_path: Path, nombre: str, filas: list[dict]) -> Path:
+    ruta = tmp_path / nombre
+    pd.DataFrame(filas).to_csv(ruta, index=False)
+    return ruta
+
+
+def _fila_scian(generico: str, sector: str = "11 agricultura", rama: str = "1111 cultivo") -> dict:
+    return {
+        "generico": generico,
+        "ponderador": "1.0",
+        "SCIAN sector": sector,
+        "SCIAN rama": rama,
+    }
+
+
+def test_ejecutar_sincronizacion_pasa_a_registro_el_resultado_de_sincronizar_scian(
+    mocker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # mismo motivo que test_ejecutar_xlsx_pdf_encadena_extraer_match_guardar_y_registro:
+    # sincronizar_scian corre de verdad, solo se mockea escribir_registro_sincronizacion,
+    # para confirmar que recibe el MISMO df/cambios/celdas que produjo la sincronizacion real
+    monkeypatch.setattr("builtins.input", lambda _="": "s")
+    registro_mock = mocker.patch("canasta_inpc.registro.escribir_registro_sincronizacion")
+
+    fuente = _csv_scian(
+        tmp_path, "2013.csv", [_fila_scian("arroz", sector="11 nuevo", rama="1111 nuevo")]
+    )
+    destino = _csv_scian(
+        tmp_path, "2010.csv", [_fila_scian("arroz", sector="00 viejo", rama="0000 viejo")]
+    )
+
+    args = argparse.Namespace(csv_fuente=fuente, csv_destino=destino)
+    generar_canasta._ejecutar_sincronizacion(args)
+
+    registro_mock.assert_called_once()
+    df_pasado, cambios_pasado, celdas_pasadas, csv_fuente_pasado, csv_destino_pasado = (
+        registro_mock.call_args[0]
+    )
+    assert list(df_pasado["SCIAN sector"]) == ["11 nuevo"]
+    assert cambios_pasado == {"arroz": True}
+    assert celdas_pasadas == 2
+    assert csv_fuente_pasado == fuente
+    assert csv_destino_pasado == destino
+
+
+def test_ejecutar_sincronizacion_produce_json_valido_sin_mockear_el_registro(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # de punta a punta de verdad, sin mocks -- mismo motivo que
+    # test_ejecutar_xlsx_pdf_produce_json_valido_sin_mockear_el_registro
+    monkeypatch.setattr("builtins.input", lambda _="": "s")
+    fuente = _csv_scian(
+        tmp_path, "2013.csv", [_fila_scian("arroz", sector="11 nuevo", rama="1111 nuevo")]
+    )
+    destino = _csv_scian(
+        tmp_path, "2010.csv", [_fila_scian("arroz", sector="00 viejo", rama="0000 viejo")]
+    )
+
+    args = argparse.Namespace(csv_fuente=fuente, csv_destino=destino)
+    generar_canasta._ejecutar_sincronizacion(args)
+
+    (archivo,) = list(tmp_path.glob("sincronizacion_*.json"))
+    registro = json.loads(archivo.read_text(encoding="utf-8"))
+    assert registro["tipo"] == "sincronizacion"
+    assert registro["genericos"] == 1
+    assert registro["celdas_actualizadas"] == 2
+
+    releido = pd.read_csv(destino, dtype=str).fillna("")
+    assert releido.loc[0, "SCIAN sector"] == "11 nuevo"
+
+
+def test_ejecutar_sincronizacion_cancelada_no_escribe_csv_ni_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda _="": "n")
+    fuente = _csv_scian(
+        tmp_path, "2013.csv", [_fila_scian("arroz", sector="11 nuevo", rama="1111 nuevo")]
+    )
+    destino = _csv_scian(
+        tmp_path, "2010.csv", [_fila_scian("arroz", sector="00 viejo", rama="0000 viejo")]
+    )
+    contenido_previo = destino.read_text(encoding="utf-8")
+
+    args = argparse.Namespace(csv_fuente=fuente, csv_destino=destino)
+    with pytest.raises(RuntimeError, match="cancelada"):
+        generar_canasta._ejecutar_sincronizacion(args)
+
+    assert destino.read_text(encoding="utf-8") == contenido_previo
+    assert list(tmp_path.glob("sincronizacion_*.json")) == []

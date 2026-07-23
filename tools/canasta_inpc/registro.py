@@ -9,6 +9,7 @@ from canasta_inpc.esquema import COLUMNAS_BASE, FUENTES_POSIBLES
 from canasta_inpc.match import Resolucion, ResultadoMatch
 
 _COLUMNAS_NO_CLASIFICACION = {"generico", "ponderador", "encadenamiento"}
+_COLUMNAS_SCIAN = ("SCIAN sector", "SCIAN rama")
 
 
 def escribir_registro_xlsx(df: pd.DataFrame, args: argparse.Namespace, ruta_csv: Path) -> None:
@@ -253,5 +254,76 @@ def _imprimir_resumen_pdf(registro: dict, ruta_csv: Path, ruta_json: Path) -> No
         print(f"  encadenamientos: {registro['encadenamientos']}")
     for col, info in registro["clasificaciones"].items():
         print(f"  {col}: {info['genericos']} clasificados, {info['categorias_unicas']} categorias")
+    print(f"\n  csv:      {ruta_csv}")
+    print(f"  registro: {ruta_json}\n")
+
+
+def escribir_registro_sincronizacion(
+    df: pd.DataFrame,
+    cambios: dict[str, bool],
+    celdas_actualizadas: int,
+    csv_fuente: Path,
+    csv_destino: Path,
+) -> Path:
+    """Genera el JSON de registro de una sincronizacion SCIAN 2013 -> 2010.
+
+    Recibe `df`/`cambios`/`celdas_actualizadas` sueltos (no el dataclass
+    `ResultadoSincronizacion` de `sincronizar.py`) -- mismo patron que
+    `escribir_registro_xlsx` (recibe un `df` plano), para que `registro.py`
+    no dependa del modulo que hace la sobrescritura destructiva del csv,
+    solo de sus resultados ya calculados.
+
+    A diferencia de `escribir_registro_xlsx`/`escribir_registro_pdf`, no hay
+    `-o` en este modo -- el JSON se escribe junto a `csv_destino`, mismo
+    directorio. `clasificaciones` reusa `_resumir_clasificacion_xlsx` tal
+    cual (SCIAN sector/rama son columnas categoricas igual que CCIF/COG en
+    modo xlsx, corridas sobre `df` ya sincronizado).
+
+    Ver: tools/uso_generar_canasta.md §Registro JSON (modo `sincronizacion`).
+    """
+    ahora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    ruta_json = csv_destino.parent / f"sincronizacion_{ahora}.json"
+
+    registro: dict = {
+        "tipo": "sincronizacion",
+        "csv_fuente": str(csv_fuente),
+        "csv_destino": str(csv_destino),
+        "version_fuente": 2013,
+        "version_destino": 2010,
+        "genericos": len(df),
+        "clasificaciones": {col: _resumir_clasificacion_xlsx(df, col) for col in _COLUMNAS_SCIAN},
+        "celdas_actualizadas": celdas_actualizadas,
+        "genericos_detalle": _construir_detalle_genericos_sincronizacion(df, cambios),
+    }
+
+    ruta_json.write_text(json.dumps(registro, ensure_ascii=False, indent=2), encoding="utf-8")
+    _imprimir_resumen_sincronizacion(registro, csv_destino, ruta_json)
+    return ruta_json
+
+
+def _construir_detalle_genericos_sincronizacion(
+    df: pd.DataFrame, cambios: dict[str, bool]
+) -> list[dict]:
+    """Arma una entrada {generico, SCIAN sector, SCIAN rama, cambio} por fila."""
+    detalle = []
+    for _, row in df.iterrows():
+        generico = row["generico"]
+        entrada: dict = {"generico": generico}
+        for col in _COLUMNAS_SCIAN:
+            entrada[col] = row[col]
+        entrada["cambio"] = cambios[generico]
+        detalle.append(entrada)
+    return detalle
+
+
+def _imprimir_resumen_sincronizacion(registro: dict, ruta_csv: Path, ruta_json: Path) -> None:
+    """Imprime a stdout el mismo resumen que queda en el JSON, sincronizacion."""
+    print(f"\n  {registro['genericos']} genericos sincronizados (2013 -> 2010)")
+    print(f"  celdas actualizadas: {registro['celdas_actualizadas']}")
+    for col, info in registro["clasificaciones"].items():
+        print(
+            f"  {col}: {info['genericos_clasificados']} clasificados, "
+            f"{info['categorias_unicas']} categorias"
+        )
     print(f"\n  csv:      {ruta_csv}")
     print(f"  registro: {ruta_json}\n")

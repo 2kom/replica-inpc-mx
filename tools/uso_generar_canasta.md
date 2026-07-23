@@ -11,13 +11,12 @@ El **modo de extracción `xlsx`** (sin `pdf`) funciona de punta a punta para
 las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona también para las
 **4 versiones**: `extraccion_pdf.py` tiene implementadas `_extraer_2010`,
 `_extraer_2013`, `_extraer_2018` y `_extraer_2024`. En **2010**, `SCIAN
-sector`/`SCIAN rama` quedan vacíos aunque se use `--pdf` (el pdf 2010 no trae
-SCIAN; `FUENTES_POSIBLES` los marca como `sync`, se llenan solo con
-`--sincronizar`, todavía sin cuerpo). El modo `xlsx + pdf` ya escribe su
-propio registro JSON (`escribir_registro_pdf`), con el detalle de cómo se
-resolvió cada campo/categoría cruzada. El modo `--sincronizar`
-(`_ejecutar_sincronizacion`) sigue sin cuerpo. Ver §Cruce `xlsx` + `pdf` y
-§Diseño futuro: sincronización.
+sector`/`SCIAN rama` quedan vacíos con `--pdf` solo (el pdf 2010 no trae
+SCIAN; `FUENTES_POSIBLES` los marca como `sync`) — se llenan corriendo
+**`--sincronizar`** después, que copia esas 2 columnas desde el csv de 2013
+ya generado. Los 3 modos (`xlsx`, `xlsx + pdf`, `--sincronizar`) están
+completos y cada uno escribe su propio registro JSON. Ver §Cruce `xlsx` +
+`pdf` y §Sincronización SCIAN 2013 → 2010.
 
 ## Instalación
 
@@ -96,11 +95,11 @@ Modo `xlsx + pdf` deja:
 ## Limitaciones actuales
 
 - Con `--version 2010 --pdf`, `SCIAN sector`/`SCIAN rama` quedan vacíos
-  igual (el pdf 2010 no trae Anexo SCIAN; esas columnas dependen de
-  `--sincronizar`, todavía sin cuerpo).
-- `--sincronizar`, `--csv-fuente` y `--csv-destino` son aceptados por el
-  parser (incluida su validación de rutas), pero `_ejecutar_sincronizacion`
-  no tiene cuerpo: la corrida termina sin error y sin generar nada.
+  igual (el pdf 2010 no trae Anexo SCIAN) — se llenan corriendo
+  `--sincronizar` después. Ver §Sincronización SCIAN 2013 → 2010.
+- `--sincronizar` requiere sesión interactiva (stdin real) por la
+  confirmación `[s/N]` antes de sobrescribir — no corre en un pipe/script
+  que no responda, lanza `RuntimeError` si stdin llega a EOF.
 - El cruce (`match.py`) asume que `df_xlsx` y `df_pdf` tienen el mismo largo
   y que, tras ordenar cada uno por `generico`, la fila `i` de uno corresponde
   a la fila `i` del otro — sin verificarlo. Esto vale porque en teoría el
@@ -131,7 +130,8 @@ El CSV final siempre tiene estas 15 columnas fijas, en este orden
 contrato final del pipeline completo. Corriendo solo `xlsx` (sin `--pdf`),
 las columnas cuya única fuente posible es `pdf` o `sync` quedan vacías; con
 `--pdf` las 4 versiones llenan casi todo, salvo lo que depende de `sync`
-(`--sincronizar`, todavía sin cuerpo — ver §Fuentes por columna y versión):
+(se llena corriendo `--sincronizar` después — ver §Fuentes por columna y
+versión):
 
 1. `generico`
 2. `ponderador`
@@ -330,41 +330,77 @@ solo agrupa y serializa eso, no reconstruye nada comparando de nuevo
 - `resolver.py` no existe como archivo aparte — su responsabilidad (resolver
   discrepancias) ya vive dentro de `match.py`.
 
-## Diseño futuro: sincronización
+## Sincronización SCIAN 2013 → 2010
 
-_Pendiente_ — `sincronizar.py` no existe todavía. Lo de acá describe la
-intención del CLI para `--sincronizar`, no algo que hoy genere resultados.
+Implementado en `tools/canasta_inpc/sincronizar.py` (`sincronizar_scian`),
+disparado por `_ejecutar_sincronizacion` cuando se pasa `--sincronizar`.
+2010 no tiene Anexo SCIAN en su pdf; sus columnas `SCIAN sector`/`SCIAN
+rama` se copian del csv de 2013 ya generado (misma canasta, mismo SCIAN).
+Único modo del CLI que **sobrescribe** un csv ya existente en vez de crear
+uno nuevo.
 
-### Parámetros previstos (sincronización)
+### Parámetros
 
 | Parámetro | Descripción |
 | --- | --- |
-| `--sincronizar` | Activa el modo de copia de SCIAN 2013 -> 2010. |
-| `--csv-fuente` | CSV de canasta 2013 ya generado (fuente). |
-| `--csv-destino` | CSV de canasta 2010 ya generado (destino, se sobrescribirá). |
+| `--sincronizar` | Activa el modo. |
+| `--csv-fuente` | CSV de canasta 2013 ya generado (con `--pdf`, SCIAN completo). |
+| `--csv-destino` | CSV de canasta 2010 ya generado — se sobrescribe in-place. |
 
-El modo se decide por los flags presentes: **`--sincronizar`** presente ->
-modo sincronización (tiene prioridad sobre `--pdf` si ambos se pasan).
+`--sincronizar` tiene prioridad sobre `--pdf` si ambos se pasan. `-o` se
+**rechaza** explícitamente en este modo (`_validar_args` corta con error si
+viene) — el registro se escribe junto a `--csv-destino`, ver §Registro JSON
+abajo.
 
-### Validaciones ya activas
+### Algoritmo
 
-Aunque el modo no hace nada todavía, el parser ya valida sus argumentos:
+1. Se leen `--csv-fuente`/`--csv-destino` (`dtype=str`, `NaN` → `""`).
+2. Se valida que ambos tengan `generico`/`SCIAN sector`/`SCIAN rama`.
+3. Se valida que la fuente tenga SCIAN completo (sin celdas vacías) — si no,
+   error pidiendo generar 2013 con `--xlsx` + `--pdf` juntos primero.
+4. Se mapea cada csv por `generico` normalizado (`normalizar_texto`) — el
+   match es **por llave, no por orden de fila**; se valida que no haya
+   genéricos duplicados tras normalizar.
+5. Se valida que el set de genéricos de fuente y destino coincida exacto —
+   confirmado con dato real (`data/tests/ponderadores/`): 283/283 idénticos
+   entre 2010 y 2013 tras normalizar, 0 diferencias. Si no coincidiera, el
+   CLI corta con un error que lista ejemplos de qué genérico sobra en cada
+   lado, en vez de sincronizar parcial en silencio.
+6. **Confirmación interactiva** (`input`, `[s/N]`) antes de escribir —
+   `data/` está en `.gitignore`, una sobrescritura mala no se recupera con
+   git, solo regenerando desde xlsx/pdf de nuevo.
+7. Se sobrescriben `SCIAN sector`/`SCIAN rama` de destino con los valores de
+   fuente y se escribe con `guardar_csv` (mismo esquema de 15 columnas; el
+   resto de columnas de destino no se toca).
 
-- `--csv-fuente` y `--csv-destino` (ambos) son obligatorios;
-- `--csv-fuente` debe existir y ser un archivo (no un directorio);
-- `--csv-destino` debe existir y ser un archivo (no un directorio).
+### Archivos generados
 
-### Ejemplo de la sintaxis prevista (no genera salida todavía)
+No genera un csv nuevo — sobrescribe `--csv-destino` in-place. Sí escribe
+un registro:
 
-Sincronización SCIAN 2013 → 2010:
+- `{directorio de --csv-destino}/sincronizacion_{fecha}.json` — ver
+  §Registro JSON (modo `sincronizacion`).
+
+### Registro JSON (modo `sincronizacion`)
+
+A diferencia de los otros 2 modos, no hay `-o`: el JSON se escribe junto a
+`--csv-destino`, mismo directorio (`escribir_registro_sincronizacion` en
+`tools/canasta_inpc/registro.py`).
+
+| Campo | Contenido |
+| --- | --- |
+| `tipo` | Siempre `"sincronizacion"`. |
+| `csv_fuente`, `csv_destino` | Rutas usadas en la corrida. |
+| `version_fuente`, `version_destino` | Fijos: `2013`, `2010`. |
+| `genericos` | Cantidad de genéricos sincronizados. |
+| `clasificaciones` | Por `SCIAN sector`/`SCIAN rama`: `genericos_clasificados`, `categorias_unicas`, `categorias` — mismo shape que el modo `xlsx` solo (`_resumir_clasificacion_xlsx` reusada tal cual, sin código nuevo). |
+| `celdas_actualizadas` | Total de celdas (`SCIAN sector` + `SCIAN rama` juntas) cuyo valor cambió respecto al csv de destino antes de sincronizar. |
+| `genericos_detalle` | Un `{generico, SCIAN sector, SCIAN rama, cambio}` por fila. `cambio` es `true` si alguna de las 2 columnas cambió para ese genérico — en el flujo normal ambas suelen cambiar juntas (vienen de la misma fila fuente), pero no es invariante: un csv destino parcialmente sincronizado a mano, o editado fuera de esta herramienta, puede traer solo una de las 2 desactualizada. Por eso no se desglosa por columna, pero tampoco se debe asumir que siempre van en par. |
+
+### Ejemplo
 
 ```bash
 python tools/generar_canasta.py --sincronizar \
   --csv-fuente salida/ponderadores_2013.csv \
   --csv-destino salida/ponderadores_2010.csv
 ```
-
-Cuando esté implementado, debería sobrescribir las columnas `SCIAN sector` y
-`SCIAN rama` de `ponderadores_2010.csv` (destino) con los valores de
-`ponderadores_2013.csv` (fuente); sin generar ningún archivo nuevo ni JSON
-de registro.
