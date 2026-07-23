@@ -7,10 +7,14 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from canasta_inpc.match import Resolucion, ResultadoMatch
 from canasta_inpc.registro import (
+    _construir_detalle_genericos_pdf,
     _construir_detalle_genericos_xlsx,
-    _imprimir_resumen,
-    _resumir_clasificacion,
+    _imprimir_resumen_xlsx,
+    _resumir_clasificacion_pdf,
+    _resumir_clasificacion_xlsx,
+    escribir_registro_pdf,
     escribir_registro_xlsx,
 )
 
@@ -21,17 +25,46 @@ def _args(tmp_path: Path, version: int = 2018, xlsx: str = "ruta/2018.xlsx") -> 
     return argparse.Namespace(salida=tmp_path, version=version, xlsx=Path(xlsx))
 
 
+def _args_pdf(
+    tmp_path: Path,
+    version: int = 2013,
+    xlsx: str = "ruta/2013.xlsx",
+    pdf: str = "ruta/2013.pdf",
+    preferir: str | None = None,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        salida=tmp_path, version=version, xlsx=Path(xlsx), pdf=Path(pdf), preferir=preferir
+    )
+
+
+def _resolucion(
+    columna: str,
+    genericos: tuple[str, ...],
+    valor_final: str,
+    origen: str = "pdf",
+    metodo: str = "igual",
+    valor_xlsx: str | None = None,
+    valor_pdf: str | None = None,
+) -> Resolucion:
+    return Resolucion(columna, genericos, valor_xlsx, valor_pdf, valor_final, origen, metodo)  # type: ignore[arg-type]
+
+
 def _leer_json(ruta_salida: Path) -> dict:
     (archivo,) = ruta_salida.glob("xlsx_*.json")
     return json.loads(archivo.read_text(encoding="utf-8"))
 
 
-# -- _resumir_clasificacion ---------------------------------------------
+def _leer_json_pdf(ruta_salida: Path) -> dict:
+    (archivo,) = ruta_salida.glob("pdf_*.json")
+    return json.loads(archivo.read_text(encoding="utf-8"))
+
+
+# -- _resumir_clasificacion_xlsx ---------------------------------------------
 
 
 def test_resumir_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
     df = pd.DataFrame({"COG": ["alimentos", "alimentos", "vivienda", ""]})
-    resumen = _resumir_clasificacion(df, "COG")
+    resumen = _resumir_clasificacion_xlsx(df, "COG")
     assert resumen == {
         "genericos_clasificados": 3,
         "categorias_unicas": 2,
@@ -41,7 +74,7 @@ def test_resumir_clasificacion_cuenta_no_vacios_y_categorias_unicas() -> None:
 
 def test_resumir_clasificacion_categorias_cuentan_genericos_por_categoria() -> None:
     df = pd.DataFrame({"COG": ["vivienda", "alimentos", "transporte", "alimentos"]})
-    assert _resumir_clasificacion(df, "COG")["categorias"] == {
+    assert _resumir_clasificacion_xlsx(df, "COG")["categorias"] == {
         "vivienda": 1,
         "alimentos": 2,
         "transporte": 1,
@@ -50,7 +83,7 @@ def test_resumir_clasificacion_categorias_cuentan_genericos_por_categoria() -> N
 
 def test_resumir_clasificacion_columna_totalmente_vacia() -> None:
     df = pd.DataFrame({"COG": ["", "", ""]})
-    assert _resumir_clasificacion(df, "COG") == {
+    assert _resumir_clasificacion_xlsx(df, "COG") == {
         "genericos_clasificados": 0,
         "categorias_unicas": 0,
         "categorias": {},
@@ -84,7 +117,7 @@ def test_construir_detalle_genericos_xlsx_respeta_orden_de_filas() -> None:
     ]
 
 
-# -- _imprimir_resumen ----------------------------------------------------
+# -- _imprimir_resumen_xlsx ----------------------------------------------------
 
 
 def test_imprimir_resumen_incluye_version_y_conteo_genericos(
@@ -96,7 +129,7 @@ def test_imprimir_resumen_incluye_version_y_conteo_genericos(
         "encadenamientos": None,
         "clasificaciones": {},
     }
-    _imprimir_resumen(registro, Path("a.csv"), Path("a.json"))
+    _imprimir_resumen_xlsx(registro, Path("a.csv"), Path("a.json"))
     salida = capsys.readouterr().out
     assert "version 2018: 299 genericos extraidos" in salida
 
@@ -110,7 +143,7 @@ def test_imprimir_resumen_omite_encadenamientos_si_es_none(
         "encadenamientos": None,
         "clasificaciones": {},
     }
-    _imprimir_resumen(registro, Path("a.csv"), Path("a.json"))
+    _imprimir_resumen_xlsx(registro, Path("a.csv"), Path("a.json"))
     assert "encadenamientos" not in capsys.readouterr().out
 
 
@@ -123,7 +156,7 @@ def test_imprimir_resumen_incluye_encadenamientos_si_no_es_none(
         "encadenamientos": 292,
         "clasificaciones": {},
     }
-    _imprimir_resumen(registro, Path("a.csv"), Path("a.json"))
+    _imprimir_resumen_xlsx(registro, Path("a.csv"), Path("a.json"))
     assert "encadenamientos: 292" in capsys.readouterr().out
 
 
@@ -136,7 +169,7 @@ def test_imprimir_resumen_incluye_clasificacion_y_rutas(
         "encadenamientos": None,
         "clasificaciones": {"COG": {"genericos_clasificados": 299, "categorias_unicas": 8}},
     }
-    _imprimir_resumen(registro, Path("salida/a.csv"), Path("salida/a.json"))
+    _imprimir_resumen_xlsx(registro, Path("salida/a.csv"), Path("salida/a.json"))
     salida = capsys.readouterr().out
     assert "COG: 299 clasificados, 8 categorias" in salida
     assert str(Path("salida/a.csv")) in salida
@@ -262,3 +295,201 @@ def test_escribir_registro_xlsx_imprime_resumen_a_stdout(
     salida = capsys.readouterr().out
     assert "version 2018: 1 genericos extraidos" in salida
     assert str(ruta_csv) in salida
+
+
+# -- _construir_detalle_genericos_pdf --------------------------------------
+
+
+def test_construir_detalle_genericos_pdf_anida_valor_origen_metodo() -> None:
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    assert _construir_detalle_genericos_pdf(df, tiene_enc=False, resoluciones=resoluciones) == [
+        {"generico": "arroz", "ponderador": {"valor": "0.5", "origen": "ambas", "metodo": "igual"}}
+    ]
+
+
+def test_construir_detalle_genericos_pdf_con_encadenamiento() -> None:
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": ["1.01"]})
+    resoluciones = (
+        _resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),
+        _resolucion("encadenamiento", ("arroz",), "1.01", origen="xlsx", metodo="redondeo"),
+    )
+    detalle = _construir_detalle_genericos_pdf(df, tiene_enc=True, resoluciones=resoluciones)
+    assert detalle == [
+        {
+            "generico": "arroz",
+            "ponderador": {"valor": "0.5", "origen": "ambas", "metodo": "igual"},
+            "encadenamiento": {"valor": "1.01", "origen": "xlsx", "metodo": "redondeo"},
+        }
+    ]
+
+
+def test_construir_detalle_genericos_pdf_sin_encadenamiento_no_busca_metadata() -> None:
+    # regresion: version sin encadenamiento en ninguna fuente (2010/2018) --
+    # tiene_enc=False debe bastar para que ni se intente buscar metadata que
+    # no existe, sin importar si el df trae la columna vacia
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": [""]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    detalle = _construir_detalle_genericos_pdf(df, tiene_enc=False, resoluciones=resoluciones)
+    assert detalle == [
+        {"generico": "arroz", "ponderador": {"valor": "0.5", "origen": "ambas", "metodo": "igual"}}
+    ]
+
+
+# -- _resumir_clasificacion_pdf ---------------------------------------------
+
+
+def test_resumir_clasificacion_pdf_desglosa_metodos_por_categoria() -> None:
+    df = pd.DataFrame({"COG": ["alimentos"] * 3 + ["vivienda"]})
+    resoluciones = (
+        _resolucion("COG", ("a", "b"), "alimentos", origen="ambas", metodo="igual"),
+        _resolucion("COG", ("c",), "alimentos", origen="pdf", metodo="preferido"),
+        _resolucion("COG", ("d",), "vivienda", origen="ambas", metodo="igual"),
+    )
+    resumen = _resumir_clasificacion_pdf(df, "COG", resoluciones)
+    assert resumen == {
+        "genericos": 4,
+        "categorias_unicas": 2,
+        "categorias": {
+            "alimentos": {
+                "genericos": 3,
+                "metodos": {"igual": 2, "decision": 1},
+                "origenes_igual": {"ambas": 2},
+                "origenes_decision": {"pdf": 1},
+            },
+            "vivienda": {
+                "genericos": 1,
+                "metodos": {"igual": 1},
+                "origenes_igual": {"ambas": 1},
+            },
+        },
+    }
+
+
+def test_resumir_clasificacion_pdf_columna_directo_trae_origenes_directo() -> None:
+    # columna de una sola fuente (grupo C) -- bucket "directo" + su propio
+    # origenes_directo (uniforme con igual/decision), sin origenes_igual ni
+    # origenes_decision (no hubo comparacion real)
+    df = pd.DataFrame({"COG": ["alimentos", "alimentos"]})
+    resoluciones = (_resolucion("COG", ("a", "b"), "alimentos", origen="xlsx", metodo="directo"),)
+    resumen = _resumir_clasificacion_pdf(df, "COG", resoluciones)
+    assert resumen["categorias"] == {
+        "alimentos": {"genericos": 2, "metodos": {"directo": 2}, "origenes_directo": {"xlsx": 2}}
+    }
+
+
+def test_resumir_clasificacion_pdf_decision_hacia_vacio_va_a_sin_clasificar() -> None:
+    # regresion: xlsx sin clasificar, pdf si -- --preferir xlsx resuelve
+    # hacia vacio, pero SI hubo una decision real; no debe desaparecer del
+    # registro ni contar como si fuera una categoria valida
+    df = pd.DataFrame({"COG": [""]})
+    resoluciones = (
+        _resolucion(
+            "COG",
+            ("arroz",),
+            "",
+            origen="xlsx",
+            metodo="preferido",
+            valor_xlsx="",
+            valor_pdf="alimentos",
+        ),
+    )
+    resumen = _resumir_clasificacion_pdf(df, "COG", resoluciones)
+    assert resumen["genericos"] == 0  # no cuenta como clasificado
+    assert resumen["categorias_unicas"] == 0  # "" no es una categoria real
+    assert resumen["categorias"]["sin_clasificar"] == {
+        "genericos": 1,
+        "metodos": {"decision": 1},
+        "origenes_decision": {"xlsx": 1},
+    }
+
+
+def test_resumir_clasificacion_pdf_categoria_hibrida_cuenta_por_origen_mixto() -> None:
+    df = pd.DataFrame({"CCIF division": ["03 ropa y calzado"]})
+    resoluciones = (
+        _resolucion(
+            "CCIF division",
+            ("abrigo",),
+            "03 ropa y calzado",
+            origen="mixto",
+            metodo="interactiva",
+        ),
+    )
+    resumen = _resumir_clasificacion_pdf(df, "CCIF division", resoluciones)
+    assert resumen["categorias"]["03 ropa y calzado"]["origenes_decision"] == {"mixto": 1}
+
+
+# -- escribir_registro_pdf --------------------------------------------------
+
+
+def test_escribir_registro_pdf_nombre_de_archivo_con_version_y_timestamp(tmp_path: Path) -> None:
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    resultado = ResultadoMatch(df=df, resoluciones=resoluciones)
+    # 2018: encadenamiento vacio en FUENTES_POSIBLES, no hace falta en el df
+    # de prueba (tiene_enc=False evita tocar esa columna)
+    escribir_registro_pdf(
+        resultado, _args_pdf(tmp_path, version=2018), tmp_path / "ponderadores_2018.csv"
+    )
+    (archivo,) = list(tmp_path.glob("*.json"))
+    assert re.match(r"^pdf_2018_\d{8}_\d{6}_\d{6}\.json$", archivo.name)
+
+
+def test_escribir_registro_pdf_tipo_es_dato_estructurado_no_texto(tmp_path: Path) -> None:
+    # tipo fijo, no un string que mezcle prosa humana ("xlsx + pdf (preferir
+    # pdf)") con el dato -- preferir va aparte, como campo propio
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    resultado = ResultadoMatch(df=df, resoluciones=resoluciones)
+    escribir_registro_pdf(
+        resultado, _args_pdf(tmp_path, version=2018, preferir="pdf"), tmp_path / "a.csv"
+    )
+    registro = _leer_json_pdf(tmp_path)
+    assert registro["tipo"] == "xlsx_pdf"
+    assert registro["preferir"] == "pdf"
+
+
+def test_escribir_registro_pdf_preferir_none_si_no_vino_el_flag(tmp_path: Path) -> None:
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    resultado = ResultadoMatch(df=df, resoluciones=resoluciones)
+    escribir_registro_pdf(
+        resultado, _args_pdf(tmp_path, version=2018, preferir=None), tmp_path / "a.csv"
+    )
+    assert _leer_json_pdf(tmp_path)["preferir"] is None
+
+
+def test_escribir_registro_pdf_encadenamiento_ausente_si_version_no_lo_tiene(
+    tmp_path: Path,
+) -> None:
+    # regresion real: 2010/2018 tienen "encadenamiento" en FUENTES_POSIBLES
+    # vacio (ninguna fuente la trae), pero match_dfs igual crea la columna en
+    # el df (rellena con "", grupo D) -- antes esto causaba un KeyError en
+    # _construir_detalle_genericos_pdf al buscar metadata que nunca se genero
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": [""]})
+    resoluciones = (_resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),)
+    resultado = ResultadoMatch(df=df, resoluciones=resoluciones)
+    escribir_registro_pdf(resultado, _args_pdf(tmp_path, version=2018), tmp_path / "a.csv")
+    registro = _leer_json_pdf(tmp_path)
+    assert registro["encadenamientos"] is None
+    assert "encadenamiento" not in registro["genericos_detalle"][0]
+
+
+def test_escribir_registro_pdf_encadenamiento_presente_si_version_lo_tiene(
+    tmp_path: Path,
+) -> None:
+    # 2013 si tiene encadenamiento en FUENTES_POSIBLES (xlsx y pdf)
+    df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"], "encadenamiento": ["1.01"]})
+    resoluciones = (
+        _resolucion("ponderador", ("arroz",), "0.5", origen="ambas", metodo="igual"),
+        _resolucion("encadenamiento", ("arroz",), "1.01", origen="ambas", metodo="igual"),
+    )
+    resultado = ResultadoMatch(df=df, resoluciones=resoluciones)
+    escribir_registro_pdf(resultado, _args_pdf(tmp_path, version=2013), tmp_path / "a.csv")
+    registro = _leer_json_pdf(tmp_path)
+    assert registro["encadenamientos"] == 1
+    assert registro["genericos_detalle"][0]["encadenamiento"] == {
+        "valor": "1.01",
+        "origen": "ambas",
+        "metodo": "igual",
+    }

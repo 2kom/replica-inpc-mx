@@ -137,11 +137,12 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
     from canasta_inpc.extraccion_pdf import extraer_pdf
     from canasta_inpc.extraccion_xlsx import extraer_xlsx
     from canasta_inpc.match import match_dfs
+    from canasta_inpc.registro import escribir_registro_pdf
     from canasta_inpc.utilidades import guardar_csv
 
     df_xlsx = extraer_xlsx(args.xlsx, args.version)
     df_pdf = extraer_pdf(args.pdf, args.version)
-    df_maestro = match_dfs(
+    resultado = match_dfs(
         df_xlsx,
         df_pdf,
         args.version,
@@ -150,7 +151,8 @@ def _ejecutar_xlsx_pdf(args: argparse.Namespace) -> None:
 
     ruta_csv = args.salida / f"ponderadores_{args.version}.csv"
 
-    guardar_csv(df_maestro, ruta_csv, args.version)
+    guardar_csv(resultado.df, ruta_csv, args.version)
+    escribir_registro_pdf(resultado, args, ruta_csv)
 
 
 def _ejecutar_sincronizacion(args: argparse.Namespace) -> None:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 
 import generar_canasta
+import pandas as pd
 import pytest
 from generar_canasta import main, parsear_args
 
@@ -314,3 +317,105 @@ def test_main_modo_sincronizar_llama_ejecutar_sincronizacion(mocker, tmp_path: P
     destino = _csv(tmp_path, "2010.csv")
     main(["--sincronizar", "--csv-fuente", str(fuente), "--csv-destino", str(destino)])
     ejecutar.assert_called_once()
+
+
+# -- _ejecutar_xlsx_pdf: wiring completo (match_dfs real, solo se mockea I/O) ---
+
+
+def _xlsx_2013_min() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "generico": ["pan", "aceite"],
+            "ponderador": ["2.5", "1.23456"],
+            "encadenamiento": ["0.87654", "0.9"],
+            "COG": ["panaderia", "aceites y grasas"],
+            "CCIF division": ["alimentos", "alimentos"],
+            "inflacion componente": ["subyacente", "subyacente"],
+            "inflacion subcomponente": ["mercancias", "mercancias"],
+            "inflacion agrupacion": ["alimentos bebidas y tabaco"] * 2,
+            "canasta basica": ["-", "X"],
+        }
+    )
+
+
+def _pdf_2013_min() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "generico": ["aceite", "pan"],
+            "ponderador": ["1.2346", "2.5"],
+            "encadenamiento": ["0.900", "0.8765"],
+            "CCIF division": ["01 alimentos", "01 alimentos"],
+            "CCIF grupo": ["01.1 aceites y grasas", "01.2 pan y cereales"],
+            "CCIF clase": ["01.1.1 aceites comestibles", "01.2.1 pan de trigo"],
+            "SCIAN sector": ["11 agricultura", "31 industrias manufactureras"],
+            "SCIAN rama": ["1111 cultivo", "3118 panificacion"],
+        }
+    )
+
+
+def test_ejecutar_xlsx_pdf_encadena_extraer_match_guardar_y_registro(
+    mocker, tmp_path: Path
+) -> None:
+    # a diferencia de test_main_modo_xlsx_pdf_llama_ejecutar_xlsx_pdf (que
+    # mockea _ejecutar_xlsx_pdf entera), esto corre match_dfs real sobre
+    # fixtures chicas -- confirma que guardar_csv/escribir_registro_pdf
+    # reciben el MISMO resultado.df que produjo match_dfs, sin reconstruir
+    # nada aparte (el bug que motivo esta prueba: durante esta sesion,
+    # _ejecutar_xlsx_pdf nunca llamo escribir_registro_pdf, y ningun test lo
+    # detecto -- solo correr el CLI a mano lo mostro)
+    mocker.patch("canasta_inpc.extraccion_xlsx.extraer_xlsx", return_value=_xlsx_2013_min())
+    mocker.patch("canasta_inpc.extraccion_pdf.extraer_pdf", return_value=_pdf_2013_min())
+    guardar_csv_mock = mocker.patch("canasta_inpc.utilidades.guardar_csv")
+    registro_mock = mocker.patch("canasta_inpc.registro.escribir_registro_pdf")
+
+    args = argparse.Namespace(
+        version=2013,
+        xlsx=Path("entrada.xlsx"),
+        pdf=Path("entrada.pdf"),
+        preferir="pdf",
+        salida=tmp_path,
+    )
+    generar_canasta._ejecutar_xlsx_pdf(args)
+
+    guardar_csv_mock.assert_called_once()
+    df_guardado = guardar_csv_mock.call_args[0][0]
+    # confirma que match_dfs corrio de verdad (alineo/ordeno "aceite" antes
+    # que "pan"), no un mock ni un df vacio
+    assert list(df_guardado["generico"]) == ["aceite", "pan"]
+
+    registro_mock.assert_called_once()
+    resultado_pasado = registro_mock.call_args[0][0]
+    assert resultado_pasado.df is df_guardado  # mismo objeto, no reconstruido
+    assert len(resultado_pasado.resoluciones) > 0
+    assert registro_mock.call_args[0][1] is args
+
+
+def test_ejecutar_xlsx_pdf_produce_json_valido_sin_mockear_el_registro(
+    mocker, tmp_path: Path
+) -> None:
+    # a diferencia de la prueba de arriba (que mockea escribir_registro_pdf
+    # para verificar SOLO el wiring), esta corre match_dfs -> escribir_registro_pdf
+    # de punta a punta de verdad -- sin construir ningun Resolucion a mano,
+    # para que un mismatch real entre lo que match_dfs produce y lo que
+    # escribir_registro_pdf espera (como los 2 KeyError de esta sesion) no
+    # pueda esconderse detras de un mock
+    mocker.patch("canasta_inpc.extraccion_xlsx.extraer_xlsx", return_value=_xlsx_2013_min())
+    mocker.patch("canasta_inpc.extraccion_pdf.extraer_pdf", return_value=_pdf_2013_min())
+    mocker.patch("canasta_inpc.utilidades.guardar_csv")
+
+    args = argparse.Namespace(
+        version=2013,
+        xlsx=Path("entrada.xlsx"),
+        pdf=Path("entrada.pdf"),
+        preferir="pdf",
+        salida=tmp_path,
+    )
+    generar_canasta._ejecutar_xlsx_pdf(args)
+
+    (archivo,) = list(tmp_path.glob("pdf_*.json"))
+    registro = json.loads(archivo.read_text(encoding="utf-8"))
+    assert registro["tipo"] == "xlsx_pdf"
+    assert registro["preferir"] == "pdf"
+    assert registro["genericos"] == 2
+    assert {d["generico"] for d in registro["genericos_detalle"]} == {"aceite", "pan"}
+    assert "COG" in registro["clasificaciones"]

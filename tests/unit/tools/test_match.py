@@ -4,12 +4,15 @@ import pandas as pd
 import pytest
 from canasta_inpc.esquema import COLUMNAS_BASE
 from canasta_inpc.match import (
+    Resolucion,
     _coinciden_por_redondeo,
     _decimales,
     _mas_preciso,
     _preguntar,
+    _reconstruir_hibrido_ccif,
     _resolver,
     _resolver_categoria,
+    _resolver_directo,
     _resolver_fila,
     match_dfs,
 )
@@ -78,10 +81,19 @@ def _pdf_2013() -> pd.DataFrame:
         ("1.230000", 6),
         ("-1.5", 1),
         ("0.9", 1),
+        ("1E-5", 5),
+        ("1.5e-3", 4),
     ],
 )
 def test_decimales(valor: str, esperado: int) -> None:
     assert _decimales(valor) == esperado
+
+
+def test_decimales_notacion_cientifica_no_se_confunde_con_menos_precision() -> None:
+    # antes de usar Decimal, "1E-5" (5 decimales reales) contaba 0 por no
+    # tener "." -- _mas_preciso hubiera preferido "0.0000" (4 decimales) y
+    # convertido 0.00001 en 0.0000, perdiendo el dato real
+    assert _mas_preciso("1E-5", "0.0000") == ("1E-5", "xlsx")
 
 
 # -- _coinciden_por_redondeo -----------------------------------------------
@@ -104,12 +116,12 @@ def test_coinciden_por_redondeo(valor_xlsx: str, valor_pdf: str, esperado: bool)
 
 
 def test_mas_preciso_devuelve_el_de_mas_decimales() -> None:
-    assert _mas_preciso("1.23456", "1.2346") == "1.23456"
-    assert _mas_preciso("1.2", "1.234") == "1.234"
+    assert _mas_preciso("1.23456", "1.2346") == ("1.23456", "xlsx")
+    assert _mas_preciso("1.2", "1.234") == ("1.234", "pdf")
 
 
 def test_mas_preciso_empate_prefiere_xlsx() -> None:
-    assert _mas_preciso("1.20", "1.30") == "1.20"
+    assert _mas_preciso("1.20", "1.30") == ("1.20", "xlsx")
 
 
 # -- _preguntar ---------------------------------------------------------------
@@ -171,17 +183,51 @@ def test_preguntar_imprime_la_eleccion_final_explicita(
 
 def test_resolver_preferir_pdf_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
-    assert _resolver("valor_xlsx", "valor_pdf", "pdf") == "valor_pdf"
+    assert _resolver("valor_xlsx", "valor_pdf", "pdf") == "pdf"
 
 
 def test_resolver_preferir_xlsx_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
-    assert _resolver("valor_xlsx", "valor_pdf", "xlsx") == "valor_xlsx"
+    assert _resolver("valor_xlsx", "valor_pdf", "xlsx") == "xlsx"
 
 
 def test_resolver_sin_preferir_delega_a_preguntar(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("builtins.input", lambda _="": "xlsx")
-    assert _resolver("valor_xlsx", "valor_pdf", None) == "valor_xlsx"
+    assert _resolver("valor_xlsx", "valor_pdf", None) == "xlsx"
+
+
+# -- _reconstruir_hibrido_ccif --------------------------------------------------------
+
+
+def test_hibrido_ccif_repone_codigo_de_pdf_sobre_nombre_de_xlsx() -> None:
+    # sin esto, "03 prendas de vestir y calzado" perderia el "03" al ganar
+    # el nombre del xlsx ("ropa y calzado", que nunca trae codigo)
+    assert _reconstruir_hibrido_ccif("ropa y calzado", "03 prendas de vestir y calzado") == (
+        "03 ropa y calzado",
+        "mixto",
+    )
+
+
+def test_hibrido_ccif_codigo_jerarquico_con_puntos() -> None:
+    assert _reconstruir_hibrido_ccif("aceites y grasas", "01.1 aceites comestibles") == (
+        "01.1 aceites y grasas",
+        "mixto",
+    )
+
+
+def test_hibrido_ccif_sin_codigo_en_pdf_se_queda_con_xlsx_tal_cual() -> None:
+    # no deberia pasar dado el contrato de extraccion, pero si el pdf no
+    # trae codigo no hay nada que reponer -- no se fabrica un origen mixto
+    assert _reconstruir_hibrido_ccif("ropa y calzado", "prendas de vestir y calzado") == (
+        "ropa y calzado",
+        "xlsx",
+    )
+
+
+def test_hibrido_ccif_xlsx_vacio_no_fabrica_codigo_suelto() -> None:
+    # xlsx no clasifico este generico -- "01 " (codigo sin nombre) seria
+    # basura; debe quedar vacio tal cual, para caer en sin_clasificar
+    assert _reconstruir_hibrido_ccif("", "01 alimentos") == ("", "xlsx")
 
 
 # -- _resolver_fila -----------------------------------------------------
@@ -191,8 +237,14 @@ def test_resolver_fila_valores_iguales_no_pregunta(monkeypatch: pytest.MonkeyPat
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["arroz", "frijol"])
     col_pdf = pd.Series(["arroz", "frijol"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
-    assert list(resultado) == ["arroz", "frijol"]
+    genericos = pd.Series(["arroz", "frijol"])
+    valores, resoluciones = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "generico", numerica=False, preferir=None
+    )
+    assert list(valores) == ["arroz", "frijol"]
+    assert [r.metodo for r in resoluciones] == ["igual", "igual"]
+    assert [r.origen for r in resoluciones] == ["ambas", "ambas"]
+    assert [r.genericos for r in resoluciones] == [("arroz",), ("frijol",)]
 
 
 def test_resolver_fila_numerica_dentro_de_tolerancia_no_pregunta(
@@ -201,8 +253,13 @@ def test_resolver_fila_numerica_dentro_de_tolerancia_no_pregunta(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["1.23456"])
     col_pdf = pd.Series(["1.2346"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
-    assert list(resultado) == ["1.23456"]  # se queda con el mas preciso, sin preguntar
+    genericos = pd.Series(["aceite"])
+    valores, resoluciones = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "ponderador", numerica=True, preferir=None
+    )
+    assert list(valores) == ["1.23456"]  # se queda con el mas preciso, sin preguntar
+    assert resoluciones[0].metodo == "redondeo"
+    assert resoluciones[0].origen == "xlsx"
 
 
 def test_resolver_fila_numerica_fuera_de_tolerancia_pregunta(
@@ -211,9 +268,14 @@ def test_resolver_fila_numerica_fuera_de_tolerancia_pregunta(
     llamadas = _respuestas(monkeypatch, ["pdf"])
     col_xlsx = pd.Series(["1.0"])
     col_pdf = pd.Series(["2.0"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir=None)
-    assert list(resultado) == ["2.0"]
+    genericos = pd.Series(["aceite"])
+    valores, resoluciones = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "ponderador", numerica=True, preferir=None
+    )
+    assert list(valores) == ["2.0"]
     assert len(llamadas) == 1
+    assert resoluciones[0].metodo == "interactiva"
+    assert resoluciones[0].origen == "pdf"
 
 
 def test_resolver_fila_no_numerica_ignora_tolerancia(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,9 +283,13 @@ def test_resolver_fila_no_numerica_ignora_tolerancia(monkeypatch: pytest.MonkeyP
     llamadas = _respuestas(monkeypatch, ["xlsx"])
     col_xlsx = pd.Series(["aceite"])
     col_pdf = pd.Series(["aceite comestible"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
-    assert list(resultado) == ["aceite"]
+    genericos = pd.Series(["aceite"])
+    valores, resoluciones = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "generico", numerica=False, preferir=None
+    )
+    assert list(valores) == ["aceite"]
     assert len(llamadas) == 1
+    assert resoluciones[0].origen == "xlsx"
 
 
 def test_resolver_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
@@ -234,15 +300,23 @@ def test_resolver_fila_preferir_aplica_incluso_a_numerica_fuera_de_tolerancia(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["1.0"])
     col_pdf = pd.Series(["2.0"])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=True, preferir="xlsx")
-    assert list(resultado) == ["1.0"]
+    genericos = pd.Series(["aceite"])
+    valores, resoluciones = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "ponderador", numerica=True, preferir="xlsx"
+    )
+    assert list(valores) == ["1.0"]
+    assert resoluciones[0].metodo == "preferido"
+    assert resoluciones[0].origen == "xlsx"
 
 
 def test_resolver_fila_preserva_indice_original() -> None:
     col_xlsx = pd.Series(["a", "b"], index=[5, 9])
     col_pdf = pd.Series(["a", "b"], index=[5, 9])
-    resultado = _resolver_fila(col_xlsx, col_pdf, numerica=False, preferir=None)
-    assert list(resultado.index) == [5, 9]
+    genericos = pd.Series(["a", "b"], index=[5, 9])
+    valores, _ = _resolver_fila(
+        col_xlsx, col_pdf, genericos, "generico", numerica=False, preferir=None
+    )
+    assert list(valores.index) == [5, 9]
 
 
 # -- _resolver_categoria -------------------------------------------------
@@ -252,8 +326,15 @@ def test_resolver_categoria_filas_iguales_no_preguntan(monkeypatch: pytest.Monke
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["alimentos", "alimentos"])
     col_pdf = pd.Series(["alimentos", "alimentos"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
-    assert list(resultado) == ["alimentos", "alimentos"]
+    genericos = pd.Series(["arroz", "frijol"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="COG"
+    )
+    assert list(valores) == ["alimentos", "alimentos"]
+    assert len(resoluciones) == 1  # un solo par unico, agrupa los 2 genericos
+    assert resoluciones[0].metodo == "igual"
+    assert resoluciones[0].origen == "ambas"
+    assert resoluciones[0].genericos == ("arroz", "frijol")
 
 
 def test_resolver_categoria_pregunta_una_vez_por_par_no_por_fila(
@@ -262,9 +343,13 @@ def test_resolver_categoria_pregunta_una_vez_por_par_no_por_fila(
     llamadas = _respuestas(monkeypatch, ["", ""])
     col_xlsx = pd.Series(["ropa y calzado"] * 3 + ["otro"])
     col_pdf = pd.Series(["prendas de vestir y calzado"] * 3 + ["otro pdf"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
+    genericos = pd.Series(["g0", "g1", "g2", "g3"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="COG"
+    )
     assert len(llamadas) == 2  # 2 pares unicos, no 4 filas
-    assert list(resultado) == ["prendas de vestir y calzado"] * 3 + ["otro pdf"]
+    assert list(valores) == ["prendas de vestir y calzado"] * 3 + ["otro pdf"]
+    assert len(resoluciones) == 2
 
 
 def test_resolver_categoria_aplica_eleccion_distinta_por_par(
@@ -274,16 +359,22 @@ def test_resolver_categoria_aplica_eleccion_distinta_por_par(
     _respuestas(monkeypatch, ["xlsx", ""])
     col_xlsx = pd.Series(["a", "c"])
     col_pdf = pd.Series(["b", "d"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="COG")
-    assert list(resultado) == ["a", "d"]
+    genericos = pd.Series(["g0", "g1"])
+    valores, _ = _resolver_categoria(col_xlsx, col_pdf, genericos, preferir=None, columna="COG")
+    assert list(valores) == ["a", "d"]
 
 
 def test_resolver_categoria_preferir_xlsx_no_pregunta(monkeypatch: pytest.MonkeyPatch) -> None:
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["ropa y calzado"])
     col_pdf = pd.Series(["prendas de vestir y calzado"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir="xlsx", columna="COG")
-    assert list(resultado) == ["ropa y calzado"]
+    genericos = pd.Series(["abrigo"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir="xlsx", columna="COG"
+    )
+    assert list(valores) == ["ropa y calzado"]
+    assert resoluciones[0].metodo == "preferido"
+    assert resoluciones[0].origen == "xlsx"
 
 
 def test_resolver_categoria_ccif_ignora_prefijo_numerico_al_comparar(
@@ -296,8 +387,15 @@ def test_resolver_categoria_ccif_ignora_prefijo_numerico_al_comparar(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["alimentos y bebidas no alcoholicas"] * 2)
     col_pdf = pd.Series(["01 alimentos y bebidas no alcoholicas"] * 2)
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
-    assert list(resultado) == ["01 alimentos y bebidas no alcoholicas"] * 2
+    genericos = pd.Series(["g0", "g1"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="CCIF division"
+    )
+    assert list(valores) == ["01 alimentos y bebidas no alcoholicas"] * 2
+    # coincide solo por clave normalizada (sin prefijo), no literal -- el
+    # codigo solo vino de pdf, origen no es "ambas"
+    assert resoluciones[0].metodo == "igual"
+    assert resoluciones[0].origen == "pdf"
 
 
 def test_resolver_categoria_ccif_detecta_divergencia_real_de_nombre(
@@ -309,9 +407,46 @@ def test_resolver_categoria_ccif_detecta_divergencia_real_de_nombre(
     llamadas = _respuestas(monkeypatch, [""])
     col_xlsx = pd.Series(["ropa y calzado"])
     col_pdf = pd.Series(["03 prendas de vestir y calzado"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
+    genericos = pd.Series(["abrigo"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="CCIF division"
+    )
     assert len(llamadas) == 1
-    assert list(resultado) == ["03 prendas de vestir y calzado"]
+    assert list(valores) == ["03 prendas de vestir y calzado"]
+    assert resoluciones[0].origen == "pdf"  # gano pdf, ya trae su propio codigo coherente
+
+
+def test_resolver_categoria_ccif_discrepancia_real_hacia_xlsx_repone_codigo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # gana el nombre del xlsx -- sin el hibrido, "03" se perderia
+    _respuestas(monkeypatch, ["xlsx"])
+    col_xlsx = pd.Series(["ropa y calzado"])
+    col_pdf = pd.Series(["03 prendas de vestir y calzado"])
+    genericos = pd.Series(["abrigo"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="CCIF division"
+    )
+    assert list(valores) == ["03 ropa y calzado"]
+    assert resoluciones[0].origen == "mixto"
+    assert resoluciones[0].metodo == "interactiva"
+
+
+def test_resolver_categoria_ccif_xlsx_vacio_no_genera_codigo_suelto() -> None:
+    # xlsx no clasifico este generico ("") y gana via --preferir xlsx -- sin
+    # el guard en _reconstruir_hibrido_ccif esto daba "01 " (codigo sin
+    # nombre); debe quedar vacio y conservar la decision (fix conserva
+    # eventos reales aunque resuelvan a vacio)
+    col_xlsx = pd.Series([""])
+    col_pdf = pd.Series(["01 alimentos"])
+    genericos = pd.Series(["arroz"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir="xlsx", columna="CCIF division"
+    )
+    assert list(valores) == [""]
+    assert len(resoluciones) == 1
+    assert resoluciones[0].valor_final == ""
+    assert resoluciones[0].origen == "xlsx"
 
 
 def test_resolver_categoria_ccif_ignora_codigo_jerarquico_con_puntos(
@@ -322,8 +457,11 @@ def test_resolver_categoria_ccif_ignora_codigo_jerarquico_con_puntos(
     _sin_prompt(monkeypatch)
     col_xlsx = pd.Series(["aceites y grasas"])
     col_pdf = pd.Series(["01.1 aceites y grasas"])
-    resultado = _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF grupo")
-    assert list(resultado) == ["01.1 aceites y grasas"]
+    genericos = pd.Series(["aceite"])
+    valores, _ = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="CCIF grupo"
+    )
+    assert list(valores) == ["01.1 aceites y grasas"]
 
 
 def test_resolver_categoria_imprime_genericos_afectados(
@@ -332,8 +470,44 @@ def test_resolver_categoria_imprime_genericos_afectados(
     _respuestas(monkeypatch, [""])
     col_xlsx = pd.Series(["ropa y calzado"] * 3)
     col_pdf = pd.Series(["03 prendas de vestir y calzado"] * 3)
-    _resolver_categoria(col_xlsx, col_pdf, preferir=None, columna="CCIF division")
+    genericos = pd.Series(["g0", "g1", "g2"])
+    _resolver_categoria(col_xlsx, col_pdf, genericos, preferir=None, columna="CCIF division")
     assert "afecta a 3 generico(s)" in capsys.readouterr().out
+
+
+def test_resolver_categoria_omite_resolucion_si_valor_final_vacio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ambas fuentes sin clasificar ese generico -- no es una resolucion real
+    _sin_prompt(monkeypatch)
+    col_xlsx = pd.Series([""])
+    col_pdf = pd.Series([""])
+    genericos = pd.Series(["arroz"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir=None, columna="COG"
+    )
+    assert list(valores) == [""]
+    assert resoluciones == ()
+
+
+def test_resolver_categoria_conserva_decision_real_que_resulta_en_vacio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # xlsx sin clasificar, pdf si -- SI es una decision real (clave difiere:
+    # "" != "alimentos"), aunque --preferir xlsx la resuelva hacia vacio; a
+    # diferencia del caso arriba (ambas vacias, sin decision), esta si debe
+    # quedar en el registro
+    col_xlsx = pd.Series([""])
+    col_pdf = pd.Series(["alimentos"])
+    genericos = pd.Series(["arroz"])
+    valores, resoluciones = _resolver_categoria(
+        col_xlsx, col_pdf, genericos, preferir="xlsx", columna="COG"
+    )
+    assert list(valores) == [""]
+    assert len(resoluciones) == 1
+    assert resoluciones[0].valor_final == ""
+    assert resoluciones[0].metodo == "preferido"
+    assert resoluciones[0].origen == "xlsx"
 
 
 # -- match_dfs --------------------------------------------------------------
@@ -346,9 +520,40 @@ def test_match_dfs_columna_de_una_sola_fuente_se_copia_directo(
     # distintos por generico confirman que el mapeo sobrevive al ordenamiento interno
     # de match_dfs, no solo que la columna "se llena" con un valor cualquiera
     _sin_prompt(monkeypatch)
-    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="xlsx").set_index("generico")
-    assert resultado.loc["pan", "COG"] == "panaderia"
-    assert resultado.loc["aceite", "COG"] == "aceites y grasas"
+    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="xlsx")
+    df = resultado.df.set_index("generico")
+    assert df.loc["pan", "COG"] == "panaderia"
+    assert df.loc["aceite", "COG"] == "aceites y grasas"
+
+
+def test_match_dfs_columna_de_una_sola_fuente_produce_resolucion_directo() -> None:
+    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
+    eventos_cog = [r for r in resultado.resoluciones if r.columna == "COG"]
+    assert eventos_cog
+    assert all(r.metodo == "directo" and r.origen == "xlsx" for r in eventos_cog)
+    assert set(g for r in eventos_cog for g in r.genericos) == {"pan", "aceite"}
+
+
+def test_resolver_directo_fila_no_omite_valores_vacios() -> None:
+    # regresion: un vacio omitido aqui deja sin metadata a ese generico en
+    # _construir_detalle_genericos_pdf -- mismo patron de bug que tiene_enc
+    # via FUENTES_POSIBLES vs columna vacia, pero a nivel de una fila puntual
+    col = pd.Series(["1.01", ""])
+    genericos = pd.Series(["arroz", "frijol"])
+    resoluciones = _resolver_directo(col, genericos, "encadenamiento", "xlsx")
+    assert len(resoluciones) == 2
+    assert {r.genericos[0] for r in resoluciones} == {"arroz", "frijol"}
+    vacio = next(r for r in resoluciones if r.genericos == ("frijol",))
+    assert vacio.valor_final == ""
+    assert vacio.metodo == "directo"
+
+
+def test_resolver_directo_categoria_omite_valores_vacios() -> None:
+    col = pd.Series(["alimentos", ""])
+    genericos = pd.Series(["arroz", "frijol"])
+    resoluciones = _resolver_directo(col, genericos, "COG", "xlsx")
+    assert len(resoluciones) == 1
+    assert resoluciones[0].valor_final == "alimentos"
 
 
 def test_match_dfs_columna_solo_pdf_mantiene_mapeo_por_generico_tras_ordenar() -> None:
@@ -356,17 +561,18 @@ def test_match_dfs_columna_solo_pdf_mantiene_mapeo_por_generico_tras_ordenar() -
     # confirman que match_dfs no desalinea el copiado tras su propio sort interno --
     # el contenido real extraido del pdf ya tiene sus tests en test_extraccion_pdf.py,
     # esto es sobre el mecanismo de copia de match_dfs, no sobre la extraccion
-    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf").set_index("generico")
-    assert resultado.loc["aceite", "CCIF grupo"] == "01.1 aceites y grasas"
-    assert resultado.loc["pan", "CCIF grupo"] == "01.2 pan y cereales"
-    assert resultado.loc["aceite", "SCIAN rama"] == "1111 cultivo"
-    assert resultado.loc["pan", "SCIAN rama"] == "3118 panificacion"
+    df = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf").df.set_index("generico")
+    assert df.loc["aceite", "CCIF grupo"] == "01.1 aceites y grasas"
+    assert df.loc["pan", "CCIF grupo"] == "01.2 pan y cereales"
+    assert df.loc["aceite", "SCIAN rama"] == "1111 cultivo"
+    assert df.loc["pan", "SCIAN rama"] == "3118 panificacion"
 
 
 def test_match_dfs_columna_sin_ninguna_fuente_queda_vacia() -> None:
     # canasta consumo minimo: frozenset() en 2013
     resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
-    assert (resultado["canasta consumo minimo"] == "").all()
+    assert (resultado.df["canasta consumo minimo"] == "").all()
+    assert not any(r.columna == "canasta consumo minimo" for r in resultado.resoluciones)
 
 
 def test_match_dfs_columna_solo_sync_no_participa_del_cruce_xlsx_pdf() -> None:
@@ -393,23 +599,23 @@ def test_match_dfs_columna_solo_sync_no_participa_del_cruce_xlsx_pdf() -> None:
         }
     )
     resultado = match_dfs(df_xlsx, df_pdf, 2010, preferir="pdf")
-    assert (resultado["SCIAN sector"] == "").all()
+    assert (resultado.df["SCIAN sector"] == "").all()
 
 
 def test_match_dfs_columnas_en_orden_de_columnas_base() -> None:
     resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
-    assert list(resultado.columns) == list(COLUMNAS_BASE)
+    assert list(resultado.df.columns) == list(COLUMNAS_BASE)
 
 
 def test_match_dfs_alinea_por_generico_sin_importar_orden_de_entrada() -> None:
     # df_xlsx entra con "pan" primero, df_pdf con "aceite" primero
     resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
-    assert list(resultado["generico"]) == ["aceite", "pan"]
+    assert list(resultado.df["generico"]) == ["aceite", "pan"]
 
 
 def test_match_dfs_preferir_pdf_repone_prefijo_de_ccif_division() -> None:
-    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
-    fila_aceite = resultado.loc[resultado["generico"] == "aceite"]
+    df = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf").df
+    fila_aceite = df.loc[df["generico"] == "aceite"]
     assert fila_aceite["CCIF division"].iloc[0] == "01 alimentos"
 
 
@@ -422,7 +628,7 @@ def test_match_dfs_sin_preferir_no_pregunta_si_ccif_solo_difiere_en_prefijo(
     # cruzadas coincide exacto o dentro de tolerancia de redondeo
     _sin_prompt(monkeypatch)
     resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir=None)
-    assert list(resultado["CCIF division"]) == ["01 alimentos", "01 alimentos"]
+    assert list(resultado.df["CCIF division"]) == ["01 alimentos", "01 alimentos"]
 
 
 def test_match_dfs_sin_preferir_pregunta_divergencia_real_de_nombre_ccif(
@@ -438,4 +644,15 @@ def test_match_dfs_sin_preferir_pregunta_divergencia_real_de_nombre_ccif(
 
     resultado = match_dfs(df_xlsx, df_pdf, 2013, preferir=None)
     assert len(llamadas) == 1
-    assert list(resultado["CCIF division"]) == ["03 prendas de vestir y calzado"] * 2
+    assert list(resultado.df["CCIF division"]) == ["03 prendas de vestir y calzado"] * 2
+
+
+def test_match_dfs_resoluciones_ponderador_una_por_generico() -> None:
+    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
+    eventos = [r for r in resultado.resoluciones if r.columna == "ponderador"]
+    assert {r.genericos for r in eventos} == {("pan",), ("aceite",)}
+
+
+def test_match_dfs_resoluciones_es_instancia_de_resolucion() -> None:
+    resultado = match_dfs(_xlsx_2013(), _pdf_2013(), 2013, preferir="pdf")
+    assert all(isinstance(r, Resolucion) for r in resultado.resoluciones)

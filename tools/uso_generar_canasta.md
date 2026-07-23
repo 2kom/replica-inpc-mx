@@ -13,10 +13,11 @@ las 4 versiones. El **modo `xlsx + pdf`** (`--pdf`) funciona también para las
 `_extraer_2013`, `_extraer_2018` y `_extraer_2024`. En **2010**, `SCIAN
 sector`/`SCIAN rama` quedan vacíos aunque se use `--pdf` (el pdf 2010 no trae
 SCIAN; `FUENTES_POSIBLES` los marca como `sync`, se llenan solo con
-`--sincronizar`, todavía sin cuerpo). El modo `xlsx + pdf`
-tampoco escribe registro JSON aún (solo el CSV), a diferencia del modo
-`xlsx` solo. El modo `--sincronizar` (`_ejecutar_sincronizacion`) sigue sin
-cuerpo. Ver §Cruce `xlsx` + `pdf` y §Diseño futuro: sincronización.
+`--sincronizar`, todavía sin cuerpo). El modo `xlsx + pdf` ya escribe su
+propio registro JSON (`escribir_registro_pdf`), con el detalle de cómo se
+resolvió cada campo/categoría cruzada. El modo `--sincronizar`
+(`_ejecutar_sincronizacion`) sigue sin cuerpo. Ver §Cruce `xlsx` + `pdf` y
+§Diseño futuro: sincronización.
 
 ## Instalación
 
@@ -74,7 +75,7 @@ Ver §Cruce `xlsx` + `pdf` para el detalle del algoritmo.
 | `--xlsx` | Ruta al archivo xlsx de ponderadores. |
 | `--pdf` | Opcional. Ruta al **manual completo** de INEGI (no al anexo pre-recortado) — `extraccion_pdf.py` lee un rango de páginas directo del manual. |
 | `--preferir {pdf,xlsx}` | Opcional, requiere `--pdf`. Preferencia automática para resolver discrepancias del cruce, sin preguntar en consola. |
-| `-o` | Directorio de salida para el CSV (y el registro JSON, solo en modo `xlsx` sin `pdf` — ver §Estado actual). Se crea automáticamente si no existe. |
+| `-o` | Directorio de salida para el CSV y el registro JSON. Se crea automáticamente si no existe. |
 
 ### Archivos generados
 
@@ -83,10 +84,14 @@ Modo `xlsx` (sin `pdf`) deja en `salida/`:
 - `ponderadores_{version}.csv` — la canasta intermedia. Ver §Esquema del
   CSV de salida para el detalle de columnas.
 - `xlsx_{version}_{fecha}.json` — un registro con el resumen de la
-  extracción. Ver §Registro JSON.
+  extracción. Ver §Registro JSON (modo solo `xlsx`).
 
-Modo `xlsx + pdf` deja solo `ponderadores_{version}.csv` — sin JSON de
-registro todavía (pendiente).
+Modo `xlsx + pdf` deja:
+
+- `ponderadores_{version}.csv` — igual que en modo `xlsx`.
+- `pdf_{version}_{fecha}.json` — registro con el resumen del cruce, incluido
+  cómo se resolvió cada campo/categoría. Ver §Registro JSON (modo `xlsx +
+  pdf`).
 
 ## Limitaciones actuales
 
@@ -96,8 +101,6 @@ registro todavía (pendiente).
 - `--sincronizar`, `--csv-fuente` y `--csv-destino` son aceptados por el
   parser (incluida su validación de rutas), pero `_ejecutar_sincronizacion`
   no tiene cuerpo: la corrida termina sin error y sin generar nada.
-- El modo `xlsx + pdf` no escribe registro JSON (a diferencia del modo
-  `xlsx` solo).
 - El cruce (`match.py`) asume que `df_xlsx` y `df_pdf` tienen el mismo largo
   y que, tras ordenar cada uno por `generico`, la fila `i` de uno corresponde
   a la fila `i` del otro — sin verificarlo. Esto vale porque en teoría el
@@ -125,9 +128,10 @@ _A partir de acá es referencia para quien toca el código de
 
 El CSV final siempre tiene estas 15 columnas fijas, en este orden
 (`COLUMNAS_BASE` en `tools/canasta_inpc/esquema.py`) — esto describe el
-contrato final del pipeline completo; hoy, con solo el modo `xlsx`
-implementado, varias columnas quedan vacías porque su única fuente posible
-es `pdf` o `sync` (ver §Fuentes por columna y versión):
+contrato final del pipeline completo. Corriendo solo `xlsx` (sin `--pdf`),
+las columnas cuya única fuente posible es `pdf` o `sync` quedan vacías; con
+`--pdf` las 4 versiones llenan casi todo, salvo lo que depende de `sync`
+(`--sincronizar`, todavía sin cuerpo — ver §Fuentes por columna y versión):
 
 1. `generico`
 2. `ponderador`
@@ -256,22 +260,41 @@ las 4 versiones.
    - **ninguna** (o solo `sync`, que no participa de este cruce) → columna
      vacía.
 3. **Grupo A — fila por fila** (`generico`, `ponderador`, `encadenamiento`):
-   se compara cada fila individual. Si coincide, no hay nada que resolver.
-   Para `ponderador`/`encadenamiento`, una discrepancia dentro de la
-   tolerancia de redondeo (los decimales de la fuente menos precisa caben en
-   los de la más precisa) se resuelve sola, quedándose con el valor de mayor
-   precisión, sin preguntar. Una discrepancia real se resuelve fila por
-   fila, una por una.
+   se compara cada fila individual. Si coincide, no hay nada que resolver
+   (`metodo="igual"`, `origen="ambas"`). Para `ponderador`/`encadenamiento`,
+   una discrepancia dentro de la tolerancia de redondeo (los decimales de la
+   fuente menos precisa caben en los de la más precisa) se resuelve sola,
+   quedándose con el valor de mayor precisión, sin preguntar
+   (`metodo="redondeo"` — **`origen` puede ser cualquiera de las 2 fuentes**,
+   incluido `xlsx`, aunque haya `--preferir pdf`: la tolerancia de redondeo
+   no consulta `--preferir`, ver §`--preferir`). Una discrepancia real se
+   resuelve fila por fila, una por una (`metodo="preferido"` o
+   `"interactiva"`, ver §`--preferir`).
 4. **Grupo B — categórica, agrupada por par único** (`COG`, `CCIF
    division/grupo/clase`, `inflacion componente/subcomponente/agrupacion`,
    `SCIAN sector/rama`, `durabilidad`, `canasta basica`, `canasta consumo
    minimo`): las discrepancias se agrupan por el par único
    `(valor_xlsx, valor_pdf)` — si 5 genéricos comparten el mismo par (ej. el
    caso real de 2018, `"ropa y calzado"` vs `"prendas de vestir y calzado"`
-   en `CCIF division`, 29 filas), se resuelve una sola vez, no 29.
-5. Cada discrepancia real (grupo A o B) se resuelve con `--preferir` si vino
+   en `CCIF division`, 29 filas), se resuelve una sola vez, no 29. En
+   columnas `CCIF *`, si la clave normalizada (sin prefijo numérico) ya
+   coincide, no hay discrepancia real (`metodo="igual"`) — `origen="ambas"`
+   solo si el string crudo también era idéntico; si no (caso típico: pdf
+   trae el prefijo, xlsx nunca), `origen="pdf"` (el código solo vino de ahí).
+5. **Columnas de una sola fuente** (grupo C, ej. `encadenamiento` en 2024 —
+   solo xlsx — o `CCIF grupo`/`clase` en todas las versiones — solo pdf): se
+   copian directo, sin comparar (`metodo="directo"`).
+6. Cada discrepancia real (grupo A o B) se resuelve con `--preferir` si vino
    el flag (sin preguntar), o si no, con un prompt en consola — Enter u
    otra respuesta no reconocida = `pdf`.
+7. **Híbrido CCIF**: si una discrepancia real en columna `CCIF *` se resuelve
+   hacia `xlsx`, el nombre de xlsx nunca trae el código numérico — sin
+   reponerlo se perdería por completo. `_reconstruir_hibrido_ccif` toma el
+   código del `pdf` (única fuente que lo tiene) y lo antepone al nombre
+   elegido del xlsx (ej. `"ropa y calzado"` + código `"03"` del pdf →
+   `"03 ropa y calzado"`, `origen="mixto"`). Si por algún motivo el pdf no
+   trae código (no debería pasar, dado el contrato de extracción), se usa el
+   xlsx tal cual (`origen="xlsx"`), sin fabricar un `"mixto"` que no aplica.
 
 ### `--preferir`
 
@@ -282,11 +305,30 @@ cruzadas, incluido `ponderador`/
 mismo `--preferir` que el resto, solo la tolerancia de redondeo se resuelve
 aparte, sin consultar `--preferir`).
 
+### Registro JSON (modo `xlsx` + `pdf`)
+
+Cada corrida escribe `{salida}/pdf_{version}_{YYYYMMDD_HHMMSS_ffffff}.json`
+además del CSV (`escribir_registro_pdf` en `tools/canasta_inpc/registro.py`).
+`match_dfs` devuelve, junto al df maestro, una `Resolucion` por cada campo
+(grupo A/C fila) o categoría final (grupo B/C categórica) — `registro.py`
+solo agrupa y serializa eso, no reconstruye nada comparando de nuevo
+`df_xlsx`/`df_pdf`/el resultado.
+
+| Campo | Contenido |
+| --- | --- |
+| `tipo` | Siempre `"xlsx_pdf"` — dato fijo, no texto a parsear. |
+| `preferir` | `"pdf"`, `"xlsx"`, o `null` si no vino el flag — antes iba incrustado en `tipo` como prosa (`"xlsx + pdf (preferir pdf)"`), ahora es su propio campo estructurado. |
+| `xlsx`, `pdf`, `csv` | Rutas de entrada/salida usadas en la corrida. |
+| `version` | Versión de canasta. |
+| `genericos` | Cantidad de genéricos extraídos. |
+| `ponderadores`, `encadenamientos` | Cantidad con valor no vacío; `encadenamientos` es `null` en versiones sin esa columna en ninguna fuente (2010/2018 — a diferencia del modo `xlsx` solo, acá se consulta `FUENTES_POSIBLES`, no si la columna existe en el df: `match_dfs` siempre crea las 15 columnas). |
+| `clasificaciones` | Por cada columna de clasificación presente: `genericos`, `categorias_unicas`, y `categorias`. Por cada categoría final, `genericos` (conteo) + `metodos` (conteo por `igual`/`decision`/`directo` — `redondeo` NO aplica acá, es exclusivo de columnas numéricas fila (`ponderador`/`encadenamiento`, viven en `genericos_detalle`); `preferido` e `interactiva` se juntan en `"decision"`, ese dato ya vive en `preferir` a nivel de todo el registro) + `origenes_igual`/`origenes_decision`/`origenes_directo` (conteo por `xlsx`/`pdf`/`ambas`/`mixto`, solo si el bucket correspondiente tuvo algo). Si alguna decisión real resolvió hacia vacío (ej. `--preferir xlsx` y el xlsx no clasificaba ese genérico), aparece una categoría sintética `"sin_clasificar"` con el mismo desglose — no cuenta para `genericos`/`categorias_unicas` (no es una categoría real, es metadata de una decisión que de otro modo desaparecería del registro). |
+| `genericos_detalle` | Un `{generico, ponderador, [encadenamiento]}` por fila, igual que en modo `xlsx` solo, pero `ponderador`/`encadenamiento` van siempre anidados como `{valor, origen, metodo}` — shape uniforme: si la columna es de una sola fuente en esta versión (grupo C, ej. `encadenamiento` en 2024), `metodo="directo"` en vez de quedar plana, para no tener un esquema mixto (a veces string, a veces objeto) según la versión. |
+
 ### Pendiente
 
 - `resolver.py` no existe como archivo aparte — su responsabilidad (resolver
   discrepancias) ya vive dentro de `match.py`.
-- Sin registro JSON para este modo (ver §Estado actual).
 
 ## Diseño futuro: sincronización
 
