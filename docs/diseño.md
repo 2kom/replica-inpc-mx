@@ -1684,9 +1684,7 @@ ReplicaInpcError
 ├── ErrorValidacion           # no falla la corrida
 │   ├── FuenteNoDisponible
 │   └── RespuestaInvalida
-├── ErrorConfiguracion        # ensamblado o invocación inválida
-└── ErrorPersistencia         # lectura/escritura de artefactos
-    └── ArtefactoNoEncontrado
+└── ErrorConfiguracion        # ensamblado o invocación inválida
 ```
 
 Excepciones conscientes documentadas en §1.4:
@@ -3290,10 +3288,6 @@ class RespuestaInvalida(ErrorValidacion): ...
 
 # Errores de configuración — el sistema fue ensamblado o invocado incorrectamente
 class ErrorConfiguracion(ReplicaInpcError): ...
-
-# Errores de persistencia — en la jerarquía por compatibilidad; no lanzados en v2
-class ErrorPersistencia(ReplicaInpcError): ...
-class ArtefactoNoEncontrado(ErrorPersistencia): ...
 ```
 
 Todos los tipos de error se re-exportan en `replica_inpc/__init__.py` — el usuario los importa como `rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc., sin rutas internas.

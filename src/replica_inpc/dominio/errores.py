@@ -169,18 +169,3 @@ class ErrorConfiguracion(ReplicaInpcError):
     """
 
     pass
-
-
-class ErrorPersistencia(ReplicaInpcError):
-    """Falló la lectura o escritura de artefactos internos.
-
-    Ver: docs/diseño.md §9.1
-    """
-
-    pass
-
-
-class ArtefactoNoEncontrado(ErrorPersistencia):
-    """No se encontró un artefacto persistido solicitado."""
-
-    pass
