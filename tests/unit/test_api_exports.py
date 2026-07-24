@@ -19,7 +19,7 @@ _SIMBOLOS_CLAVE = [
     "calcular_historia",
     "set_token",
     "limpiar_cache",
-    "TIPOS_CON_VALIDACION",
+    "INDICES_VALIDABLES",
     "PeriodoMensual",
     "PeriodoQuincenal",
     "periodo_desde_str",

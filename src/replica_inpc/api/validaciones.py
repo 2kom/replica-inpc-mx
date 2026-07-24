@@ -12,7 +12,7 @@ from replica_inpc.dominio.modelos.validacion import (
     ValidacionVariacion,
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
+from replica_inpc.dominio.tipos import INDICES_VALIDABLES
 from replica_inpc.dominio.validacion.incidencias import (
     _tipo_incidencia,
     validar_incidencias,
@@ -25,7 +25,7 @@ from replica_inpc.dominio.validacion.variaciones import (
 from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValidacionApi
 
 __all__ = [
-    "TIPOS_CON_VALIDACION",
+    "INDICES_VALIDABLES",
     "validar_incidencia",
     "validar_indice",
     "validar_variacion",
@@ -33,10 +33,10 @@ __all__ = [
 
 
 def _verificar_tipo(tipo: str) -> None:
-    if tipo not in TIPOS_CON_VALIDACION:
+    if tipo not in INDICES_VALIDABLES:
         raise ErrorConfiguracion(
             f"tipo '{tipo}' no es comparable contra INEGI; "
-            f"tipos válidos: {sorted(TIPOS_CON_VALIDACION)}."
+            f"tipos válidos: {sorted(INDICES_VALIDABLES)}."
         )
 
 

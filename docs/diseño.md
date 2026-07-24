@@ -76,7 +76,7 @@ El historial de cambios vive en git.
     - [11.11 Firma de `validacion/indices.py`](#1111-firma-de-validacionindicespy)
     - [11.12 `id_corrida` en `ResultadoIndice`](#1112-id_corrida-en-resultadoindice)
     - [11.13 Schema condicional en `ReporteDetalladoValidacion`](#1113-schema-condicional-en-reportedetalladovalidacion)
-    - [11.14 `TIPOS_CON_VALIDACION` en el dominio](#1114-tipos_con_validacion-en-el-dominio)
+    - [11.14 `INDICES_VALIDABLES` en el dominio](#1114-tipos_con_validacion-en-el-dominio)
     - [11.15 Cache de clase en `FuenteValidacionApi`](#1115-cache-de-clase-en-fuentevalidacionapi)
     - [11.16 UTF-8 como primer encoding en `LectorSeriesCsv`](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
     - [11.17 Dispatch interno en `CalculadorBase`](#1117-dispatch-interno-en-calculadorbase)
@@ -379,7 +379,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | ------ | ------- |
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
-| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `TIPOS_CON_VALIDACION`, `RANGOS_CANASTAS`, `ManifestUnidad`, `ManifestDerivado` |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestUnidad`, `ManifestDerivado` |
 | `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia.py` | `alinear_genericos` |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
@@ -501,10 +501,10 @@ COLUMNAS_CLASIFICACION: frozenset[str] = frozenset({
 
 Columnas de `CanastaCanonica` válidas como `tipo` para calcular subíndices. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador hace split por categoría; el nivel `indice` de cada fila = valor de la categoría (ej. `"subyacente"`).
 
-**`TIPOS_CON_VALIDACION`**
+**`INDICES_VALIDABLES`**
 
 ```python
-TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
+INDICES_VALIDABLES: frozenset[str] = frozenset(
     {"inpc", "inflacion componente", "inflacion subcomponente"}
 )
 ```
@@ -1104,7 +1104,7 @@ DataFrame vacío si todos los índices tuvieron dato exacto en ambos extremos; d
 
 `ValidacionIndice`, `ValidacionVariacion` y `ValidacionIncidencia` encapsulan la comparación entre un resultado replicado y las series publicadas por INEGI. Todas heredan de `Validacion` (ver [5.5](#55-modelo-base)).
 
-Sin `.df` ni `.pipe()` — las validaciones son terminales. `_repr_html_()` expone `.resumen` en notebooks. El `Resultado*` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`. `TIPOS_CON_VALIDACION` en [5.2](#52-tipos-compartidos). `estado_validacion` en [5.1](#51-semántica-compartida).
+Sin `.df` ni `.pipe()` — las validaciones son terminales. `_repr_html_()` expone `.resumen` en notebooks. El `Resultado*` subyacente no tiene acceso externo; toda la información está expuesta vía `.resultado`, `.resumen`, `.reporte` y `.diagnostico`. `INDICES_VALIDABLES` en [5.2](#52-tipos-compartidos). `estado_validacion` en [5.1](#51-semántica-compartida).
 
 **ValidacionIndice — constructor**
 
@@ -1122,7 +1122,7 @@ ValidacionIndice(
 
 | Invariante | Condición | Error |
 | --- | --- | --- |
-| Tipos validables | todos `manifiesto[i].tipo` ∈ `TIPOS_CON_VALIDACION` | `InvarianteViolado` |
+| Tipos validables | todos `manifiesto[i].tipo` ∈ `INDICES_VALIDABLES` | `InvarianteViolado` |
 | Columnas Vista | `resultado_largo_df` contiene `indice_replicado`, `indice_inegi`, `error_absoluto`, `estado_validacion` | `InvarianteViolado` |
 
 **`.resultado`** — `Vista(resultado_largo_df, ["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"])`.
@@ -1196,7 +1196,7 @@ Misma estructura que `ValidacionIndice`. Diferencias:
 | --- | --- | --- |
 | Input | `ResultadoVariacion` | `ResultadoIncidencia` |
 | Columnas Vista | `variacion_pp`, `variacion_inegi_pp`, `error_absoluto_pp`, `estado_validacion` | `incidencia_pp`, `incidencia_inegi_pp`, `error_absoluto_pp`, `estado_validacion` |
-| Invariante de tipo | `manifiesto.tipo` ∈ `TIPOS_CON_VALIDACION` | idem |
+| Invariante de tipo | `manifiesto.tipo` ∈ `INDICES_VALIDABLES` | idem |
 | `.resumen` base | extiende `ResultadoVariacion.resumen` (índice `0`, una fila) | extiende `ResultadoIncidencia.resumen` (índice `0`, una fila) |
 
 **Asimetría respecto a `ValidacionIndice`:** el `.resultado.largo` de derivados solo contiene filas computables — sin filas `sin_datos`/`fallida`. Las combinaciones no computables aparecen en `.reporte`/`.diagnostico` con `estado_validacion = sin_calculo`, pero no en `.resultado.largo`. Por esto, el `.resumen` de derivados no incluye `n_sin_calculo` y `estado_validacion_global` nunca vale `sin_calculo`.
@@ -1588,7 +1588,7 @@ validar_indices(
 ) -> ValidacionIndice
 ```
 
-Solo admite tipos en `TIPOS_CON_VALIDACION` ([5.2](#52-tipos-compartidos)). Lanza `InvarianteViolado` para otros tipos.
+Solo admite tipos en `INDICES_VALIDABLES` ([5.2](#52-tipos-compartidos)). Lanza `InvarianteViolado` para otros tipos.
 
 ---
 
@@ -1602,7 +1602,7 @@ validar_variaciones(
 ) -> ValidacionVariacion
 ```
 
-Solo admite `resultado.manifiesto.tipo ∈ TIPOS_CON_VALIDACION`. Solo las clases siguientes son comparables contra INEGI:
+Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo las clases siguientes son comparables contra INEGI:
 
 | `clase_variacion` | `tipo_variacion` en `FuenteValidacion` |
 | --- | --- |
@@ -1625,7 +1625,7 @@ validar_incidencias(
 ) -> ValidacionIncidencia
 ```
 
-Solo admite `resultado.manifiesto.tipo ∈ TIPOS_CON_VALIDACION`. Solo `clase_incidencia = "periodica_mensual"` es comparable; INEGI únicamente publica incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
+Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable; INEGI únicamente publica incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
 
 ---
 
@@ -1743,7 +1743,7 @@ Funciones públicas aceptan `str` en parámetros de periodo; nunca `Periodo*` en
 
 **§D3 — Versión explícita en insumos:** `version` es obligatorio en `cargar_canasta` y `cargar_serie` porque las canastas 2010 y 2013 tienen genéricos idénticos; auto-detect no puede distinguirlas y elegiría mal en silencio, produciendo un cálculo erróneo sin error visible.
 
-**§D4 — Re-export en `replica_inpc/__init__.py`:** el paquete raíz re-exporta en `__all__` los tipos de error de `dominio/errores.py` (`rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc.), los tipos de periodo (`rep.PeriodoMensual`, `rep.PeriodoQuincenal`, `rep.periodo_desde_str`), `rep.VersionCanasta` y `rep.TIPOS_CON_VALIDACION`. El usuario no necesita importar desde rutas internas. `api/__init__.py` es vacío — el ensamblado ocurre solo en el paquete raíz.
+**§D4 — Re-export en `replica_inpc/__init__.py`:** el paquete raíz re-exporta en `__all__` los tipos de error de `dominio/errores.py` (`rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc.), los tipos de periodo (`rep.PeriodoMensual`, `rep.PeriodoQuincenal`, `rep.periodo_desde_str`), `rep.VersionCanasta` y `rep.INDICES_VALIDABLES`. El usuario no necesita importar desde rutas internas. `api/__init__.py` es vacío — el ensamblado ocurre solo en el paquete raíz.
 
 ---
 
@@ -2448,7 +2448,7 @@ p, i, v = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
 
 Comparación de resultados replicados contra series publicadas por INEGI. Las tres funciones usan las tolerancias configuradas en `config.py` (§6.1) y obtienen el token vía `get_token()`.
 
-`TIPOS_CON_VALIDACION = {"inpc", "inflacion componente", "inflacion subcomponente"}` — re-exportado como `rep.TIPOS_CON_VALIDACION`.
+`INDICES_VALIDABLES = {"inpc", "inflacion componente", "inflacion subcomponente"}` — re-exportado como `rep.INDICES_VALIDABLES`.
 
 **validar_indice**
 
@@ -2458,12 +2458,12 @@ def validar_indice(resultado: ResultadoIndice) -> ValidacionIndice:
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `resultado` | `ResultadoIndice` | resultado a validar; todos los `manifiesto[i].tipo` deben ser iguales y pertenecer a `TIPOS_CON_VALIDACION` |
+| `resultado` | `ResultadoIndice` | resultado a validar; todos los `manifiesto[i].tipo` deben ser iguales y pertenecer a `INDICES_VALIDABLES` |
 
 | Condición | Error |
 | --- | --- |
 | `resultado.manifiesto` mezcla varios tipos | `ErrorConfiguracion` |
-| `tipo` no en `TIPOS_CON_VALIDACION` | `ErrorConfiguracion` |
+| `tipo` no en `INDICES_VALIDABLES` | `ErrorConfiguracion` |
 | token INEGI no configurado | `ErrorConfiguracion` |
 | API INEGI no responde / HTTP error | `FuenteNoDisponible` |
 | respuesta INEGI con formato inesperado | `RespuestaInvalida` |
@@ -2478,11 +2478,11 @@ def validar_variacion(resultado: ResultadoVariacion) -> ValidacionVariacion:
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `resultado` | `ResultadoVariacion` | resultado a validar; `manifiesto.tipo` ∈ `TIPOS_CON_VALIDACION`; `manifiesto.clase` comparable |
+| `resultado` | `ResultadoVariacion` | resultado a validar; `manifiesto.tipo` ∈ `INDICES_VALIDABLES`; `manifiesto.clase` comparable |
 
 | Condición | Error |
 | --- | --- |
-| `manifiesto.tipo` no en `TIPOS_CON_VALIDACION` | `ErrorConfiguracion` |
+| `manifiesto.tipo` no en `INDICES_VALIDABLES` | `ErrorConfiguracion` |
 | `manifiesto.clase` no comparable contra INEGI | `ErrorConfiguracion` |
 | token INEGI no configurado | `ErrorConfiguracion` |
 | API INEGI no responde / HTTP error | `FuenteNoDisponible` |
@@ -2500,11 +2500,11 @@ def validar_incidencia(resultado: ResultadoIncidencia) -> ValidacionIncidencia:
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `resultado` | `ResultadoIncidencia` | resultado a validar; `manifiesto.tipo` ∈ `TIPOS_CON_VALIDACION`; `manifiesto.clase = "periodica_mensual"` |
+| `resultado` | `ResultadoIncidencia` | resultado a validar; `manifiesto.tipo` ∈ `INDICES_VALIDABLES`; `manifiesto.clase = "periodica_mensual"` |
 
 | Condición | Error |
 | --- | --- |
-| `manifiesto.tipo` no en `TIPOS_CON_VALIDACION` | `ErrorConfiguracion` |
+| `manifiesto.tipo` no en `INDICES_VALIDABLES` | `ErrorConfiguracion` |
 | `manifiesto.clase ≠ "periodica_mensual"` | `ErrorConfiguracion` |
 | token INEGI no configurado | `ErrorConfiguracion` |
 | API INEGI no responde / HTTP error | `FuenteNoDisponible` |
@@ -3614,13 +3614,13 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ---
 
-### 11.14 `TIPOS_CON_VALIDACION` en el dominio
+### 11.14 `INDICES_VALIDABLES` en el dominio
 
-**Decisión:** `TIPOS_CON_VALIDACION` vive en `dominio/tipos.py`, aunque `INDICADORES_INEGI` (que mapea tipo → indicador concreto) vive en `infraestructura/inegi/fuente_validacion_api.py`.
+**Decisión:** `INDICES_VALIDABLES` vive en `dominio/tipos.py`, aunque `INDICADORES_INEGI` (que mapea tipo → indicador concreto) vive en `infraestructura/inegi/fuente_validacion_api.py`.
 
-**Alternativa considerada:** derivar `TIPOS_CON_VALIDACION` dinámicamente desde `INDICADORES_INEGI` en infraestructura.
+**Alternativa considerada:** derivar `INDICES_VALIDABLES` dinámicamente desde `INDICADORES_INEGI` en infraestructura.
 
-**Razón:** qué tipos admiten comparación contra una fuente oficial es una propiedad del dominio — afecta el esquema de `ValidacionIndice.reporte` y la lógica de `validacion/indices.py`, ambos en el dominio. Que el indicador concreto sea `910420` es un detalle del adaptador INEGI. Si se agrega un adaptador distinto (ej. CSV con datos oficiales), `TIPOS_CON_VALIDACION` no debería cambiar.
+**Razón:** qué tipos admiten comparación contra una fuente oficial es una propiedad del dominio — afecta el esquema de `ValidacionIndice.reporte` y la lógica de `validacion/indices.py`, ambos en el dominio. Que el indicador concreto sea `910420` es un detalle del adaptador INEGI. Si se agrega un adaptador distinto (ej. CSV con datos oficiales), `INDICES_VALIDABLES` no debería cambiar.
 
 ---
 
@@ -3899,7 +3899,7 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 ### 11.28 Re-export de errores y tipos en `replica_inpc/__init__.py`
 
-**Decisión:** `replica_inpc/__init__.py` re-exporta explícitamente en `__all__` los tipos de error (`ArchivoNoEncontrado`, `InvarianteViolado`, etc.), los tipos de periodo (`PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str`), `VersionCanasta` y `TIPOS_CON_VALIDACION`. El usuario los usa como `rep.ArchivoNoEncontrado` sin imports internos. `api/__init__.py` es vacío.
+**Decisión:** `replica_inpc/__init__.py` re-exporta explícitamente en `__all__` los tipos de error (`ArchivoNoEncontrado`, `InvarianteViolado`, etc.), los tipos de periodo (`PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str`), `VersionCanasta` y `INDICES_VALIDABLES`. El usuario los usa como `rep.ArchivoNoEncontrado` sin imports internos. `api/__init__.py` es vacío.
 
 **Razón:** la API es flat — `import replica_inpc as rep` es el único import necesario. Sin el re-export, el usuario tendría que conocer rutas internas (`from replica_inpc.dominio.errores import ArchivoNoEncontrado`) que son un detalle de implementación sujeto a cambio. El re-export centraliza la superficie pública en un solo punto y permite refactorizar el interior sin romper código de usuario.
 

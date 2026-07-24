@@ -30,7 +30,7 @@ from replica_inpc.api.incidencias import (
 from replica_inpc.api.indices import a_mensual, calcular_indice, empalmar, rebasar
 from replica_inpc.api.insumos import cargar_canasta, cargar_serie
 from replica_inpc.api.validaciones import (
-    TIPOS_CON_VALIDACION,
+    INDICES_VALIDABLES,
     validar_incidencia,
     validar_indice,
     validar_variacion,
@@ -122,7 +122,7 @@ __all__ = [
     "mayor_incidencia",
     "menor_incidencia",
     # validaciones
-    "TIPOS_CON_VALIDACION",
+    "INDICES_VALIDABLES",
     "validar_incidencia",
     "validar_indice",
     "validar_variacion",

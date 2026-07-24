@@ -9,7 +9,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import ValidacionIndice
-from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
+from replica_inpc.dominio.tipos import INDICES_VALIDABLES
 from replica_inpc.dominio.validacion._comun import contar, rollup_global
 
 _COLS_DIAGNOSTICO = [
@@ -32,10 +32,10 @@ def validar_indices(
     tolerancia: float = 0.0009,
 ) -> ValidacionIndice:
     """Compara los índices replicados contra los publicados por INEGI."""
-    invalidos = {m.tipo for m in resultado.manifiesto} - TIPOS_CON_VALIDACION
+    invalidos = {m.tipo for m in resultado.manifiesto} - INDICES_VALIDABLES
     if invalidos:
         raise InvarianteViolado(
-            f"validar_indices: tipo(s) {sorted(invalidos)} fuera de TIPOS_CON_VALIDACION."
+            f"validar_indices: tipo(s) {sorted(invalidos)} fuera de INDICES_VALIDABLES."
         )
 
     largo = resultado.resultado.largo

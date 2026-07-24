@@ -9,7 +9,7 @@ from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.validacion import ValidacionVariacion
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
+from replica_inpc.dominio.tipos import INDICES_VALIDABLES
 from replica_inpc.dominio.validacion._comun import contar, rollup_global
 
 # clase_variacion → tipo_variacion del puerto FuenteValidacion.
@@ -49,10 +49,10 @@ def validar_variaciones(
     tolerancia_pp: float = 0.009,
 ) -> ValidacionVariacion:
     """Compara las variaciones replicadas contra las publicadas por INEGI."""
-    if resultado.manifiesto.tipo not in TIPOS_CON_VALIDACION:
+    if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
         raise InvarianteViolado(
             f"validar_variaciones: tipo '{resultado.manifiesto.tipo}' fuera de "
-            f"TIPOS_CON_VALIDACION."
+            f"INDICES_VALIDABLES."
         )
     tipo_variacion = _tipo_variacion(resultado.manifiesto.clase)
 

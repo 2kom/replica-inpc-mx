@@ -7,7 +7,7 @@ from replica_inpc.dominio.modelos.base import Validacion, Vista
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.tipos import TIPOS_CON_VALIDACION
+from replica_inpc.dominio.tipos import INDICES_VALIDABLES
 
 _COLS_VISTA_INDICE = ["indice_replicado", "indice_inegi", "error_absoluto", "estado_validacion"]
 _COLS_VISTA_VARIACION = [
@@ -33,10 +33,10 @@ class ValidacionIndice(Validacion):
         reporte_df: pd.DataFrame,
         diagnostico_df: pd.DataFrame,
     ) -> None:
-        invalidos = [m.tipo for m in resultado.manifiesto if m.tipo not in TIPOS_CON_VALIDACION]
+        invalidos = [m.tipo for m in resultado.manifiesto if m.tipo not in INDICES_VALIDABLES]
         if invalidos:
             raise InvarianteViolado(
-                f"ValidacionIndice solo admite tipos en TIPOS_CON_VALIDACION; "
+                f"ValidacionIndice solo admite tipos en INDICES_VALIDABLES; "
                 f"recibió {sorted(set(invalidos))}"
             )
         faltantes = set(_COLS_VISTA_INDICE) - set(resultado_largo_df.columns)
@@ -79,10 +79,10 @@ class ValidacionVariacion(Validacion):
         reporte_df: pd.DataFrame,
         diagnostico_df: pd.DataFrame,
     ) -> None:
-        if resultado.manifiesto.tipo not in TIPOS_CON_VALIDACION:
+        if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
             raise InvarianteViolado(
                 f"ValidacionVariacion: tipo '{resultado.manifiesto.tipo}' no está en "
-                f"TIPOS_CON_VALIDACION"
+                f"INDICES_VALIDABLES"
             )
         faltantes = set(_COLS_VISTA_VARIACION) - set(resultado_largo_df.columns)
         if faltantes:
@@ -124,10 +124,10 @@ class ValidacionIncidencia(Validacion):
         reporte_df: pd.DataFrame,
         diagnostico_df: pd.DataFrame,
     ) -> None:
-        if resultado.manifiesto.tipo not in TIPOS_CON_VALIDACION:
+        if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
             raise InvarianteViolado(
                 f"ValidacionIncidencia: tipo '{resultado.manifiesto.tipo}' no está en "
-                f"TIPOS_CON_VALIDACION"
+                f"INDICES_VALIDABLES"
             )
         faltantes = set(_COLS_VISTA_INCIDENCIA) - set(resultado_largo_df.columns)
         if faltantes:

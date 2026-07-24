@@ -28,7 +28,7 @@ COLUMNAS_CLASIFICACION: frozenset[str] = frozenset(
     }
 )
 
-TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
+INDICES_VALIDABLES: frozenset[str] = frozenset(
     {"inpc", "inflacion componente", "inflacion subcomponente"}
 )
 
