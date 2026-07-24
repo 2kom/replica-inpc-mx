@@ -32,7 +32,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 # -- periodos ------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ def _res_inc(
                 }
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
-    manifiesto = [ManifestUnidad(id_corrida, version, tipo, "LaspeyresEncadenadoT2")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(id_corrida, version, tipo, "LaspeyresEncadenadoT2")]  # type: ignore[arg-type]
     reporte = pd.DataFrame(
         {"version": version, "estado_calculo": df["estado_calculo"].to_numpy()},
         index=df.index,
@@ -141,7 +141,7 @@ def _res_multi(
     ]
     df = pd.DataFrame(filas).set_index(["periodo", "indice"])
     versiones = {v for _, _, v, _, _, _ in rows}
-    manifiesto = [ManifestUnidad(id_corrida, v, tipo, "LaspeyresDirecto") for v in versiones]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(id_corrida, v, tipo, "LaspeyresDirecto") for v in versiones]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame())
 
 

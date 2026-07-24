@@ -15,7 +15,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad, VersionCanasta
+from replica_inpc.dominio.tipos import ManifestCalculo, VersionCanasta
 
 # -- fixtures: canastas y series sintéticas ------------------------------------
 
@@ -173,7 +173,7 @@ def test_referencias_inpc_identidad() -> None:
     )
     prev = ResultadoIndice(
         df,
-        [ManifestUnidad("x", 2018, "inpc", "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo("x", 2018, "inpc", "LaspeyresDirecto")],  # type: ignore[arg-type]
         pd.DataFrame(),
         pd.DataFrame(),
     )
@@ -197,7 +197,7 @@ def test_referencias_normaliza_clave_renombrada() -> None:
     )
     prev = ResultadoIndice(
         df,
-        [ManifestUnidad("x", 2018, tipo, "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo("x", 2018, tipo, "LaspeyresDirecto")],  # type: ignore[arg-type]
         pd.DataFrame(),
         pd.DataFrame(),
     )

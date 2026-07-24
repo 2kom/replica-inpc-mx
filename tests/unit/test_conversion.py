@@ -10,7 +10,7 @@ from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 # --------------------------------------------------------------------------- helpers
 
@@ -20,8 +20,8 @@ def _manifiesto(
     tipo: str = "inpc",
     id_corrida: str = "abc",
     calculador: str = "LaspeyresDirecto",
-) -> ManifestUnidad:
-    return ManifestUnidad(
+) -> ManifestCalculo:
+    return ManifestCalculo(
         id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,

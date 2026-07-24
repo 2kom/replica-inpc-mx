@@ -94,7 +94,7 @@ El historial de cambios vive en git.
     - [11.27 `FuenteValidacion` en `dominio/`, no en `aplicacion/`](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
     - [11.28 Re-export de errores y tipos en `replica_inpc/__init__.py`](#1128-re-export-de-errores-y-tipos-en-replica_inpc__init__py)
     - [11.29 `a_mensual` — filtrado de manifiestos huérfanos](#1129-a_mensual--filtrado-de-manifiestos-huérfanos)
-    - [11.30 `ManifestUnidad.ruta_canasta` y `ruta_series` opcionales](#1130-manifestunidadruta_canasta-y-ruta_series-opcionales)
+    - [11.30 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales](#1130-manifestunidadruta_canasta-y-ruta_series-opcionales)
     - [11.31 `indice_incidencia` y de-encadenamiento de incidencias](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)
   - [12. Gaps conocidos](#12-gaps-conocidos)
     - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
@@ -379,7 +379,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | ------ | ------- |
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
-| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestUnidad`, `ManifestDerivado` |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestCalculo`, `ManifestDerivado` |
 | `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia.py` | `alinear_genericos` |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
@@ -524,9 +524,9 @@ RANGOS_CANASTAS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal |
 
 Periodos válidos por versión de canasta. `None` como fin = hasta el último periodo disponible. Usado en `calculo/base.py` para recortar `SerieNormalizada` antes del cálculo.
 
-**`ManifestUnidad`**
+**`ManifestCalculo`**
 
-Trazabilidad de una corrida elemental sobre una sola canasta. `empalmar` concatena listas de `ManifestUnidad` sin colapsarlas.
+Trazabilidad de una corrida elemental sobre una sola canasta. `empalmar` concatena listas de `ManifestCalculo` sin colapsarlas.
 
 | Campo | Tipo | Notas |
 | ----- | ---- | ----- |
@@ -890,7 +890,7 @@ Resultado de un cálculo elemental sobre una sola canasta, o de un empalme entre
 ```python
 ResultadoIndice(
     df: pd.DataFrame,
-    manifiesto: list[ManifestUnidad],
+    manifiesto: list[ManifestCalculo],
     reporte_df: pd.DataFrame,
     diagnostico_df: pd.DataFrame,
     periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
@@ -904,11 +904,11 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 | `manifiesto` no vacío | `len(manifiesto) >= 1` | `InvarianteViolado` |
 | Columnas mínimas | `df` contiene `version`, `tipo`, `indice_replicado`, `estado_calculo` | `InvarianteViolado` |
 | `estado_calculo` válido | valores ⊆ `{"ok", "rellenado", "parcial", "sin_datos", "fallida"}` | `InvarianteViolado` |
-| Coherencia manifiesto↔df | cada `ManifestUnidad` tiene ≥1 fila en `df` con su `version` y `tipo` | `InvarianteViolado` |
+| Coherencia manifiesto↔df | cada `ManifestCalculo` tiene ≥1 fila en `df` con su `version` y `tipo` | `InvarianteViolado` |
 
 **`.manifiesto`**
 
-`list[ManifestUnidad]`. Un elemento por corrida elemental; `empalmar` concatena listas sin colapsar. Ver campos de `ManifestUnidad` en [5.2](#52-tipos-compartidos).
+`list[ManifestCalculo]`. Un elemento por corrida elemental; `empalmar` concatena listas sin colapsar. Ver campos de `ManifestCalculo` en [5.2](#52-tipos-compartidos).
 
 **`.periodo_referencia`**
 
@@ -930,7 +930,7 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 
 **`.resumen` — esquema**
 
-Índice: `id_corrida`. Una fila por `ManifestUnidad`. `estado_calculo` = peor estado del tramo.
+Índice: `id_corrida`. Una fila por `ManifestCalculo`. `estado_calculo` = peor estado del tramo.
 
 | Columna | Tipo |
 | --- | --- |
@@ -1146,7 +1146,7 @@ Hereda columnas de `ResultadoIndice.resultado.largo` y agrega columnas de compar
 
 **`.resumen` — esquema**
 
-Extiende `ResultadoIndice.resumen`. Índice: `id_corrida`. Una fila por `ManifestUnidad`. Agrega columnas de validación:
+Extiende `ResultadoIndice.resumen`. Índice: `id_corrida`. Una fila por `ManifestCalculo`. Agrega columnas de validación:
 
 | Columna | Tipo | Descripción |
 | --- | --- | --- |
@@ -3598,9 +3598,9 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ### 11.12 `id_corrida` en `ResultadoIndice`
 
-**Decisión:** `CalcularHistoria` arma `id_corrida` como `f"{tipo}:{version}"` (determinista, no UUID) y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestUnidad(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
+**Decisión:** `CalcularHistoria` arma `id_corrida` como `f"{tipo}:{version}"` (determinista, no UUID) y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestCalculo(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
 
-**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El esquema `tipo:version` es único dentro de un mismo `ResultadoIndice` (cada versión aparece una sola vez por ejecución de `ejecutar()`) y legible en `resumen.index` — no es único entre ejecuciones repetidas de la misma historia, eso no es una garantía que el diseño requiera. El `ManifestUnidad` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
+**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El esquema `tipo:version` es único dentro de un mismo `ResultadoIndice` (cada versión aparece una sola vez por ejecución de `ejecutar()`) y legible en `resumen.index` — no es único entre ejecuciones repetidas de la misma historia, eso no es una garantía que el diseño requiera. El `ManifestCalculo` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
 
 ---
 
@@ -3753,7 +3753,7 @@ Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un peri
 3. Aplicar `_construir_mapa_renombre` + dedup defensivo por tramo (ver §11.22). Dedup con `keep="first"` — el tramo anterior prevalece cuando un renombre colapsa dos variantes en el mismo índice.
 4. Acumular tramos: cada tramo posterior contribuye solo sus periodos NO presentes ya en el acumulador; en el periodo frontera, aporta únicamente índices nuevos que el acumulador no tiene aún. En la práctica el periodo frontera queda del primer tramo — el segundo no añade nada para índices ya vistos.
 5. `pd.concat` de los DataFrames filtrados.
-6. El `manifiesto` del resultado combinado agrega las entradas `ManifestUnidad` de todos los tramos.
+6. El `manifiesto` del resultado combinado agrega las entradas `ManifestCalculo` de todos los tramos.
 
 **Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoIndice`. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
 
@@ -3909,17 +3909,17 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 ### 11.29 `a_mensual` — filtrado de manifiestos huérfanos
 
-**Problema:** cuando dos quincenas consecutivas de un periodo mensual tienen `version` distinta (ej. q1 es `2018` y q2 es `2024`, en el periodo frontera del empalme), la quincena de `version` menor puede quedar sin filas en el df mensual — el promedio simple solo produce filas para índices presentes en ambas quincenas. El `ManifestUnidad` del tramo menor queda huérfano: no tiene ninguna fila con su `version` y `tipo` en el df mensual, violando el invariante de `ResultadoIndice`.
+**Problema:** cuando dos quincenas consecutivas de un periodo mensual tienen `version` distinta (ej. q1 es `2018` y q2 es `2024`, en el periodo frontera del empalme), la quincena de `version` menor puede quedar sin filas en el df mensual — el promedio simple solo produce filas para índices presentes en ambas quincenas. El `ManifestCalculo` del tramo menor queda huérfano: no tiene ninguna fila con su `version` y `tipo` en el df mensual, violando el invariante de `ResultadoIndice`.
 
 **Decisión:** `a_mensual` filtra la lista de manifiestos al subconjunto de pares `(version, tipo)` que tienen al menos una fila en el df mensual resultante. Si el filtrado dejaría la lista vacía (caso extremo: resultado con un solo periodo mensual en la frontera), se preserva la lista original como fallback de provenance.
 
-**Razón:** el invariante de `ResultadoIndice` exige que cada `ManifestUnidad` tenga ≥1 fila con su `version` y `tipo`. En el periodo frontera del empalme, el promedio mensual produce un único resultado que hereda la `version` de la quincena dominante; el manifiesto de la versión menor quedaría sin cobertura. El filtrado resuelve la violación sin alterar el cálculo — solo ajusta la lista de provenance.
+**Razón:** el invariante de `ResultadoIndice` exige que cada `ManifestCalculo` tenga ≥1 fila con su `version` y `tipo`. En el periodo frontera del empalme, el promedio mensual produce un único resultado que hereda la `version` de la quincena dominante; el manifiesto de la versión menor quedaría sin cobertura. El filtrado resuelve la violación sin alterar el cálculo — solo ajusta la lista de provenance.
 
 ---
 
-### 11.30 `ManifestUnidad.ruta_canasta` y `ruta_series` opcionales
+### 11.30 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales
 
-**Decisión:** `ruta_canasta: Path | None = None` y `ruta_series: Path | None = None` en `ManifestUnidad`. Los calculadores (`LaspeyresDirecto`, `LaspeyresEncadenadoT1/T2`) no reciben rutas — operan sobre `CanastaCanonica` y `SerieNormalizada` ya en memoria. Solo la capa I/O (`LectorCanastaCsv`, `cargar_canasta`, `cargar_serie`) conoce la ruta de origen e inyecta los campos al construir el manifiesto.
+**Decisión:** `ruta_canasta: Path | None = None` y `ruta_series: Path | None = None` en `ManifestCalculo`. Los calculadores (`LaspeyresDirecto`, `LaspeyresEncadenadoT1/T2`) no reciben rutas — operan sobre `CanastaCanonica` y `SerieNormalizada` ya en memoria. Solo la capa I/O (`LectorCanastaCsv`, `cargar_canasta`, `cargar_serie`) conoce la ruta de origen e inyecta los campos al construir el manifiesto.
 
 **Razón:** los calculadores son funciones puras que transforman objetos de dominio; inyectarles rutas de filesystem viola la separación de capas — el dominio no debe conocer infraestructura. Con los campos opcionales, el manifiesto puede construirse tanto desde la capa I/O (con ruta) como desde código que genera datos directamente (sin ruta, p. ej. tests o notebooks con DataFrames manuales).
 

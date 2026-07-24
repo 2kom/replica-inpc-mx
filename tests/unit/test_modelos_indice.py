@@ -10,11 +10,11 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.base import Vista
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 
-def _manifiesto(id_corrida: str = "abc", version: int = 2018, tipo: str = "inpc") -> ManifestUnidad:
-    return ManifestUnidad(
+def _manifiesto(id_corrida: str = "abc", version: int = 2018, tipo: str = "inpc") -> ManifestCalculo:
+    return ManifestCalculo(
         id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,

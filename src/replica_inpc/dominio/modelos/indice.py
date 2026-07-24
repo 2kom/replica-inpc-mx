@@ -5,7 +5,7 @@ import pandas as pd
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.base import Resultado, Vista
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 _COLUMNAS_MINIMAS = {"version", "tipo", "indice_replicado", "estado_calculo"}
 _ORDEN_SEVERIDAD = {"ok": 0, "rellenado": 1, "parcial": 2, "sin_datos": 3, "fallida": 4}
@@ -16,7 +16,7 @@ class ResultadoIndice(Resultado):
     def __init__(
         self,
         df: pd.DataFrame,
-        manifiesto: list[ManifestUnidad],
+        manifiesto: list[ManifestCalculo],
         reporte_df: pd.DataFrame,
         diagnostico_df: pd.DataFrame,
         periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
@@ -38,7 +38,7 @@ class ResultadoIndice(Resultado):
         for m in manifiesto:
             if not ((df["version"] == m.version) & (df["tipo"] == m.tipo)).any():
                 raise InvarianteViolado(
-                    f"ManifestUnidad(id_corrida={m.id_corrida!r}, version={m.version}, "
+                    f"ManifestCalculo(id_corrida={m.id_corrida!r}, version={m.version}, "
                     f"tipo={m.tipo!r}) no tiene filas correspondientes en df"
                 )
         super().__init__(df[["indice_replicado"]])
@@ -57,7 +57,7 @@ class ResultadoIndice(Resultado):
         self._frontera = frontera
 
     @property
-    def manifiesto(self) -> list[ManifestUnidad]:
+    def manifiesto(self) -> list[ManifestCalculo]:
         return self._manifiesto
 
     @property

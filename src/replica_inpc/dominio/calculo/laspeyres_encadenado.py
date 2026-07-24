@@ -22,7 +22,7 @@ from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
     RANGOS_CANASTAS,
-    ManifestUnidad,
+    ManifestCalculo,
     VersionCanasta,
 )
 
@@ -344,7 +344,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                 ignore_index=True,
             )
 
-        manifiesto = ManifestUnidad(
+        manifiesto = ManifestCalculo(
             id_corrida=id_corrida,
             version=canasta.version,
             tipo=tipo,

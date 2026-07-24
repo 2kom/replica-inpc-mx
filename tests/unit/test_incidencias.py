@@ -14,7 +14,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 # -- periodos ------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ def _indice(
                 }
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
-    manifiesto = [ManifestUnidad(id_corrida, version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(id_corrida, version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame(), periodo_referencia)
 
 

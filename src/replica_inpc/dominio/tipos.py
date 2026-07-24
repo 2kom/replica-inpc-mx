@@ -41,7 +41,7 @@ RANGOS_CANASTAS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal |
 
 
 @dataclass
-class ManifestUnidad:
+class ManifestCalculo:
     id_corrida: str
     version: VersionCanasta
     tipo: str

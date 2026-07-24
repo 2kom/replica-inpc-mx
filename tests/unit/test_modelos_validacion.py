@@ -17,12 +17,12 @@ from replica_inpc.dominio.modelos.validacion import (
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestDerivado, ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestDerivado, ManifestCalculo
 
 # ---------- Fixtures helpers ----------
 
-def _manif_unidad(tipo: str = "inpc", version: int = 2018, id_corrida: str = "c") -> ManifestUnidad:
-    return ManifestUnidad(
+def _manif_unidad(tipo: str = "inpc", version: int = 2018, id_corrida: str = "c") -> ManifestCalculo:
+    return ManifestCalculo(
         id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,

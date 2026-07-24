@@ -10,7 +10,7 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.base import Resultado, Validacion, Vista
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestDerivado, ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestDerivado, ManifestCalculo
 
 
 def _df_largo_1col() -> pd.DataFrame:
@@ -270,10 +270,10 @@ def test_manifest_derivado_ambos_presentes_construye() -> None:
     assert m.clasificacion_ids == ["y"]
 
 
-# ---------- ManifestUnidad ----------
+# ---------- ManifestCalculo ----------
 
 def test_manifest_unidad_construccion_valida() -> None:
-    m = ManifestUnidad(
+    m = ManifestCalculo(
         id_corrida="abc",
         version=2018,
         tipo="inpc",

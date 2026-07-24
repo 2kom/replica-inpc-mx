@@ -7,7 +7,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import ValidacionIndice
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 from replica_inpc.dominio.validacion.indices import validar_indices
 
 _P1 = PeriodoQuincenal(2018, 1, 1)
@@ -42,7 +42,7 @@ def _ri(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
-    manifiesto = [ManifestUnidad("c1", version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo("c1", version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
 

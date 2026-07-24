@@ -12,7 +12,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestUnidad
+from replica_inpc.dominio.tipos import ManifestCalculo
 
 # -- helpers -------------------------------------------------------------------
 
@@ -42,7 +42,7 @@ def _indice(
                 }
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
-    manifiesto = [ManifestUnidad("c1", version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo("c1", version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
     return ResultadoIndice(
         df,
         manifiesto,
