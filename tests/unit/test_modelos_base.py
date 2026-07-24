@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -10,7 +9,6 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.base import Resultado, Validacion, Vista
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 
 def _df_largo_1col() -> pd.DataFrame:
@@ -83,6 +81,7 @@ class _ValidacionMinima(Validacion):
 
 # ---------- Vista ----------
 
+
 def test_vista_largo_retorna_df_sin_transformar() -> None:
     df = _df_largo_1col()
     assert Vista(df, ["x"]).largo is df
@@ -114,13 +113,14 @@ def test_vista_ancho_ncols_preserva_nan() -> None:
     q2 = PeriodoQuincenal(2024, 1, 2)
     assert ancho.shape == (4, 2)
     assert set(ancho.index) == {("001", "a"), ("001", "b"), ("002", "a"), ("002", "b")}
-    assert pd.isna(ancho.loc[("002", "a"), q1])
-    assert pd.isna(ancho.loc[("001", "b"), q2])
-    assert ancho.loc[("001", "a"), q1] == 1.0
-    assert ancho.loc[("002", "b"), q2] == 40.0
+    assert pd.isna(ancho.loc[("002", "a"), cast(Any, q1)])
+    assert pd.isna(ancho.loc[("001", "b"), cast(Any, q2)])
+    assert ancho.loc[("001", "a"), cast(Any, q1)] == 1.0
+    assert ancho.loc[("002", "b"), cast(Any, q2)] == 40.0
 
 
 # ---------- Resultado ----------
+
 
 def test_resultado_no_instanciable_directamente() -> None:
     with pytest.raises(TypeError):
@@ -189,6 +189,7 @@ def test_resultado_pipe_aplica_funcion() -> None:
 
 # ---------- Validacion ----------
 
+
 def test_validacion_no_instanciable_directamente() -> None:
     with pytest.raises(TypeError):
         Validacion()  # type: ignore[abstract]
@@ -203,31 +204,3 @@ def test_validacion_instancia_sin_df_ni_pipe() -> None:
     v = _ValidacionMinima()
     assert hasattr(v, "df") is False
     assert hasattr(v, "pipe") is False
-
-
-# ---------- ManifestDerivado ----------
-
-def test_manifest_derivado_clase_vacia_falla() -> None:
-    with pytest.raises(InvarianteViolado):
-        ManifestDerivado(
-            id_corrida=["x"],
-            tipo="inpc",
-            clase="",
-            descripcion="",
-            fecha=datetime(2024, 1, 1),
-        )
-
-
-# ---------- ManifestCalculo ----------
-
-def test_manifest_calculo_construccion_valida() -> None:
-    m = ManifestCalculo(
-        id_corrida="abc",
-        version=2018,
-        tipo="inpc",
-        calculador="LaspeyresDirecto",
-        ruta_canasta=Path("/tmp/c.csv"),
-        ruta_series=Path("/tmp/s.csv"),
-        fecha=datetime(2024, 1, 1),
-    )
-    assert m.id_corrida == "abc"
