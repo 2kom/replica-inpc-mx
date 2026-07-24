@@ -1,5 +1,6 @@
 import argparse
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +19,8 @@ def escribir_registro_xlsx(df: pd.DataFrame, args: argparse.Namespace, ruta_csv:
     Ver: tools/uso_generar_canasta.md §Registro JSON (modo solo `xlsx`).
     """
     ahora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    ruta_json = args.salida / f"xlsx_{args.version}_{ahora}.json"
+    sufijo = uuid.uuid4().hex[:8]
+    ruta_json = args.salida / f"xlsx_{args.version}_{ahora}_{sufijo}.json"
 
     # solo columnas reales del esquema -- una columna fuera de COLUMNAS_BASE
     # (typo de codigo, xlsx con hoja distinta) ya la descarta guardar_csv con
@@ -104,7 +106,8 @@ def escribir_registro_pdf(
     """
     df = resultado.df
     ahora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    ruta_json = args.salida / f"pdf_{args.version}_{ahora}.json"
+    sufijo = uuid.uuid4().hex[:8]
+    ruta_json = args.salida / f"pdf_{args.version}_{ahora}_{sufijo}.json"
 
     cols_clasificacion = [
         c for c in COLUMNAS_BASE if c not in _COLUMNAS_NO_CLASIFICACION and c in df.columns
@@ -282,7 +285,8 @@ def escribir_registro_sincronizacion(
     Ver: tools/uso_generar_canasta.md §Registro JSON (modo `sincronizacion`).
     """
     ahora = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    ruta_json = csv_destino.parent / f"sincronizacion_{ahora}.json"
+    sufijo = uuid.uuid4().hex[:8]
+    ruta_json = csv_destino.parent / f"sincronizacion_{ahora}_{sufijo}.json"
 
     registro: dict = {
         "tipo": "sincronizacion",

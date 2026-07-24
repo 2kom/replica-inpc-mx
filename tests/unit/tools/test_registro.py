@@ -193,7 +193,7 @@ def test_escribir_registro_xlsx_nombre_de_archivo_con_version_y_timestamp(
     df = pd.DataFrame({"generico": ["arroz"], "ponderador": ["0.5"]})
     escribir_registro_xlsx(df, _args(tmp_path, version=2018), tmp_path / "ponderadores_2018.csv")
     (archivo,) = list(tmp_path.glob("*.json"))
-    assert re.match(r"^xlsx_2018_\d{8}_\d{6}_\d{6}\.json$", archivo.name)
+    assert re.match(r"^xlsx_2018_\d{8}_\d{6}_\d{6}_[0-9a-f]{8}\.json$", archivo.name)
 
 
 def test_escribir_registro_xlsx_dos_corridas_seguidas_no_se_pisan(tmp_path: Path) -> None:
@@ -440,7 +440,7 @@ def test_escribir_registro_pdf_nombre_de_archivo_con_version_y_timestamp(tmp_pat
         resultado, _args_pdf(tmp_path, version=2018), tmp_path / "ponderadores_2018.csv"
     )
     (archivo,) = list(tmp_path.glob("*.json"))
-    assert re.match(r"^pdf_2018_\d{8}_\d{6}_\d{6}\.json$", archivo.name)
+    assert re.match(r"^pdf_2018_\d{8}_\d{6}_\d{6}_[0-9a-f]{8}\.json$", archivo.name)
 
 
 def test_escribir_registro_pdf_tipo_es_dato_estructurado_no_texto(tmp_path: Path) -> None:
@@ -570,7 +570,7 @@ def test_escribir_registro_sincronizacion_nombre_de_archivo_con_timestamp(
         csv_destino,
     )
     (archivo,) = list(tmp_path.glob("*.json"))
-    assert re.match(r"^sincronizacion_\d{8}_\d{6}_\d{6}\.json$", archivo.name)
+    assert re.match(r"^sincronizacion_\d{8}_\d{6}_\d{6}_[0-9a-f]{8}\.json$", archivo.name)
 
 
 def test_escribir_registro_sincronizacion_se_escribe_junto_a_csv_destino(
