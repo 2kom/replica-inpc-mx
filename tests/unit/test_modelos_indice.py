@@ -127,7 +127,9 @@ def test_resumen_una_fila_por_manifiesto() -> None:
         "estado_calculo",
         "periodo_inicio",
         "periodo_fin",
+        "fecha",
     ]
+    assert list(res["fecha"]) == [datetime(2024, 1, 1), datetime(2024, 1, 1)]
 
 
 def test_resumen_peor_estado_segun_severidad() -> None:

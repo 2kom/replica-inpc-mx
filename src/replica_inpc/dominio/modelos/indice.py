@@ -111,6 +111,7 @@ class ResultadoIndice(Resultado):
                     "estado_calculo": estado,
                     "periodo_inicio": periodo_inicio,
                     "periodo_fin": periodo_fin,
+                    "fecha": m.fecha,
                 }
             )
         return pd.DataFrame(filas).set_index("id_corrida")

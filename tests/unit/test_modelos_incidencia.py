@@ -176,7 +176,7 @@ def test_indices_parciales_propagado_con_clase_desde() -> None:
 def test_resumen_una_fila_con_cols_esperadas() -> None:
     r = ResultadoIncidencia(_df_inc(), _manifiesto(), _rep_vacio(), _diag_vacio())
     res = r.resumen
-    assert res.shape == (1, 6)
+    assert res.shape == (1, 7)
     assert list(res.columns) == [
         "tipo",
         "clase_incidencia",
@@ -184,6 +184,7 @@ def test_resumen_una_fila_con_cols_esperadas() -> None:
         "estado_calculo",
         "periodo_inicio",
         "periodo_fin",
+        "fecha",
     ]
 
 
@@ -198,6 +199,7 @@ def test_resumen_valores_concretos() -> None:
     assert fila["estado_calculo"] == "ok"
     assert fila["periodo_inicio"] == PeriodoQuincenal(2024, 1, 2)
     assert fila["periodo_fin"] == PeriodoQuincenal(2024, 2, 2)
+    assert fila["fecha"] == datetime(2024, 1, 1)
 
 
 def test_resumen_mezcla_ok_parcial_devuelve_parcial() -> None:

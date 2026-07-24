@@ -530,7 +530,7 @@ Trazabilidad de una corrida elemental sobre una sola canasta. `empalmar` concate
 
 | Campo | Tipo | Notas |
 | ----- | ---- | ----- |
-| `id_corrida` | `str` | identificador único de la corrida elemental |
+| `id_corrida` | `str` | `f"{tipo}:{version}"`, determinista; único dentro de un `ResultadoIndice`, no entre ejecuciones repetidas |
 | `version` | `VersionCanasta` | versión de canasta usada en el tramo |
 | `tipo` | `str` | tipo de índice calculado |
 | `calculador` | `Literal[...]` | `"LaspeyresDirecto"`, `"LaspeyresEncadenadoT1"`, `"LaspeyresEncadenadoT2"` |
@@ -939,6 +939,7 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 | `estado_calculo` | `str` |
 | `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
 | `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
+| `fecha` | `datetime` |
 
 **`.reporte` — esquema**
 
@@ -1048,6 +1049,7 @@ Solo filas computables — sin filas `sin_datos`/`fallida`.
 | `estado_calculo` | `str` | `str` |
 | `periodo_inicio` | `Periodo*` | `Periodo*` |
 | `periodo_fin` | `Periodo*` | `Periodo*` |
+| `fecha` | `datetime` | `datetime` |
 
 **`.reporte` — esquema**
 
@@ -3596,9 +3598,9 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ### 11.12 `id_corrida` en `ResultadoIndice`
 
-**Decisión:** `CalcularHistoria` genera el UUID y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestUnidad(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
+**Decisión:** `CalcularHistoria` arma `id_corrida` como `f"{tipo}:{version}"` (determinista, no UUID) y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestUnidad(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
 
-**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El `ManifestUnidad` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
+**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El esquema `tipo:version` es único dentro de un mismo `ResultadoIndice` (cada versión aparece una sola vez por ejecución de `ejecutar()`) y legible en `resumen.index` — no es único entre ejecuciones repetidas de la misma historia, eso no es una garantía que el diseño requiera. El `ManifestUnidad` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
 
 ---
 

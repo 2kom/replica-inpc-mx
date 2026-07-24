@@ -113,6 +113,7 @@ class ResultadoVariacion(Resultado):
                     "estado_calculo": estado,
                     "periodo_inicio": min(periodos),
                     "periodo_fin": max(periodos),
+                    "fecha": self._manifiesto.fecha,
                 }
             ]
         )
