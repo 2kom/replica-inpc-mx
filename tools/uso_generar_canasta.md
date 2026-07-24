@@ -46,25 +46,89 @@ Se instala vía `conda-forge`, que sí trae binarios listos para Linux/Windows/M
 conda install -c conda-forge pdftotext
 ```
 
-## Comando funcional
+## Cómo usar
 
-Extracción solo `xlsx`, cualquier versión:
+Después de conseguir el xlsx y el documento metodológico completo (PDF) —
+ver [guias/obtener_ponderadores.md](../guias/obtener_ponderadores.md) —,
+elegir el modo según lo que se tenga a mano:
 
-```bash
-python tools/generar_canasta.py --version 2018 --xlsx ruta/a/xlsx/2018.xlsx -o salida/
-```
-
-Extracción `xlsx + pdf`, cualquier versión:
-
-```bash
-python tools/generar_canasta.py --version 2013 --xlsx ruta/a/xlsx/2013.xlsx \
-  --pdf ruta/al/manual/completo/2013.pdf -o salida/
-```
+| Se tiene | Usar | Resultado |
+| --- | --- | --- |
+| Solo el xlsx | modo `xlsx` (sin `--pdf`) | CSV con lo que trae el xlsx; `CCIF grupo`/`CCIF clase` y `SCIAN sector`/`SCIAN rama` quedan vacíos (esas columnas solo vienen del pdf) |
+| xlsx + documento metodológico completo | modo `xlsx + pdf` (`--pdf`) | CSV con clasificación completa (CCIF, SCIAN) en las 4 versiones |
+| Ya se generó 2013 con `--pdf` y falta 2010 | `--sincronizar`, después de generar 2010 con xlsx | copia `SCIAN sector`/`SCIAN rama` de 2013 a 2010 (2010 no trae Anexo SCIAN en su pdf) |
 
 Con `--preferir {pdf,xlsx}` se salta las preguntas interactivas del cruce y
 resuelve todas las discrepancias automático hacia esa fuente. Sin
 `--preferir`, cada discrepancia real se pregunta en consola (Enter = `pdf`).
 Ver §Cruce `xlsx` + `pdf` para el detalle del algoritmo.
+
+### Ejemplo con rutas reales
+
+Asumiendo los archivos en `data/inputs/canastas/` (la ubicación que sugiere
+la guía de obtención):
+
+```bash
+python tools/generar_canasta.py --version 2018 \
+  --xlsx data/inputs/canastas/ponderadores_2018.xlsx \
+  --pdf data/inputs/canastas/manual_2018.pdf \
+  --preferir pdf \
+  -o data/inputs/canastas/
+```
+
+Esto deja `ponderadores_2018.csv` (la canasta intermedia) y
+`pdf_2018_<fecha>.json` (registro de la corrida) en `data/inputs/canastas/`.
+
+### Flujo completo: las 4 versiones en orden
+
+2010 depende de que 2013 ya esté generado (lo necesita el paso de
+sincronización) — conviene generar 2013 primero:
+
+```bash
+# 1. 2013 primero — 2010 lo va a necesitar más abajo
+python tools/generar_canasta.py --version 2013 \
+  --xlsx data/inputs/canastas/ponderadores_2013.xlsx \
+  --pdf data/inputs/canastas/manual_2013.pdf \
+  --preferir pdf -o data/inputs/canastas/
+
+# 2. 2018 y 2024 — no dependen de nada, cualquier orden
+python tools/generar_canasta.py --version 2018 \
+  --xlsx data/inputs/canastas/ponderadores_2018.xlsx \
+  --pdf data/inputs/canastas/manual_2018.pdf \
+  --preferir pdf -o data/inputs/canastas/
+
+python tools/generar_canasta.py --version 2024 \
+  --xlsx data/inputs/canastas/ponderadores_2024.xlsx \
+  --pdf data/inputs/canastas/manual_2024.pdf \
+  --preferir pdf -o data/inputs/canastas/
+
+# 3. 2010 — igual que las demás, con xlsx+pdf (SCIAN queda vacío por ahora)
+python tools/generar_canasta.py --version 2010 \
+  --xlsx data/inputs/canastas/ponderadores_2010.xlsx \
+  --pdf data/inputs/canastas/manual_2010.pdf \
+  --preferir pdf -o data/inputs/canastas/
+
+# 4. Sincronizar SCIAN de 2013 a 2010 (2010 no lo trae en su pdf)
+python tools/generar_canasta.py --sincronizar \
+  --csv-fuente data/inputs/canastas/ponderadores_2013.csv \
+  --csv-destino data/inputs/canastas/ponderadores_2010.csv
+```
+
+### Cómo confirmar que salió bien
+
+Cada corrida deja un registro JSON junto al CSV — no hace falta abrir el CSV
+a mano, el registro ya trae el resumen. Revisar:
+
+- `genericos` — cantidad razonable de genéricos extraídos (dato real
+  verificado: 283 en 2010/2013, 299 en 2018, 292 en 2024).
+- `clasificaciones` — cada columna de clasificación presente debe traer
+  categorías, no venir vacía.
+- En modo `xlsx + pdf`, el campo `preferir` del registro confirma qué fuente
+  ganó en cada discrepancia real del cruce.
+
+Para debug más fino (qué se resolvió campo por campo, con qué método), ver
+§Registro JSON más abajo — ese detalle es interno, no hace falta para uso
+normal.
 
 ### Parámetros
 
