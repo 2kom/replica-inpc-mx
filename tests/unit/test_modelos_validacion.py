@@ -17,11 +17,11 @@ from replica_inpc.dominio.modelos.validacion import (
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestDerivado, ManifestCalculo
+from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 # ---------- Fixtures helpers ----------
 
-def _manif_unidad(tipo: str = "inpc", version: int = 2018, id_corrida: str = "c") -> ManifestCalculo:
+def _manif_calculo(tipo: str = "inpc", version: int = 2018, id_corrida: str = "c") -> ManifestCalculo:
     return ManifestCalculo(
         id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
@@ -97,7 +97,7 @@ def _df_incidencia(tipo: str = "inpc") -> pd.DataFrame:
 def _resultado_indice(tipo: str = "inpc") -> ResultadoIndice:
     return ResultadoIndice(
         _df_indice(tipo=tipo),
-        [_manif_unidad(tipo=tipo)],
+        [_manif_calculo(tipo=tipo)],
         pd.DataFrame(),
         pd.DataFrame(),
     )
@@ -162,7 +162,7 @@ def test_indice_construccion_valida() -> None:
 def test_indice_tipo_invalido_falla(tipo_invalido: str) -> None:
     r = ResultadoIndice(
         _df_indice(tipo=tipo_invalido),
-        [_manif_unidad(tipo=tipo_invalido)],
+        [_manif_calculo(tipo=tipo_invalido)],
         pd.DataFrame(),
         pd.DataFrame(),
     )
@@ -185,7 +185,7 @@ def test_indice_manifiesto_mixto_falla() -> None:
     df_concat = pd.concat([df, df2])
     r = ResultadoIndice(
         df_concat,
-        [_manif_unidad(tipo="inpc"), _manif_unidad(tipo="cobertura", id_corrida="c2")],
+        [_manif_calculo(tipo="inpc"), _manif_calculo(tipo="cobertura", id_corrida="c2")],
         pd.DataFrame(),
         pd.DataFrame(),
     )

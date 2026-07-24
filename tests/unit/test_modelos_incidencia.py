@@ -23,8 +23,6 @@ def _manifiesto(
         clase=clase,
         descripcion=descripcion,
         fecha=datetime(2024, 1, 1),
-        inpc_ids=["c1"],
-        clasificacion_ids=["c2"],
     )
 
 

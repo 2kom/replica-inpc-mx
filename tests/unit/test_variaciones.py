@@ -126,7 +126,6 @@ def test_periodica_manifiesto_y_diagnostico() -> None:
     indice = _indice({"INPC": [(_Q1, 100.0), (_Q2, 103.0), (_Q3, None), (_Q4, 109.0)]})
     r = variacion_periodica(indice, "quincenal")
     assert r.manifiesto.id_corrida == ["c1"]
-    assert r.manifiesto.inpc_ids is None
     assert len(r.diagnostico) == 3
     assert r.indices_parciales is None
 

@@ -666,8 +666,6 @@ def _construir_resultado(
         clase=clase,
         descripcion=descripcion,
         fecha=datetime.now(),
-        inpc_ids=ids_inpc,
-        clasificacion_ids=ids_clas,
     )
     return ResultadoIncidencia(df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales)
 

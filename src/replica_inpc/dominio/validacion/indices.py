@@ -103,12 +103,12 @@ def validar_indices(
 
 
 def _construir_diagnostico(largo_val: pd.DataFrame, resultado: ResultadoIndice) -> pd.DataFrame:
-    id_por_unidad = {(m.version, m.tipo): m.id_corrida for m in resultado.manifiesto}
+    id_por_calculo = {(m.version, m.tipo): m.id_corrida for m in resultado.manifiesto}
     filas = largo_val[largo_val["estado_validacion"] != "ok"].reset_index()
     if filas.empty:
         return pd.DataFrame(columns=_COLS_DIAGNOSTICO)
     filas["id_corrida"] = [
-        id_por_unidad.get((version, tipo), "")
+        id_por_calculo.get((version, tipo), "")
         for version, tipo in zip(filas["version"], filas["tipo"])
     ]
     return filas[_COLS_DIAGNOSTICO].reset_index(drop=True)

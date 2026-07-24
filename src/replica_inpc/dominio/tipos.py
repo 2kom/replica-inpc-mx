@@ -57,14 +57,8 @@ class ManifestDerivado:
     tipo: str
     clase: str
     descripcion: str
-    fecha: datetime
-    inpc_ids: list[str] | None = None
-    clasificacion_ids: list[str] | None = None
+    fecha: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self) -> None:
         if not self.clase:
             raise InvarianteViolado("ManifestDerivado.clase no puede estar vacío")
-        if (self.inpc_ids is None) != (self.clasificacion_ids is None):
-            raise InvarianteViolado(
-                "inpc_ids y clasificacion_ids deben ambos ser None o ambos estar presentes"
-            )

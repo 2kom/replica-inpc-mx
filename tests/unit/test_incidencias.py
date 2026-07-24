@@ -135,8 +135,6 @@ def test_periodica_indices_parciales_none() -> None:
 
 def test_periodica_manifiesto_ids() -> None:
     r = incidencia_periodica(_inpc(), _clas(), _canastas(), "mensual")
-    assert r.manifiesto.inpc_ids == ["ci"]
-    assert r.manifiesto.clasificacion_ids == ["cc"]
     assert r.manifiesto.id_corrida == ["ci", "cc"]
 
 

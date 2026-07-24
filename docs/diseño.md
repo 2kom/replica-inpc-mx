@@ -76,7 +76,7 @@ El historial de cambios vive en git.
     - [11.11 Firma de `validacion/indices.py`](#1111-firma-de-validacionindicespy)
     - [11.12 `id_corrida` en `ResultadoIndice`](#1112-id_corrida-en-resultadoindice)
     - [11.13 Schema condicional en `ReporteDetalladoValidacion`](#1113-schema-condicional-en-reportedetalladovalidacion)
-    - [11.14 `INDICES_VALIDABLES` en el dominio](#1114-tipos_con_validacion-en-el-dominio)
+    - [11.14 `INDICES_VALIDABLES` en el dominio](#1114-indices_validables-en-el-dominio)
     - [11.15 Cache de clase en `FuenteValidacionApi`](#1115-cache-de-clase-en-fuentevalidacionapi)
     - [11.16 UTF-8 como primer encoding en `LectorSeriesCsv`](#1116-utf-8-como-primer-encoding-en-lectorseriescsv)
     - [11.17 Dispatch interno en `CalculadorBase`](#1117-dispatch-interno-en-calculadorbase)
@@ -94,7 +94,7 @@ El historial de cambios vive en git.
     - [11.27 `FuenteValidacion` en `dominio/`, no en `aplicacion/`](#1127-fuentevalidacion-en-dominio-no-en-aplicacion)
     - [11.28 Re-export de errores y tipos en `replica_inpc/__init__.py`](#1128-re-export-de-errores-y-tipos-en-replica_inpc__init__py)
     - [11.29 `a_mensual` — filtrado de manifiestos huérfanos](#1129-a_mensual--filtrado-de-manifiestos-huérfanos)
-    - [11.30 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales](#1130-manifestunidadruta_canasta-y-ruta_series-opcionales)
+    - [11.30 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales](#1130-manifestcalculoruta_canasta-y-ruta_series-opcionales)
     - [11.31 `indice_incidencia` y de-encadenamiento de incidencias](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)
   - [12. Gaps conocidos](#12-gaps-conocidos)
     - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
@@ -550,13 +550,10 @@ Trazabilidad de un resultado derivado. Terminal — no combinable vía `empalmar
 | `tipo` | `str` | tipo de índice derivado |
 | `clase` | `str` | clase del derivado; ver catálogo en secciones 5.8 y 5.9 |
 | `descripcion` | `str` | no vacío cuando `clase = "desde"`; vacío en otros casos |
-| `fecha` | `datetime` | marca temporal |
-| `inpc_ids` | `list[str] \| None` | IDs corridas INPC; solo para `ResultadoIncidencia` |
-| `clasificacion_ids` | `list[str] \| None` | IDs corridas clasificación; solo para `ResultadoIncidencia` |
+| `fecha` | `datetime` | marca temporal; default `datetime.now()` |
 
 Invariantes:
 - `clase` no vacío → `InvarianteViolado` si no
-- `(inpc_ids is None) == (clasificacion_ids is None)` → `InvarianteViolado` si no
 
 ---
 

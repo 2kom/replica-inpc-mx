@@ -10,7 +10,7 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.base import Resultado, Validacion, Vista
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestDerivado, ManifestCalculo
+from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 
 def _df_largo_1col() -> pd.DataFrame:
@@ -218,61 +218,9 @@ def test_manifest_derivado_clase_vacia_falla() -> None:
         )
 
 
-def test_manifest_derivado_solo_inpc_ids_falla() -> None:
-    with pytest.raises(InvarianteViolado):
-        ManifestDerivado(
-            id_corrida=["x"],
-            tipo="inpc",
-            clase="periodica_mensual",
-            descripcion="",
-            fecha=datetime(2024, 1, 1),
-            inpc_ids=None,
-            clasificacion_ids=["c"],
-        )
-
-
-def test_manifest_derivado_solo_clasificacion_ids_falla() -> None:
-    with pytest.raises(InvarianteViolado):
-        ManifestDerivado(
-            id_corrida=["x"],
-            tipo="inpc",
-            clase="periodica_mensual",
-            descripcion="",
-            fecha=datetime(2024, 1, 1),
-            inpc_ids=["x"],
-            clasificacion_ids=None,
-        )
-
-
-def test_manifest_derivado_ambos_none_construye() -> None:
-    m = ManifestDerivado(
-        id_corrida=["x"],
-        tipo="inpc",
-        clase="periodica_mensual",
-        descripcion="",
-        fecha=datetime(2024, 1, 1),
-    )
-    assert m.inpc_ids is None
-    assert m.clasificacion_ids is None
-
-
-def test_manifest_derivado_ambos_presentes_construye() -> None:
-    m = ManifestDerivado(
-        id_corrida=["x", "y"],
-        tipo="inflacion componente",
-        clase="periodica_mensual",
-        descripcion="",
-        fecha=datetime(2024, 1, 1),
-        inpc_ids=["x"],
-        clasificacion_ids=["y"],
-    )
-    assert m.inpc_ids == ["x"]
-    assert m.clasificacion_ids == ["y"]
-
-
 # ---------- ManifestCalculo ----------
 
-def test_manifest_unidad_construccion_valida() -> None:
+def test_manifest_calculo_construccion_valida() -> None:
     m = ManifestCalculo(
         id_corrida="abc",
         version=2018,
