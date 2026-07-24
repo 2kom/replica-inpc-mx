@@ -379,7 +379,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | ------ | ------- |
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
-| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `TIPOS_CON_VALIDACION`, `RANGOS_VALIDOS`, `ManifestUnidad`, `ManifestDerivado` |
+| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `TIPOS_CON_VALIDACION`, `RANGOS_CANASTAS`, `ManifestUnidad`, `ManifestDerivado` |
 | `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia.py` | `alinear_genericos` |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
@@ -511,10 +511,10 @@ TIPOS_CON_VALIDACION: frozenset[str] = frozenset(
 
 Tipos con series publicadas por el INEGI comparables directamente. Solo estos pueden pasarse a `validar_indices`, `validar_variaciones`, `validar_incidencias`.
 
-**`RANGOS_VALIDOS`**
+**`RANGOS_CANASTAS`**
 
 ```python
-RANGOS_VALIDOS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {
+RANGOS_CANASTAS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {
     2010: (PeriodoQuincenal(2010, 12, 2), PeriodoQuincenal(2013, 3, 2)),
     2013: (PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2018, 7, 2)),
     2018: (PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2024, 7, 2)),
@@ -871,7 +871,7 @@ resultado = i_tramo * factor_h
 
 Antes del cálculo cada calculador aplica en orden:
 
-1. Recorta la `SerieNormalizada` al rango válido de la versión (`RANGOS_VALIDOS`).
+1. Recorta la `SerieNormalizada` al rango válido de la versión (`RANGOS_CANASTAS`).
 2. Rellena NaN via `bfill→ffill` por fila; periodos afectados → `estado_calculo = "rellenado"`.
 3. Periodos con NaN irrellenable → `estado_calculo = "sin_datos"`, `indice_replicado = NaN`.
 
@@ -1357,7 +1357,7 @@ Reglas de agregación por `(mes, indice)` (prioridad descendente):
 
 La columna interna `indice_incidencia` ([5.7](#57-resultadoindice)) se promedia con las **mismas** máscaras que `indice_replicado`. Como `a_mensual` reconstruye el `df_result`, debe agregarla de forma explícita — a diferencia de `empalmar`/`rebasar`, que la arrastran/preservan sin tocarla (el rebase NO la reescala, así la incidencia queda invariante al rebase; ver [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias)).
 
-`a_mensual` también **crea** el campo interno `_frontera` ([5.7](#57-resultadoindice)): por cada junta de canasta presente en el input quincenal (detectada por `RANGOS_VALIDOS` + presencia del periodo de enlace, no por "cambio de versión dentro del mes"), captura los valores del tramo viejo en la quincena de enlace antes de promediar. `rebasar` reescala su campo visible (`indice_replicado_old`) por el mismo `k` y preserva `indice_incidencia_old`; `empalmar` lo renombra con el mismo mapa `RENOMBRES_INDICES`. Detalle en [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias).
+`a_mensual` también **crea** el campo interno `_frontera` ([5.7](#57-resultadoindice)): por cada junta de canasta presente en el input quincenal (detectada por `RANGOS_CANASTAS` + presencia del periodo de enlace, no por "cambio de versión dentro del mes"), captura los valores del tramo viejo en la quincena de enlace antes de promediar. `rebasar` reescala su campo visible (`indice_replicado_old`) por el mismo `k` y preserva `indice_incidencia_old`; `empalmar` lo renombra con el mismo mapa `RENOMBRES_INDICES`. Detalle en [11.31](#1131-indice_incidencia-y-de-encadenamiento-de-incidencias).
 
 Retorno: `ResultadoIndice` con periodos `PeriodoMensual` y `.periodo_referencia = None`. El `None` es invariante — el promedio destruye la escala del rebase original; usar siempre `a_mensual` antes de `rebasar` cuando se necesitan datos mensuales rebased.
 

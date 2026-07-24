@@ -21,7 +21,7 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
-    RANGOS_VALIDOS,
+    RANGOS_CANASTAS,
     ManifestUnidad,
     VersionCanasta,
 )
@@ -43,7 +43,7 @@ def _calcular_df(
     resultado = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
     indice_incidencia = resultado  # nivel crudo, antes de factor_h
     if referencia_empalme is not None:
-        traslape = RANGOS_VALIDOS[version][0]
+        traslape = RANGOS_CANASTAS[version][0]
         if traslape not in resultado.index:
             raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
         factor_h = referencia_empalme / float(resultado[traslape])
@@ -144,7 +144,7 @@ class LaspeyresDirecto(CalculadorBase):
 
             # referencia_empalme por categoría (solo LaspeyresDirecto usado como T0 de encadenado)
             if self._referencia_empalme:
-                traslape = RANGOS_VALIDOS[canasta.version][0]
+                traslape = RANGOS_CANASTAS[canasta.version][0]
                 if traslape not in resultado_mat.columns:
                     raise ErrorCalculo(
                         f"PeriodoQuincenal de traslape {traslape} no está en la serie."

@@ -44,7 +44,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, RANGOS_VALIDOS, ManifestDerivado
+from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, RANGOS_CANASTAS, ManifestDerivado
 
 Periodo = PeriodoQuincenal | PeriodoMensual
 
@@ -197,7 +197,7 @@ def _segmentos_entre(
     """Parte `[b, t]` en segmentos por las juntas de canasta que atraviesa.
 
     Devuelve `(version_m, inicio_m, fin_m, inicio_es_junta_nueva, fin_es_junta_vieja)`.
-    Las juntas son los límites inferiores de `RANGOS_VALIDOS` de las versiones más
+    Las juntas son los límites inferiores de `RANGOS_CANASTAS` de las versiones más
     nuevas; son periodos QUINCENALES aun cuando `b`/`t` sean mensuales (el punto de
     enlace oculto). Lanza `InvarianteViolado` si `ver_b`/`ver_t` no forman un cruce
     hacia adelante (consistencia: una fila cross siempre debe producir ≥2 segmentos).
@@ -215,7 +215,7 @@ def _segmentos_entre(
             f"_segmentos_entre: fila cross sin cruce hacia adelante "
             f"(ver_b={ver_b}, ver_t={ver_t}); no hay junta entre ellas."
         )
-    juntas = [RANGOS_VALIDOS[orden[k]][0] for k in range(i + 1, j + 1)]  # type: ignore[index]
+    juntas = [RANGOS_CANASTAS[orden[k]][0] for k in range(i + 1, j + 1)]  # type: ignore[index]
     total = j - i + 1
     segs: list[tuple[int, Periodo, Periodo, bool, bool]] = []
     for m in range(1, total + 1):

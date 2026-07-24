@@ -8,7 +8,7 @@ from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 _ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
@@ -16,7 +16,7 @@ _ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
 # Juntas de canasta: (periodo_quincenal_enlace, version_old, version_new). El enlace es el
 # límite inferior del tramo nuevo; el tramo viejo lo posee en el empalme.
 _JUNTAS_FRONTERA: list[tuple[PeriodoQuincenal, VersionCanasta, VersionCanasta]] = [
-    (RANGOS_VALIDOS[v_new][0], v_old, v_new)
+    (RANGOS_CANASTAS[v_new][0], v_old, v_new)
     for v_old, v_new in zip(_ORDEN_VERSIONES, _ORDEN_VERSIONES[1:])
 ]
 

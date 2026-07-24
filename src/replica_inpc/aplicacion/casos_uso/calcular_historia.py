@@ -24,7 +24,7 @@ from replica_inpc.dominio.conversion import (
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 _ORDEN_VERSIONES: tuple[int, ...] = (2010, 2013, 2018, 2024)
 # Cada versión encadenada requiere su versión base contigua en `insumos`.
@@ -47,7 +47,7 @@ def _referencias_normalizadas(
     vocabulario de `version_destino` (vía `RENOMBRES_INDICES`) — el calculador
     encadenado busca la referencia con el nombre de la canasta actual.
     """
-    traslape = RANGOS_VALIDOS[version_destino][0]  # type: ignore[index]
+    traslape = RANGOS_CANASTAS[version_destino][0]  # type: ignore[index]
     mapa = _construir_mapa_renombre(tipo, version_origen, version_destino)
     df = resultado_prev.df
     refs: dict[str, float] = {}

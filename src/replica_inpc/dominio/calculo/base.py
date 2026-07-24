@@ -10,7 +10,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import RANGOS_VALIDOS, VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 
 def _rellenar_faltantes(
@@ -72,7 +72,7 @@ def _rellenar_faltantes(
 
 
 def _recortar_al_rango(df_serie: pd.DataFrame, version: VersionCanasta) -> pd.DataFrame:
-    inicio, fin = RANGOS_VALIDOS[version]
+    inicio, fin = RANGOS_CANASTAS[version]
     cols = [
         p
         for p in df_serie.columns

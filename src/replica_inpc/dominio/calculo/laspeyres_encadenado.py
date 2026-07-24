@@ -21,7 +21,7 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     INDICE_POR_TIPO,
-    RANGOS_VALIDOS,
+    RANGOS_CANASTAS,
     ManifestUnidad,
     VersionCanasta,
 )
@@ -36,7 +36,7 @@ def _obtener_f_k(
     necesita_fallback = enc_raw.isna()
 
     if necesita_fallback.any():
-        traslape = RANGOS_VALIDOS[version][0]
+        traslape = RANGOS_CANASTAS[version][0]
         if traslape not in df_serie.columns:
             raise ErrorCalculo(
                 f"PeriodoQuincenal de traslape {traslape} no está en la serie "
@@ -121,7 +121,7 @@ def _calcular_df_t1(
     """T1 — v2013: factor_h = ref / i_tramo[traslape] | 1.0."""
     version: VersionCanasta = 2013
     i_tramo, _f_k, _pond, periodos_null = _i_tramo_y_metadata(df_canasta, df_serie, version)
-    traslape = RANGOS_VALIDOS[version][0]
+    traslape = RANGOS_CANASTAS[version][0]
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
     if referencia_empalme is not None:
@@ -151,7 +151,7 @@ def _calcular_df_t2(
     """T2 — v2024: factor_h = ref / 100 | sum(pond * f_k) / sum(pond)."""
     version: VersionCanasta = 2024
     i_tramo, f_k, ponderadores, periodos_null = _i_tramo_y_metadata(df_canasta, df_serie, version)
-    traslape = RANGOS_VALIDOS[version][0]
+    traslape = RANGOS_CANASTAS[version][0]
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
     if referencia_empalme is not None:
@@ -254,7 +254,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             enc_raw = canasta.df.loc[gens, "encadenamiento"]
             necesita_fallback = enc_raw.isna()
             if necesita_fallback.any():
-                traslape = RANGOS_VALIDOS[canasta.version][0]
+                traslape = RANGOS_CANASTAS[canasta.version][0]
                 if traslape not in df_s.columns:
                     raise ErrorCalculo(
                         f"PeriodoQuincenal de traslape {traslape} no está en la serie "
@@ -383,7 +383,7 @@ class LaspeyresEncadenadoT1(_LaspeyresEncadenadoBase):
         factor_h = pd.Series(1.0, index=i_tramo_mat.index)
         cats_ref = [c for c in i_tramo_mat.index if c in self._referencia_empalme]
         if cats_ref:
-            traslape = RANGOS_VALIDOS[2013][0]
+            traslape = RANGOS_CANASTAS[2013][0]
             if traslape not in i_tramo_mat.columns:
                 raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
             refs_s = pd.Series({c: self._referencia_empalme[c] for c in cats_ref})
