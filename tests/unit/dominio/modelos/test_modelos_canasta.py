@@ -8,6 +8,7 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 
 _GENERICOS = ("arroz", "frijol", "leche", "huevo")
 _PONDERADORES = ("10.0", "20.0", "30.0", "40.0")
+_COLUMNAS_CORE = ("COG", "inflacion componente", "inflacion subcomponente", "inflacion agrupacion")
 
 
 def _df(
@@ -86,6 +87,33 @@ def test_encadenamiento_no_positivo_cuando_no_nulo_falla(encadenamiento_invalido
 
 
 def test_encadenamiento_nulo_no_falla() -> None:
+    CanastaCanonica(_df(), 2018)
+
+
+# ---------- Columnas core de clasificación ----------
+
+
+def _df_con_core(vacia: str | None = None) -> pd.DataFrame:
+    df = _df()
+    for columna in _COLUMNAS_CORE:
+        df[columna] = "valor"
+    if vacia is not None:
+        df.loc["arroz", vacia] = None
+    return df
+
+
+@pytest.mark.parametrize("columna", _COLUMNAS_CORE)
+def test_columna_core_vacia_falla(columna: str) -> None:
+    with pytest.raises(InvarianteViolado):
+        CanastaCanonica(_df_con_core(vacia=columna), 2018)
+
+
+def test_columnas_core_pobladas_no_falla() -> None:
+    CanastaCanonica(_df_con_core(), 2018)
+
+
+def test_columna_core_ausente_no_falla() -> None:
+    """Fixture mínimo sin columnas de clasificación (usado por otros tests) sigue siendo válido."""
     CanastaCanonica(_df(), 2018)
 
 

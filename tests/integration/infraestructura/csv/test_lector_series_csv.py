@@ -15,7 +15,7 @@ from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "inputs"
+DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
 
 """
 La serie sintética queda como (orientación horizontal):

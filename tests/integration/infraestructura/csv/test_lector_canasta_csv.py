@@ -43,7 +43,7 @@ df_canasta = pd.DataFrame(
     }
 ).set_index("generico")
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "inputs"
+DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
 
 
 def test_lector_canasta_csv_valido(tmp_path: Path):
