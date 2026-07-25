@@ -679,7 +679,7 @@ Invariantes — validados al construir (lanza `InvarianteViolado`):
 
 **`SerieNormalizada`**
 
-DataFrame-backed, formato ancho. Índice: `generico_limpio` (str). Columnas: objetos `PeriodoQuincenal`. Valores: `float64` o NaN. Las series de entrada son siempre quincenales — datos mensuales se obtienen solo vía `a_mensual(resultado)`, nunca cargando CSVs mensuales.
+DataFrame-backed, formato ancho. Índice: `generico` (str). Columnas: objetos `PeriodoQuincenal`. Valores: `float64` o NaN. Las series de entrada son siempre quincenales — datos mensuales se obtienen solo vía `a_mensual(resultado)`, nunca cargando CSVs mensuales.
 
 ```python
 SerieNormalizada(df, mapeo={"arroz": "Arroz", ...})
@@ -690,14 +690,14 @@ Propiedades:
 | Propiedad | Tipo | Notas |
 | --- | --- | --- |
 | `.df` | `pd.DataFrame` | DataFrame interno |
-| `.mapeo` | `dict[str, str]` | trazabilidad `generico_limpio → generico_original`; vacío si se omite en construcción |
+| `.mapeo` | `dict[str, str]` | trazabilidad `generico → generico_original`; vacío si se omite en construcción |
 | `_repr_html_()` | HTML | display automático en Jupyter |
 
 Esquema del DataFrame:
 
 | Dimensión | Tipo | Notas |
 | --- | --- | --- |
-| Índice | `str` | `generico_limpio` |
+| Índice | `str` | `generico` |
 | Columnas | `PeriodoQuincenal` | una columna por quincena |
 | Valores | `float64` / NaN | NaN cuando falta el índice del genérico en ese periodo |
 
@@ -1551,7 +1551,7 @@ alinear_genericos(
 ) -> SerieNormalizada
 ```
 
-Verifica que todos los genéricos de `canasta` estén en `serie` (por igualdad exacta de `generico_limpio`) y devuelve una `SerieNormalizada` filtrada y reordenada al orden de `canasta.df.index`. El `mapeo` resultante se filtra al mismo subconjunto.
+Verifica que todos los genéricos de `canasta` estén en `serie` (por igualdad exacta de `generico`) y devuelve una `SerieNormalizada` filtrada y reordenada al orden de `canasta.df.index`. El `mapeo` resultante se filtra al mismo subconjunto.
 
 | Condición | Error |
 | --- | --- |
@@ -1874,7 +1874,7 @@ def cargar_serie(
 | `ruta` | `str` | ruta al CSV; relativa o absoluta |
 | `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta correspondiente |
 
-Devuelve `SerieNormalizada` — índice = `generico_limpio`; columnas = `PeriodoQuincenal`.
+Devuelve `SerieNormalizada` — índice = `generico`; columnas = `PeriodoQuincenal`.
 
 | Condición | Error |
 | --- | --- |
@@ -3012,7 +3012,7 @@ Todas las versiones (2010, 2013, 2018, 2024) comparten el mismo esquema de CSV i
 
 `LectorCanastaCsv` lee `generico` como índice y convierte `ponderador` y `encadenamiento` a `str` antes de construir `CanastaCanonica`. Las columnas de clasificación se pasan al DataFrame sin modificar.
 
-El índice `generico` se normaliza con la misma función que `LectorSeriesCsv` aplica para producir `generico_limpio`: eliminar tildes vocálicas (`á`→`a`, etc.), conservar `ñ`, eliminar puntuación, convertir a minúsculas. Normalización simétrica garantiza comparabilidad directa en `correspondencia.py`. Verificado: 299 genéricos de la canasta 2018 coinciden exactamente con los 299 extraídos de las series BIE.
+El índice `generico` se normaliza con la misma función que `LectorSeriesCsv` aplica sobre su propio índice `generico`: eliminar tildes vocálicas (`á`→`a`, etc.), conservar `ñ`, eliminar puntuación, convertir a minúsculas. Normalización simétrica garantiza comparabilidad directa en `correspondencia.py`. Verificado: 299 genéricos de la canasta 2018 coinciden exactamente con los 299 extraídos de las series BIE.
 
 Función de normalización en `infraestructura/csv/_utils.py`, compartida con `LectorSeriesCsv`.
 
@@ -3070,7 +3070,7 @@ Dos estrategias determinísticas según formato:
 1. **Formato con clave de 3 dígitos** (series 2018/2024): regex `\b\d{3}\b\s*(.*)` sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto son agregados CCIF y se descartan.
 2. **Formato jerárquico BIE sin clave terminal** (series 2010/2013): se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título empiece con `titulo + ","`). En esas filas, el extractor ubica el último componente con código CCIF (`01.1.1`, `04.5.1`, etc.) y genera candidatos de sufijo. Esto preserva genéricos con comas, como `Leche evaporada, condensada y maternizada`. Aplica tabla mínima de aliases para diferencias reales verificadas (`niña`/`niñas`, `deshechables`/`desechables`). Sin fuzzy matching.
 
-**Normalización de nombres:** eliminar tildes vocálicas, conservar `ñ`, eliminar puntuación, minúsculas. Resultado: `generico_limpio`; nombre original: `generico_original`. Implementada en `infraestructura/csv/_utils.py`.
+**Normalización de nombres:** eliminar tildes vocálicas, conservar `ñ`, eliminar puntuación, minúsculas. Resultado: `generico`; nombre original: `generico_original`. Implementada en `infraestructura/csv/_utils.py`.
 
 **Parseo de periodos:** `"1Q Ene 2018"` → `PeriodoQuincenal(2018, 1, 1)`. Mes en español abreviado (`Ene`…`Dic`), insensible a mayúsculas. Internamente usa `periodo_desde_str`; si el string no puede parsearse lanza `PeriodoNoInterpretable`; si es interpretable pero algún componente está fuera de rango lanza `InvarianteViolado`.
 
@@ -3444,9 +3444,9 @@ El suite es suficiente cuando cubre:
 
 ### 11.1 `SerieNormalizada` en formato ancho
 
-**Decisión:** DataFrame con `generico_limpio` como índice y objetos `PeriodoQuincenal` como columnas.
+**Decisión:** DataFrame con `generico` como índice y objetos `PeriodoQuincenal` como columnas.
 
-**Alternativa considerada:** formato largo — columnas `generico_limpio`, `periodo`, `indice`.
+**Alternativa considerada:** formato largo — columnas `generico`, `periodo`, `indice`.
 
 **Razón:** el cálculo Laspeyres sobre todos los periodos es una multiplicación matricial directa entre el vector de ponderadores y la matriz de índices. El formato ancho lo hace eficiente y legible. El formato largo requeriría un pivot antes de cada cálculo.
 
@@ -3454,7 +3454,7 @@ El suite es suficiente cuando cubre:
 
 ### 11.2 `generico_original` como diccionario
 
-**Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico_limpio → generico_original`), fuera del DataFrame.
+**Decisión:** `generico_original` vive en `serie.mapeo` como `dict[str, str]` (`generico → generico_original`), fuera del DataFrame.
 
 **Alternativa considerada:** columna opcional en el DataFrame de `SerieNormalizada`.
 
@@ -3473,7 +3473,7 @@ determinista. En 2018/2024, después de normalizar ambos lados, los genéricos
 extraídos de las series BIE coinciden exactamente con la canasta. En 2010/2013,
 el problema no es de correspondencia sino de extracción: los títulos BIE no
 terminan con una clave de genérico de 3 dígitos, por lo que `LectorSeriesCsv`
-produce el mismo `generico_limpio` usando una estrategia jerárquica
+produce el mismo `generico` usando una estrategia jerárquica
 determinística (ver §8.2). Una vez producida la `SerieNormalizada`,
 `correspondencia.py` sigue comparando strings directos y falla si falta algún
 genérico.

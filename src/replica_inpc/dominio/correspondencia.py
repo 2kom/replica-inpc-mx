@@ -14,7 +14,7 @@ def alinear_genericos(canasta: CanastaCanonica, serie: SerieNormalizada) -> Seri
 
     Args:
         canasta: Canasta canónica cuyo índice contiene los genéricos esperados.
-        serie: Serie normalizada cuyos índices representan `generico_limpio` y
+        serie: Serie normalizada cuyos índices representan `generico` y
             cuyo `mapeo` conserva la trazabilidad hacia `generico_original`.
 
     Returns:
@@ -42,7 +42,6 @@ def alinear_genericos(canasta: CanastaCanonica, serie: SerieNormalizada) -> Seri
     genericos_serie = set(serie.df.index)
     faltantes = [g for g in canasta.df.index if g not in genericos_serie]
     if faltantes:
-        print(f"{len(faltantes)} de genericos no alineados")
         raise CorrespondenciaInsuficiente(faltantes)
 
     serie_filtrada = serie.df.loc[canasta.df.index]

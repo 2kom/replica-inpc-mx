@@ -64,7 +64,7 @@ mapeo_serie = {
     "huevo": "Huevo",
 }
 
-# `mapeo` conserva la trazabilidad `generico_limpio -> generico_original`.
+# `mapeo` conserva la trazabilidad `generico -> generico_original`.
 canasta = CanastaCanonica(df_canasta, 2018)
 serie = SerieNormalizada(df_serie, mapeo_serie)
 

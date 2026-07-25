@@ -10,9 +10,9 @@ class SerieNormalizada:
     """Representa una matriz de índices por genérico y periodo.
 
     Args:
-        df: DataFrame en formato ancho con `generico_limpio` como índice,
+        df: DataFrame en formato ancho con `generico` como índice,
             columnas `PeriodoQuincenal` y valores numéricos no negativos o `NaN`.
-        mapeo: Correspondencia de trazabilidad `generico_limpio ->
+        mapeo: Correspondencia de trazabilidad `generico ->
             generico_original`. Si se omite, se usa un diccionario vacío.
 
     Raises:
@@ -21,24 +21,24 @@ class SerieNormalizada:
             DataFrame contiene valores negativos.
 
     Esquema del DataFrame:
-        Índice (str): `generico_limpio`.
+        Índice (str): `generico`.
         Columnas (PeriodoQuincenal): una columna por quincena.
         Valores (float64/NaN): índice del genérico en cada periodo.
 
     Example:
         DataFrame interno:
-        | generico_limpio | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
+        | generico        | 2Q Jul 2018 | 1Q Ago 2018 | 2Q Ago 2018 |
         | :-------------- | :---------- | :---------- | :---------- |
         | arroz           | 100.0       | 101.0       | 102.0       |
         | frijol          | 100.0       | 102.0       | 104.0       |
         | leche           | 100.0       | NaN         | 106.0       |
 
-        Trazabilidad (`generico_limpio -> generico_original`):
-        | generico_limpio | generico_original |
-        | :-------------- | :---------------- |
-        | arroz           | Arroz             |
-        | frijol          | Frijol            |
-        | leche           | Leche             |
+        Trazabilidad (`generico -> generico_original`):
+        | generico | generico_original |
+        | :------- | :---------------- |
+        | arroz    | Arroz             |
+        | frijol   | Frijol            |
+        | leche    | Leche             |
 
         `NaN` indica que no hubo índice disponible para un genérico en ese
         periodo.
@@ -70,7 +70,7 @@ class SerieNormalizada:
 
     @property
     def mapeo(self) -> dict[str, str]:
-        """Devuelve la trazabilidad `generico_limpio -> generico_original`."""
+        """Devuelve la trazabilidad `generico -> generico_original`."""
         return self._mapeo
 
     def _repr_html_(self) -> str:

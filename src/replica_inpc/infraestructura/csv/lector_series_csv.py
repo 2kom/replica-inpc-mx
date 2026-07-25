@@ -64,7 +64,7 @@ class LectorSeriesCsv:
         filas = [fila for _, _, fila in extracciones]
 
         df_num = pd.DataFrame(filas, columns=data.columns).apply(pd.to_numeric, errors="coerce")
-        df_num.index = pd.Index(genericos_limpios, name="generico_limpio")
+        df_num.index = pd.Index(genericos_limpios, name="generico")
         df_num.columns = periodos
         mapeo = dict(zip(genericos_limpios, genericos_originales))
         return SerieNormalizada(df_num, mapeo)
