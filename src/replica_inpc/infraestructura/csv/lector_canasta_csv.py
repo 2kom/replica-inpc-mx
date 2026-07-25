@@ -20,11 +20,14 @@ COLUMNAS_REQUERIDAS = [
     "encadenamiento",
     "COG",
     "CCIF division",
+    "CCIF grupo",
+    "CCIF clase",
     "inflacion componente",
     "inflacion subcomponente",
     "inflacion agrupacion",
     "SCIAN sector",
     "SCIAN rama",
+    "durabilidad",
     "canasta basica",
     "canasta consumo minimo",
 ]
@@ -45,9 +48,7 @@ class LectorCanastaCsv:
         except pd.errors.EmptyDataError:
             raise ArchivoVacio(f"El archivo está vacío: {ruta}")
         except pd.errors.ParserError:
-            raise ArchivoCorrupto(
-                f"El archivo está corrupto o no es un CSV válido: {ruta}"
-            )
+            raise ArchivoCorrupto(f"El archivo está corrupto o no es un CSV válido: {ruta}")
         except UnicodeDecodeError:
             raise EncodingNoLegible(
                 f"No se pudo leer el archivo debido a un problema de encoding: {ruta}"
@@ -56,9 +57,7 @@ class LectorCanastaCsv:
         df.index = pd.Index([_normalizar(g) for g in df.index], name="generico")
 
         if not all(col in df.columns for col in COLUMNAS_REQUERIDAS):
-            columnas_faltantes = [
-                col for col in COLUMNAS_REQUERIDAS if col not in df.columns
-            ]
+            columnas_faltantes = [col for col in COLUMNAS_REQUERIDAS if col not in df.columns]
             raise ColumnasMinFaltantes(
                 f"Faltan columnas requeridas: {', '.join(columnas_faltantes)}"
             )

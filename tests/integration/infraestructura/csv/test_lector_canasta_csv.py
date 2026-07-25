@@ -15,11 +15,11 @@ from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 
 """
 La canasta queda como:
-generico | ponderador | encadenamiento | COG   | CCIF division | inflacion componente | inflacion subcomponente | inflacion agrupacion | SCIAN sector    | SCIAN rama      | canasta basica | canasta consumo minimo |
-arroz    | 10.0       | None           | COG 1 | CCIF 1        | inf 1.1              | inf 2.1                 | inf 3.1              | SCIAN sect 1.1  | SCIAN rama 2.1  | x              | X                      |
-frijol   | 20.0       | None           | COG 1 | CCIF 1        | inf 1.1              | inf 2.1                 | inf 3.1              | SCIAN sect 1.1  | SCIAN rama 2.1  | x              | x                      |
-leche    | 30.0       | None           | COG 2 | CCIF 2        | inf 1.2              | inf 2.2                 | inf 3.2              | SCIAN sect 1.2  | SCIAN rama 2.2  |                |                        |
-huevo    | 40.0       | None           | COG 3 | CCIF 3        | inf 1.3              | inf 2.3                 | inf 3.3              | SCIAN sect 1.3  | SCIAN rama 2.3  | x              |                        |
+generico | ponderador | encadenamiento | COG   | CCIF division | inflacion componente | SCIAN sector    | canasta basica |
+arroz    | 10.0       | None           | COG 1 | CCIF 1        | inf 1.1              | SCIAN sect 1.1  | x              |
+frijol   | 20.0       | None           | COG 1 | CCIF 1        | inf 1.1              | SCIAN sect 1.1  | x              |
+leche    | 30.0       | None           | COG 2 | CCIF 2        | inf 1.2              | SCIAN sect 1.2  | -              |
+huevo    | 40.0       | None           | COG 3 | CCIF 3        | inf 1.3              | SCIAN sect 1.3  | x              |
 """
 df_canasta = pd.DataFrame(
     {
@@ -33,12 +33,15 @@ df_canasta = pd.DataFrame(
             "COG 3",
         ],
         "CCIF division": ["CCIF 1", "CCIF 1", "CCIF 2", "CCIF 3"],
+        "CCIF grupo": ["grupo 1", "grupo 1", "grupo 2", "grupo 3"],
+        "CCIF clase": ["clase 1", "clase 1", "clase 2", "clase 3"],
         "inflacion componente": ["inf 1.1", "inf 1.1", "inf 1.2", "inf 1.3"],
         "inflacion subcomponente": ["inf 2.1", "inf 2.1", "inf 2.2", "inf 2.3"],
         "inflacion agrupacion": ["inf 3.1", "inf 3.1", "inf 3.2", "inf 3.3"],
         "SCIAN sector": ["SCIAN sect 1.1", "SCIAN sect 1.1", "SCIAN sect 1.2", "SCIAN sect 1.3"],
         "SCIAN rama": ["SCIAN rama 2.1", "SCIAN rama 2.1", "SCIAN rama 2.2", "SCIAN rama 2.3"],
-        "canasta basica": ["x", "x", "", "x"],
+        "durabilidad": ["dur 1", "dur 1", "dur 2", "dur 3"],
+        "canasta basica": ["x", "x", "-", "x"],
         "canasta consumo minimo": ["x", "x", None, None],
     }
 ).set_index("generico")
@@ -70,9 +73,7 @@ def test_lector_canasta_csv_archivo_vacio(tmp_path: Path):
 
 def test_lector_canasta_csv_archivo_corrupto(tmp_path: Path):
     ruta_canasta = tmp_path / "canasta_corrupta.csv"
-    ruta_canasta.write_text(
-        'generico,ponderador\n"comilla sin cerrar,10.0\n', encoding="utf-8"
-    )
+    ruta_canasta.write_text('generico,ponderador\n"comilla sin cerrar,10.0\n', encoding="utf-8")
     with pytest.raises(ArchivoCorrupto):
         LectorCanastaCsv().leer(ruta_canasta, 2018)
 
@@ -80,6 +81,15 @@ def test_lector_canasta_csv_archivo_corrupto(tmp_path: Path):
 def test_lector_canasta_csv_columnas_faltantes(tmp_path: Path):
     ruta_canasta = tmp_path / "canasta_faltante_columnas.csv"
     df_canasta.drop(columns=["COG", "CCIF division"]).to_csv(ruta_canasta)
+    with pytest.raises(ColumnasMinFaltantes):
+        LectorCanastaCsv().leer(ruta_canasta, 2018)
+
+
+@pytest.mark.parametrize("columna", ["CCIF grupo", "CCIF clase", "durabilidad"])
+def test_lector_canasta_csv_columna_fina_faltante_falla(tmp_path: Path, columna: str) -> None:
+    """Ausencia de columna (no solo contenido vacío) debe fallar acá, no como KeyError en calculo/."""
+    ruta_canasta = tmp_path / "canasta_faltante_columna_fina.csv"
+    df_canasta.drop(columns=[columna]).to_csv(ruta_canasta)
     with pytest.raises(ColumnasMinFaltantes):
         LectorCanastaCsv().leer(ruta_canasta, 2018)
 

@@ -10,6 +10,7 @@ _COLUMNAS_CORE = (
     "inflacion componente",
     "inflacion subcomponente",
     "inflacion agrupacion",
+    "canasta basica",
 )
 
 
@@ -27,10 +28,10 @@ class CanastaCanonica:
             duplicados o cadenas vacías, si algún ponderador no es positivo, si
             la suma de ponderadores no es 100, si algún encadenamiento no nulo
             no es positivo, o si `COG`/`inflacion componente`/`inflacion
-            subcomponente`/`inflacion agrupacion` tienen valores vacíos (a
-            diferencia de las clasificaciones finas, obligatorias en toda
-            versión — ver Esquema abajo para las que sí pueden faltar según
-            fuente o versión).
+            subcomponente`/`inflacion agrupacion`/`canasta basica` tienen
+            valores vacíos (a diferencia de las clasificaciones finas,
+            obligatorias en toda versión — ver Esquema abajo para las que sí
+            pueden faltar según fuente o versión).
 
     Esquema del DataFrame (índice: `generico`):
         ponderador (object/str): texto decimal exacto del ponderador.
@@ -45,8 +46,13 @@ class CanastaCanonica:
         SCIAN sector (object/str): numero y nombre del sector, ej. "32 Industrias manufactureras".
         SCIAN rama (object/str): codigo y nombre de la rama, ej. "3241 Fabricacion de...".
         durabilidad (object/str): categoria de durabilidad; vacio cuando no aplica.
-        canasta basica (object/str): "X" si pertenece, "" si no.
-        canasta consumo minimo (object/str): "X" si pertenece, "" o null si no aplica.
+        canasta basica (object/str): "X" si pertenece, "-" si no; nunca
+            vacío — siempre disponible vía xlsx en las 4 versiones (ver
+            tools/canasta_inpc/esquema.py::FUENTES_POSIBLES).
+        canasta consumo minimo (object/str): "X" si pertenece, "-" si no
+            pertenece (solo en la versión donde la clasificación existe,
+            2024); NaN cuando la clasificación no aplica a la versión
+            (2010/2013/2018).
 
     Example:
         DataFrame interno:
