@@ -16,9 +16,42 @@ _VERSIONES_VALIDAS = (2010, 2013, 2018, 2024)
 
 def _validar_version(version: int) -> None:
     if version not in _VERSIONES_VALIDAS:
-        raise InvarianteViolado(
-            f"version {version!r} inválida; usa una de {_VERSIONES_VALIDAS}."
-        )
+        raise InvarianteViolado(f"version {version!r} inválida; usa una de {_VERSIONES_VALIDAS}.")
+
+
+def _mostrar_resumen_carga_canasta(canasta: CanastaCanonica, version: VersionCanasta) -> None:
+    """Imprime tabla resumen de genéricos, encadenamientos y categorías por columna."""
+    resumen = [
+        ("Genericos", str(len(canasta.df.index))),
+        ("Encadenamientos", str(len(canasta.df["encadenamiento"].dropna()))),
+    ]
+    columnas = [
+        (str(col), str(n))
+        for col, n in canasta.df.nunique().items()
+        if col not in ("ponderador", "encadenamiento")
+    ]
+    encabezado = (f"Columnas = {len(canasta.df.columns)}", "Categorias")
+    filas = [*resumen, encabezado, *columnas]
+
+    ancho_izq = max(len(izq) for izq, _ in filas)
+    ancho_der = max(len(der) for _, der in filas)
+    ancho_total = ancho_izq + ancho_der + 3
+    borde_split = f"+{'-' * (ancho_izq + 2)}+{'-' * (ancho_der + 2)}+"
+
+    def fila(izq: str, der: str) -> str:
+        return f"| {izq:<{ancho_izq}} | {der:>{ancho_der}} |"
+
+    print(f"+{'-' * (ancho_total + 2)}+")
+    print(f"| {f'Canasta: {version}':^{ancho_total}} |")
+    print(borde_split)
+    for izq, der in resumen:
+        print(fila(izq, der))
+    print(borde_split)
+    print(fila(*encabezado))
+    print(borde_split)
+    for izq, der in columnas:
+        print(fila(izq, der))
+    print(borde_split)
 
 
 def cargar_canasta(ruta: str, version: VersionCanasta) -> CanastaCanonica:
@@ -28,7 +61,9 @@ def cargar_canasta(ruta: str, version: VersionCanasta) -> CanastaCanonica:
     auto-detect elegiría mal en silencio (ver api.md §D3).
     """
     _validar_version(version)
-    return LectorCanastaCsv().leer(Path(ruta), version)
+    canasta = LectorCanastaCsv().leer(Path(ruta), version)
+    _mostrar_resumen_carga_canasta(canasta, version)
+    return canasta
 
 
 def cargar_serie(ruta: str, version: VersionCanasta) -> SerieNormalizada:

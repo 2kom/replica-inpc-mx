@@ -21,6 +21,7 @@ def test_cargar_serie_version_invalida(version: int) -> None:
 
 
 def test_cargar_canasta_delega_al_lector_con_path_y_version(mocker) -> None:
+    mocker.patch.object(insumos, "_mostrar_resumen_carga_canasta")
     lector = mocker.patch.object(insumos, "LectorCanastaCsv")
     leer = lector.return_value.leer
     leer.return_value = "canasta"

@@ -99,6 +99,12 @@ class LaspeyresDirecto(CalculadorBase):
             raise InvarianteViolado(
                 f"tipo='{tipo}' no está en INDICE_POR_TIPO ni en COLUMNAS_CLASIFICACION"
             )
+        if tipo in COLUMNAS_CLASIFICACION and canasta.df[tipo].dropna().empty:
+            raise InvarianteViolado(
+                f"La canasta versión {canasta.version} no tiene datos en '{tipo}'. "
+                "Revisa tools/canasta_inpc/esquema.py::FUENTES_POSIBLES para qué "
+                "clasificaciones aplican a cada versión (docs/diseño.md §5.4)."
+            )
 
         if tipo in INDICE_POR_TIPO:
             indice = INDICE_POR_TIPO[tipo]

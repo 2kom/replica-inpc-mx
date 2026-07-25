@@ -675,6 +675,7 @@ Invariantes — validados al construir (lanza `InvarianteViolado`):
 | Ponderador positivo | `float(ponderador) > 0` para cada fila |
 | Suma de ponderadores | `abs(sum(ponderadores) - 100) <= 1e-5` |
 | Encadenamiento positivo | cuando no nulo: `float(encadenamiento) > 0` |
+| Columnas core no vacías | `COG`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion` sin NaN ni `""` en ninguna fila — a diferencia de las clasificaciones finas (`CCIF grupo`/`clase`, `SCIAN sector`/`rama`, `durabilidad`), que pueden faltar según versión o fuente de generación (ver `tools/canasta_inpc/esquema.py::FUENTES_POSIBLES`) |
 
 **`SerieNormalizada`**
 
@@ -808,7 +809,7 @@ def calcular(
 ) -> ResultadoIndice:
 ```
 
-`tipo` debe estar en `INDICE_POR_TIPO` o `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`).
+`tipo` debe estar en `INDICE_POR_TIPO` o `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`). Si `tipo in COLUMNAS_CLASIFICACION` pero la columna está 100% vacía en `canasta.df` (categoría fina sin fuente para esa versión — ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`) → `InvarianteViolado` también, en vez de agrupar en silencio sobre `NaN`.
 
 **`para_canasta`**
 
@@ -1927,6 +1928,7 @@ Devuelve `ResultadoIndice` para el tramo de la canasta; `periodo_referencia = No
 | ponderador faltante para el cálculo | `PonderadorFaltante` |
 | `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
 | `tipo` no en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` | `InvarianteViolado` |
+| `tipo in COLUMNAS_CLASIFICACION` con columna 100% vacía en `canasta.df` | `InvarianteViolado` |
 
 Una canasta a la vez; historia completa = varias llamadas + `empalmar`.
 

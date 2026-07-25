@@ -5,6 +5,13 @@ import pandas as pd
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.tipos import VersionCanasta
 
+_COLUMNAS_CORE = (
+    "COG",
+    "inflacion componente",
+    "inflacion subcomponente",
+    "inflacion agrupacion",
+)
+
 
 class CanastaCanonica:
     """Representa la canasta canónica usada para el cálculo del índice.
@@ -18,8 +25,12 @@ class CanastaCanonica:
     Raises:
         InvarianteViolado: Si la versión no es válida, si el índice contiene
             duplicados o cadenas vacías, si algún ponderador no es positivo, si
-            la suma de ponderadores no es 100 o si algún encadenamiento no nulo
-            no es positivo.
+            la suma de ponderadores no es 100, si algún encadenamiento no nulo
+            no es positivo, o si `COG`/`inflacion componente`/`inflacion
+            subcomponente`/`inflacion agrupacion` tienen valores vacíos (a
+            diferencia de las clasificaciones finas, obligatorias en toda
+            versión — ver Esquema abajo para las que sí pueden faltar según
+            fuente o versión).
 
     Esquema del DataFrame (índice: `generico`):
         ponderador (object/str): texto decimal exacto del ponderador.
@@ -63,27 +74,31 @@ class CanastaCanonica:
                 "El índice del DataFrame de la canasta no puede tener valores duplicados."
             )
         if version not in {2010, 2013, 2018, 2024}:
-            raise InvarianteViolado(
-                "La versión de la canasta debe ser 2010, 2013, 2018 o 2024."
-            )
+            raise InvarianteViolado("La versión de la canasta debe ser 2010, 2013, 2018 o 2024.")
         if (df.index == "").any():
-            raise InvarianteViolado(
-                "El índice del DataFrame no puede contener cadenas vacías."
-            )
+            raise InvarianteViolado("El índice del DataFrame no puede contener cadenas vacías.")
         if not (df["ponderador"].astype(float) > 0).all():
-            raise InvarianteViolado(
-                "La columna 'ponderador' debe contener solo valores positivos."
-            )
+            raise InvarianteViolado("La columna 'ponderador' debe contener solo valores positivos.")
         if (
             abs(df["ponderador"].astype(float).sum() - 100) > 1e-5
         ):  # Permitir una pequeña tolerancia numérica
             raise InvarianteViolado("La suma de los ponderadores debe ser igual a 100.")
-        if (
-            df["encadenamiento"].notnull().any()
-            and (df["encadenamiento"].astype(float) <= 0).any()
-        ):
+        if df["encadenamiento"].notnull().any() and (df["encadenamiento"].astype(float) <= 0).any():
             raise InvarianteViolado(
                 "La columna 'encadenamiento' debe contener solo valores positivos cuando no es nula."
+            )
+        columnas_vacias = [
+            col
+            for col in _COLUMNAS_CORE
+            if col in df.columns
+            and (df[col].isna() | (df[col].astype(str).str.strip() == "")).any()
+        ]
+        if columnas_vacias:
+            raise InvarianteViolado(
+                f"Las columnas {columnas_vacias} no pueden tener valores vacíos "
+                "— a diferencia de las clasificaciones finas (CCIF grupo/clase, "
+                "SCIAN sector/rama, durabilidad), son obligatorias en toda versión "
+                "de la canasta."
             )
 
         self._df = df
