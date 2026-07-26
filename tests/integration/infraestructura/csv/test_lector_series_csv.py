@@ -12,10 +12,12 @@ from replica_inpc.dominio.errores import (
     SerieVacia,
 )
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
+from replica_inpc.infraestructura.csv._utils import _normalizar
 from replica_inpc.infraestructura.csv.lector_canasta_csv import LectorCanastaCsv
 from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
+DATA_DIR_CANASTA = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests" / "p_pdf"
 
 """
 La serie sintética queda como (orientación horizontal):
@@ -136,6 +138,70 @@ def test_lector_series_csv_serie_vacia(tmp_path: Path):
         LectorSeriesCsv().leer(ruta)
 
 
+# ---------- Extracción jerárquica BIE (2010/2013, sin código de 3 dígitos) ----------
+
+"""
+Jerarquía sintética (sin código de 3 dígitos, fuerza la extracción jerárquica):
+
+INPC, Total                                                                    <- huérfano, se descarta
+INPC, 01 Alimentos                                                             <- padre (división)
+INPC, 01 Alimentos, 01.1 Frutas y verduras                                     <- padre (grupo)
+INPC, 01 Alimentos, 01.1 Frutas y verduras, Manzana                            <- genérico simple
+INPC, 01 Alimentos, 01.1 Frutas y verduras, Naranja                            <- genérico simple, hermano
+INPC, 01 Alimentos, 01.2 Leche, quesos y huevos                                <- padre (clase con coma propia)
+INPC, 01 Alimentos, 01.2 Leche, quesos y huevos, Huevo                         <- genérico bajo clase con coma
+INPC, 01 Alimentos, 01.2 Leche, quesos y huevos, Leche evaporada, condensada y maternizada
+                                                                                <- genérico CON coma propia, bajo clase con coma
+INPC, 01 Alimentos, 01.3 Panificados                                           <- padre (clase sin coma)
+INPC, 01 Alimentos, 01.3 Panificados, Pasteles, pastelillos y pan dulce empaquetado
+                                                                                <- genérico con coma propia, clase sin coma
+
+Genéricos esperados: 5 (Manzana, Naranja, Huevo, "Leche evaporada, condensada y
+maternizada", "Pasteles, pastelillos y pan dulce empaquetado"). "Total" y los 4
+padres se descartan.
+"""
+
+_TITULOS_BIE = [
+    "INPC, Total",
+    "INPC, 01 Alimentos",
+    "INPC, 01 Alimentos, 01.1 Frutas y verduras",
+    "INPC, 01 Alimentos, 01.1 Frutas y verduras, Manzana",
+    "INPC, 01 Alimentos, 01.1 Frutas y verduras, Naranja",
+    "INPC, 01 Alimentos, 01.2 Leche, quesos y huevos",
+    "INPC, 01 Alimentos, 01.2 Leche, quesos y huevos, Huevo",
+    "INPC, 01 Alimentos, 01.2 Leche, quesos y huevos, Leche evaporada, condensada y maternizada",
+    "INPC, 01 Alimentos, 01.3 Panificados",
+    "INPC, 01 Alimentos, 01.3 Panificados, Pasteles, pastelillos y pan dulce empaquetado",
+]
+
+df_bie = pd.DataFrame(
+    {
+        "Título": _TITULOS_BIE,
+        "Cifra": ["Indices"] * len(_TITULOS_BIE),
+        "Serie": [str(90000 + i) for i in range(len(_TITULOS_BIE))],
+        "1Q Ene 2018": ["100.00"] * len(_TITULOS_BIE),
+        "2Q Jul 2018": ["100.00"] * len(_TITULOS_BIE),
+    }
+)
+
+
+def test_lector_series_csv_extraccion_jerarquica_bie(tmp_path: Path) -> None:
+    ruta = tmp_path / "serie_bie_sintetica.csv"
+    _escribir_csv(ruta, df_bie)
+    resultado = LectorSeriesCsv().leer(ruta)
+
+    esperados = {
+        "Manzana",
+        "Naranja",
+        "Huevo",
+        "Leche evaporada, condensada y maternizada",
+        "Pasteles, pastelillos y pan dulce empaquetado",
+    }
+    assert len(resultado.df) == 5
+    assert set(resultado.df.index) == {_normalizar(nombre) for nombre in esperados}
+    assert set(resultado.mapeo.values()) == esperados
+
+
 @pytest.mark.requires_data
 def test_lector_series_csv_real_2018_horizontal_metadata():
     ruta = DATA_DIR / "series2018_horizontal_metadata.CSV"
@@ -183,12 +249,12 @@ def test_lector_series_csv_real_2018_vertical_nometadata():
     ],
 )
 def test_lector_series_csv_real_2010_bie_alinea_canasta(archivo: str):
-    canasta = LectorCanastaCsv().leer(DATA_DIR / "ponderadores_2010.csv", 2010)
+    canasta = LectorCanastaCsv().leer(DATA_DIR_CANASTA / "ponderadores_2010.csv", 2010)
     resultado = LectorSeriesCsv().leer(DATA_DIR / archivo)
     resultado_alineado = alinear_genericos(canasta, resultado)
 
     assert isinstance(resultado, SerieNormalizada)
     assert not resultado.df.index.duplicated().any()
-    assert len(resultado.df) == 360
+    assert len(resultado.df) == 283
     assert len(resultado_alineado.df) == 283
     assert resultado_alineado.df.index.equals(canasta.df.index)

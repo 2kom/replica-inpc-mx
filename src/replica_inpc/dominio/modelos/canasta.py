@@ -71,7 +71,7 @@ class CanastaCanonica:
         En este ejemplo, los ponderadores suman 100 y `encadenamiento` está
         vacío porque la estrategia aplicable es directa.
 
-    Ver: docs/diseño.md §5.1, §11.5
+    Ver: docs/diseño.md §5.4, §11.5
     """
 
     def __init__(self, df: pd.DataFrame, version: VersionCanasta) -> None:

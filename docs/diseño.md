@@ -709,6 +709,7 @@ Invariantes — validados al construir (lanza `InvarianteViolado`):
 | Genérico no vacío | ningún valor del índice es `""` |
 | Al menos un periodo | al menos una columna |
 | Columnas son `PeriodoQuincenal` | todas las columnas son instancias de `PeriodoQuincenal` |
+| Sin periodos duplicados | columnas sin valores repetidos |
 | Valores no negativos | todo valor numérico es ≥ 0 |
 
 ---
@@ -3043,6 +3044,8 @@ Archivo descargado del BIE del INEGI. Todas las versiones comparten el mismo for
 
 **Encabezado INEGI:** siempre 5 líneas a saltar (`skiprows=5`): 4 líneas de metadatos institucionales + 1 línea vacía.
 
+**Encoding:** intenta `utf-8` → `cp1252` → `latin-1` en ese orden. `latin-1` decodifica cualquier secuencia de bytes sin error, así que el intento final nunca falla — no existe condición de encoding no decodificable para esta clase (a diferencia de `LectorCanastaCsv`, que no tiene fallback).
+
 **Orientación horizontal** (filas = genéricos, columnas = periodos):
 
 | Columna | Notas |
@@ -3068,7 +3071,7 @@ El metadata se descarta implícitamente: en horizontal se conservan solo columna
 Dos estrategias determinísticas según formato:
 
 1. **Formato con clave de 3 dígitos** (series 2018/2024): regex `\b\d{3}\b\s*(.*)` sobre cada fila. Solo las filas con código de 3 dígitos son genéricos — el resto son agregados CCIF y se descartan.
-2. **Formato jerárquico BIE sin clave terminal** (series 2010/2013): se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título empiece con `titulo + ","`). En esas filas, el extractor ubica el último componente con código CCIF (`01.1.1`, `04.5.1`, etc.) y genera candidatos de sufijo. Esto preserva genéricos con comas, como `Leche evaporada, condensada y maternizada`. Aplica tabla mínima de aliases para diferencias reales verificadas (`niña`/`niñas`, `deshechables`/`desechables`). Sin fuzzy matching.
+2. **Formato jerárquico BIE sin clave terminal** (series 2010/2013): se identifican filas terminales del árbol BIE (títulos sin hijos cuyo título empiece con `titulo + ","`). En esas filas, el extractor busca el prefijo (por coma) más largo que YA existe como título propio en el archivo — ese es el padre inmediato publicado por INEGI; el resto es el nombre del genérico, sin ambigüedad. Esto resuelve tanto genéricos con coma propia en su nombre (`Leche evaporada, condensada y maternizada`) como clases con coma propia en su nombre oficial (`01.1.4 Leche, quesos y huevos`), sin generar candidatos especulativos por sufijo. Aplica tabla mínima de aliases para diferencias reales verificadas (`niña`/`niñas`, `deshechables`/`desechables`). Sin fuzzy matching.
 
 **Normalización de nombres:** eliminar tildes vocálicas, conservar `ñ`, eliminar puntuación, minúsculas. Resultado: `generico`; nombre original: `generico_original`. Implementada en `infraestructura/csv/_utils.py`.
 
@@ -3086,7 +3089,6 @@ class LectorSeriesCsv:
 | `ruta` no existe | `ArchivoNoEncontrado` |
 | archivo vacío | `ArchivoVacio` |
 | CSV no parseable o `df.columns[0] != 'Título'` | `ArchivoCorrupto` |
-| encoding no decodificable | `EncodingNoLegible` |
 | orientación no detectable | `OrientacionNoDetectable` |
 | columna de periodo no parseable | `PeriodoNoInterpretable` |
 | columna de periodo interpretable pero fuera de rango | `InvarianteViolado` |
@@ -3381,7 +3383,7 @@ Fixtures viven en `tests/fixtures/` (vacío; cada test construye sus datos sint�
 
 Un CSV de canasta sintético por versión soportada.
 
-**Integración con datos reales** — archivos reales de `data/inputs/` para verificar que el sistema procesa insumos INEGI sin errores y produce resultados dentro de tolerancia. `test_lector_series_csv.py` verifica las cuatro variantes `series2010_*` (360 candidatos únicos, 283/283 genéricos alineados contra `ponderadores_2010.csv`).
+**Integración con datos reales** — archivos reales de `data/inputs/` para verificar que el sistema procesa insumos INEGI sin errores y produce resultados dentro de tolerancia. `test_lector_series_csv.py` verifica las cuatro variantes `series2010_*` (283 genéricos únicos, 283/283 alineados contra `ponderadores_2010.csv`).
 
 ---
 

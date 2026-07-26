@@ -17,8 +17,9 @@ class SerieNormalizada:
 
     Raises:
         InvarianteViolado: Si el índice contiene duplicados o cadenas vacías,
-            si no hay columnas, si alguna columna no es `PeriodoQuincenal` o si el
-            DataFrame contiene valores negativos.
+            si no hay columnas, si alguna columna no es `PeriodoQuincenal`, si
+            hay columnas de periodo duplicadas o si el DataFrame contiene
+            valores negativos.
 
     Esquema del DataFrame:
         Índice (str): `generico`.
@@ -43,7 +44,7 @@ class SerieNormalizada:
         `NaN` indica que no hubo índice disponible para un genérico en ese
         periodo.
 
-    Ver: docs/diseño.md §5.2, §11.1, §11.2
+    Ver: docs/diseño.md §5.4, §11.1, §11.2
     """
 
     def __init__(self, df: pd.DataFrame, mapeo: dict[str, str] | None = None) -> None:
@@ -56,6 +57,10 @@ class SerieNormalizada:
         if not all(isinstance(col, PeriodoQuincenal) for col in df.columns):
             raise InvarianteViolado(
                 "Las columnas del DataFrame deben ser del tipo PeriodoQuincenal."
+            )
+        if df.columns.duplicated().any():
+            raise InvarianteViolado(
+                "Las columnas del DataFrame no pueden contener periodos duplicados."
             )
 
         if (df < 0).any().any():

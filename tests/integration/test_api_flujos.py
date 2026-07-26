@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -10,7 +11,8 @@ from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "inputs"
-_CANASTA_2018 = str(DATA_DIR / "ponderadores_2018.csv")
+DATA_DIR_CANASTA = Path(__file__).parent.parent.parent / "data" / "tests" / "p_pdf"
+_CANASTA_2018 = str(DATA_DIR_CANASTA / "ponderadores_2018.csv")
 _SERIE_2018 = str(DATA_DIR / "series2018_horizontal_metadata.CSV")
 _BASE = PeriodoQuincenal(2018, 7, 2)
 
@@ -24,9 +26,8 @@ def test_calcular_historia_defaults_sin_argumentos_extra() -> None:
     assert isinstance(resultado, ResultadoIndice)
     largo = resultado.resultado.largo
     assert not largo.empty
-    assert largo.loc[(PeriodoMensual(2018, 7), "INPC"), "indice_replicado"] == pytest.approx(
-        100.0
-    )
+    clave = cast(Any, (PeriodoMensual(2018, 7), "INPC"))
+    assert largo.loc[clave, "indice_replicado"] == pytest.approx(100.0)
 
 
 @pytest.mark.requires_data
@@ -42,7 +43,8 @@ def test_calcular_historia_2018_standalone_quincenal() -> None:
     largo = resultado.resultado.largo
     assert not largo.empty
     # rebased a 2Q Jul 2018 = 100 → el INPC en la base vale 100.
-    assert largo.loc[(_BASE, "INPC"), "indice_replicado"] == pytest.approx(100.0)
+    clave = cast(Any, (_BASE, "INPC"))
+    assert largo.loc[clave, "indice_replicado"] == pytest.approx(100.0)
 
 
 def test_calcular_historia_referencia_invalida_lanza_error_configuracion() -> None:
