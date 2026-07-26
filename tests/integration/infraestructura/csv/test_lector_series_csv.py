@@ -3,7 +3,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from replica_inpc.dominio.correspondencia import alinear_genericos
 from replica_inpc.dominio.errores import (
     ArchivoCorrupto,
     ArchivoNoEncontrado,
@@ -251,10 +250,8 @@ def test_lector_series_csv_real_2018_vertical_nometadata():
 def test_lector_series_csv_real_2010_bie_alinea_canasta(archivo: str):
     canasta = LectorCanastaCsv().leer(DATA_DIR_CANASTA / "ponderadores_2010.csv", 2010)
     resultado = LectorSeriesCsv().leer(DATA_DIR / archivo)
-    resultado_alineado = alinear_genericos(canasta, resultado)
 
     assert isinstance(resultado, SerieNormalizada)
     assert not resultado.df.index.duplicated().any()
     assert len(resultado.df) == 283
-    assert len(resultado_alineado.df) == 283
-    assert resultado_alineado.df.index.equals(canasta.df.index)
+    assert set(resultado.df.index) == set(canasta.df.index)

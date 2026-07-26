@@ -5,17 +5,17 @@ RENOMBRES_GENERICOS: dict[int, dict[str, str]] = {
     2013: {
         "calcetines": "calcetines y calcetas para niños",
         "camisas": "camisas y playeras para hombre",
-        "carnes secas y otros embutidos": "carnes secas, procesadas y otros embutidos",
+        "carnes secas y otros embutidos": "carnes secas procesadas y otros embutidos",
         "crema de leche": "crema y otros productos a base de leche",
         "frutas y legumbres preparadas para bebes": "alimentos para bebe",
-        "helados": "helados, nieves y paletas de hielo",
+        "helados": "helados nieves y paletas de hielo",
         "instrumentos musicales y otros": "instrumentos musicales",
         "juguetes": "juguetes y juegos de mesa",
-        "medias y pantimedias": "calcetas, medias y pantimedias",
-        "otras diversiones y espectaculos deportivos": "otros servicios culturales, diversiones y espectaculos deportivos",
+        "medias y pantimedias": "calcetas medias y pantimedias",
+        "otras diversiones y espectaculos deportivos": "otros servicios culturales diversiones y espectaculos deportivos",
         "otras prendas para hombre": "otras prendas de vestir para hombre",
         "otras prendas para mujer": "otras prendas de vestir para mujer",
-        "otras refacciones": "partes, accesorios y otras refacciones para vehiculos",
+        "otras refacciones": "partes accesorios y otras refacciones para vehiculos",
         "otros gastos del calzado": "servicios y articulos para el calzado",
         "papas fritas y similares": "papas fritas",
         "pasta dental": "crema y productos para higiene dental",
@@ -25,7 +25,7 @@ RENOMBRES_GENERICOS: dict[int, dict[str, str]] = {
     },
     2018: {
         "leche de soya": "leches de origen vegetal",
-        "ropa interior para infantes": "ropa interior para niños, niñas y adolescentes",
+        "ropa interior para infantes": "ropa interior para niños niñas y adolescentes",
         "zapatos de material sintetico": "sandalias y huaraches",
     },
 }
@@ -34,14 +34,14 @@ RENOMBRES_GENERICOS: dict[int, dict[str, str]] = {
 DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
     2013: {
         "bicicletas y motocicletas": ("motocicletas", "bicicletas"),
-        "chiles envasados, moles y salsas": ("chiles envasados", "moles y salsas"),
+        "chiles envasados moles y salsas": ("chiles envasados", "moles y salsas"),
         "chocolate": (
             "chocolate y productos de confiteria",
             "chocolate liquido y para preparar bebida",
         ),
-        "dulces, cajetas y miel": (
+        "dulces cajetas y miel": (
             "chocolate y productos de confiteria",
-            "gelatina, miel y mermeladas",
+            "gelatina miel y mermeladas",
         ),
         "estudios medicos de gabinete": (
             "analisis clinicos",
@@ -49,7 +49,7 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
         ),
         "otros aparatos electricos": (
             "aspiradoras y otros aparatos para el hogar",
-            "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños",
+            "cafeteras tostadoras ventiladores y otros electrodomesticos pequeños",
             "aparatos electricos para el cuidado personal",
         ),
         "otros textiles para el hogar": (
@@ -60,9 +60,9 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
             "articulos y utensilios para el hogar",
             "articulos desechables y no duraderos",
         ),
-        "peliculas, musica y videojuegos": (
+        "peliculas musica y videojuegos": (
             "peliculas y musica",
-            "juegos electronicos; consola, cartuchos y discos para videojuegos",
+            "juegos electronicos consola cartuchos y discos para videojuegos",
         ),
     },
     2018: {
@@ -73,20 +73,20 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
         ),
         "blancos y otros textiles para el hogar": (
             "complementos de vestir",
-            "toallas, cortinas y otros blancos",
+            "toallas cortinas y otros blancos",
         ),
-        "bolsas, maletas y cinturones": (
+        "bolsas maletas y cinturones": (
             "complementos de vestir",
             "bolsas y mochilas",
         ),
-        "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños": (
+        "cafeteras tostadoras ventiladores y otros electrodomesticos pequeños": (
             "aspiradoras y otros aparatos para el hogar",
-            "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños",
+            "cafeteras tostadoras ventiladores y otros electrodomesticos pequeños",
         ),
         "cine": ("cine", "servicios recreativos y centros nocturnos"),
         "instrumentos musicales": ("instrumentos musicales y descargas de audio y video",),
-        "juegos electronicos; consola, cartuchos y discos para videojuegos": (
-            "consolas, discos y descargas de videojuegos",
+        "juegos electronicos consola cartuchos y discos para videojuegos": (
+            "consolas discos y descargas de videojuegos",
             "servicios recreativos y centros nocturnos",
         ),
         "otras prendas de vestir para hombre": (
@@ -97,17 +97,17 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
             "otras prendas de vestir para mujer",
             "complementos de vestir",
         ),
-        "otros servicios culturales, diversiones y espectaculos deportivos": (
+        "otros servicios culturales diversiones y espectaculos deportivos": (
             "cine",
             "museos y sitios culturales",
             "paquetes para fiesta",
         ),
         "otros servicios para el hogar": (
-            "servicios para el mantenimiento, reparacion y seguridad de la vivienda",
+            "servicios para el mantenimiento reparacion y seguridad de la vivienda",
             "otros servicios relacionados con la vivienda",
             "servicio domestico",
         ),
-        "leche evaporada, condensada y maternizada": (
+        "leche evaporada condensada y maternizada": (
             "leche evaporada y condensada",
             "leche maternizada y alimentos para bebe",
         ),
@@ -119,7 +119,7 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
         "refrescos envasados": ("refrescos envasados", "bebidas energeticas"),
         "otras verduras y legumbres": (
             "otras verduras y legumbres",
-            "cilantro, epazote y perejil",
+            "cilantro epazote y perejil",
         ),
         "ropa de abrigo": ("ropa de abrigo", "complementos de vestir"),
         "servicio domestico": ("servicio domestico",),
@@ -130,7 +130,7 @@ DESAGREGACIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
 # version_origen -> {generico_destino: (genericos_viejos, ...)}
 FUSIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
     2013: {
-        "cafeteras, tostadoras, ventiladores y otros electrodomesticos pequeños": ("ventiladores",),
+        "cafeteras tostadoras ventiladores y otros electrodomesticos pequeños": ("ventiladores",),
         "equipo terminal de comunicacion": ("aparatos de telefonia fija",),
         "otras verduras y legumbres": ("otras legumbres", "chicharo"),
         "sala de belleza y masajes": ("sala de belleza",),
@@ -153,16 +153,16 @@ FUSIONES_GENERICOS: dict[int, dict[str, tuple[str, ...]]] = {
             "objetos ornamentales y decorativos",
         ),
         "periodicos y revistas": ("periodicos", "revistas"),
-        "reproductores de audio y video, y sus accesorios": (
+        "reproductores de audio y video y sus accesorios": (
             "equipos y reproductores de audio",
             "reproductores de video",
         ),
         "ropa para bebes": ("camisetas para bebes", "ropa para bebes"),
         "servicios recreativos y centros nocturnos": (
             "centro nocturno",
-            "otros servicios culturales, diversiones y espectaculos deportivos",
+            "otros servicios culturales diversiones y espectaculos deportivos",
         ),
-        "toallas, cortinas y otros blancos": ("cortinas", "toallas"),
+        "toallas cortinas y otros blancos": ("cortinas", "toallas"),
     },
 }
 
@@ -187,7 +187,10 @@ NUEVOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
 # version_origen -> {version_destino: (genericos_eliminados, ...)}
 ELIMINADOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
     2013: {
-        2018: ("calentadores para agua", "larga distancia nacional"),
+        2018: (
+            "calentadores para agua",
+            "larga distancia nacional",
+        ),  # "calentadores para agua" en el manual 2018 aparece como "calentadores de agua"
     },
 }
 
@@ -475,51 +478,3 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
 # - Conclusion: 7223 no es renombre 1:1 desde 2013; es reagrupacion o fusion
 #   parcial desde 3119 y 7222. Desde 2018 a 2024 se mantiene estable con los
 #   mismos cinco genericos.
-
-
-_ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
-
-
-def validar_renombres_indices(canastas, renombres=None) -> list[str]:
-    """Verifica que cada renombre de `RENOMBRES_INDICES` exista en las canastas.
-
-    Para `RENOMBRES_INDICES[tipo][version] = {origen: destino}`, el `origen`
-    debe ser un nombre nativo de la canasta `version` y el `destino` un nombre
-    nativo de la versión siguiente. Devuelve una lista de descripciones de las
-    entradas inconsistentes (vacía si todas son válidas).
-
-    Pensada para correrse tras regenerar los ponderadores: si la herramienta de
-    extracción cambia un nombre de categoría, las entradas que apuntaban al
-    nombre viejo quedan obsoletas y aquí saltan, en vez de corromper en silencio
-    el alineamiento de ponderadores en incidencias o producir nombres fantasma
-    en `empalmar`. `canastas` es `{version: canasta}`; cada canasta expone `.df`
-    con una columna por tipo de clasificación.
-    """
-    renombres = RENOMBRES_INDICES if renombres is None else renombres
-    problemas: list[str] = []
-    for tipo, por_version in renombres.items():
-        for version, mapa in por_version.items():
-            if version not in _ORDEN_VERSIONES:
-                continue
-            i = _ORDEN_VERSIONES.index(version)
-            destino_version = _ORDEN_VERSIONES[i + 1] if i + 1 < len(_ORDEN_VERSIONES) else None
-            can_o = canastas.get(version)
-            can_d = canastas.get(destino_version) if destino_version is not None else None
-            if can_o is None or can_d is None:
-                continue
-            if tipo not in can_o.df.columns or tipo not in can_d.df.columns:
-                continue
-            nativos_o = set(can_o.df[tipo])
-            nativos_d = set(can_d.df[tipo])
-            for origen, destino in mapa.items():
-                if origen not in nativos_o:
-                    problemas.append(
-                        f"[{tipo}][{version}->{destino_version}] origen ausente en "
-                        f"canasta {version}: {origen!r}"
-                    )
-                if destino not in nativos_d:
-                    problemas.append(
-                        f"[{tipo}][{version}->{destino_version}] destino ausente en "
-                        f"canasta {destino_version}: {destino!r}"
-                    )
-    return problemas

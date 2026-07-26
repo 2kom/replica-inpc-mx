@@ -113,22 +113,6 @@ class ErrorCalculo(ReplicaInpcError):
     pass
 
 
-class CorrespondenciaInsuficiente(ErrorCalculo):
-    """Faltan genéricos de la canasta en la serie normalizada.
-
-    Args:
-        faltantes: Lista de genéricos de la canasta que no tuvieron
-            correspondencia en la serie.
-
-    Attributes:
-        faltantes: Genéricos faltantes que detonaron el error.
-    """
-
-    def __init__(self, faltantes: list[str]) -> None:
-        super().__init__(f"Genericos sin serie: {faltantes}")
-        self.faltantes = faltantes
-
-
 class PonderadorFaltante(ErrorCalculo):
     """Falta un ponderador requerido para completar el cálculo."""
 
