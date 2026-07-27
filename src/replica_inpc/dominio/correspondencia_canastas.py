@@ -194,38 +194,67 @@ ELIMINADOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
     },
 }
 
-# tipo → version_origen → {nombre_viejo: nombre_canonico_2024}
+# indice -> version -> {nombre_con_error (sin codigo): nombre_correcto (sin codigo)}
+ERRORES_TIPOGRAFICOS_INDICES: dict[str, dict[int, dict[str, str]]] = {
+    "CCIF grupo": {
+        2010: {
+            # falta la "s" en "equipo(s)", vs 2013 "productos artefactos y equipos medicos"
+            "productos artefactos y equipo medicos": "productos artefactos y equipos medicos",
+        },
+    },
+    "CCIF clase": {
+        2010: {
+            # falta espacio entre "joyeria" y "relojes"
+            "joyeriarelojes de pared y relojes de pulsera": "joyeria relojes de pared y relojes de pulsera",
+            # typo "choclolates" vs "chocolates"
+            "azucar mermeladas miel choclolates y dulces": "azucar mermeladas miel chocolates y dulces",
+            # falta la "a" en "terapeuticos"
+            "artefactos y equipos terpeuticos": "artefactos y equipos terapeuticos",
+        },
+    },
+}
+
+# indice -> version -> {nombre_equivocado: nombre_correcto_de_esa_era}
+ERRORES_CLASIFICACION_INDICES: dict[str, dict[int, dict[str, str]]] = {
+    "CCIF division": {
+        2018: {
+            "ropa y calzado": "prendas de vestir y calzado",  # xlsx 2018 usa nombre ccif 2018 en vez de nombre ccif 1999
+        },
+    },
+}
+
+# indice → version_origen → {nombre_canasta_anterior: nombre_canasta_nueva}
 RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     "CCIF division": {
         2018: {
-            "bienes y servicios diversos": "cuidado personal, proteccion social y bienes diversos",
+            "bienes y servicios diversos": "cuidado personal proteccion social y bienes diversos",
             "comunicaciones": "informacion y comunicacion",
             "educacion": "servicios educativos",
-            "muebles, articulos para el hogar y para su conservacion": "mobiliario, equipo domestico y mantenimiento rutinario del hogar",
+            "muebles articulos para el hogar y para su conservacion": "mobiliario equipo domestico y mantenimiento rutinario del hogar",
             "prendas de vestir y calzado": "ropa y calzado",
-            "recreacion y cultura": "recreacion, deporte y cultura",
+            "recreacion y cultura": "recreacion deporte y cultura",
             "restaurantes y hoteles": "restaurantes y servicios de alojamiento",
-            "vivienda, agua, electricidad, gas y otros combustibles": "vivienda, agua, electricidad y gas",
-        }
+            "vivienda agua electricidad gas y otros combustibles": "vivienda agua electricidad y gas",
+        },
     },
-    # Renombres 1:1 validados contra CSVs de ponderadores (reciprocidad de genericos).
+    # Renombres 1:1 validados contra CSVs de ponderadores.
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
     "CCIF grupo": {
         2018: {
             "agua y otros servicios referentes a la vivienda": "suministro de agua y servicios diversos relacionados con la vivienda",
-            "articulos de cristal, vajillas y utensilios para el hogar": "cristaleria, vajillas y utensilios para el hogar",
+            "articulos de cristal vajillas y utensilios para el hogar": "cristaleria vajillas y utensilios para el hogar",
             "articulos para el hogar": "electrodomesticos",
             "bienes y servicios para la conservacion ordinaria del hogar": "bienes y servicios para el mantenimiento rutinario del hogar",
             "educacion no atribuible a algun nivel": "educacion no definida por nivel",
-            "educacion terciaria": "educacion terciaria (universitaria)",
+            "educacion terciaria": "educacion terciaria universitaria",
             "funcionamiento de equipo de transporte personal": "funcionamiento del equipo de transporte personal",
             "herramientas y equipo para el hogar y el jardin": "herramienta y equipo para casa y jardin",
-            "mantenimiento y reparacion de la vivienda": "mantenimiento, reparacion y seguridad de la vivienda",
-            "muebles y accesorios, alfombras y otros materiales para pisos": "muebles, mobiliario y alfombras sueltas",
+            "mantenimiento y reparacion de la vivienda": "mantenimiento reparacion y seguridad de la vivienda",
+            "muebles y accesorios alfombras y otros materiales para pisos": "muebles mobiliario y alfombras sueltas",
             "paquetes turisticos": "paquetes de vacaciones",
             "prendas de vestir": "ropa",
             "productos textiles para el hogar": "textiles para el hogar",
-            "productos, artefactos y equipos medicos": "medicamentos y productos sanitarios",
+            "productos artefactos y equipos medicos": "medicamentos y productos sanitarios",
             "renta de vivienda": "alquileres reales de vivienda",
             "servicios de hospital": "servicios de atencion para pacientes hospitalizados",
             "servicios de suministro de comidas": "servicios de alimentos y bebidas",
@@ -233,43 +262,49 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "vivienda propia": "alquileres imputados para vivienda",
         },
     },
-    # Renombres 1:1 validados contra CSVs de ponderadores (reciprocidad de genericos)
-    # y contra COICOP 2018 (UN Statistics Division) para confirmar cambios oficiales.
+    # Renombres 1:1 validados contra CSVs de ponderadores
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
+    # Division 05 (muebles/hogar): varias entradas 2018 tienen fuga de 1 generico
+    # hacia/desde otra clase (ej. "articulos de cristal..." pierde 1 generico hacia
+    # "muebles..."). Bajo la regla estricta ninguna calificaria como renombre 1:1
+    # puro, pero se documentan aqui de todos modos porque sin ellas no habria
+    # continuidad de categoria alguna en division 05 entre 2018 y 2024 (fuga
+    # minoritaria, 1 de varios genericos, no cambia el caracter de la categoria).
     "CCIF clase": {
         2013: {
             "seguro relacionado con el transporte": "seguros",
         },
         2018: {
+            "agua": "suministro de agua",
             "animales domesticos y productos relacionados": "mascotas y productos relacionados",
             "artefactos y equipos terapeuticos": "productos de apoyo",
-            "articulos de cristal, vajillas y utensilios para el hogar": "cristaleria, vajillas y utensilios para el hogar",
+            "articulos de cristal vajillas y utensilios para el hogar": "cristaleria vajillas y utensilios para el hogar",
             "articulos de papeleria y dibujo": "material de papeleria y dibujo",
             "articulos electricos pequeños para el hogar": "electrodomesticos pequeños",
-            "articulos grandes para el hogar, electricos o no": "grandes electrodomesticos, electricos o no",
+            "articulos grandes para el hogar electricos o no": "grandes electrodomesticos electricos o no",
             "bienes no duraderos para el hogar": "articulos domesticos no duraderos",
-            "carnes": "animales vivos, carne y otras partes comestibles de animales terrestres",
+            "carnes": "animales vivos carne y otras partes comestibles de animales terrestres",
             "diarios y periodicos": "periodicos y publicaciones periodicas",
             "educacion no atribuible a algun nivel": "educacion no definida por nivel",
-            "educacion terciaria": "educacion terciaria (universitaria)",
-            "equipo de deportes, campamento y recreacion al aire libre": "equipo para deportes, campismo y recreacion al aire libre",
+            "educacion terciaria": "educacion terciaria universitaria",
+            "equipo de deportes campamento y recreacion al aire libre": "equipo para deportes campismo y recreacion al aire libre",
             "equipo fotografico y cinematografico e instrumentos opticos": "equipos e instrumentos opticos fotograficos y cinematograficos",
             "equipo para el procesamiento de informacion": "equipo de procesamiento de informacion",
-            "equipo para la recepcion, grabacion y reproduccion de sonidos e imagenes": "equipo para la recepcion, grabacion y reproduccion de sonido y video",
+            "equipo para la recepcion grabacion y reproduccion de sonidos e imagenes": "equipo para la recepcion grabacion y reproduccion de sonido y video",
             "equipo telefonico y de facsimile": "equipo de telefonia movil",
             "frutas": "frutas y frutos secos",
             "herramientas pequeñas y accesorios diversos": "herramientas no motorizadas y accesorios diversos",
             "instrumentos musicales y equipos duraderos importantes para recreacion en interiores": "instrumentos musicales",
-            "jardines, plantas y flores": "productos de jardineria, plantas y flores",
-            "joyeria, relojes de pared y relojes de pulsera": "joyas y relojes",
-            "juegos, juguetes y aficiones": "juguetes, juegos y pasatiempos",
-            "leche, quesos y huevos": "leche, otros productos lacteos y huevos",
-            "legumbres y hortalizas": "hortalizas, tuberculos, platanos de coccion y legumbres",
+            "jardines plantas y flores": "productos de jardineria plantas y flores",
+            "joyeria relojes de pared y relojes de pulsera": "joyas y relojes",
+            "juegos juguetes y aficiones": "juguetes juegos y pasatiempos",
+            "leche quesos y huevos": "leche otros productos lacteos y huevos",
+            "legumbres y hortalizas": "hortalizas tuberculos platanos de coccion y legumbres",
             "licores": "bebidas destiladas y licores",
-            "limpieza, reparacion y alquiler de prendas de vestir": "limpieza, reparacion, confeccion y alquiler de ropa",
+            "limpieza reparacion y alquiler de prendas de vestir": "limpieza reparacion confeccion y alquiler de ropa",
             "mantenimiento y reparacion para equipo de transporte personal": "mantenimiento y reparacion de equipo de transporte personal",
             "materiales para la conservacion y reparacion de la vivienda": "materiales para el mantenimiento y reparacion de la vivienda",
-            "muebles y accesorios": "muebles, mobiliario y alfombras sueltas",
+            "muebles y accesorios": "muebles mobiliario y alfombras sueltas",
             "otros productos alimenticios": "alimentos preparados y otros productos alimenticios",
             "otros productos medicos": "productos medicos",
             "otros servicios relativos al transporte personal": "otros servicios relacionados con equipos de transporte personal",
@@ -280,7 +315,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "productos farmaceuticos": "medicamentos",
             "productos textiles para el hogar": "textiles para el hogar",
             "renta de vivienda": "alquileres reales pagados por los inquilinos de la residencia principal",
-            "restaurantes, cafes y establecimientos similares": "restaurantes, cafes y similares",
+            "restaurantes cafes y establecimientos similares": "restaurantes cafes y similares",
             "salones de peluqueria de cuidado personal": "salones de peluqueria y establecimientos de aseo personal",
             "seguros": "seguros relacionado con el transporte",
             "servicios de hospital": "servicios curativos y de rehabilitacion para pacientes hospitalizados",
@@ -291,7 +326,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "transporte de pasajeros por aire": "transporte de pasajeros por via aerea",
             "vehiculos a motor": "automoviles",
             "veterinaria y otros servicios para animales domesticos": "veterinarios y otros servicios para mascotas",
-            "vivienda propia": "alquileres imputados de propietarios-ocupantes para residencia principal",
+            "vivienda propia": "alquileres imputados de propietariosocupantes para residencia principal",
             "zapatos y otros calzados": "calzado y otros tipos de calzado",
         },
     },
@@ -351,6 +386,79 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales": "3116 matanza, empacado y procesamiento de carne de ganado, aves y otros animales comestibles",
             "3253 fabricacion de fertilizantes, pesticidas y otros agroquimicos": "3253 fabricacion de fertilizantes, plaguicidas y otros agroquimicos",
             "5111 edicion de periodicos, revistas, libros y similares, y edicion de estas publicaciones integrada con la impresion": "5131 edicion de periodicos, revistas, libros, directorios y otros materiales",
+        },
+    },
+    "inflacion agrupacion": {
+        2013: {
+            "educacion": "educacion colegiaturas",  # 2013 -> 2018: cambio de nombre
+        },
+    },
+}
+
+# indice -> version_origen -> {nombre_anterior: (codigo_anterior, codigo_nuevo)}
+# trabaja sobre el supuesto de que no hay errores tipograficos, de clasifidacion ni renombres en las categorias de las clasificaciones
+RENOMBRES_CODIGOS_INDICES: dict[str, dict[int, dict[str, tuple[str, str]]]] = {
+    "CCIF division": {
+        2018: {
+            # codigo 12 en 2018 -> 13 en 2024 y 12 queda libre para seguros y servicios financieros
+            "bienes y servicios diversos": (
+                "12",
+                "13",
+            ),
+        },
+    },
+    "CCIF grupo": {
+        2018: {
+            # codigo 02.2 en 2018 -> 02.3 en 2024; 02.2 queda libre (sin uso en 2024)
+            "tabaco": ("02.2", "02.3"),
+            # codigo 09.5 en 2018 -> 09.7 en 2024; 09.5 queda libre (sin uso en 2024)
+            "periodicos libros y articulos de papeleria": ("09.5", "09.7"),
+            # nombre Y codigo cambian; ver RENOMBRES_INDICES["CCIF grupo"][2018] para el nombre
+            "paquetes turisticos": ("09.6", "09.8"),
+            # nombre identico, solo cambia el codigo
+            "cuidado personal": ("12.1", "13.1"),
+            "proteccion social": ("12.4", "13.3"),
+            "seguros": ("12.5", "12.1"),
+            "otros servicios": ("12.7", "13.9"),
+        },
+    },
+    "CCIF clase": {
+        2018: {
+            # codigo 02.2.0 en 2018 -> 02.3.0 en 2024; 02.2.0 queda libre (sin uso en 2024)
+            "tabaco": ("02.2.0", "02.3.0"),
+            # codigo 05.2.0 en 2018 -> 05.2.1 en 2024; 05.2.0 queda libre (sin uso en 2024)
+            "productos textiles para el hogar": ("05.2.0", "05.2.1"),
+            # codigo 06.3.0 en 2018 -> 06.3.1 en 2024; 06.3.0 queda libre (sin uso en 2024)
+            "servicios de hospital": ("06.3.0", "06.3.1"),
+            # codigo 06.2.3 en 2018 -> 06.4.1 en 2024 (categoria nueva de salud); 06.2.3 queda libre
+            "servicios paramedicos": ("06.2.3", "06.4.1"),
+            # codigo 08.2.0 en 2018 -> 08.1.2 en 2024; 08.2.0 queda libre (sin uso en 2024)
+            "equipo telefonico y de facsimile": ("08.2.0", "08.1.2"),
+            # division 09: varios codigos se reasignan en cadena entre categorias
+            # (el codigo que deja libre una entrada lo toma otra de esta misma tanda)
+            "equipo para el procesamiento de informacion": ("09.1.3", "08.1.3"),
+            "equipo fotografico y cinematografico e instrumentos opticos": ("09.1.2", "09.1.1"),
+            "equipo para la recepcion grabacion y reproduccion de sonidos e imagenes": (
+                "09.1.1",
+                "08.1.4",
+            ),
+            "equipo de deportes campamento y recreacion al aire libre": ("09.3.2", "09.2.2"),
+            "jardines plantas y flores": ("09.3.3", "09.3.1"),
+            "animales domesticos y productos relacionados": ("09.3.4", "09.3.2"),
+            "veterinaria y otros servicios para animales domesticos": ("09.3.5", "09.4.5"),
+            # nombre identico, solo cambia el codigo
+            "libros": ("09.5.1", "09.7.1"),
+            "diarios y periodicos": ("09.5.2", "09.7.2"),
+            "articulos de papeleria y dibujo": ("09.5.4", "09.7.4"),
+            "paquetes turisticos": ("09.6.0", "09.8.0"),
+            # division 12: mismo patron de reasignacion en cadena
+            "salones de peluqueria de cuidado personal": ("12.1.1", "13.1.3"),
+            "aparatos electricos para el cuidado personal": ("12.1.2", "13.1.1"),
+            "otros aparatos articulos y productos para el cuidado personal": ("12.1.3", "13.1.2"),
+            "joyeria relojes de pared y relojes de pulsera": ("12.3.1", "13.2.1"),
+            "proteccion social": ("12.4.0", "13.3.0"),
+            "seguros": ("12.5.4", "12.1.4"),
+            "otros servicios": ("12.7.0", "13.9.0"),
         },
     },
 }
