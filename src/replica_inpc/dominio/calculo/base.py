@@ -13,13 +13,11 @@ from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 def _rellenar_faltantes(
     df_serie: pd.DataFrame,
-    id_corrida: str,
     version: VersionCanasta,
     tipo: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, set[object]]:
     """Rellena NaN via bfill→ffill por fila. Retorna (df_rellenado, df_corr_relleno, periodos_rellenados)."""
     columnas = [
-        "id_corrida",
         "version",
         "tipo",
         "periodo",
@@ -55,7 +53,6 @@ def _rellenar_faltantes(
                         break
             filas.append(
                 {
-                    "id_corrida": id_corrida,
                     "version": version,
                     "tipo": tipo,
                     "periodo": periodo,
@@ -92,7 +89,6 @@ class CalculadorBase(ABC):
         self,
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
-        id_corrida: str,
         tipo: str,
     ) -> ResultadoIndice:
         """Calcula `ResultadoIndice` para una canasta y serie dadas."""
@@ -142,7 +138,6 @@ def _construir_reporte(
 def _construir_diagnostico(
     df_canasta: pd.DataFrame,
     df_serie: pd.DataFrame,
-    id_corrida: str,
     version: VersionCanasta,
     tipo: str,
 ) -> pd.DataFrame:
@@ -154,7 +149,6 @@ def _construir_diagnostico(
     """
     _ = df_canasta
     columnas = [
-        "id_corrida",
         "version",
         "tipo",
         "periodo",
@@ -174,7 +168,6 @@ def _construir_diagnostico(
 
     return pd.DataFrame(
         {
-            "id_corrida": id_corrida,
             "version": version,
             "tipo": tipo,
             "periodo": periodos_f,

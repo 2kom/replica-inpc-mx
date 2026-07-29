@@ -51,7 +51,7 @@ def _indice(
                 }
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
-    manifiesto = [ManifestCalculo(id_corrida, version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame(), periodo_referencia)
 
 
@@ -135,7 +135,7 @@ def test_periodica_indices_parciales_none() -> None:
 
 def test_periodica_manifiesto_ids() -> None:
     r = incidencia_periodica(_inpc(), _clas(), _canastas(), "mensual")
-    assert r.manifiesto.id_corrida == ["ci", "cc"]
+    assert r.manifiesto.id_corrida == ["inpc:2018", "inflacion componente:2018"]
 
 
 def test_periodica_estado_parcial_propagado() -> None:

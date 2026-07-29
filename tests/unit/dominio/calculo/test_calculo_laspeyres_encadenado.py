@@ -44,13 +44,13 @@ _F_H_T2 = (10 * 1.5 + 20 * 1.4 + 30 * 1.6 + 40 * 1.3) / 100
 
 
 def test_t2_traslape_es_fh_por_100_sin_referencia() -> None:
-    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "inpc")
     valor = r.df.at[(_traslape_t2, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(_F_H_T2 * 100)
 
 
 def test_t2_difiere_de_directo() -> None:
-    enc = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    enc = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "inpc")
     val_enc = enc.df.at[(_post_t2, "INPC"), "indice_replicado"]
     # Laspeyres naive (sin de-encadenamiento) para el mismo periodo
     serie_df = _serie_t2().df
@@ -62,16 +62,16 @@ def test_t2_difiere_de_directo() -> None:
 
 def test_t2_con_referencia_ancla_traslape_en_ref() -> None:
     ref = 134.471
-    r = LaspeyresEncadenadoT2({"INPC": ref}).calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    r = LaspeyresEncadenadoT2({"INPC": ref}).calcular(_canasta_t2(), _serie_t2(), "inpc")
     # factor_h = ref/100, i_tramo[traslape] = 100 (porque serie/f_k = 100 en traslape)
     valor = r.df.at[(_traslape_t2, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(ref)
 
 
 def test_t2_fk_desde_serie_igual_a_desde_canasta() -> None:
-    r_can = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    r_can = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "inpc")
     r_ser = LaspeyresEncadenadoT2().calcular(
-        _canasta_t2([None, None, None, None]), _serie_t2(), "c1", "inpc"
+        _canasta_t2([None, None, None, None]), _serie_t2(), "inpc"
     )
     assert r_can.df["indice_replicado"].tolist() == pytest.approx(
         r_ser.df["indice_replicado"].tolist()
@@ -79,7 +79,7 @@ def test_t2_fk_desde_serie_igual_a_desde_canasta() -> None:
 
 
 def test_t2_manifiesto() -> None:
-    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "cX", "inpc")
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "inpc")
     m = r.manifiesto[0]
     assert m.calculador == "LaspeyresEncadenadoT2"
     assert m.version == 2024
@@ -95,7 +95,7 @@ def test_t2_rechaza_canasta_no_2024() -> None:
     )
     canasta_2013 = CanastaCanonica(df, 2013)
     with pytest.raises(InvarianteViolado):
-        LaspeyresEncadenadoT2().calcular(canasta_2013, _serie_t2(), "c1", "inpc")
+        LaspeyresEncadenadoT2().calcular(canasta_2013, _serie_t2(), "inpc")
 
 
 # ---------- T1 (v2013) ----------
@@ -129,7 +129,7 @@ def _serie_t1() -> SerieNormalizada:
 
 
 def test_t1_sin_referencia_factor_h_es_1() -> None:
-    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "c1", "inpc")
+    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "inpc")
     f_k = _canasta_t1().df["encadenamiento"].astype(float)
     pond = _canasta_t1().df["ponderador"].astype(float)
     serie_div = _serie_t1().df.divide(f_k, axis=0)
@@ -140,13 +140,13 @@ def test_t1_sin_referencia_factor_h_es_1() -> None:
 
 def test_t1_con_referencia_ancla_traslape() -> None:
     ref = 109.172
-    r = LaspeyresEncadenadoT1({"INPC": ref}).calcular(_canasta_t1(), _serie_t1(), "c1", "inpc")
+    r = LaspeyresEncadenadoT1({"INPC": ref}).calcular(_canasta_t1(), _serie_t1(), "inpc")
     valor = r.df.at[(_traslape_t1, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(ref)
 
 
 def test_t1_manifiesto() -> None:
-    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "cZ", "inpc")
+    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "inpc")
     m = r.manifiesto[0]
     assert m.calculador == "LaspeyresEncadenadoT1"
     assert m.version == 2013
@@ -154,17 +154,17 @@ def test_t1_manifiesto() -> None:
 
 def test_t1_rechaza_canasta_no_2013() -> None:
     with pytest.raises(InvarianteViolado):
-        LaspeyresEncadenadoT1().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+        LaspeyresEncadenadoT1().calcular(_canasta_t2(), _serie_t2(), "inpc")
 
 
 def test_t1_tipo_invalido_lanza_invariante_violado() -> None:
     with pytest.raises(InvarianteViolado):
-        LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "c1", "no_existe")
+        LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "no_existe")
 
 
 def test_t2_tipo_invalido_lanza_invariante_violado() -> None:
     with pytest.raises(InvarianteViolado):
-        LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "no_existe")
+        LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "no_existe")
 
 
 def test_periodos_fuera_de_rango_2024_se_recortan() -> None:
@@ -182,7 +182,7 @@ def test_periodos_fuera_de_rango_2024_se_recortan() -> None:
     ).T
     serie_extra = SerieNormalizada(df)
 
-    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie_extra, "c1", "inpc")
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie_extra, "inpc")
 
     periodos_resultado = r.df.index.get_level_values("periodo").tolist()
     assert pre_traslape not in periodos_resultado
@@ -205,7 +205,7 @@ def test_periodos_fuera_de_rango_2013_se_recortan() -> None:
     ).T
     serie_extra = SerieNormalizada(df)
 
-    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie_extra, "c1", "inpc")
+    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie_extra, "inpc")
 
     periodos_resultado = r.df.index.get_level_values("periodo").tolist()
     assert pre_traslape not in periodos_resultado
@@ -226,7 +226,7 @@ def test_nan_parcial_t2_produce_estado_rellenado() -> None:
     ).T
     serie = SerieNormalizada(df)
 
-    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie, "c1", "inpc")
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie, "inpc")
 
     largo = r.resultado.largo
     estados = dict(zip(largo.index.get_level_values("periodo"), largo["estado_calculo"]))
@@ -235,5 +235,5 @@ def test_nan_parcial_t2_produce_estado_rellenado() -> None:
 
 
 def test_sin_nan_encadenado_no_produce_estado_rellenado() -> None:
-    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+    r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "inpc")
     assert "rellenado" not in r.resultado.largo["estado_calculo"].values

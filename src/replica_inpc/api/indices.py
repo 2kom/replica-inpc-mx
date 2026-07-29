@@ -42,9 +42,7 @@ def calcular_indice(
         version_origen = max(m.version for m in referencia.manifiesto)
         referencias = _referencias_normalizadas(referencia, tipo, version_origen, canasta.version)
 
-    return para_canasta(canasta, referencias).calcular(
-        canasta, serie, f"{tipo}:{canasta.version}", tipo
-    )
+    return para_canasta(canasta, referencias).calcular(canasta, serie, tipo)
 
 
 def empalmar(

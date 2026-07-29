@@ -37,20 +37,20 @@ def _serie() -> SerieNormalizada:
 
 
 def test_subindice_genera_indices_por_categoria() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     indices = sorted(r.df.index.get_level_values("indice").unique())
     assert indices == ["alimentos", "servicios"]
 
 
 def test_subindice_valores_correctos_periodo_base_es_100() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     p0 = _periodos[0]
     assert r.df.at[(p0, "alimentos"), "indice_replicado"] == pytest.approx(100.0)
     assert r.df.at[(p0, "servicios"), "indice_replicado"] == pytest.approx(100.0)
 
 
 def test_subindice_alimentos_post_periodo_es_promedio_ponderado() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     p1 = _periodos[1]
     # alimentos: (10*101 + 20*102) / (10+20)
     esperado = (10 * 101.0 + 20 * 102.0) / 30
@@ -58,7 +58,7 @@ def test_subindice_alimentos_post_periodo_es_promedio_ponderado() -> None:
 
 
 def test_subindice_reporte_ponderador_esperado_es_del_subgrupo() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     p0 = _periodos[0]
     # ponderador_esperado de alimentos = 10 + 20 = 30
     assert r.reporte.at[(p0, "alimentos"), "ponderador_esperado"] == pytest.approx(30.0)
@@ -67,12 +67,12 @@ def test_subindice_reporte_ponderador_esperado_es_del_subgrupo() -> None:
 
 
 def test_subindice_reporte_genericos_esperados_es_del_subgrupo() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     p0 = _periodos[0]
     assert r.reporte.at[(p0, "alimentos"), "genericos_esperados"] == 2
     assert r.reporte.at[(p0, "servicios"), "genericos_esperados"] == 2
 
 
 def test_subindice_manifiesto_tipo_es_clasificacion() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "COG")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "COG")
     assert r.manifiesto[0].tipo == "COG"

@@ -18,11 +18,9 @@ from replica_inpc.dominio.tipos import ManifestCalculo
 def _manifiesto(
     version: int = 2018,
     tipo: str = "inpc",
-    id_corrida: str = "abc",
     calculador: str = "LaspeyresDirecto",
 ) -> ManifestCalculo:
     return ManifestCalculo(
-        id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,
         calculador=calculador,  # type: ignore[arg-type]
@@ -34,7 +32,6 @@ def _resultado(
     rows: list[tuple[Any, str, float | None, str, str | None]],
     version: int = 2018,
     tipo: str = "inpc",
-    id_corrida: str = "abc",
     periodo_referencia: Any = None,
 ) -> ResultadoIndice:
     """rows = list of (periodo, indice, valor, estado, motivo)."""
@@ -73,7 +70,7 @@ def _resultado(
     )
     return ResultadoIndice(
         df,
-        [_manifiesto(version=version, tipo=tipo, id_corrida=id_corrida)],
+        [_manifiesto(version=version, tipo=tipo)],
         reporte,
         diag,
         periodo_referencia=periodo_referencia,

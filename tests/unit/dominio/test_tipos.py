@@ -92,7 +92,6 @@ def test_rangos_canastas_ultima_version_sin_fin() -> None:
 
 def test_manifest_calculo_construccion_valida() -> None:
     m = ManifestCalculo(
-        id_corrida="abc",
         version=2018,
         tipo="inpc",
         calculador="LaspeyresDirecto",
@@ -100,12 +99,12 @@ def test_manifest_calculo_construccion_valida() -> None:
         ruta_series=Path("/tmp/s.csv"),
         fecha=datetime(2024, 1, 1),
     )
-    assert m.id_corrida == "abc"
+    assert m.version == 2018
 
 
 def test_manifest_calculo_rutas_y_fecha_por_defecto() -> None:
     antes = datetime.now()
-    m = ManifestCalculo(id_corrida="abc", version=2018, tipo="inpc", calculador="LaspeyresDirecto")
+    m = ManifestCalculo(version=2018, tipo="inpc", calculador="LaspeyresDirecto")
     despues = datetime.now()
     assert m.ruta_canasta is None
     assert m.ruta_series is None

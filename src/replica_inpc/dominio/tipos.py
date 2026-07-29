@@ -42,7 +42,6 @@ RANGOS_CANASTAS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal |
 
 @dataclass
 class ManifestCalculo:
-    id_corrida: str
     version: VersionCanasta
     tipo: str
     calculador: Literal["LaspeyresDirecto", "LaspeyresEncadenadoT1", "LaspeyresEncadenadoT2"]

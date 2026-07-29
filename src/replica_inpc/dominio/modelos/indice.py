@@ -38,8 +38,8 @@ class ResultadoIndice(Resultado):
         for m in manifiesto:
             if not ((df["version"] == m.version) & (df["tipo"] == m.tipo)).any():
                 raise InvarianteViolado(
-                    f"ManifestCalculo(id_corrida={m.id_corrida!r}, version={m.version}, "
-                    f"tipo={m.tipo!r}) no tiene filas correspondientes en df"
+                    f"ManifestCalculo(version={m.version}, tipo={m.tipo!r}) "
+                    "no tiene filas correspondientes en df"
                 )
         super().__init__(df[["indice_replicado"]])
         self._df_completo = df
@@ -105,7 +105,6 @@ class ResultadoIndice(Resultado):
             periodo_fin = max(periodos)
             filas.append(
                 {
-                    "id_corrida": m.id_corrida,
                     "version": m.version,
                     "tipo": m.tipo,
                     "estado_calculo": estado,
@@ -114,7 +113,7 @@ class ResultadoIndice(Resultado):
                     "fecha": m.fecha,
                 }
             )
-        return pd.DataFrame(filas).set_index("id_corrida")
+        return pd.DataFrame(filas).set_index(["version", "tipo"])
 
     def _repr_html_(self) -> str:
         return self.resumen._repr_html_()  # type: ignore[operator]

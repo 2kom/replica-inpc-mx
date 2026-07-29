@@ -13,9 +13,8 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo
 
 
-def _manifiesto(id_corrida: str = "abc", version: int = 2018, tipo: str = "inpc") -> ManifestCalculo:
+def _manifiesto(version: int = 2018, tipo: str = "inpc") -> ManifestCalculo:
     return ManifestCalculo(
-        id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,
         calculador="LaspeyresDirecto",
@@ -54,7 +53,7 @@ def _reporte_vacio() -> pd.DataFrame:
 
 
 def _diagnostico_vacio() -> pd.DataFrame:
-    return pd.DataFrame({"id_corrida": [], "version": []})
+    return pd.DataFrame({"version": []})
 
 
 def test_construccion_valida() -> None:
@@ -83,7 +82,7 @@ def test_estado_calculo_invalido_falla() -> None:
 
 def test_manifiesto_sin_filas_en_df_falla() -> None:
     df = _df_indice(version=2018)
-    huerfano = _manifiesto(id_corrida="orphan", version=2024)
+    huerfano = _manifiesto(version=2024)
     with pytest.raises(InvarianteViolado):
         ResultadoIndice(df, [huerfano], _reporte_vacio(), _diagnostico_vacio())
 
@@ -113,17 +112,15 @@ def test_periodo_referencia_propagado() -> None:
 
 
 def test_resumen_una_fila_por_manifiesto() -> None:
-    m1 = _manifiesto(id_corrida="c1", version=2018)
-    m2 = _manifiesto(id_corrida="c2", version=2024)
+    m1 = _manifiesto(version=2018)
+    m2 = _manifiesto(version=2024)
     df1 = _df_indice(version=2018, año=2018)
     df2 = _df_indice(version=2024, año=2024)
     df = pd.concat([df1, df2])
     r = ResultadoIndice(df, [m1, m2], _reporte_vacio(), _diagnostico_vacio())
     res = r.resumen
-    assert list(res.index) == ["c1", "c2"]
+    assert list(res.index) == [(2018, "inpc"), (2024, "inpc")]
     assert list(res.columns) == [
-        "version",
-        "tipo",
         "estado_calculo",
         "periodo_inicio",
         "periodo_fin",
@@ -139,7 +136,7 @@ def test_resumen_peor_estado_segun_severidad() -> None:
         _reporte_vacio(),
         _diagnostico_vacio(),
     )
-    assert r.resumen.loc["abc", "estado_calculo"] == "parcial"
+    assert r.resumen.loc[(2018, "inpc"), "estado_calculo"] == "parcial"
 
 
 def test_resumen_estado_fallida_mas_severo_que_sin_datos() -> None:
@@ -149,4 +146,4 @@ def test_resumen_estado_fallida_mas_severo_que_sin_datos() -> None:
         _reporte_vacio(),
         _diagnostico_vacio(),
     )
-    assert r.resumen.loc["abc", "estado_calculo"] == "fallida"
+    assert r.resumen.loc[(2018, "inpc"), "estado_calculo"] == "fallida"

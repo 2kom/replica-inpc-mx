@@ -43,38 +43,37 @@ def _serie() -> SerieNormalizada:
 
 
 def test_calcular_retorna_resultado_indice() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "inpc")
     assert isinstance(r, ResultadoIndice)
 
 
 def test_valores_inpc_correctos() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "inpc")
     valores = r.df["indice_replicado"].tolist()
     assert valores == pytest.approx([100.0, 103.0, 106.0, 109.0])
 
 
 def test_multiindex_periodo_indice() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "inpc")
     assert list(r.df.index.names) == ["periodo", "indice"]
     assert r.df.index.get_level_values("periodo").tolist() == _periodos
     assert (r.df.index.get_level_values("indice") == "INPC").all()
 
 
 def test_manifiesto_calculador_y_version() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "inpc")
     assert len(r.manifiesto) == 1
     m = r.manifiesto[0]
     assert m.calculador == "LaspeyresDirecto"
     assert m.version == 2018
     assert m.tipo == "inpc"
-    assert m.id_corrida == "c1"
     assert m.ruta_canasta is None
     assert m.ruta_series is None
 
 
 def test_tipo_invalido_lanza_invariante_violado() -> None:
     with pytest.raises(InvarianteViolado):
-        LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "tipo_inventado")
+        LaspeyresDirecto().calcular(_canasta(), _serie(), "tipo_inventado")
 
 
 def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
@@ -96,7 +95,7 @@ def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
     ).T
     serie_extra = SerieNormalizada(df)
 
-    r = LaspeyresDirecto().calcular(_canasta(), serie_extra, "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), serie_extra, "inpc")
 
     periodos_resultado = r.df.index.get_level_values("periodo").tolist()
     assert PeriodoQuincenal(2018, 1, 1) not in periodos_resultado
@@ -123,7 +122,7 @@ def test_nan_parcial_produce_estado_rellenado() -> None:
     ).T
     serie = SerieNormalizada(df)
 
-    r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), serie, "inpc")
 
     largo = r.resultado.largo
     estados = dict(zip(largo.index.get_level_values("periodo"), largo["estado_calculo"]))
@@ -147,14 +146,14 @@ def test_nan_total_generico_produce_sin_datos() -> None:
     ).T
     serie = SerieNormalizada(df)
 
-    r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), serie, "inpc")
 
     # Ningún periodo queda "rellenado" — arroz all-NaN no puede rellenarse
     assert "rellenado" not in r.resultado.largo["estado_calculo"].values
 
 
 def test_sin_nan_no_produce_estado_rellenado() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "c1", "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie(), "inpc")
     largo = r.resultado.largo
     assert "rellenado" not in largo["estado_calculo"].values
     assert (largo["estado_calculo"] == "ok").all()

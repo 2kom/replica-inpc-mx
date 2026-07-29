@@ -89,12 +89,7 @@ class CalcularHistoria:
             if previo is not None:
                 version_origen = max(m.version for m in previo.manifiesto)
                 referencias = _referencias_normalizadas(previo, tipo, version_origen, version)
-            resultado = para_canasta(canasta, referencias).calcular(
-                canasta,
-                serie,
-                f"{tipo}:{version}",
-                tipo,
-            )
+            resultado = para_canasta(canasta, referencias).calcular(canasta, serie, tipo)
             resultados.append((version, resultado))
             previo = resultado
 

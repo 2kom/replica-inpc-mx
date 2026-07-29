@@ -42,7 +42,7 @@ def _ri(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
-    manifiesto = [ManifestCalculo("c1", version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(version, tipo, "LaspeyresDirecto")]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
 
@@ -110,7 +110,7 @@ def test_resumen_conteos_y_global() -> None:
     assert fila["n_diferencia_por_parcial"] == 1
     assert fila["error_absoluto_max"] == pytest.approx(0.5)
     assert fila["estado_validacion_global"] == "diferencia_detectada"
-    assert list(resumen.index) == ["c1"]
+    assert list(resumen.index) == [(2018, "inpc")]
 
 
 def test_diagnostico_solo_no_ok() -> None:
@@ -122,7 +122,6 @@ def test_diagnostico_solo_no_ok() -> None:
         "sin_calculo",
         "fuera_rango_inegi",
     }
-    assert (diag["id_corrida"] == "c1").all()
 
 
 def test_tolerancia_personalizada() -> None:

@@ -200,7 +200,6 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         self,
         canasta: CanastaCanonica,
         serie: SerieNormalizada,
-        id_corrida: str,
         tipo: str,
     ) -> ResultadoIndice:
 
@@ -228,7 +227,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             indice = INDICE_POR_TIPO[tipo]
             df_s_raw = _recortar_al_rango(serie.df, canasta.version)
             df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
-                df_s_raw, id_corrida, canasta.version, tipo
+                df_s_raw, canasta.version, tipo
             )
             df_calc = self._calcular_df_para(
                 canasta.df,
@@ -241,7 +240,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
             df_diag = pd.concat(
                 [
-                    _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo),
+                    _construir_diagnostico(canasta.df, df_s, canasta.version, tipo),
                     df_corr_relleno,
                 ],
                 ignore_index=True,
@@ -253,9 +252,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             gens = cat_por_gen.index
 
             df_s_raw = _recortar_al_rango(serie.df.loc[gens], canasta.version)
-            df_s, df_corr_relleno, _ = _rellenar_faltantes(
-                df_s_raw, id_corrida, canasta.version, tipo
-            )
+            df_s, df_corr_relleno, _ = _rellenar_faltantes(df_s_raw, canasta.version, tipo)
             pond = canasta.df.loc[gens, "ponderador"].astype(float)
 
             enc_raw = canasta.df.loc[gens, "encadenamiento"]
@@ -345,14 +342,13 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
 
             df_diag = pd.concat(
                 [
-                    _construir_diagnostico(canasta.df, df_s, id_corrida, canasta.version, tipo),
+                    _construir_diagnostico(canasta.df, df_s, canasta.version, tipo),
                     df_corr_relleno,
                 ],
                 ignore_index=True,
             )
 
         manifiesto = ManifestCalculo(
-            id_corrida=id_corrida,
             version=canasta.version,
             tipo=tipo,
             calculador=self._CALCULADOR_NOMBRE,

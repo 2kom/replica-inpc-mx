@@ -21,9 +21,8 @@ from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 # ---------- Fixtures helpers ----------
 
-def _manif_calculo(tipo: str = "inpc", version: int = 2018, id_corrida: str = "c") -> ManifestCalculo:
+def _manif_calculo(tipo: str = "inpc", version: int = 2018) -> ManifestCalculo:
     return ManifestCalculo(
-        id_corrida=id_corrida,
         version=version,  # type: ignore[arg-type]
         tipo=tipo,
         calculador="LaspeyresDirecto",
@@ -185,7 +184,7 @@ def test_indice_manifiesto_mixto_falla() -> None:
     df_concat = pd.concat([df, df2])
     r = ResultadoIndice(
         df_concat,
-        [_manif_calculo(tipo="inpc"), _manif_calculo(tipo="cobertura", id_corrida="c2")],
+        [_manif_calculo(tipo="inpc"), _manif_calculo(tipo="cobertura")],
         pd.DataFrame(),
         pd.DataFrame(),
     )

@@ -112,7 +112,7 @@ def _res_inc(
                 }
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
-    manifiesto = [ManifestCalculo(id_corrida, version, tipo, "LaspeyresEncadenadoT2")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(version, tipo, "LaspeyresEncadenadoT2")]  # type: ignore[arg-type]
     reporte = pd.DataFrame(
         {"version": version, "estado_calculo": df["estado_calculo"].to_numpy()},
         index=df.index,
@@ -141,7 +141,7 @@ def _res_multi(
     ]
     df = pd.DataFrame(filas).set_index(["periodo", "indice"])
     versiones = {v for _, _, v, _, _, _ in rows}
-    manifiesto = [ManifestCalculo(id_corrida, v, tipo, "LaspeyresDirecto") for v in versiones]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(v, tipo, "LaspeyresDirecto") for v in versiones]  # type: ignore[arg-type]
     return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame())
 
 
@@ -183,7 +183,7 @@ def test_directo_indice_incidencia_igual_replicado() -> None:
     serie = SerieNormalizada(
         pd.DataFrame({"gen_a": [100.0, 110.0], "gen_b": [100.0, 90.0]}, index=[_Q1, _Q2]).T
     )
-    largo = LaspeyresDirecto().calcular(can, serie, "c1", "inpc")._completo
+    largo = LaspeyresDirecto().calcular(can, serie, "inpc")._completo
     assert (largo["indice_incidencia"] == largo["indice_replicado"]).all()
 
 
@@ -191,7 +191,7 @@ def test_t2_indice_incidencia_es_i_tramo() -> None:
     ref = 134.471
     largo = (
         LaspeyresEncadenadoT2({"INPC": ref})
-        .calcular(_canasta_t2(), _serie_t2(), "c1", "inpc")
+        .calcular(_canasta_t2(), _serie_t2(), "inpc")
         ._completo
     )
     # i_tramo en el traslape == 100 (serie/f_k = 100 por construcción T2)

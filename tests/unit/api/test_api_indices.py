@@ -29,7 +29,7 @@ def test_calcular_indice_base_sin_referencia_delega(version: int, mocker) -> Non
 
     assert salida == "resultado"
     para_canasta.assert_called_once_with(canasta, None)
-    calcular.assert_called_once_with(canasta, "serie", f"inpc:{version}", "inpc")
+    calcular.assert_called_once_with(canasta, "serie", "inpc")
 
 
 def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:

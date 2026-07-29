@@ -75,9 +75,7 @@ def _cobertura(reporte_fuente: pd.DataFrame) -> pd.Series | None:
     return None
 
 
-def variacion_periodica(
-    resultado: ResultadoIndice, frecuencia: Frecuencia
-) -> ResultadoVariacion:
+def variacion_periodica(resultado: ResultadoIndice, frecuencia: Frecuencia) -> ResultadoVariacion:
     """Variación de cada periodo contra N periodos anteriores según `frecuencia`."""
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
@@ -90,9 +88,11 @@ def variacion_periodica(
         )
     lag = lag_map[frecuencia]
     if mensual:
+
         def base_de(p: Periodo) -> Periodo:
             return restar_meses(p, lag)  # type: ignore[arg-type]
     else:
+
         def base_de(p: Periodo) -> Periodo:
             return restar_quincenas(p, lag)  # type: ignore[arg-type]
 
@@ -104,9 +104,11 @@ def variacion_acumulada_anual(resultado: ResultadoIndice) -> ResultadoVariacion:
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
     if mensual:
+
         def base_de(p: Periodo) -> Periodo:
             return PeriodoMensual(p.año - 1, 12)
     else:
+
         def base_de(p: Periodo) -> Periodo:
             return PeriodoQuincenal(p.año - 1, 12, 2)
 
@@ -124,7 +126,7 @@ def _calcular_con_base(
     `base_de` mapea cada periodo `t` a su periodo base.
     """
     largo = resultado.resultado.largo
-    ids = [m.id_corrida for m in resultado.manifiesto]
+    ids = [f"{m.tipo}:{m.version}" for m in resultado.manifiesto]
     tipo = str(largo["tipo"].iloc[0])
 
     indices_lvl = largo.index.get_level_values("indice")
@@ -132,25 +134,16 @@ def _calcular_con_base(
     valores = largo["indice_replicado"]
 
     base_periodos = [base_de(p) for p in periodos_lvl]
-    base_idx = pd.MultiIndex.from_arrays(
-        [base_periodos, indices_lvl], names=["periodo", "indice"]
-    )
+    base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_lvl], names=["periodo", "indice"])
     valor_lag = pd.Series(valores.reindex(base_idx).to_numpy(), index=largo.index)
-    estado_lag = pd.Series(
-        largo["estado_calculo"].reindex(base_idx).to_numpy(), index=largo.index
-    )
-    version_lag = pd.Series(
-        largo["version"].reindex(base_idx).to_numpy(), index=largo.index
-    )
+    estado_lag = pd.Series(largo["estado_calculo"].reindex(base_idx).to_numpy(), index=largo.index)
+    version_lag = pd.Series(largo["version"].reindex(base_idx).to_numpy(), index=largo.index)
     periodo_lag = pd.Series(base_periodos, index=largo.index, dtype=object)
 
     variacion_pp = (valores / valor_lag - 1.0) * 100.0
     computable = valores.notna() & valor_lag.notna()
     derivado = pd.Series(
-        [
-            _estado_derivado(et, el)
-            for et, el in zip(largo["estado_calculo"], estado_lag)
-        ],
+        [_estado_derivado(et, el) for et, el in zip(largo["estado_calculo"], estado_lag)],
         index=largo.index,
     )
 
@@ -276,19 +269,15 @@ def variacion_desde(
     registra en `indices_parciales`.
     """
     largo = resultado.resultado.largo
-    ids = [m.id_corrida for m in resultado.manifiesto]
+    ids = [f"{m.tipo}:{m.version}" for m in resultado.manifiesto]
     tipo = str(largo["tipo"].iloc[0])
 
     periodos_todos = sorted(set(largo.index.get_level_values("periodo")))
     if desde not in periodos_todos:
-        raise InvarianteViolado(
-            f"El periodo 'desde' ({desde}) no existe en el resultado."
-        )
+        raise InvarianteViolado(f"El periodo 'desde' ({desde}) no existe en el resultado.")
     hasta_efectivo: Periodo = hasta if hasta is not None else periodos_todos[-1]
     if hasta is not None and hasta not in periodos_todos:
-        raise InvarianteViolado(
-            f"El periodo 'hasta' ({hasta}) no existe en el resultado."
-        )
+        raise InvarianteViolado(f"El periodo 'hasta' ({hasta}) no existe en el resultado.")
     if hasta_efectivo < desde:  # type: ignore[operator]
         raise InvarianteViolado(
             f"'hasta' ({hasta_efectivo}) no puede ser anterior a 'desde' ({desde})."
@@ -310,9 +299,7 @@ def variacion_desde(
     for indice in indices:
         validos = [p for p in rango if pd.notna(valores.get((p, indice)))]
         desde_real = resolver_extremo(desde, validos, incluir_parciales, primero=True)
-        hasta_real = resolver_extremo(
-            hasta_efectivo, validos, incluir_parciales, primero=False
-        )
+        hasta_real = resolver_extremo(hasta_efectivo, validos, incluir_parciales, primero=False)
 
         if desde_real is None or hasta_real is None:
             valor_lag = float(valores.get((desde, indice), float("nan")))
@@ -320,9 +307,17 @@ def variacion_desde(
             motivo = _motivo_faltante(valor_t, valor_lag)
             filas_rep.append(
                 _fila_reporte(
-                    hasta_efectivo, indice, desde, "sin_datos", motivo,
-                    valor_t, valor_lag, versiones, cobertura,
-                    hasta_efectivo, desde,
+                    hasta_efectivo,
+                    indice,
+                    desde,
+                    "sin_datos",
+                    motivo,
+                    valor_t,
+                    valor_lag,
+                    versiones,
+                    cobertura,
+                    hasta_efectivo,
+                    desde,
                 )
             )
             filas_diag.append(
@@ -363,9 +358,17 @@ def variacion_desde(
             )
         filas_rep.append(
             _fila_reporte(
-                hasta_real, indice, desde_real, estado, float("nan"),
-                valor_hasta, valor_desde, versiones, cobertura,
-                hasta_real, desde_real,
+                hasta_real,
+                indice,
+                desde_real,
+                estado,
+                float("nan"),
+                valor_hasta,
+                valor_desde,
+                versiones,
+                cobertura,
+                hasta_real,
+                desde_real,
             )
         )
         if desde_real != desde or hasta_real != hasta_efectivo:
@@ -379,8 +382,7 @@ def variacion_desde(
 
     if not filas_df:
         raise InvarianteViolado(
-            f"Ningún índice tiene datos computables en el rango "
-            f"[{desde}, {hasta_efectivo}]."
+            f"Ningún índice tiene datos computables en el rango [{desde}, {hasta_efectivo}]."
         )
 
     df_out = pd.DataFrame(filas_df).set_index(["periodo", "indice"]).sort_index()
@@ -402,9 +404,7 @@ def variacion_desde(
         descripcion=f"desde {desde} hasta {hasta_efectivo}",
         fecha=datetime.now(),
     )
-    return ResultadoVariacion(
-        df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales
-    )
+    return ResultadoVariacion(df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales)
 
 
 def _fila_reporte(
@@ -421,6 +421,7 @@ def _fila_reporte(
     periodo_lag_cob: Periodo,
 ) -> dict[str, object]:
     """Construye una fila del `reporte_df` de `variacion_desde`."""
+
     def cob(p: Periodo) -> float:
         if cobertura is None:
             return float("nan")

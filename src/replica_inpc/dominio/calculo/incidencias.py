@@ -475,8 +475,8 @@ def _construir_resultado(
     descartan de `df_out` (siguen visibles en `reporte`).
     """
     tipo_clas = str(df_emitir["tipo"].iloc[0])
-    ids_inpc = [m.id_corrida for m in inpc.manifiesto]
-    ids_clas = [m.id_corrida for m in clasificacion.manifiesto]
+    ids_inpc = [f"{m.tipo}:{m.version}" for m in inpc.manifiesto]
+    ids_clas = [f"{m.tipo}:{m.version}" for m in clasificacion.manifiesto]
 
     # El resultado de clasificación ya viene normalizado al vocabulario canónico `vc` que usó
     # empalmar. Los ponderadores se indexan con el nombre NATIVO de cada canasta, así que se
