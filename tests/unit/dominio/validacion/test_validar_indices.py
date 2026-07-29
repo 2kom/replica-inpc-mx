@@ -23,7 +23,7 @@ _P6 = PeriodoQuincenal(2018, 3, 2)
 def _ri(
     filas: list[tuple[PeriodoQuincenal, float | None, str]],
     *,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     indice: str = "INPC",
     version: int = 2018,
 ) -> ResultadoIndice:
@@ -110,7 +110,7 @@ def test_resumen_conteos_y_global() -> None:
     assert fila["n_diferencia_por_parcial"] == 1
     assert fila["error_absoluto_max"] == pytest.approx(0.5)
     assert fila["estado_validacion_global"] == "diferencia_detectada"
-    assert list(resumen.index) == [(2018, "inpc")]
+    assert list(resumen.index) == [(2018, "INPC")]
 
 
 def test_diagnostico_solo_no_ok() -> None:

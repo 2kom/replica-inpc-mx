@@ -59,7 +59,7 @@ def _inpc(estados: dict[tuple[object, str], str] | None = None) -> ResultadoIndi
     # INPC = (60*I_A + 40*I_B) / 100 — consistente con la canasta.
     return _indice(
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0), (_FEB, 104.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
         estados=estados,
     )
@@ -71,7 +71,7 @@ def _clas(estados: dict[tuple[object, str], str] | None = None) -> ResultadoIndi
             "A": [(_DIC18, 100.0), (_ENE, 110.0), (_FEB, 120.0)],
             "B": [(_DIC18, 100.0), (_ENE, 90.0), (_FEB, 80.0)],
         },
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
         estados=estados,
     )
@@ -84,7 +84,7 @@ def _clas_b_sin_dic() -> ResultadoIndice:
             "A": [(_DIC18, 100.0), (_ENE, 110.0), (_FEB, 120.0)],
             "B": [(_DIC18, None), (_ENE, 90.0), (_FEB, 80.0)],
         },
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
 
@@ -94,7 +94,7 @@ def _canasta(version: int = 2018) -> CanastaCanonica:
         {
             "ponderador": ["60.0", "40.0"],
             "encadenamiento": [float("nan"), float("nan")],
-            "inflacion componente": ["A", "B"],
+            "INFLACION COMPONENTE": ["A", "B"],
         },
         index=pd.Index(["gen_a", "gen_b"], name="generico"),
     )
@@ -166,7 +166,7 @@ def test_acumulada_suma_igual_variacion_inpc() -> None:
 def test_tipo_inpc_invalido_falla() -> None:
     falso_inpc = _indice(
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0)]},
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="ci",
     )
     with pytest.raises(ErrorConfiguracion):

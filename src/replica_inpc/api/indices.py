@@ -31,6 +31,7 @@ def calcular_indice(
     Las versiones encadenadas (2013, 2024) requieren `referencia` — el
     resultado del tramo anterior; las versiones base (2010, 2018) la ignoran.
     """
+    tipo = tipo.upper()
     if canasta.version in _VERSIONES_ENCADENADAS and referencia is None:
         raise InvarianteViolado(
             f"la versión {canasta.version} es encadenada y requiere `referencia` "

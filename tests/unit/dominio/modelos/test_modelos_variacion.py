@@ -13,7 +13,7 @@ from replica_inpc.dominio.tipos import ManifestDerivado
 
 
 def _manifiesto(
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     clase: str = "periodica_mensual",
     descripcion: str = "",
 ) -> ManifestDerivado:
@@ -29,7 +29,7 @@ def _manifiesto(
 def _df_var(
     estados: list[str] | None = None,
     clase: str = "periodica_mensual",
-    tipo: str = "inpc",
+    tipo: str = "INPC",
 ) -> pd.DataFrame:
     estados = estados or ["ok", "ok"]
     n = len(estados)
@@ -118,15 +118,15 @@ def test_manifiesto_clase_mismatch_falla() -> None:
 
 def test_df_tipo_heterogeneo_falla() -> None:
     df = _df_var()
-    df.loc[df.index[1], "tipo"] = "inflacion componente"
+    df.loc[df.index[1], "tipo"] = "INFLACION COMPONENTE"
     with pytest.raises(InvarianteViolado):
         ResultadoVariacion(df, _manifiesto(), _rep_vacio(), _diag_vacio())
 
 
 def test_manifiesto_tipo_mismatch_falla() -> None:
-    df = _df_var(tipo="inpc")
+    df = _df_var(tipo="INPC")
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, _manifiesto(tipo="inflacion componente"), _rep_vacio(), _diag_vacio())
+        ResultadoVariacion(df, _manifiesto(tipo="INFLACION COMPONENTE"), _rep_vacio(), _diag_vacio())
 
 
 @pytest.mark.parametrize("estado_invalido", ["sin_datos", "fallida"])
@@ -191,7 +191,7 @@ def test_resumen_valores_concretos() -> None:
         _df_var(), _manifiesto(descripcion="ene→feb 2024"), _rep_vacio(), _diag_vacio()
     )
     fila = r.resumen.loc[0]
-    assert fila["tipo"] == "inpc"
+    assert fila["tipo"] == "INPC"
     assert fila["clase_variacion"] == "periodica_mensual"
     assert fila["descripcion"] == "ene→feb 2024"
     assert fila["estado_calculo"] == "ok"

@@ -196,13 +196,13 @@ ELIMINADOS_GENERICOS: dict[int, dict[int, tuple[str, ...]]] = {
 
 # indice -> version -> {nombre_con_error (sin codigo): nombre_correcto (sin codigo)}
 ERRORES_TIPOGRAFICOS_INDICES: dict[str, dict[int, dict[str, str]]] = {
-    "CCIF grupo": {
+    "CCIF GRUPO": {
         2010: {
             # falta la "s" en "equipo(s)", vs 2013 "productos artefactos y equipos medicos"
             "productos artefactos y equipo medicos": "productos artefactos y equipos medicos",
         },
     },
-    "CCIF clase": {
+    "CCIF CLASE": {
         2010: {
             # falta espacio entre "joyeria" y "relojes"
             "joyeriarelojes de pared y relojes de pulsera": "joyeria relojes de pared y relojes de pulsera",
@@ -216,7 +216,7 @@ ERRORES_TIPOGRAFICOS_INDICES: dict[str, dict[int, dict[str, str]]] = {
 
 # indice -> version -> {nombre_equivocado: nombre_correcto_de_esa_era}
 ERRORES_CLASIFICACION_INDICES: dict[str, dict[int, dict[str, str]]] = {
-    "CCIF division": {
+    "CCIF DIVISION": {
         2018: {
             "ropa y calzado": "prendas de vestir y calzado",  # xlsx 2018 usa nombre ccif 2018 en vez de nombre ccif 1999
         },
@@ -225,7 +225,7 @@ ERRORES_CLASIFICACION_INDICES: dict[str, dict[int, dict[str, str]]] = {
 
 # indice → version_origen → {nombre_canasta_anterior: nombre_canasta_nueva}
 RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
-    "CCIF division": {
+    "CCIF DIVISION": {
         2018: {
             "bienes y servicios diversos": "cuidado personal proteccion social y bienes diversos",
             "comunicaciones": "informacion y comunicacion",
@@ -239,7 +239,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     },
     # Renombres 1:1 validados contra CSVs de ponderadores.
     # Splits, fusiones, categorias nuevas y eliminadas quedan fuera.
-    "CCIF grupo": {
+    "CCIF GRUPO": {
         2018: {
             "agua y otros servicios referentes a la vivienda": "suministro de agua y servicios diversos relacionados con la vivienda",
             "articulos de cristal vajillas y utensilios para el hogar": "cristaleria vajillas y utensilios para el hogar",
@@ -270,7 +270,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
     # puro, pero se documentan aqui de todos modos porque sin ellas no habria
     # continuidad de categoria alguna en division 05 entre 2018 y 2024 (fuga
     # minoritaria, 1 de varios genericos, no cambia el caracter de la categoria).
-    "CCIF clase": {
+    "CCIF CLASE": {
         2013: {
             "seguro relacionado con el transporte": "seguros",
         },
@@ -330,14 +330,14 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "zapatos y otros calzados": "calzado y otros tipos de calzado",
         },
     },
-    "SCIAN sector": {
+    "SCIAN SECTOR": {
         2013: {
             "22 generacion transmision y distribucion de energia electrica suministro de agua y de gas por ductos al consumidor final": "22 generacion transmision distribucion y comercializacion de energia electrica suministro de agua y de gas natural por ductos al consumidor final",
             "56 servicios de apoyo a los negocios y manejo de desechos y servicios de remediacion": "56 servicios de apoyo a los negocios y manejo de residuos y servicios de remediacion",
             "93 actividades legislativas gubernamentales de imparticion de justicia y de organismos internacionales y extraterritorial": "93 actividades legislativas gubernamentales de imparticion de justicia y de organismos internacionales y extraterritoriales",
         }
     },
-    "SCIAN rama": {
+    "SCIAN RAMA": {
         2013: {
             "2211 generacion transmision y distribucion de energia electrica": "2211 generacion transmision distribucion y comercializacion de energia electrica",
             "2221 captacion tratamiento y suministro de agua": "2213 captacion tratamiento y suministro de agua",
@@ -357,7 +357,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
             "5111 edicion de periodicos revistas libros y similares y edicion de estas publicaciones integrada con la impresion": "5131 edicion de periodicos revistas libros directorios y otros materiales",
         },
     },
-    "inflacion agrupacion": {
+    "INFLACION AGRUPACION": {
         2013: {
             "educacion": "educacion colegiaturas",  # 2013 -> 2018: cambio de nombre
         },
@@ -367,7 +367,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]] = {
 # indice -> version_origen -> {nombre_anterior: (codigo_anterior, codigo_nuevo)}
 # trabaja sobre el supuesto de que no hay errores tipograficos, de clasifidacion ni renombres en las categorias de las clasificaciones
 RENOMBRES_CODIGOS_INDICES: dict[str, dict[int, dict[str, tuple[str, str]]]] = {
-    "CCIF division": {
+    "CCIF DIVISION": {
         2018: {
             # codigo 12 en 2018 -> 13 en 2024 y 12 queda libre para seguros y servicios financieros
             "bienes y servicios diversos": (
@@ -376,13 +376,13 @@ RENOMBRES_CODIGOS_INDICES: dict[str, dict[int, dict[str, tuple[str, str]]]] = {
             ),
         },
     },
-    "CCIF grupo": {
+    "CCIF GRUPO": {
         2018: {
             # codigo 02.2 en 2018 -> 02.3 en 2024; 02.2 queda libre (sin uso en 2024)
             "tabaco": ("02.2", "02.3"),
             # codigo 09.5 en 2018 -> 09.7 en 2024; 09.5 queda libre (sin uso en 2024)
             "periodicos libros y articulos de papeleria": ("09.5", "09.7"),
-            # nombre Y codigo cambian; ver RENOMBRES_INDICES["CCIF grupo"][2018] para el nombre
+            # nombre Y codigo cambian; ver RENOMBRES_INDICES["CCIF GRUPO"][2018] para el nombre
             "paquetes turisticos": ("09.6", "09.8"),
             # nombre identico, solo cambia el codigo
             "cuidado personal": ("12.1", "13.1"),
@@ -391,7 +391,7 @@ RENOMBRES_CODIGOS_INDICES: dict[str, dict[int, dict[str, tuple[str, str]]]] = {
             "otros servicios": ("12.7", "13.9"),
         },
     },
-    "CCIF clase": {
+    "CCIF CLASE": {
         2018: {
             # codigo 02.2.0 en 2018 -> 02.3.0 en 2024; 02.2.0 queda libre (sin uso en 2024)
             "tabaco": ("02.2.0", "02.3.0"),

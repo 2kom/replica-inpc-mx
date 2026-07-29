@@ -28,7 +28,7 @@ _M9 = PeriodoMensual(2099, 9)
 def _ri(
     data: dict[str, list[tuple[PeriodoMensual, float]]],
     *,
-    tipo: str = "inflacion componente",
+    tipo: str = "INFLACION COMPONENTE",
     clase: str = "periodica_mensual",
 ) -> ResultadoIncidencia:
     rows = []

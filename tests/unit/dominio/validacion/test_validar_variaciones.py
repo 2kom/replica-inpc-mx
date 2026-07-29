@@ -23,7 +23,7 @@ _P5 = PeriodoMensual(2024, 5)
 def _rv(
     filas: list[tuple[PeriodoMensual, float, str]],
     *,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     clase: str = "periodica_mensual",
     indice: str = "INPC",
 ) -> ResultadoVariacion:
@@ -125,7 +125,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
             {
                 "periodo": _P1,
                 "indice": "INPC",
-                "tipo": "inpc",
+                "tipo": "INPC",
                 "clase_variacion": "periodica_mensual",
                 "variacion_pp": 1.0,
                 "estado_calculo": "ok",
@@ -140,7 +140,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018], tipo="inpc", clase="periodica_mensual", descripcion="",
+        versiones=[2018], tipo="INPC", clase="periodica_mensual", descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoVariacion(df, manifiesto, reporte, pd.DataFrame())

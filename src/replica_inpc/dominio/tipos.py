@@ -10,26 +10,37 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
-INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
+TIPO_INPC: str = "INPC"
+
+# Las columnas que vienen por defecto en la canasta ya sea con la flag --xlsx
+# o con la flag --pdf, son: generico, ponderador, COG, CCIF division,
+# CCIF grupo, CCIF clase, inflacion componente, inflacion subcomponente,
+# inflacion agrupacion, SCIAN sector, SCIAN rama, durabilidad, canasta basica,
+# canasta consumo minimo; ahora pueden venir o no con informacion, pero esas
+# columnas ya vienen en el archivo csv que luego se convierte en la canasta.
+# LectorCanastaCsv las renombra a mayúsculas al cargar (ver
+# infraestructura/csv/lector_canasta_csv.py) — CanastaCanonica y todo lo que
+# sigue en el dominio solo ve el nombre en mayúsculas.
 
 COLUMNAS_CLASIFICACION: frozenset[str] = frozenset(
     {
         "COG",
-        "CCIF division",
-        "CCIF grupo",
-        "CCIF clase",
-        "inflacion componente",
-        "inflacion subcomponente",
-        "inflacion agrupacion",
-        "SCIAN sector",
-        "SCIAN rama",
-        "durabilidad",
-        "canasta basica",
+        "CCIF DIVISION",
+        "CCIF GRUPO",
+        "CCIF CLASE",
+        "INFLACION COMPONENTE",
+        "INFLACION SUBCOMPONENTE",
+        "INFLACION AGRUPACION",
+        "SCIAN SECTOR",
+        "SCIAN RAMA",
+        "DURABILIDAD",
+        "CANASTA BASICA",
+        "CANASTA CONSUMO MINIMO",
     }
 )
 
 INDICES_VALIDABLES: frozenset[str] = frozenset(
-    {"inpc", "inflacion componente", "inflacion subcomponente"}
+    {TIPO_INPC, "INFLACION COMPONENTE", "INFLACION SUBCOMPONENTE"}
 )
 
 RANGOS_CANASTAS: dict[VersionCanasta, tuple[PeriodoQuincenal, PeriodoQuincenal | None]] = {

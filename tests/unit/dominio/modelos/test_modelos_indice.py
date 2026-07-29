@@ -13,7 +13,7 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo
 
 
-def _manifiesto(version: int = 2018, tipo: str = "inpc") -> ManifestCalculo:
+def _manifiesto(version: int = 2018, tipo: str = "INPC") -> ManifestCalculo:
     return ManifestCalculo(
         version=version,  # type: ignore[arg-type]
         tipo=tipo,
@@ -27,7 +27,7 @@ def _manifiesto(version: int = 2018, tipo: str = "inpc") -> ManifestCalculo:
 def _df_indice(
     estados: list[str] | None = None,
     version: int = 2018,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     año: int = 2024,
 ) -> pd.DataFrame:
     estados = estados or ["ok", "ok"]
@@ -119,7 +119,7 @@ def test_resumen_una_fila_por_manifiesto() -> None:
     df = pd.concat([df1, df2])
     r = ResultadoIndice(df, [m1, m2], _reporte_vacio(), _diagnostico_vacio())
     res = r.resumen
-    assert list(res.index) == [(2018, "inpc"), (2024, "inpc")]
+    assert list(res.index) == [(2018, "INPC"), (2024, "INPC")]
     assert list(res.columns) == [
         "estado_calculo",
         "periodo_inicio",
@@ -136,7 +136,7 @@ def test_resumen_peor_estado_segun_severidad() -> None:
         _reporte_vacio(),
         _diagnostico_vacio(),
     )
-    assert r.resumen.loc[(2018, "inpc"), "estado_calculo"] == "parcial"
+    assert r.resumen.loc[(2018, "INPC"), "estado_calculo"] == "parcial"
 
 
 def test_resumen_estado_fallida_mas_severo_que_sin_datos() -> None:
@@ -146,4 +146,4 @@ def test_resumen_estado_fallida_mas_severo_que_sin_datos() -> None:
         _reporte_vacio(),
         _diagnostico_vacio(),
     )
-    assert r.resumen.loc[(2018, "inpc"), "estado_calculo"] == "fallida"
+    assert r.resumen.loc[(2018, "INPC"), "estado_calculo"] == "fallida"

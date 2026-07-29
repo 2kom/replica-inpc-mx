@@ -23,7 +23,7 @@ _P5 = PeriodoMensual(2024, 5)
 def _ri(
     filas: list[tuple[PeriodoMensual, float, str]],
     *,
-    tipo: str = "inflacion componente",
+    tipo: str = "INFLACION COMPONENTE",
     clase: str = "periodica_mensual",
     indice: str = "subyacente",
 ) -> ResultadoIncidencia:
@@ -124,7 +124,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
             {
                 "periodo": _P1,
                 "indice": "subyacente",
-                "tipo": "inflacion componente",
+                "tipo": "INFLACION COMPONENTE",
                 "clase_incidencia": "periodica_mensual",
                 "incidencia_pp": 1.0,
                 "estado_calculo": "ok",
@@ -139,7 +139,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018, 2018], tipo="inflacion componente",
+        versiones=[2018, 2018], tipo="INFLACION COMPONENTE",
         clase="periodica_mensual", descripcion="", fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())

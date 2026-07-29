@@ -29,7 +29,7 @@ def test_calcular_indice_base_sin_referencia_delega(version: int, mocker) -> Non
 
     assert salida == "resultado"
     para_canasta.assert_called_once_with(canasta, None)
-    calcular.assert_called_once_with(canasta, "serie", "inpc")
+    calcular.assert_called_once_with(canasta, "serie", "INPC")
 
 
 def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:
@@ -44,7 +44,7 @@ def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:
 
     indices.calcular_indice(canasta, "serie", "inpc", referencia=referencia)
 
-    refs.assert_called_once_with(referencia, "inpc", 2018, 2024)
+    refs.assert_called_once_with(referencia, "INPC", 2018, 2024)
     para_canasta.assert_called_once_with(canasta, {"INPC": 100.0})
 
 

@@ -7,10 +7,10 @@ from replica_inpc.dominio.tipos import VersionCanasta
 
 _COLUMNAS_CORE = (
     "COG",
-    "inflacion componente",
-    "inflacion subcomponente",
-    "inflacion agrupacion",
-    "canasta basica",
+    "INFLACION COMPONENTE",
+    "INFLACION SUBCOMPONENTE",
+    "INFLACION AGRUPACION",
+    "CANASTA BASICA",
 )
 
 
@@ -27,29 +27,32 @@ class CanastaCanonica:
         InvarianteViolado: Si la versión no es válida, si el índice contiene
             duplicados o cadenas vacías, si algún ponderador no es positivo, si
             la suma de ponderadores no es 100, si algún encadenamiento no nulo
-            no es positivo, o si `COG`/`inflacion componente`/`inflacion
-            subcomponente`/`inflacion agrupacion`/`canasta basica` tienen
+            no es positivo, o si `COG`/`INFLACION COMPONENTE`/`INFLACION
+            SUBCOMPONENTE`/`INFLACION AGRUPACION`/`CANASTA BASICA` tienen
             valores vacíos (a diferencia de las clasificaciones finas,
             obligatorias en toda versión — ver Esquema abajo para las que sí
             pueden faltar según fuente o versión).
 
-    Esquema del DataFrame (índice: `generico`):
+    Esquema del DataFrame (índice: `generico`). `LectorCanastaCsv` renombra
+    todas las columnas de clasificación a mayúsculas al cargar — el nombre de
+    columna real, tal como viene del CSV fuente, se conserva solo en
+    `tools/canasta_inpc/` (fuera del dominio):
         ponderador (object/str): texto decimal exacto del ponderador.
         encadenamiento (object/str/NaN): texto decimal exacto o `NaN` cuando no aplica.
         COG (object/str): clasificacion por objeto del gasto.
-        CCIF division (object/str): clasificacion de consumo por finalidades — division.
-        CCIF grupo (object/str): clasificacion de consumo por finalidades — grupo.
-        CCIF clase (object/str): clasificacion de consumo por finalidades — clase.
-        inflacion componente (object/str): componente de inflacion.
-        inflacion subcomponente (object/str): subcomponente de inflacion.
-        inflacion agrupacion (object/str): agrupacion de inflacion.
-        SCIAN sector (object/str): numero y nombre del sector, ej. "32 Industrias manufactureras".
-        SCIAN rama (object/str): codigo y nombre de la rama, ej. "3241 Fabricacion de...".
-        durabilidad (object/str): categoria de durabilidad; vacio cuando no aplica.
-        canasta basica (object/str): "X" si pertenece, "-" si no; nunca
+        CCIF DIVISION (object/str): clasificacion de consumo por finalidades — division.
+        CCIF GRUPO (object/str): clasificacion de consumo por finalidades — grupo.
+        CCIF CLASE (object/str): clasificacion de consumo por finalidades — clase.
+        INFLACION COMPONENTE (object/str): componente de inflacion.
+        INFLACION SUBCOMPONENTE (object/str): subcomponente de inflacion.
+        INFLACION AGRUPACION (object/str): agrupacion de inflacion.
+        SCIAN SECTOR (object/str): numero y nombre del sector, ej. "32 Industrias manufactureras".
+        SCIAN RAMA (object/str): codigo y nombre de la rama, ej. "3241 Fabricacion de...".
+        DURABILIDAD (object/str): categoria de durabilidad; vacio cuando no aplica.
+        CANASTA BASICA (object/str): "X" si pertenece, "-" si no; nunca
             vacío — siempre disponible vía xlsx en las 4 versiones (ver
             tools/canasta_inpc/esquema.py::FUENTES_POSIBLES).
-        canasta consumo minimo (object/str): "X" si pertenece, "-" si no
+        CANASTA CONSUMO MINIMO (object/str): "X" si pertenece, "-" si no
             pertenece (solo en la versión donde la clasificación existe,
             2024); NaN cuando la clasificación no aplica a la versión
             (2010/2013/2018).
@@ -71,7 +74,7 @@ class CanastaCanonica:
         En este ejemplo, los ponderadores suman 100 y `encadenamiento` está
         vacío porque la estrategia aplicable es directa.
 
-    Ver: docs/diseño.md §5.4, §11.5
+    Ver: docs/diseño.md §5.4, §11.5, §11.32
     """
 
     def __init__(self, df: pd.DataFrame, version: VersionCanasta) -> None:
@@ -102,8 +105,8 @@ class CanastaCanonica:
         if columnas_vacias:
             raise InvarianteViolado(
                 f"Las columnas {columnas_vacias} no pueden tener valores vacíos "
-                "— a diferencia de las clasificaciones finas (CCIF grupo/clase, "
-                "SCIAN sector/rama, durabilidad), son obligatorias en toda versión "
+                "— a diferencia de las clasificaciones finas (CCIF GRUPO/CLASE, "
+                "SCIAN SECTOR/RAMA, DURABILIDAD), son obligatorias en toda versión "
                 "de la canasta."
             )
 

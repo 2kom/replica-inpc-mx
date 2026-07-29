@@ -39,6 +39,7 @@ def consultar_indice(
     Requiere token INEGI configurado (`rep.set_token(...)` o `INEGI_TOKEN`).
     Ver: docs/diseño.md §6.8.
     """
+    tipo = tipo.upper()
     if periodicidad not in ("mensual", "quincenal"):
         raise ErrorConfiguracion(
             f"periodicidad '{periodicidad}' inválida; usa 'mensual' o 'quincenal'."
@@ -58,6 +59,7 @@ def consultar_variacion(
     anterior; `"anual"` = vs mismo periodo año anterior; `"acumulada_anual"` =
     vs diciembre año anterior. Ver tabla de mapeo en docs/diseño.md §6.8.
     """
+    tipo = tipo.upper()
     if periodicidad not in ("mensual", "quincenal"):
         raise ErrorConfiguracion(
             f"periodicidad '{periodicidad}' inválida; usa 'mensual' o 'quincenal'."
@@ -83,5 +85,6 @@ def consultar_incidencia(
     INEGI solo publica incidencias mensuales de tipo `"periodica"`.
     Ver: docs/diseño.md §6.8.
     """
+    tipo = tipo.upper()
     fuente = FuenteValidacionApi(config.get_token(), tipo, timeout=config.timeout_api)
     return _a_dataframe(fuente.historico_incidencias("periodica"))

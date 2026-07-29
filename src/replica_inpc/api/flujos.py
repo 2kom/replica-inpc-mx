@@ -16,7 +16,7 @@ from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
 
 def calcular_historia(
     insumos: list[tuple[VersionCanasta, str, str]],
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     referencia: str = "2Q Jul 2018",
     periodicidad: Literal["quincenal", "mensual"] = "mensual",
 ) -> ResultadoIndice:
@@ -30,6 +30,7 @@ def calcular_historia(
     cálculos internos son siempre quincenales; cuando `periodicidad="mensual"`
     la conversión a periodo mensual ocurre automáticamente.
     """
+    tipo = tipo.upper()
     try:
         periodo_referencia = periodo_desde_str(referencia)
     except PeriodoNoInterpretable as exc:

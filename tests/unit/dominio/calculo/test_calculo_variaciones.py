@@ -20,7 +20,7 @@ from replica_inpc.dominio.tipos import ManifestCalculo
 def _indice(
     data: dict[str, list[tuple[object, float | None]]],
     *,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     version: int = 2018,
     estados: dict[tuple[object, str], str] | None = None,
     reporte: pd.DataFrame | None = None,

@@ -95,7 +95,7 @@ _INSUMOS_3 = [
 
 def test_una_version_directo() -> None:
     historia = _historia_3_versiones()
-    r = historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2018, 7, 2), "quincenal")
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoQuincenal(2018, 7, 2), "quincenal")
     assert isinstance(r, ResultadoIndice)
     assert r.periodo_referencia == PeriodoQuincenal(2018, 7, 2)
     assert {m.version for m in r.manifiesto} == {2018}
@@ -105,7 +105,7 @@ def test_tres_versiones_contiguas_fold_left() -> None:
     # calcular_historia encadena versiones vía fold-left con forzar=True;
     # cada par consecutivo comparte exactamente 1 periodo (frontera).
     historia = _historia_3_versiones()
-    r = historia.ejecutar(_INSUMOS_3, "inpc", PeriodoQuincenal(2013, 4, 1), "quincenal")
+    r = historia.ejecutar(_INSUMOS_3, "INPC", PeriodoQuincenal(2013, 4, 1), "quincenal")
     assert isinstance(r, ResultadoIndice)
     assert {m.version for m in r.manifiesto} == {2010, 2013, 2018}
     assert r.periodo_referencia == PeriodoQuincenal(2013, 4, 1)
@@ -119,8 +119,8 @@ def test_tres_versiones_propagacion_referencia_empalme() -> None:
     historia = _historia_3_versiones()
     base = PeriodoQuincenal(2013, 3, 1)
     traslape = PeriodoQuincenal(2013, 3, 2)
-    cadena = historia.ejecutar(_INSUMOS_3, "inpc", base, "quincenal")
-    solo_2010 = historia.ejecutar([(2010, _RC10, _RS10)], "inpc", base, "quincenal")
+    cadena = historia.ejecutar(_INSUMOS_3, "INPC", base, "quincenal")
+    solo_2010 = historia.ejecutar([(2010, _RC10, _RS10)], "INPC", base, "quincenal")
     assert cadena.df.loc[(traslape, "INPC"), "indice_replicado"] == pytest.approx(
         solo_2010.df.loc[(traslape, "INPC"), "indice_replicado"]
     )
@@ -128,7 +128,7 @@ def test_tres_versiones_propagacion_referencia_empalme() -> None:
 
 def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
     historia = _historia_3_versiones()
-    r = historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoMensual(2018, 8), "mensual")
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoMensual(2018, 8), "mensual")
     assert r.periodo_referencia == PeriodoMensual(2018, 8)
     assert all(isinstance(p, PeriodoMensual) for p in r.df.index.get_level_values("periodo"))
 
@@ -152,14 +152,14 @@ def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
 def test_validaciones_fallan(insumos: list, periodicidad: str) -> None:
     historia = _historia_3_versiones()
     with pytest.raises(InvarianteViolado):
-        historia.ejecutar(insumos, "inpc", PeriodoQuincenal(2018, 7, 2), periodicidad)  # type: ignore[arg-type]
+        historia.ejecutar(insumos, "INPC", PeriodoQuincenal(2018, 7, 2), periodicidad)  # type: ignore[arg-type]
 
 
 def test_periodo_referencia_inexistente_emite_warning() -> None:
     # Periodo de referencia fuera de rango → todos los índices huérfanos → warning.
     historia = _historia_3_versiones()
     with pytest.warns(UserWarning, match="sin dato"):
-        historia.ejecutar([(2018, _RC18, _RS18)], "inpc", PeriodoQuincenal(2099, 1, 1), "quincenal")
+        historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoQuincenal(2099, 1, 1), "quincenal")
 
 
 # -- _referencias_normalizadas -------------------------------------------------
@@ -170,7 +170,7 @@ def test_referencias_inpc_identidad() -> None:
     df = pd.DataFrame(
         {
             "version": [2018],
-            "tipo": ["inpc"],
+            "tipo": ["INPC"],
             "indice_replicado": [123.4],
             "estado_calculo": ["ok"],
         },
@@ -178,17 +178,17 @@ def test_referencias_inpc_identidad() -> None:
     )
     prev = ResultadoIndice(
         df,
-        [ManifestCalculo(2018, "inpc", "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo(2018, "INPC", "LaspeyresDirecto")],  # type: ignore[arg-type]
         pd.DataFrame(),
         pd.DataFrame(),
     )
-    refs = _referencias_normalizadas(prev, "inpc", 2018, 2024)
+    refs = _referencias_normalizadas(prev, "INPC", 2018, 2024)
     assert refs == {"INPC": pytest.approx(123.4)}
 
 
 def test_referencias_normaliza_clave_renombrada() -> None:
     # Toma dinámicamente una pareja old -> new del catálogo para CCIF division.
-    tipo = "CCIF division"
+    tipo = "CCIF DIVISION"
     old, new = next(iter(RENOMBRES_INDICES[tipo][2018].items()))
     traslape = PeriodoQuincenal(2024, 7, 2)
     df = pd.DataFrame(

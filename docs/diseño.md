@@ -96,6 +96,7 @@ El historial de cambios vive en git.
     - [11.29 `indice_incidencia` y de-encadenamiento de incidencias](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias)
     - [11.30 Provenencia vía `DataFrame.attrs` — simplificación de `calcular`](#1130-provenencia-vía-dataframeattrs--simplificación-de-calcular)
     - [11.31 Eliminación final de `id_corrida`](#1131-eliminación-final-de-id_corrida)
+    - [11.32 Columnas de clasificación y `tipo` normalizados a mayúsculas](#1132-columnas-de-clasificación-y-tipo-normalizados-a-mayúsculas)
   - [12. Gaps conocidos](#12-gaps-conocidos)
     - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
     - [12.2 Detección dinámica del header en `LectorSeriesCsv`](#122-detección-dinámica-del-header-en-lectorseriescsv)
@@ -376,7 +377,7 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | ------ | ------- |
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
-| `tipos.py` | `VersionCanasta`, `INDICE_POR_TIPO`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestCalculo`, `ManifestDerivado` |
+| `tipos.py` | `VersionCanasta`, `TIPO_INPC`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestCalculo`, `ManifestDerivado` |
 | `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
 | `conversion.py` | `empalmar`, `rebasar`, `a_mensual` |
@@ -477,21 +478,22 @@ VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
 Alias de tipo. Reemplaza `int` en todos los contratos que aceptan versión de canasta.
 
-**`INDICE_POR_TIPO`**
+**`TIPO_INPC`**
 
 ```python
-INDICE_POR_TIPO: dict[str, str] = {"inpc": "INPC"}
+TIPO_INPC: str = "INPC"
 ```
 
-Mapeo `tipo` → nombre del nivel `indice` en el MultiIndex. Aplica cuando `tipo` representa un índice agregado. El string `"INPC"` es el valor que aparece en `.df.index.get_level_values("indice")`.
+Constante para el valor de `tipo` que representa el índice agregado (no una columna de clasificación). `tipo` se normaliza a mayúsculas en el boundary de entrada (`api/`), así que `TIPO_INPC` y las entradas de `COLUMNAS_CLASIFICACION` comparten un único vocabulario, todo en mayúsculas. El string `"INPC"` es el valor que aparece en `.df.index.get_level_values("indice")`.
 
 **`COLUMNAS_CLASIFICACION`**
 
 ```python
 COLUMNAS_CLASIFICACION: frozenset[str] = frozenset({
-    "COG", "CCIF division", "CCIF grupo", "CCIF clase",
-    "inflacion componente", "inflacion subcomponente", "inflacion agrupacion",
-    "SCIAN sector", "SCIAN rama", "durabilidad", "canasta basica",
+    "COG", "CCIF DIVISION", "CCIF GRUPO", "CCIF CLASE",
+    "INFLACION COMPONENTE", "INFLACION SUBCOMPONENTE", "INFLACION AGRUPACION",
+    "SCIAN SECTOR", "SCIAN RAMA", "DURABILIDAD", "CANASTA BASICA",
+    "CANASTA CONSUMO MINIMO",
 })
 ```
 
@@ -501,7 +503,7 @@ Columnas de `CanastaCanonica` válidas como `tipo` para calcular subíndices. Cu
 
 ```python
 INDICES_VALIDABLES: frozenset[str] = frozenset(
-    {"inpc", "inflacion componente", "inflacion subcomponente"}
+    {"INPC", "INFLACION COMPONENTE", "INFLACION SUBCOMPONENTE"}
 )
 ```
 
@@ -648,17 +650,17 @@ Esquema del DataFrame (índice: `generico`):
 | `ponderador` | `object` (str) | texto decimal exacto del archivo fuente |
 | `encadenamiento` | `object` (str / NaN) | texto decimal exacto; NaN cuando no aplica |
 | `COG` | `object` (str) | |
-| `CCIF division` | `object` (str) | |
-| `CCIF grupo` | `object` (str) | |
-| `CCIF clase` | `object` (str) | |
-| `inflacion componente` | `object` (str) | |
-| `inflacion subcomponente` | `object` (str) | |
-| `inflacion agrupacion` | `object` (str) | |
-| `SCIAN sector` | `object` (str) | número + nombre, ej. `"32 Industrias manufactureras"` |
-| `SCIAN rama` | `object` (str) | código + nombre, ej. `"3241 Fabricación de..."` |
-| `durabilidad` | `object` (str) | vacío cuando no aplica a la versión |
-| `canasta basica` | `object` (str) | `"X"` si pertenece; `""` si no |
-| `canasta consumo minimo` | `object` (str) | `"X"` si pertenece; `""` o NaN si no aplica |
+| `CCIF DIVISION` | `object` (str) | |
+| `CCIF GRUPO` | `object` (str) | |
+| `CCIF CLASE` | `object` (str) | |
+| `INFLACION COMPONENTE` | `object` (str) | |
+| `INFLACION SUBCOMPONENTE` | `object` (str) | |
+| `INFLACION AGRUPACION` | `object` (str) | |
+| `SCIAN SECTOR` | `object` (str) | número + nombre, ej. `"32 Industrias manufactureras"` |
+| `SCIAN RAMA` | `object` (str) | código + nombre, ej. `"3241 Fabricación de..."` |
+| `DURABILIDAD` | `object` (str) | vacío cuando no aplica a la versión |
+| `CANASTA BASICA` | `object` (str) | `"X"` si pertenece; `""` si no |
+| `CANASTA CONSUMO MINIMO` | `object` (str) | `"X"` si pertenece; `""` o NaN si no aplica |
 
 Invariantes — validados al construir (lanza `InvarianteViolado`):
 
@@ -670,7 +672,7 @@ Invariantes — validados al construir (lanza `InvarianteViolado`):
 | Ponderador positivo | `float(ponderador) > 0` para cada fila |
 | Suma de ponderadores | `abs(sum(ponderadores) - 100) <= 1e-5` |
 | Encadenamiento positivo | cuando no nulo: `float(encadenamiento) > 0` |
-| Columnas core no vacías | `COG`, `inflacion componente`, `inflacion subcomponente`, `inflacion agrupacion` sin NaN ni `""` en ninguna fila — a diferencia de las clasificaciones finas (`CCIF grupo`/`clase`, `SCIAN sector`/`rama`, `durabilidad`), que pueden faltar según versión o fuente de generación (ver `tools/canasta_inpc/esquema.py::FUENTES_POSIBLES`) |
+| Columnas core no vacías | `COG`, `INFLACION COMPONENTE`, `INFLACION SUBCOMPONENTE`, `INFLACION AGRUPACION` sin NaN ni `""` en ninguna fila — a diferencia de las clasificaciones finas (`CCIF GRUPO`/`CLASE`, `SCIAN SECTOR`/`RAMA`, `DURABILIDAD`), que pueden faltar según versión o fuente de generación (ver `tools/canasta_inpc/esquema.py::FUENTES_POSIBLES`) |
 
 **`SerieNormalizada`**
 
@@ -802,7 +804,7 @@ def calcular(
 
 `ruta_canasta`/`ruta_series` del `ManifestCalculo` resultante se leen de `canasta.df.attrs.get("origen")` y `serie.df.attrs.get("origen")` — no son parámetros; solo los loaders (`LectorCanastaCsv`, `LectorSeriesCsv`) los setean. `fecha` se captura con `datetime.now()` al inicio de `calcular()`, antes del cómputo.
 
-`tipo` debe estar en `INDICE_POR_TIPO` o `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`). Si `tipo in COLUMNAS_CLASIFICACION` pero la columna está 100% vacía en `canasta.df` (categoría fina sin fuente para esa versión — ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`) → `InvarianteViolado` también, en vez de agrupar en silencio sobre `NaN`.
+`tipo` debe ser `TIPO_INPC` o estar en `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`). Si `tipo in COLUMNAS_CLASIFICACION` pero la columna está 100% vacía en `canasta.df` (categoría fina sin fuente para esa versión — ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`) → `InvarianteViolado` también, en vez de agrupar en silencio sobre `NaN`.
 
 **`para_canasta`**
 
@@ -1450,7 +1452,7 @@ incidencia_desde(
 ) -> ResultadoIncidencia
 ```
 
-Combinan un resultado `tipo = "inpc"` con un resultado de clasificación (`COG`, `CCIF division`, etc.) para calcular la contribución de cada categoría a la variación del INPC. Propiedad clave de `incidencia_acumulada_anual`: la suma de `incidencia_pp` de todos los genéricos en un periodo es igual a la variación acumulada anual del INPC en ese periodo.
+Combinan un resultado `tipo = "INPC"` con un resultado de clasificación (`COG`, `CCIF DIVISION`, etc.) para calcular la contribución de cada categoría a la variación del INPC. Propiedad clave de `incidencia_acumulada_anual`: la suma de `incidencia_pp` de todos los genéricos en un periodo es igual a la variación acumulada anual del INPC en ese periodo.
 
 Fórmula: `inc_i = w_i × (J_i(t) − J_i(base)) / J_INPC(base)`, donde `J` es la escala **seleccionada por fila** (ver Fix 2 abajo): `indice_incidencia` de-encadenado en filas within-canasta, `indice_replicado` visible en filas cross-canasta. La selección por fila es el contrato, no una excepción.
 
@@ -1467,7 +1469,7 @@ Dos correcciones vs. la fórmula naive:
 | Condición | Función | Error |
 | --- | --- | --- |
 | `inpc.periodo_referencia ≠ clasificacion.periodo_referencia` | todas | `InvarianteViolado` |
-| `inpc.tipo ≠ "inpc"` | todas | `ErrorConfiguracion` |
+| `inpc.tipo ≠ "INPC"` | todas | `ErrorConfiguracion` |
 | `clasificacion.tipo ∉ COLUMNAS_CLASIFICACION` | todas | `ErrorConfiguracion` |
 | falta `canastas[v]` para alguna versión en `clasificacion` | todas | `ErrorConfiguracion` |
 | `frecuencia` inválida para el tipo de periodo | `incidencia_periodica` | `InvarianteViolado` |
@@ -1538,7 +1540,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]]
 # tipo → version_origen → {nombre_viejo: nombre_canonico}
 ```
 
-Mapas de renombre 1:1 validados para `"CCIF division"`, `"CCIF grupo"`, `"CCIF clase"`, `"SCIAN sector"` y `"SCIAN rama"`. `empalmar` los consume para normalizar nomenclatura entre versiones ([5.10](#510-conversión-y-combinación)).
+Mapas de renombre 1:1 validados para `"CCIF DIVISION"`, `"CCIF GRUPO"`, `"CCIF CLASE"`, `"SCIAN SECTOR"` y `"SCIAN RAMA"`. `empalmar` los consume para normalizar nomenclatura entre versiones ([5.10](#510-conversión-y-combinación)).
 
 El mismo archivo contiene tablas de cambios de cobertura entre versiones de canasta (`RENOMBRES_GENERICOS`, `DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`). Son datos de referencia — ninguna función del dominio las consume en tiempo de ejecución.
 
@@ -1887,7 +1889,7 @@ def calcular_indice(
 | --- | --- | --- |
 | `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
 | `serie` | `SerieNormalizada` | serie ya cargada; misma versión que `canasta` |
-| `tipo` | `str` | tipo de índice a calcular; valores válidos en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` (ej. `"inpc"`, `"inflacion componente"`, `"durabilidad"`) |
+| `tipo` | `str` | tipo de índice a calcular; se normaliza con `tipo.upper()` al inicio de la función; valores válidos en `TIPO_INPC ∪ COLUMNAS_CLASIFICACION` (ej. `"INPC"`, `"INFLACION COMPONENTE"`, `"DURABILIDAD"`) |
 | `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones encadenadas (2013 → base 2010, 2024 → base 2018); `None` para versiones base (2010, 2018) |
 
 Devuelve `ResultadoIndice` para el tramo de la canasta; `periodo_referencia = None`.
@@ -1897,7 +1899,7 @@ Devuelve `ResultadoIndice` para el tramo de la canasta; `periodo_referencia = No
 | `canasta` sin genéricos utilizables | `CanastaSinGenericos` |
 | ponderador faltante para el cálculo | `PonderadorFaltante` |
 | `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
-| `tipo` no en `INDICE_POR_TIPO ∪ COLUMNAS_CLASIFICACION` | `InvarianteViolado` |
+| `tipo` no en `TIPO_INPC ∪ COLUMNAS_CLASIFICACION` | `InvarianteViolado` |
 | `tipo in COLUMNAS_CLASIFICACION` con columna 100% vacía en `canasta.df` | `InvarianteViolado` |
 
 Una canasta a la vez; historia completa = varias llamadas + `empalmar`.
@@ -1905,7 +1907,7 @@ Una canasta a la vez; historia completa = varias llamadas + `empalmar`.
 ```python
 canasta = rep.cargar_canasta("canasta_2018.csv", version=2018)
 serie   = rep.cargar_serie("serie_2018.csv", version=2018)
-indice  = rep.calcular_indice(canasta, serie, tipo="inpc")
+indice  = rep.calcular_indice(canasta, serie, tipo="INPC")
 ```
 
 **empalmar**
@@ -2415,7 +2417,7 @@ p, i, v = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
 
 Comparación de resultados replicados contra series publicadas por INEGI. Las tres funciones usan las tolerancias configuradas en `config.py` (§6.1) y obtienen el token vía `get_token()`.
 
-`INDICES_VALIDABLES = {"inpc", "inflacion componente", "inflacion subcomponente"}` — re-exportado como `rep.INDICES_VALIDABLES`.
+`INDICES_VALIDABLES = {"INPC", "INFLACION COMPONENTE", "INFLACION SUBCOMPONENTE"}` — re-exportado como `rep.INDICES_VALIDABLES`.
 
 **validar_indice**
 
@@ -2502,7 +2504,7 @@ Flujo orquestado completo. Para control granular sobre cualquier paso usar las f
 ```python
 def calcular_historia(
     insumos: list[tuple[VersionCanasta, str, str]],
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     referencia: str = "2Q Jul 2018",
     periodicidad: Literal["quincenal", "mensual"] = "mensual",
 ) -> ResultadoIndice:
@@ -2511,7 +2513,7 @@ def calcular_historia(
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
 | `insumos` | `list[tuple[VersionCanasta, str, str]]` | orden cronológico; cada elemento = `(version, ruta_canasta, ruta_series)`; mínimo 1 elemento; sin versiones duplicadas; si contiene 2013 → debe contener 2010; si contiene 2024 → debe contener 2018 |
-| `tipo` | `str` | clasificación a calcular; debe existir en todas las canastas; default `"inpc"` |
+| `tipo` | `str` | clasificación a calcular; se normaliza con `tipo.upper()`; debe existir en todas las canastas; default `"INPC"` |
 | `referencia` | `str` | periodo base para `rebasar`; solo formato quincenal `"NQ Mmm AAAA"`; con `periodicidad="mensual"` se convierte automáticamente a su equivalente mensual; default `"2Q Jul 2018"` |
 | `periodicidad` | `Literal["quincenal", "mensual"]` | frecuencia del resultado final; default `"mensual"` |
 
@@ -2578,7 +2580,7 @@ def consultar_indice(
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+| `tipo` | `str` | se normaliza con `tipo.upper()`; `"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"` |
 | `periodicidad` | `Literal["mensual", "quincenal"]` | frecuencia del histórico a devolver; default `"mensual"` |
 
 Devuelve DataFrame indexado por `periodo` (`PeriodoMensual` o `PeriodoQuincenal`), columnas = nombres publicados por INEGI según `tipo` (`"INPC"`, `"subyacente"`, etc.). El índice cubre el rango completo desde el primer hasta el último periodo que INEGI tiene en su serie; periodos intermedios sin dato aparecen como `NaN` (gap visible). Periodos anteriores al inicio de la serie simplemente no existen en el resultado.
@@ -2592,8 +2594,8 @@ Devuelve DataFrame indexado por `periodo` (`PeriodoMensual` o `PeriodoQuincenal`
 | respuesta inesperada INEGI | `RespuestaInvalida` |
 
 ```python
-rep.consultar_indice("inpc")                               # mensual, columna "INPC"
-rep.consultar_indice("inflacion componente", "quincenal")  # cols "subyacente", "no subyacente"
+rep.consultar_indice("INPC")                               # mensual, columna "INPC"
+rep.consultar_indice("INFLACION COMPONENTE", "quincenal")  # cols "subyacente", "no subyacente"
 ```
 
 ---
@@ -2610,7 +2612,7 @@ def consultar_variacion(
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+| `tipo` | `str` | se normaliza con `tipo.upper()`; `"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"` |
 | `periodicidad` | `Literal["mensual", "quincenal"]` | frecuencia del histórico; default `"mensual"` |
 | `frecuencia` | `Literal["mensual", "quincenal", "anual", "acumulada_anual"]` | tipo de variación; default `"mensual"` — ver tabla de mapeo |
 
@@ -2635,10 +2637,10 @@ Devuelve DataFrame indexado por `periodo`, columnas = nombres según `tipo`. Mis
 | respuesta inesperada INEGI | `RespuestaInvalida` |
 
 ```python
-rep.consultar_variacion("inpc")                                # mensual, vs mes anterior
-rep.consultar_variacion("inpc", "quincenal", "quincenal")      # quincenal, vs quincena anterior
-rep.consultar_variacion("inpc", "mensual", "anual")            # mensual, vs mismo mes año anterior
-rep.consultar_variacion("inpc", "mensual", "acumulada_anual")  # mensual, vs dic año anterior
+rep.consultar_variacion("INPC")                                # mensual, vs mes anterior
+rep.consultar_variacion("INPC", "quincenal", "quincenal")      # quincenal, vs quincena anterior
+rep.consultar_variacion("INPC", "mensual", "anual")            # mensual, vs mismo mes año anterior
+rep.consultar_variacion("INPC", "mensual", "acumulada_anual")  # mensual, vs dic año anterior
 ```
 
 ---
@@ -2653,7 +2655,7 @@ def consultar_incidencia(
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
-| `tipo` | `str` | `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"` |
+| `tipo` | `str` | se normaliza con `tipo.upper()`; `"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"` |
 
 INEGI solo publica incidencias mensuales y de tipo `"periodica"` — no hay parámetros adicionales.
 
@@ -2667,8 +2669,8 @@ Devuelve DataFrame indexado por `PeriodoMensual`, columnas = nombres según `tip
 | respuesta inesperada INEGI | `RespuestaInvalida` |
 
 ```python
-rep.consultar_incidencia("inpc")                  # columna "INPC"
-rep.consultar_incidencia("inflacion componente")  # cols "subyacente", "no subyacente"
+rep.consultar_incidencia("INPC")                  # columna "INPC"
+rep.consultar_incidencia("INFLACION COMPONENTE")  # cols "subyacente", "no subyacente"
 ```
 
 ---
@@ -2795,9 +2797,9 @@ Todos los métodos devuelven `dict[str, dict[Periodo, float | None]]`:
 
 | `tipo` | Claves devueltas |
 | --- | --- |
-| `"inpc"` | `"INPC"` |
-| `"inflacion componente"` | `"subyacente"`, `"no subyacente"` |
-| `"inflacion subcomponente"` | `"mercancias"`, `"servicios"`, `"agropecuarios"`, `"energeticos y tarifas autorizadas por el gobierno"` |
+| `"INPC"` | `"INPC"` |
+| `"INFLACION COMPONENTE"` | `"subyacente"`, `"no subyacente"` |
+| `"INFLACION SUBCOMPONENTE"` | `"mercancias"`, `"servicios"`, `"agropecuarios"`, `"energeticos y tarifas autorizadas por el gobierno"` |
 
 `obtener_variaciones` y `obtener_incidencias` devuelven las mismas claves que `obtener_indices` según `tipo`.
 
@@ -3116,89 +3118,89 @@ Las observaciones vienen en orden cronológico descendente. `OBS_STATUS` siempre
 
 | `tipo` | índice | BIE |
 | --- | --- | --- |
-| `"inpc"` | `"INPC"` | `910420` |
-| `"inflacion componente"` | `"subyacente"` | `910421` |
-| `"inflacion componente"` | `"no subyacente"` | `910424` |
-| `"inflacion subcomponente"` | `"mercancias"` | `910422` |
-| `"inflacion subcomponente"` | `"servicios"` | `910423` |
-| `"inflacion subcomponente"` | `"agropecuarios"` | `910425` |
-| `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910426` |
+| `"INPC"` | `"INPC"` | `910420` |
+| `"INFLACION COMPONENTE"` | `"subyacente"` | `910421` |
+| `"INFLACION COMPONENTE"` | `"no subyacente"` | `910424` |
+| `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910422` |
+| `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910423` |
+| `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910425` |
+| `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910426` |
 
 **Mapeo tipo → indicador — niveles mensuales**
 
 | `tipo` | índice | BIE |
 | --- | --- | --- |
-| `"inpc"` | `"INPC"` | `910392` |
-| `"inflacion componente"` | `"subyacente"` | `910393` |
-| `"inflacion componente"` | `"no subyacente"` | `910396` |
-| `"inflacion subcomponente"` | `"mercancias"` | `910394` |
-| `"inflacion subcomponente"` | `"servicios"` | `910395` |
-| `"inflacion subcomponente"` | `"agropecuarios"` | `910397` |
-| `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910398` |
+| `"INPC"` | `"INPC"` | `910392` |
+| `"INFLACION COMPONENTE"` | `"subyacente"` | `910393` |
+| `"INFLACION COMPONENTE"` | `"no subyacente"` | `910396` |
+| `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910394` |
+| `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910395` |
+| `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910397` |
+| `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910398` |
 
 **Mapeo tipo → indicador — variaciones mensuales**
 
 | `tipo_variacion` | `tipo` | índice | BIE |
 | --- | --- | --- | --- |
-| `"periodica"` | `"inpc"` | `"INPC"` | `910399` |
-| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `910400` |
-| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `910403` |
-| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `910401` |
-| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `910402` |
-| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910404` |
-| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910405` |
-| `"interanual"` | `"inpc"` | `"INPC"` | `910406` |
-| `"interanual"` | `"inflacion componente"` | `"subyacente"` | `910407` |
-| `"interanual"` | `"inflacion componente"` | `"no subyacente"` | `910410` |
-| `"interanual"` | `"inflacion subcomponente"` | `"mercancias"` | `910408` |
-| `"interanual"` | `"inflacion subcomponente"` | `"servicios"` | `910409` |
-| `"interanual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910411` |
-| `"interanual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910412` |
-| `"acumulada_anual"` | `"inpc"` | `"INPC"` | `910413` |
-| `"acumulada_anual"` | `"inflacion componente"` | `"subyacente"` | `910414` |
-| `"acumulada_anual"` | `"inflacion componente"` | `"no subyacente"` | `910417` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"mercancias"` | `910415` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"servicios"` | `910416` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910418` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910419` |
+| `"periodica"` | `"INPC"` | `"INPC"` | `910399` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910400` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910403` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910401` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910402` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910404` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910405` |
+| `"interanual"` | `"INPC"` | `"INPC"` | `910406` |
+| `"interanual"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910407` |
+| `"interanual"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910410` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910408` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910409` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910411` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910412` |
+| `"acumulada_anual"` | `"INPC"` | `"INPC"` | `910413` |
+| `"acumulada_anual"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910414` |
+| `"acumulada_anual"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910417` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910415` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910416` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910418` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910419` |
 
 **Mapeo tipo → indicador — variaciones quincenales**
 
 | `tipo_variacion` | `tipo` | índice | BIE |
 | --- | --- | --- | --- |
-| `"periodica"` | `"inpc"` | `"INPC"` | `910427` |
-| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `910428` |
-| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `910431` |
-| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `910429` |
-| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `910430` |
-| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910432` |
-| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910433` |
-| `"interanual"` | `"inpc"` | `"INPC"` | `910438` |
-| `"interanual"` | `"inflacion componente"` | `"subyacente"` | `910439` |
-| `"interanual"` | `"inflacion componente"` | `"no subyacente"` | `910442` |
-| `"interanual"` | `"inflacion subcomponente"` | `"mercancias"` | `910440` |
-| `"interanual"` | `"inflacion subcomponente"` | `"servicios"` | `910441` |
-| `"interanual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910443` |
-| `"interanual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910444` |
-| `"acumulada_anual"` | `"inpc"` | `"INPC"` | `910445` |
-| `"acumulada_anual"` | `"inflacion componente"` | `"subyacente"` | `910446` |
-| `"acumulada_anual"` | `"inflacion componente"` | `"no subyacente"` | `910449` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"mercancias"` | `910447` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"servicios"` | `910448` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"agropecuarios"` | `910450` |
-| `"acumulada_anual"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910451` |
+| `"periodica"` | `"INPC"` | `"INPC"` | `910427` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910428` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910431` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910429` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910430` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910432` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910433` |
+| `"interanual"` | `"INPC"` | `"INPC"` | `910438` |
+| `"interanual"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910439` |
+| `"interanual"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910442` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910440` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910441` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910443` |
+| `"interanual"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910444` |
+| `"acumulada_anual"` | `"INPC"` | `"INPC"` | `910445` |
+| `"acumulada_anual"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `910446` |
+| `"acumulada_anual"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `910449` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `910447` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `910448` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `910450` |
+| `"acumulada_anual"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `910451` |
 
 **Mapeo tipo → indicador — incidencias mensuales**
 
 | `tipo_incidencia` | `tipo` | índice | BIE |
 | --- | --- | --- | --- |
-| `"periodica"` | `"inpc"` | `"INPC"` | `909281` |
-| `"periodica"` | `"inflacion componente"` | `"subyacente"` | `909282` |
-| `"periodica"` | `"inflacion componente"` | `"no subyacente"` | `909290` |
-| `"periodica"` | `"inflacion subcomponente"` | `"mercancias"` | `909283` |
-| `"periodica"` | `"inflacion subcomponente"` | `"servicios"` | `909286` |
-| `"periodica"` | `"inflacion subcomponente"` | `"agropecuarios"` | `909291` |
-| `"periodica"` | `"inflacion subcomponente"` | `"energeticos y tarifas autorizadas por el gobierno"` | `909294` |
+| `"periodica"` | `"INPC"` | `"INPC"` | `909281` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"subyacente"` | `909282` |
+| `"periodica"` | `"INFLACION COMPONENTE"` | `"no subyacente"` | `909290` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"mercancias"` | `909283` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"servicios"` | `909286` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"agropecuarios"` | `909291` |
+| `"periodica"` | `"INFLACION SUBCOMPONENTE"` | `"energeticos y tarifas autorizadas por el gobierno"` | `909294` |
 
 **Cache de clase**
 
@@ -3453,23 +3455,23 @@ El suite es suficiente cuando cubre:
 
 **Decisión:** las columnas de clasificación en `CanastaCanonica` almacenan texto tal como viene del CSV intermedio. No se usan `pd.Categorical`. El mapeo cross-versión de nombres no vive en `CanastaCanonica` sino en `RENOMBRES_INDICES` en `correspondencia_canastas.py` — se aplica al combinar resultados, no al leer la canasta (ver §11.20).
 
-**Columnas con categorías en canasta 2018** (`encadenamiento` y `canasta consumo minimo` están vacías para esta versión):
+**Columnas con categorías en canasta 2018** (`encadenamiento` y `CANASTA CONSUMO MINIMO` están vacías para esta versión):
 
 | Columna | N categorías | Valores |
 | ------- | -----------: | ------- |
 | `COG` | 8 | `alimentos, bebidas y tabaco` · `educacion y esparcimiento` · `muebles, aparatos y accesorios domesticos` · `otros servicios` · `ropa, calzado y accesorios` · `salud y cuidado personal` · `transporte` · `vivienda` |
-| `CCIF division` | 12 | `alimentos y bebidas no alcoholicas` · `bebidas alcoholicas y tabaco` · `bienes y servicios diversos` · `comunicaciones` · `educacion` · `muebles, articulos para el hogar y para su conservacion` · `prendas de vestir y calzado` · `recreacion y cultura` · `restaurantes y hoteles` · `salud` · `transporte` · `vivienda, agua, electricidad, gas y otros combustibles` |
-| `CCIF grupo` | 44 | (ver CSV `ponderadores_2018.csv`) |
-| `CCIF clase` | 87 | (ver CSV `ponderadores_2018.csv`) |
-| `inflacion componente` | 2 | `no subyacente` · `subyacente` |
-| `inflacion subcomponente` | 4 | `agropecuarios` · `energeticos y tarifas autorizadas por el gobierno` · `mercancias` · `servicios` |
-| `inflacion agrupacion` | 9 | `alimentos, bebidas y tabaco` · `educacion (colegiaturas)` · `energeticos` · `frutas y verduras` · `mercancias no alimenticias` · `otros servicios` · `pecuarios` · `tarifas autorizadas por el gobierno` · `vivienda` |
-| `SCIAN sector` | 18 | (ver CSV `ponderadores_2018.csv`) |
-| `SCIAN rama` | 91 | (ver CSV `ponderadores_2018.csv`) |
-| `durabilidad` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
-| `canasta basica` | 1 | `X` (indica pertenencia; ausente si no aplica) |
+| `CCIF DIVISION` | 12 | `alimentos y bebidas no alcoholicas` · `bebidas alcoholicas y tabaco` · `bienes y servicios diversos` · `comunicaciones` · `educacion` · `muebles, articulos para el hogar y para su conservacion` · `prendas de vestir y calzado` · `recreacion y cultura` · `restaurantes y hoteles` · `salud` · `transporte` · `vivienda, agua, electricidad, gas y otros combustibles` |
+| `CCIF GRUPO` | 44 | (ver CSV `ponderadores_2018.csv`) |
+| `CCIF CLASE` | 87 | (ver CSV `ponderadores_2018.csv`) |
+| `INFLACION COMPONENTE` | 2 | `no subyacente` · `subyacente` |
+| `INFLACION SUBCOMPONENTE` | 4 | `agropecuarios` · `energeticos y tarifas autorizadas por el gobierno` · `mercancias` · `servicios` |
+| `INFLACION AGRUPACION` | 9 | `alimentos, bebidas y tabaco` · `educacion (colegiaturas)` · `energeticos` · `frutas y verduras` · `mercancias no alimenticias` · `otros servicios` · `pecuarios` · `tarifas autorizadas por el gobierno` · `vivienda` |
+| `SCIAN SECTOR` | 18 | (ver CSV `ponderadores_2018.csv`) |
+| `SCIAN RAMA` | 91 | (ver CSV `ponderadores_2018.csv`) |
+| `DURABILIDAD` | 4 | `duradero` · `no duradero` · `semiduradero` · `servicio` |
+| `CANASTA BASICA` | 1 | `X` (indica pertenencia; ausente si no aplica) |
 
-**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `empalmar` vía `_construir_mapa_renombre` + `_aplicar_renombre` resuelve automáticamente los nombres para `CCIF division`, `SCIAN rama` y, de forma preliminar, para renombres 1:1 de `CCIF grupo` y `CCIF clase`. `SCIAN sector` no tiene renombres 1:1 confirmados. Los splits, fusiones, categorías nuevas y categorías eliminadas no se mapean.
+**Nota cross-versión:** entre versiones hay cambios de nombre de categorías (ej. `"comunicaciones"` en 2018 → `"informacion y comunicacion"` en 2024). `empalmar` vía `_construir_mapa_renombre` + `_aplicar_renombre` resuelve automáticamente los nombres para `CCIF DIVISION`, `SCIAN RAMA` y, de forma preliminar, para renombres 1:1 de `CCIF GRUPO` y `CCIF CLASE`. `SCIAN SECTOR` no tiene renombres 1:1 confirmados. Los splits, fusiones, categorías nuevas y categorías eliminadas no se mapean.
 
 ---
 
@@ -3576,7 +3578,7 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ### 11.15 Dispatch interno en `CalculadorBase`
 
-**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `CalcularHistoria`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa $\sum w_j$ como denominador, válido tanto para la canasta completa ($\sum w_j = 100$) como para subgrupos ($\sum w_j < 100$). La firma de `CalculadorBase.calcular()` incluye `tipo` como parámetro — se deriva el nombre del índice internamente con `INDICE_POR_TIPO[tipo]`.
+**Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `CalcularHistoria`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa $\sum w_j$ como denominador, válido tanto para la canasta completa ($\sum w_j = 100$) como para subgrupos ($\sum w_j < 100$). La firma de `CalculadorBase.calcular()` incluye `tipo` como parámetro — cuando `tipo == TIPO_INPC` el nombre del índice es directamente `tipo` (ambos son ya `"INPC"`); en otro caso el nombre del índice es la categoría dentro de la columna de clasificación.
 
 **Razón:** `CalcularHistoria` queda con una sola llamada `calculador.calcular(canasta, serie, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre $\sum w_j$.
 
@@ -3586,7 +3588,7 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 **Decisión:** operaciones vectorizadas de pandas en lugar de loops Python escalares en `validar_indices()`.
 
-**Por qué:** profiling con SCIAN rama (91 categorías, 158 periodos, canasta 2018) mostró que el loop ingenuo consume el 96% del tiempo de la corrida. Tres causas:
+**Por qué:** profiling con SCIAN RAMA (91 categorías, 158 periodos, canasta 2018) mostró que el loop ingenuo consume el 96% del tiempo de la corrida. Tres causas:
 
 1. 3× `.loc[(periodo, indice), col]` por iteración del loop `indices × periodos` → ≈40 000 llamadas a `__getitem__` con tupla sobre MultiIndex.
 2. `serie_col[ponderadores.index]` + 2× `notna()` por iteración → ≈26 000 llamadas escalares.
@@ -3699,7 +3701,7 @@ resultado = empalmar([acc_rebased, r2018, r2024], forzar=True)
 
 ### 11.20 `RENOMBRES_INDICES` y normalización cross-versión
 
-**Problema:** al combinar `ResultadoIndice` de canastas distintas, el nivel `indice` del MultiIndex contiene el nombre de la categoría tal como lo generó cada corrida. Para `CCIF division`, los nombres cambiaron entre 2018 y 2024 (ej. `"comunicaciones"` → `"informacion y comunicacion"`). Sin normalización, `empalmar` produce dos filas separadas para lo que conceptualmente es la misma serie.
+**Problema:** al combinar `ResultadoIndice` de canastas distintas, el nivel `indice` del MultiIndex contiene el nombre de la categoría tal como lo generó cada corrida. Para `CCIF DIVISION`, los nombres cambiaron entre 2018 y 2024 (ej. `"comunicaciones"` → `"informacion y comunicacion"`). Sin normalización, `empalmar` produce dos filas separadas para lo que conceptualmente es la misma serie.
 
 **Decisión:** constante `RENOMBRES_INDICES` en `dominio/correspondencia_canastas.py`. Funciones privadas `_construir_mapa_renombre(tipo, version_origen, version_canonica)` y `_aplicar_renombre(df, mapa)` en `conversion.py`. `empalmar` las invoca por tramo antes de acumular.
 
@@ -3712,7 +3714,7 @@ RENOMBRES_INDICES: dict[str, dict[int, dict[str, str]]]
 # tipo → version_origen → {nombre_viejo: nombre_canonico}
 ```
 
-**Tabla de correspondencia CCIF division (2018 → 2024):**
+**Tabla de correspondencia CCIF DIVISION (2018 → 2024):**
 
 | 2018 | 2024 (canónico) |
 | ---- | --------------- |
@@ -3737,15 +3739,15 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 `_aplicar_renombre(df, mapa)` mapea la columna `"indice"` del MultiIndex usando `mapa.get(x, x)` (sin-mapeo → identidad).
 
-**CCIF grupo — versión preliminar:** 19 renombres 1:1 (2018 → 2024). La selección usa reciprocidad estricta sobre genéricos comunes en los CSVs de ponderadores. Ver tabla completa en `dominio/correspondencia_canastas.py`.
+**CCIF GRUPO — versión preliminar:** 19 renombres 1:1 (2018 → 2024). La selección usa reciprocidad estricta sobre genéricos comunes en los CSVs de ponderadores. Ver tabla completa en `dominio/correspondencia_canastas.py`.
 
-**CCIF clase:** 52 renombres 1:1 (2018 → 2024). Con esta normalización, las clases comunes pasan de 25 a 77. Ver tabla en `dominio/correspondencia_canastas.py`.
+**CCIF CLASE:** 52 renombres 1:1 (2018 → 2024). Con esta normalización, las clases comunes pasan de 25 a 77. Ver tabla en `dominio/correspondencia_canastas.py`.
 
-**SCIAN rama:** 4 renombres 1:1 (2018 → 2024). Ramas comunes pasan de 82 a 86. `SCIAN sector` sin mapeo — `49 transportes...` aparece solo en 2018.
+**SCIAN RAMA:** 4 renombres 1:1 (2018 → 2024). Ramas comunes pasan de 82 a 86. `SCIAN SECTOR` sin mapeo — `49 transportes...` aparece solo en 2018.
 
-**Validación:** todos los renombres de `CCIF grupo` y `CCIF clase` fueron verificados contra los CSVs de ponderadores (reciprocidad estricta) y contra COICOP 2018 (UN Statistics Division). Los cambios de nombre son oficiales de la revisión COICOP 2018.
+**Validación:** todos los renombres de `CCIF GRUPO` y `CCIF CLASE` fueron verificados contra los CSVs de ponderadores (reciprocidad estricta) y contra COICOP 2018 (UN Statistics Division). Los cambios de nombre son oficiales de la revisión COICOP 2018.
 
-**Consistencia con el dato.** `RENOMBRES_INDICES` es conocimiento mantenido a mano y carga estructural: tanto `empalmar` como el motor de incidencias dependen de él. Un renombre cuyo origen no existe como nombre nativo de `canasta[version_origen]`, o cuyo destino no existe en la versión siguiente, queda obsoleto y corrompe en silencio — `empalmar` no aplica el renombre (categorías que debían unirse quedan separadas) o emite nombres fantasma, y las incidencias buscan el ponderador con el nombre equivocado ("sin ponderador"). Una entrada con `origen == destino` (renombre identidad) es residuo equivalente: el nombre ya coincide entre versiones y el mapa sobra. Origen del caso real: la herramienta de extracción exportaba las ramas `SCIAN` con punto final; el loader lo normaliza (`rstrip('.')`) y el bug se corrigió en la herramienta, así que las 6 entradas `SCIAN rama` 2010→2013 (puro artefacto de punto, nombres ya idénticos) se eliminaron y los 7 orígenes con punto del paso 2013→2018 se des-puntearon (2211/2221 son renombres reales; el resto eran identidad).
+**Consistencia con el dato.** `RENOMBRES_INDICES` es conocimiento mantenido a mano y carga estructural: tanto `empalmar` como el motor de incidencias dependen de él. Un renombre cuyo origen no existe como nombre nativo de `canasta[version_origen]`, o cuyo destino no existe en la versión siguiente, queda obsoleto y corrompe en silencio — `empalmar` no aplica el renombre (categorías que debían unirse quedan separadas) o emite nombres fantasma, y las incidencias buscan el ponderador con el nombre equivocado ("sin ponderador"). Una entrada con `origen == destino` (renombre identidad) es residuo equivalente: el nombre ya coincide entre versiones y el mapa sobra. Origen del caso real: la herramienta de extracción exportaba las ramas `SCIAN` con punto final; el loader lo normaliza (`rstrip('.')`) y el bug se corrigió en la herramienta, así que las 6 entradas `SCIAN RAMA` 2010→2013 (puro artefacto de punto, nombres ya idénticos) se eliminaron y los 7 orígenes con punto del paso 2013→2018 se des-puntearon (2211/2221 son renombres reales; el resto eran identidad).
 
 ---
 
@@ -3872,26 +3874,26 @@ Las variaciones sobreviven (el factor se cancela en el cociente); las incidencia
 
 **Invariancia al rebase.** `rebasar` reescala `indice_replicado` pero **no** toca `indice_incidencia`. Como `J` ya está en la escala compatible, queda invariante al rebase por construcción — sin depender de leer ningún factor. `empalmar` arrastra la columna por fila; `a_mensual` la promedia explícito ([5.10](#510-conversión-y-combinación)).
 
-**Cross-canasta: prohibido `i_tramo` directo, exacto por segmentos (Fase 2A).** `i_tramo` es una escala interna de cada tramo, discontinua en la junta de canastas (`J_INPC ≈ 142` en el último periodo de 2018 vs `≈ 100.7` en el primero de 2024). Calcular una incidencia que cruce la junta comparando esos dos `J` directo daría un total implícito de `100.7/142 − 1 ≈ −0.29` — catastróficamente erróneo. La solución exacta (Fase 2A, ver subsección abajo) **parte el rango en segmentos por junta**, descompone cada segmento within-canasta con su propio `i_tramo` (exacto) y encadena las contribuciones con `S_m = INPC_visible(inicio_m)/INPC_visible(b)`. La **selección de escala sigue siendo por fila** `(periodo, indice)`: within-canasta usa `indice_incidencia` directo; cross-canasta de tipos **content-exact** (criterio `_es_content_exact`: `inflacion componente`, `inflacion subcomponente`, `COG`, `canasta basica`) usa el encadenado por segmentos; cross-canasta de tipos finos no content-exact (`SCIAN rama`, `CCIF *`) cae al `indice_replicado` visible sin garantía (diferido a Fase 2B). Solo `componente`/`subcomponente` tienen indicador BIE; los demás content-exact son exactos algebraicamente pero sin validación contra INEGI.
+**Cross-canasta: prohibido `i_tramo` directo, exacto por segmentos (Fase 2A).** `i_tramo` es una escala interna de cada tramo, discontinua en la junta de canastas (`J_INPC ≈ 142` en el último periodo de 2018 vs `≈ 100.7` en el primero de 2024). Calcular una incidencia que cruce la junta comparando esos dos `J` directo daría un total implícito de `100.7/142 − 1 ≈ −0.29` — catastróficamente erróneo. La solución exacta (Fase 2A, ver subsección abajo) **parte el rango en segmentos por junta**, descompone cada segmento within-canasta con su propio `i_tramo` (exacto) y encadena las contribuciones con `S_m = INPC_visible(inicio_m)/INPC_visible(b)`. La **selección de escala sigue siendo por fila** `(periodo, indice)`: within-canasta usa `indice_incidencia` directo; cross-canasta de tipos **content-exact** (criterio `_es_content_exact`: `INFLACION COMPONENTE`, `INFLACION SUBCOMPONENTE`, `COG`, `CANASTA BASICA`) usa el encadenado por segmentos; cross-canasta de tipos finos no content-exact (`SCIAN RAMA`, `CCIF *`) cae al `indice_replicado` visible sin garantía (diferido a Fase 2B). Solo `componente`/`subcomponente` tienen indicador BIE; los demás content-exact son exactos algebraicamente pero sin validación contra INEGI.
 
 **Marcador `metodo_incidencia` (interno).** Cada fila lleva un marcador del método usado, en `{within, cross_segmentado, cross_t1_diferido, cross_visible, cross_sin_frontera}`. Vive **solo en `.reporte`** (todas las filas; fuente operativa de auditoría) y se repite en `.diagnostico` (que conserva su semántica: solo filas no computables). **No** se agrega a `df_out`/`.resultado.largo`: `ResultadoIncidencia.resultado` pasa `_df_completo` a `Vista` y `Vista.largo` devuelve el DataFrame completo, así que cualquier columna en `df_out` se filtraría a la vista pública; mantener el marcador fuera de `df_out` preserva la API pública (`incidencia_pp`). El cruce sigue siendo detectable además por `version_t != version_lag` en `.reporte`. No se reusa `estado_calculo = "parcial"` (ya significa "una sola quincena disponible", [11.7](#117-reglas-de-estado_calculo)).
 
 **Versión por fila, no por periodo.** `version_t`/`version_lag` (y el `cross` que selecciona la escala, y la versión de canasta de la que se toma el ponderador base en el Fix 1) se derivan **por fila** `(periodo, indice)`: `version_t` de `df_emitir["version"]`, `version_lag` de `df_lookup["version"].reindex(base_idx)` (con fallback a `version_t` cuando el periodo base no existe). Nunca por periodo: usar `groupby("periodo").first()` clasificaría mal las filas en un periodo frontera donde coexisten índices de dos versiones — daría una etiqueta falsa y, peor, buscaría el ponderador base en la canasta equivocada, tirando como no computable una alta within-canasta que sí tiene ponderador en su propia versión. Por eso `version_t != version_lag` coincide exactamente con la decisión real de escala.
 
-**Vocabulario del ponderador alineado al del resultado.** El resultado de clasificación ya viene normalizado al vocabulario canónico que usó `empalmar` (`version_nombres`, default = versión más alta presente; ver [11.20](#1120-renombres_indices-y-normalización-cross-versión)), pero las canastas que recibe el cálculo de incidencias mantienen el nombre **nativo** de cada versión. Antes de buscar el ponderador base (Fix 1), `pond_por_version[v]` se renombra al vocabulario canónico con `_construir_mapa_renombre(tipo, v, vc)`. Sin esto, una categoría **renombrada** entre canastas (ej. `comunicaciones` 2018 → `informacion y comunicacion` 2024) se buscaría con el nombre canónico contra un índice nativo y la fila cross caería como "sin ponderador". `vc` no se infiere como `max(version)` (eso fallaría con `empalmar(version_nombres=...)` custom), sino como la versión `v` cuyos nombres de índice (filas versión `v`) están **todos** contenidos en los nombres nativos de `canasta[v]`: una versión con categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Cuando dos versiones comparten nombres idénticos (no hubo renombre real), ambas son candidatas y se toma `max`; eso es **inocuo siempre que el mapa de renombre entre ellas sea vacío** — es decir, que `RENOMBRES_INDICES` sea consistente con el dato: un renombre declarado debe corresponder a nombres realmente distintos. Esa invariante (no la unicidad de la inferencia) es la que sostiene el alineamiento, ver [11.20](#1120-renombres_indices-y-normalización-cross-versión). Un mapa obsoleto la rompe: el artefacto de punto en `SCIAN rama` 2010→2013 —ya normalizado por el loader (`rstrip('.')`) pero aún declarado— renombraba el ponderador a un nombre inexistente y tiraba ~330 filas como "sin ponderador"; se eliminó.
+**Vocabulario del ponderador alineado al del resultado.** El resultado de clasificación ya viene normalizado al vocabulario canónico que usó `empalmar` (`version_nombres`, default = versión más alta presente; ver [11.20](#1120-renombres_indices-y-normalización-cross-versión)), pero las canastas que recibe el cálculo de incidencias mantienen el nombre **nativo** de cada versión. Antes de buscar el ponderador base (Fix 1), `pond_por_version[v]` se renombra al vocabulario canónico con `_construir_mapa_renombre(tipo, v, vc)`. Sin esto, una categoría **renombrada** entre canastas (ej. `comunicaciones` 2018 → `informacion y comunicacion` 2024) se buscaría con el nombre canónico contra un índice nativo y la fila cross caería como "sin ponderador". `vc` no se infiere como `max(version)` (eso fallaría con `empalmar(version_nombres=...)` custom), sino como la versión `v` cuyos nombres de índice (filas versión `v`) están **todos** contenidos en los nombres nativos de `canasta[v]`: una versión con categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Cuando dos versiones comparten nombres idénticos (no hubo renombre real), ambas son candidatas y se toma `max`; eso es **inocuo siempre que el mapa de renombre entre ellas sea vacío** — es decir, que `RENOMBRES_INDICES` sea consistente con el dato: un renombre declarado debe corresponder a nombres realmente distintos. Esa invariante (no la unicidad de la inferencia) es la que sostiene el alineamiento, ver [11.20](#1120-renombres_indices-y-normalización-cross-versión). Un mapa obsoleto la rompe: el artefacto de punto en `SCIAN RAMA` 2010→2013 —ya normalizado por el loader (`rstrip('.')`) pero aún declarado— renombraba el ponderador a un nombre inexistente y tiraba ~330 filas como "sin ponderador"; se eliminó.
 
-**Fase 2A — cross-canasta exacto por segmentos (implementado).** Para `inflacion componente` e `inflacion subcomponente` (content-exact: mismo conjunto de categorías y ningún genérico cruza de bucket en las 3 juntas) la fila cross se calcula exacta:
+**Fase 2A — cross-canasta exacto por segmentos (implementado).** Para `INFLACION COMPONENTE` e `INFLACION SUBCOMPONENTE` (content-exact: mismo conjunto de categorías y ningún genérico cruza de bucket en las 3 juntas) la fila cross se calcula exacta:
 
 ```text
 contribucion_K(b,t) = Σ_m  S_m · w_K^(version_m) · (J_K(fin_m) − J_K(inicio_m)) / J_INPC^(m)(inicio_m)
 S_m = INPC_visible(inicio_m) / INPC_visible(b)        (S_1 = 1)
 ```
 
-con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada junta vale `100` por contrato (el tramo nuevo ancla `i_tramo = 100` en su junta; directo 2018, T2 2024). El lado viejo (`J_K_old(e)`, `INPC_visible(e)`) en **quincenal** está en `_df_completo` (el empalme se lo asigna al tramo viejo); en **mensual** `a_mensual` promedia la quincena de enlace, así que se preserva en el campo interno `_frontera` ([5.7](#57-resultadoindice), [5.10](#510-conversión-y-combinación)). Componentes nuevos: `_segmentos_entre`, `_incidencia_cross_encadenada`, `_es_content_exact` (`incidencias.py`); `_construir_frontera` y la propagación de `_frontera` por `a_mensual`/`rebasar`/`empalmar` (`conversion.py`). Estados (con `valor=None` → el llamador conserva el visible de Fase 1): `cross_segmentado` (exacto), `cross_sin_frontera` (mensual content-exact sin metadatos de enlace → visible, sin garantía), `cross_t1_diferido` (la junta entra a un tramo T1/2013 → visible, sin garantía). **Verificado con dato real:** `i_tramo_2024(2Q Jul 2024) = 100.0007` (contrato vale) vs `i_tramo_2013(2Q Mar 2013) = 108.81` (NO ancla en 100); por eso T1-como-lado-nuevo no es segmentable con el contrato =100 y se difiere a Fase 2B. El alcance content-exact NO se limita a componente/subcomponente: `_es_content_exact` también da `True` para `COG` y `canasta basica`, que reciben segmentación (algebraicamente exacta, sin validación BIE porque no tienen indicador).
+con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada junta vale `100` por contrato (el tramo nuevo ancla `i_tramo = 100` en su junta; directo 2018, T2 2024). El lado viejo (`J_K_old(e)`, `INPC_visible(e)`) en **quincenal** está en `_df_completo` (el empalme se lo asigna al tramo viejo); en **mensual** `a_mensual` promedia la quincena de enlace, así que se preserva en el campo interno `_frontera` ([5.7](#57-resultadoindice), [5.10](#510-conversión-y-combinación)). Componentes nuevos: `_segmentos_entre`, `_incidencia_cross_encadenada`, `_es_content_exact` (`incidencias.py`); `_construir_frontera` y la propagación de `_frontera` por `a_mensual`/`rebasar`/`empalmar` (`conversion.py`). Estados (con `valor=None` → el llamador conserva el visible de Fase 1): `cross_segmentado` (exacto), `cross_sin_frontera` (mensual content-exact sin metadatos de enlace → visible, sin garantía), `cross_t1_diferido` (la junta entra a un tramo T1/2013 → visible, sin garantía). **Verificado con dato real:** `i_tramo_2024(2Q Jul 2024) = 100.0007` (contrato vale) vs `i_tramo_2013(2Q Mar 2013) = 108.81` (NO ancla en 100); por eso T1-como-lado-nuevo no es segmentable con el contrato =100 y se difiere a Fase 2B. El alcance content-exact NO se limita a componente/subcomponente: `_es_content_exact` también da `True` para `COG` y `CANASTA BASICA`, que reciben segmentación (algebraicamente exacta, sin validación BIE porque no tienen indicador).
 
 **Frontera por tipo de resultado.** `_frontera` del INPC guarda `INPC_visible(e)` y `J_INPC_old(e)`; la de clasificación guarda `J_K_old(e)` por categoría y **no** `INPC_visible(e)` — `rebasar(clasificacion)` no conoce el factor de rebase del INPC (`k_INPC`), así que `INPC_visible(e)` vive solo en `inpc._frontera` y `_incidencia_cross_encadenada` lo lee de ahí. `rebasar` reescala el campo visible (`INPC_visible(e)`) por el mismo `k` que `indice_replicado` y preserva los `indice_incidencia_old`; así `S_m` queda consistente y la incidencia cross sigue invariante al rebase.
 
-**Diferido a Fase 2B.** Queda pendiente: (1) T1 exacto (2010→2013) reteniendo el ancla del tramo nuevo (hoy `cross_t1_diferido` → visible, porque `i_tramo_2013(2Q Mar 2013) = 108.81 ≠ 100`); (2) clasificaciones finas no content-exact (`SCIAN rama`, `CCIF *`) vía ledger por genérico + matriz de asignación `A_{h,g,m}` (`Σ_h A = 1` ⟹ total exacto) que operacionalice las tablas hoy inertes (`DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`) + bucket "reclasificación" para splits/fusiones; (3) validación contra las incidencias publicadas por INEGI (BIE).
+**Diferido a Fase 2B.** Queda pendiente: (1) T1 exacto (2010→2013) reteniendo el ancla del tramo nuevo (hoy `cross_t1_diferido` → visible, porque `i_tramo_2013(2Q Mar 2013) = 108.81 ≠ 100`); (2) clasificaciones finas no content-exact (`SCIAN RAMA`, `CCIF *`) vía ledger por genérico + matriz de asignación `A_{h,g,m}` (`Σ_h A = 1` ⟹ total exacto) que operacionalice las tablas hoy inertes (`DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`) + bucket "reclasificación" para splits/fusiones; (3) validación contra las incidencias publicadas por INEGI (BIE).
 
 ---
 
@@ -3908,6 +3910,16 @@ con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada ju
 **Decisión:** `id_corrida` se elimina de `ManifestCalculo` (ver [11.10](#1110-id_corrida-eliminado-de-resultadoindice)) y de `ManifestDerivado`, donde se reemplaza por `versiones: list[VersionCanasta]`.
 
 **Razón:** los dos casos tienen semántica distinta. En `ManifestCalculo`, `id_corrida` era 100% redundante — `f"{tipo}:{version}"` no decía nada que `version`+`tipo` (ya campos propios) no dijeran; se elimina sin reemplazo, y `.resumen`/`.diagnostico` pasan a indexar/filtrar por `(version, tipo)` directo. En `ManifestDerivado`, en cambio, `id_corrida: list[str]` era la única fuente real de "qué versiones contribuyeron al derivado" — `ManifestDerivado` no tiene un campo `version` propio (es terminal, no de una sola canasta) — así que no es una eliminación limpia sino un reemplazo: `versiones: list[VersionCanasta]` expresa la misma información sin pasar por una serialización a string que había que parsear para recuperar la versión.
+
+---
+
+### 11.32 Columnas de clasificación y `tipo` normalizados a mayúsculas
+
+**Decisión:** todo valor de `tipo` (el parámetro de `CalculadorBase.calcular()` y de las funciones públicas de `api/`) se normaliza a mayúsculas en el boundary de entrada — `api/indices.py::calcular_indice`, `api/flujos.py::calcular_historia`, y las 3 funciones de `api/consultas.py` (`consultar_indice`, `consultar_variacion`, `consultar_incidencia`) hacen `tipo = tipo.upper()` antes de usarlo. `COLUMNAS_CLASIFICACION` (`dominio/tipos.py`) pasa a contener sus 12 valores en mayúsculas (`"CCIF DIVISION"`, `"SCIAN RAMA"`, etc. — `"COG"` no cambia, ya era mayúscula). `LectorCanastaCsv` renombra las columnas de clasificación del CSV crudo a mayúsculas justo después de leerlo (antes de construir `CanastaCanonica`) — el pipeline de generación (`tools/canasta_inpc/`) no se toca, sigue produciendo CSVs con el casing mixto de siempre; la canonización ocurre solo al cargar. `INDICE_POR_TIPO` (diccionario de 1 entrada `{"inpc": "INPC"}`) se elimina, reemplazado por `TIPO_INPC = "INPC"` (constante) — con `tipo` ya normalizado, `"INPC"` deja de ser un caso especial de traducción, es una entrada más de un único vocabulario en mayúsculas.
+
+**Razón:** `tipo` podía valer 2 especies distintas de string (palabra clave `"inpc"` vs. nombre de columna real) sin ninguna marca que las distinguiera — mismo tipo estático (`str`), sin garantía de mypy contra typos de casing. La asimetría concreta: `"inpc"` necesitaba traducción de salida (`INDICE_POR_TIPO["inpc"] == "INPC"`), las columnas de clasificación no (entraban y salían igual). Normalizar todo a mayúsculas en el boundary hace que la transformación sea uniforme para cualquier `tipo` válido — elimina la asimetría que justificaba el diccionario de 1 entrada, sin resolver (porque no es resoluble por renombre) la dualidad real de significado agregado-vs-desglose. Se optó por normalizar en el boundary de carga (`LectorCanastaCsv`) y no en `tools/canasta_inpc/` para no reabrir un pipeline de generación recién cerrado y verificado ("0 diferencias reales").
+
+**Hallazgo adicional:** `"canasta consumo minimo"` faltaba en `COLUMNAS_CLASIFICACION` — tiene el mismo patrón `"X"`/`"-"` que `"canasta basica"` (vacía en 2010/2013/2018, poblada en 2024 con 170/122 filas, verificado contra `data/inputs/{pdf,xlsx}/ponderadores_2024.csv`). Se agrega junto con el resto de la migración.
 
 ---
 
@@ -3947,17 +3959,17 @@ Decisiones que se tomaron con limitaciones conocidas. Cada entrada registra el c
 
 | Tipo | Versiones cubiertas |
 |---|---|
-| `CCIF division` | 2018 only |
-| `CCIF grupo` | 2018 only |
-| `CCIF clase` | 2013 + 2018 |
-| `SCIAN sector` | 2013 |
-| `SCIAN rama` | 2013 |
+| `CCIF DIVISION` | 2018 only |
+| `CCIF GRUPO` | 2018 only |
+| `CCIF CLASE` | 2013 + 2018 |
+| `SCIAN SECTOR` | 2013 |
+| `SCIAN RAMA` | 2013 |
 
-El paso `SCIAN rama` 2010→2013 no aparece: tras la normalización del punto en el loader (`rstrip('.')`) los nombres de rama 2010 y 2013 son idénticos, así que no requiere mapa (ver §11.20).
+El paso `SCIAN RAMA` 2010→2013 no aparece: tras la normalización del punto en el loader (`rstrip('.')`) los nombres de rama 2010 y 2013 son idénticos, así que no requiere mapa (ver §11.20).
 
-**Problema:** `CCIF division` y `CCIF grupo` no tienen entradas para 2010/2013. Para análisis cross-versión completo por subíndice CCIF que incluya esas versiones, los nombres de categorías de `division` y `grupo` no se normalizan automáticamente entre versiones.
+**Problema:** `CCIF DIVISION` y `CCIF GRUPO` no tienen entradas para 2010/2013. Para análisis cross-versión completo por subíndice CCIF que incluya esas versiones, los nombres de categorías de `division` y `grupo` no se normalizan automáticamente entre versiones.
 
-**Mejora propuesta:** extender `RENOMBRES_INDICES["CCIF division"]` y `RENOMBRES_INDICES["CCIF grupo"]` con entradas para `version_origen ∈ {2010, 2013}` usando el mismo criterio de reciprocidad estricta sobre genéricos comunes.
+**Mejora propuesta:** extender `RENOMBRES_INDICES["CCIF DIVISION"]` y `RENOMBRES_INDICES["CCIF GRUPO"]` con entradas para `version_origen ∈ {2010, 2013}` usando el mismo criterio de reciprocidad estricta sobre genéricos comunes.
 
 **Cuándo implementar:** cuando el análisis histórico completo 2010–2024 por subíndice CCIF requiera series continuas de clasificación.
 

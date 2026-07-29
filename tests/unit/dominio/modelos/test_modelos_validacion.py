@@ -21,7 +21,7 @@ from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 # ---------- Fixtures helpers ----------
 
-def _manif_calculo(tipo: str = "inpc", version: int = 2018) -> ManifestCalculo:
+def _manif_calculo(tipo: str = "INPC", version: int = 2018) -> ManifestCalculo:
     return ManifestCalculo(
         version=version,  # type: ignore[arg-type]
         tipo=tipo,
@@ -32,7 +32,7 @@ def _manif_calculo(tipo: str = "inpc", version: int = 2018) -> ManifestCalculo:
     )
 
 
-def _manif_derivado(tipo: str = "inpc", clase: str = "periodica_mensual") -> ManifestDerivado:
+def _manif_derivado(tipo: str = "INPC", clase: str = "periodica_mensual") -> ManifestDerivado:
     return ManifestDerivado(
         versiones=[2018],
         tipo=tipo,
@@ -42,7 +42,7 @@ def _manif_derivado(tipo: str = "inpc", clase: str = "periodica_mensual") -> Man
     )
 
 
-def _df_indice(tipo: str = "inpc", version: int = 2018) -> pd.DataFrame:
+def _df_indice(tipo: str = "INPC", version: int = 2018) -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
     idx = pd.MultiIndex.from_tuples(
         [(p, "INPC") for p in periodos], names=["periodo", "indice"]
@@ -59,7 +59,7 @@ def _df_indice(tipo: str = "inpc", version: int = 2018) -> pd.DataFrame:
     )
 
 
-def _df_variacion(tipo: str = "inpc") -> pd.DataFrame:
+def _df_variacion(tipo: str = "INPC") -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
     idx = pd.MultiIndex.from_tuples(
         [(p, "INPC") for p in periodos], names=["periodo", "indice"]
@@ -76,7 +76,7 @@ def _df_variacion(tipo: str = "inpc") -> pd.DataFrame:
     )
 
 
-def _df_incidencia(tipo: str = "inpc") -> pd.DataFrame:
+def _df_incidencia(tipo: str = "INPC") -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
     idx = pd.MultiIndex.from_tuples(
         [(p, "INPC") for p in periodos], names=["periodo", "indice"]
@@ -93,7 +93,7 @@ def _df_incidencia(tipo: str = "inpc") -> pd.DataFrame:
     )
 
 
-def _resultado_indice(tipo: str = "inpc") -> ResultadoIndice:
+def _resultado_indice(tipo: str = "INPC") -> ResultadoIndice:
     return ResultadoIndice(
         _df_indice(tipo=tipo),
         [_manif_calculo(tipo=tipo)],
@@ -102,7 +102,7 @@ def _resultado_indice(tipo: str = "inpc") -> ResultadoIndice:
     )
 
 
-def _resultado_variacion(tipo: str = "inpc") -> ResultadoVariacion:
+def _resultado_variacion(tipo: str = "INPC") -> ResultadoVariacion:
     return ResultadoVariacion(
         _df_variacion(tipo=tipo),
         _manif_derivado(tipo=tipo),
@@ -111,7 +111,7 @@ def _resultado_variacion(tipo: str = "inpc") -> ResultadoVariacion:
     )
 
 
-def _resultado_incidencia(tipo: str = "inpc") -> ResultadoIncidencia:
+def _resultado_incidencia(tipo: str = "INPC") -> ResultadoIncidencia:
     return ResultadoIncidencia(
         _df_incidencia(tipo=tipo),
         _manif_derivado(tipo=tipo),
@@ -157,7 +157,7 @@ def test_indice_construccion_valida() -> None:
     assert isinstance(v.resultado, Vista)
 
 
-@pytest.mark.parametrize("tipo_invalido", ["cobertura", "durabilidad", "canasta basica"])
+@pytest.mark.parametrize("tipo_invalido", ["cobertura", "DURABILIDAD", "CANASTA BASICA"])
 def test_indice_tipo_invalido_falla(tipo_invalido: str) -> None:
     r = ResultadoIndice(
         _df_indice(tipo=tipo_invalido),
@@ -172,10 +172,10 @@ def test_indice_tipo_invalido_falla(tipo_invalido: str) -> None:
 
 
 def test_indice_manifiesto_mixto_falla() -> None:
-    df = pd.concat([_df_indice(tipo="inpc"), _df_indice(tipo="cobertura").rename(
+    df = pd.concat([_df_indice(tipo="INPC"), _df_indice(tipo="cobertura").rename(
         index={p: p for p in []}  # noop
     )])
-    df = _df_indice(tipo="inpc")
+    df = _df_indice(tipo="INPC")
     df2 = _df_indice(tipo="cobertura")
     df2.index = pd.MultiIndex.from_tuples(
         [(PeriodoQuincenal(2024, m, 1), "INPC") for m in (1, 2)],
@@ -184,7 +184,7 @@ def test_indice_manifiesto_mixto_falla() -> None:
     df_concat = pd.concat([df, df2])
     r = ResultadoIndice(
         df_concat,
-        [_manif_calculo(tipo="inpc"), _manif_calculo(tipo="cobertura")],
+        [_manif_calculo(tipo="INPC"), _manif_calculo(tipo="cobertura")],
         pd.DataFrame(),
         pd.DataFrame(),
     )
@@ -262,7 +262,7 @@ def test_variacion_construccion_valida() -> None:
     assert isinstance(v.resultado, Vista)
 
 
-@pytest.mark.parametrize("tipo_invalido", ["cobertura", "durabilidad"])
+@pytest.mark.parametrize("tipo_invalido", ["cobertura", "DURABILIDAD"])
 def test_variacion_tipo_invalido_falla(tipo_invalido: str) -> None:
     r = _resultado_variacion(tipo=tipo_invalido)
     with pytest.raises(InvarianteViolado):
@@ -339,7 +339,7 @@ def test_incidencia_construccion_valida() -> None:
     assert isinstance(v.resultado, Vista)
 
 
-@pytest.mark.parametrize("tipo_invalido", ["cobertura", "durabilidad"])
+@pytest.mark.parametrize("tipo_invalido", ["cobertura", "DURABILIDAD"])
 def test_incidencia_tipo_invalido_falla(tipo_invalido: str) -> None:
     r = _resultado_incidencia(tipo=tipo_invalido)
     with pytest.raises(InvarianteViolado):

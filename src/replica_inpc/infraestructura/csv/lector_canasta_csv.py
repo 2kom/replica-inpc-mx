@@ -12,7 +12,7 @@ from replica_inpc.dominio.errores import (
     EncodingNoLegible,
 )
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
-from replica_inpc.dominio.tipos import VersionCanasta
+from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, VersionCanasta
 from replica_inpc.infraestructura.csv._utils import _normalizar
 
 COLUMNAS_REQUERIDAS = [
@@ -61,6 +61,12 @@ class LectorCanastaCsv:
             raise ColumnasMinFaltantes(
                 f"Faltan columnas requeridas: {', '.join(columnas_faltantes)}"
             )
+
+        canasta = canasta.rename(
+            columns={
+                col: col.upper() for col in COLUMNAS_REQUERIDAS if col.upper() in COLUMNAS_CLASIFICACION
+            }
+        )
 
         canasta.attrs["origen"] = ruta
 

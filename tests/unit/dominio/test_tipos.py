@@ -9,18 +9,18 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
-    INDICE_POR_TIPO,
     INDICES_VALIDABLES,
     RANGOS_CANASTAS,
+    TIPO_INPC,
     ManifestCalculo,
     ManifestDerivado,
 )
 
-# -- INDICE_POR_TIPO --
+# -- TIPO_INPC --
 
 
-def test_indice_por_tipo_mapea_inpc_a_inpc_mayuscula() -> None:
-    assert INDICE_POR_TIPO == {"inpc": "INPC"}
+def test_tipo_inpc_es_inpc_mayuscula() -> None:
+    assert TIPO_INPC == "INPC"
 
 
 # -- COLUMNAS_CLASIFICACION --
@@ -29,16 +29,17 @@ def test_indice_por_tipo_mapea_inpc_a_inpc_mayuscula() -> None:
 def test_columnas_clasificacion_contenido_exacto() -> None:
     assert COLUMNAS_CLASIFICACION == {
         "COG",
-        "CCIF division",
-        "CCIF grupo",
-        "CCIF clase",
-        "inflacion componente",
-        "inflacion subcomponente",
-        "inflacion agrupacion",
-        "SCIAN sector",
-        "SCIAN rama",
-        "durabilidad",
-        "canasta basica",
+        "CCIF DIVISION",
+        "CCIF GRUPO",
+        "CCIF CLASE",
+        "INFLACION COMPONENTE",
+        "INFLACION SUBCOMPONENTE",
+        "INFLACION AGRUPACION",
+        "SCIAN SECTOR",
+        "SCIAN RAMA",
+        "DURABILIDAD",
+        "CANASTA BASICA",
+        "CANASTA CONSUMO MINIMO",
     }
 
 
@@ -46,11 +47,11 @@ def test_columnas_clasificacion_contenido_exacto() -> None:
 
 
 def test_indices_validables_contenido_exacto() -> None:
-    assert INDICES_VALIDABLES == {"inpc", "inflacion componente", "inflacion subcomponente"}
+    assert INDICES_VALIDABLES == {TIPO_INPC, "INFLACION COMPONENTE", "INFLACION SUBCOMPONENTE"}
 
 
 def test_indices_validables_es_subconjunto_de_tipos_reconocidos() -> None:
-    tipos_reconocidos = set(INDICE_POR_TIPO) | COLUMNAS_CLASIFICACION
+    tipos_reconocidos = {TIPO_INPC} | COLUMNAS_CLASIFICACION
     assert INDICES_VALIDABLES <= tipos_reconocidos
 
 
@@ -93,7 +94,7 @@ def test_rangos_canastas_ultima_version_sin_fin() -> None:
 def test_manifest_calculo_construccion_valida() -> None:
     m = ManifestCalculo(
         version=2018,
-        tipo="inpc",
+        tipo="INPC",
         calculador="LaspeyresDirecto",
         ruta_canasta=Path("/tmp/c.csv"),
         ruta_series=Path("/tmp/s.csv"),
@@ -104,7 +105,7 @@ def test_manifest_calculo_construccion_valida() -> None:
 
 def test_manifest_calculo_rutas_y_fecha_por_defecto() -> None:
     antes = datetime.now()
-    m = ManifestCalculo(version=2018, tipo="inpc", calculador="LaspeyresDirecto")
+    m = ManifestCalculo(version=2018, tipo="INPC", calculador="LaspeyresDirecto")
     despues = datetime.now()
     assert m.ruta_canasta is None
     assert m.ruta_series is None
@@ -118,7 +119,7 @@ def test_manifest_derivado_clase_vacia_falla() -> None:
     with pytest.raises(InvarianteViolado):
         ManifestDerivado(
             versiones=[2018],
-            tipo="inpc",
+            tipo="INPC",
             clase="",
             descripcion="",
             fecha=datetime(2024, 1, 1),
@@ -127,6 +128,6 @@ def test_manifest_derivado_clase_vacia_falla() -> None:
 
 def test_manifest_derivado_fecha_por_defecto() -> None:
     antes = datetime.now()
-    m = ManifestDerivado(versiones=[2018], tipo="inpc", clase="periodica_mensual", descripcion="")
+    m = ManifestDerivado(versiones=[2018], tipo="INPC", clase="periodica_mensual", descripcion="")
     despues = datetime.now()
     assert antes <= m.fecha <= despues

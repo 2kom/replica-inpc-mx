@@ -8,7 +8,7 @@ from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, TIPO_INPC, VersionCanasta
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 _ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
@@ -30,7 +30,7 @@ def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
     `indice_replicado_old` (= INPC_visible(e)); para clasificación lo deja NaN — no se
     guarda INPC_visible en la frontera de clasificación (ver docs/diseño §11.31).
     """
-    es_inpc = str(df["tipo"].iloc[0]) == "inpc"
+    es_inpc = str(df["tipo"].iloc[0]) == TIPO_INPC
     tiene_inc = "indice_incidencia" in df.columns
     periodos = set(df.index.get_level_values("periodo"))
     versiones = {int(v) for v in df["version"].unique()}

@@ -19,8 +19,8 @@ from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
-    INDICE_POR_TIPO,
     RANGOS_CANASTAS,
+    TIPO_INPC,
     ManifestCalculo,
     VersionCanasta,
 )
@@ -95,9 +95,9 @@ class LaspeyresDirecto(CalculadorBase):
         ruta_canasta = canasta.df.attrs.get("origen")
         ruta_serie = serie.df.attrs.get("origen")
 
-        if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
+        if tipo != TIPO_INPC and tipo not in COLUMNAS_CLASIFICACION:
             raise InvarianteViolado(
-                f"tipo='{tipo}' no está en INDICE_POR_TIPO ni en COLUMNAS_CLASIFICACION"
+                f"tipo='{tipo}' no es '{TIPO_INPC}' ni está en COLUMNAS_CLASIFICACION"
             )
         if tipo in COLUMNAS_CLASIFICACION and canasta.df[tipo].dropna().empty:
             raise InvarianteViolado(
@@ -106,11 +106,11 @@ class LaspeyresDirecto(CalculadorBase):
                 "clasificaciones aplican a cada versión (docs/diseño.md §5.4)."
             )
 
-        if tipo in INDICE_POR_TIPO:
-            indice = INDICE_POR_TIPO[tipo]
-            df_s_raw = _recortar_al_rango(serie.df, canasta.version)
+        if tipo == TIPO_INPC:
+            indice = tipo
+            serie_recortada = _recortar_al_rango(serie.df, canasta.version)
             df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
-                df_s_raw, canasta.version, tipo
+                serie_recortada, canasta.version, tipo
             )
             df_calc = _calcular_df(
                 canasta.df,
@@ -135,8 +135,8 @@ class LaspeyresDirecto(CalculadorBase):
             cat_por_gen = canasta.df[tipo].dropna()
             gens = cat_por_gen.index
 
-            df_s_raw = _recortar_al_rango(serie.df.loc[gens], canasta.version)
-            df_s, df_corr_relleno, _ = _rellenar_faltantes(df_s_raw, canasta.version, tipo)
+            serie_recortada = _recortar_al_rango(serie.df.loc[gens], canasta.version)
+            df_s, df_corr_relleno, _ = _rellenar_faltantes(serie_recortada, canasta.version, tipo)
             pond = canasta.df.loc[gens, "ponderador"].astype(float)
 
             # Laspeyres: media ponderada por categoría
@@ -165,7 +165,9 @@ class LaspeyresDirecto(CalculadorBase):
 
             # Estado por (cat, periodo)
             has_null = df_s.isna().groupby(cat_por_gen).any()  # cat × bool
-            has_rel = (df_s_raw.isna() & df_s.notna()).groupby(cat_por_gen).any()  # cat × bool
+            has_rel = (
+                (serie_recortada.isna() & df_s.notna()).groupby(cat_por_gen).any()
+            )  # cat × bool
 
             # Reshape a MultiIndex (periodo, indice=cat)
             df_stacked = resultado_mat.T.stack()

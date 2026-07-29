@@ -74,14 +74,14 @@ class TestInicializacion:
             FuenteValidacionApi(token="cualquier-token", tipo="tipo_inexistente")
 
     def test_tipo_valido_no_lanza(self):
-        FuenteValidacionApi(token="cualquier-token", tipo="inpc")
+        FuenteValidacionApi(token="cualquier-token", tipo="INPC")
 
 
 class TestRespuestaQuincenal:
     def test_devuelve_valores_para_periodos_pedidos(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([_P1, _P2])
 
         assert resultado["INPC"][_P1] == pytest.approx(145.446)
@@ -90,7 +90,7 @@ class TestRespuestaQuincenal:
     def test_periodo_no_en_api_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([PeriodoQuincenal(2000, 1, 1)])
 
         assert resultado["INPC"][PeriodoQuincenal(2000, 1, 1)] is None
@@ -98,7 +98,7 @@ class TestRespuestaQuincenal:
     def test_obs_value_null_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL_CON_NULL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([_P1, _P2])
 
         assert resultado["INPC"][_P1] is None
@@ -109,7 +109,7 @@ class TestRespuestaMensual:
     def test_devuelve_valores_para_periodos_mensuales(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([_PM1, _PM2])
 
         assert resultado["INPC"][_PM1] == pytest.approx(145.200)
@@ -118,7 +118,7 @@ class TestRespuestaMensual:
     def test_periodo_mensual_no_en_api_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([PeriodoMensual(2000, 1)])
 
         assert resultado["INPC"][PeriodoMensual(2000, 1)] is None
@@ -126,7 +126,7 @@ class TestRespuestaMensual:
     def test_obs_value_null_mensual_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL_CON_NULL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_indices([_PM1, _PM2])
 
         assert resultado["INPC"][_PM1] is None
@@ -134,7 +134,7 @@ class TestRespuestaMensual:
 
     def test_inflacion_subcomponente_mensual_devuelve_claves_correctas(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        fuente = FuenteValidacionApi(token="token", tipo="INFLACION SUBCOMPONENTE")
         resultado = fuente.obtener_indices([_PM1])
         assert "mercancias" in resultado
 
@@ -142,24 +142,24 @@ class TestRespuestaMensual:
 class TestDeteccionAutomatica:
     def test_periodos_quincenales_usan_indicador_quincenal(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_indices([_P1])
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_indices([_P1])
         url = mock_get.call_args[0][0]
         assert "910420" in url
 
     def test_periodos_mensuales_usan_indicador_mensual(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_indices([_PM1])
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_indices([_PM1])
         url = mock_get.call_args[0][0]
         assert "910392" in url
 
     def test_timeout_del_constructor_se_pasa_a_requests_get(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
-        FuenteValidacionApi(token="token", tipo="inpc", timeout=42).obtener_indices([_P1])
+        FuenteValidacionApi(token="token", tipo="INPC", timeout=42).obtener_indices([_P1])
         assert mock_get.call_args.kwargs["timeout"] == 42
 
     def test_timeout_default_es_10(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_indices([_P1])
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_indices([_P1])
         assert mock_get.call_args.kwargs["timeout"] == 10
 
     def test_cache_mensual_y_quincenal_son_independientes(self, mocker):
@@ -169,7 +169,7 @@ class TestDeteccionAutomatica:
             _mock_resp(200, _RESPUESTA_MENSUAL),
         ]
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         fuente.obtener_indices([_P1])
         fuente.obtener_indices([_PM1])
 
@@ -180,7 +180,7 @@ class TestCache:
     def test_segunda_llamada_quincenal_no_hace_request(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         fuente.obtener_indices([_P1])
         fuente.obtener_indices([_P2])
 
@@ -189,7 +189,7 @@ class TestCache:
     def test_segunda_llamada_mensual_no_hace_request(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         fuente.obtener_indices([_PM1])
         fuente.obtener_indices([_PM2])
 
@@ -198,8 +198,8 @@ class TestCache:
     def test_cache_compartido_entre_instancias(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_indices([_P1])
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_indices([_P1])
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_indices([_P1])
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_indices([_P1])
 
         assert mock_get.call_count == 1
 
@@ -208,7 +208,7 @@ class TestApiNoDisponible:
     def test_timeout_lanza_fuente_no_disponible(self, mocker):
         mocker.patch("requests.get", side_effect=requests.exceptions.Timeout("timeout"))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(FuenteNoDisponible):
             fuente.obtener_indices([_P1])
 
@@ -217,7 +217,7 @@ class TestApiNoDisponible:
         mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError("400")
         mocker.patch("requests.get", return_value=mock_resp)
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(FuenteNoDisponible):
             fuente.obtener_indices([_P1])
 
@@ -226,14 +226,14 @@ class TestRespuestaInvalida:
     def test_sin_clave_series_lanza_respuesta_invalida(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, {"Header": {}}))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
     def test_series_vacio_lanza_respuesta_invalida(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, {"Series": []}))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
@@ -249,7 +249,7 @@ class TestRespuestaInvalida:
         }
         mocker.patch("requests.get", return_value=_mock_resp(200, respuesta))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
@@ -269,7 +269,7 @@ class TestRespuestaInvalida:
         }
         mocker.patch("requests.get", return_value=_mock_resp(200, respuesta))
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
@@ -278,7 +278,7 @@ class TestRespuestaInvalida:
         mock_resp.json.side_effect = ValueError("no es json")
         mocker.patch("requests.get", return_value=mock_resp)
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
@@ -286,13 +286,13 @@ class TestRespuestaInvalida:
 class TestObtenerVariaciones:
     def test_retorna_dict_keyed_por_indice(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_variaciones([_PM1], "periodica")
         assert "INPC" in resultado
 
     def test_valores_para_periodos_pedidos(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_variaciones([_PM1, _PM2], "periodica")
         assert resultado["INPC"][_PM1] == pytest.approx(145.200)
         assert resultado["INPC"][_PM2] == pytest.approx(144.300)
@@ -300,25 +300,25 @@ class TestObtenerVariaciones:
     def test_tipo_variacion_invalido_lanza_error(self, mocker):
         from replica_inpc.dominio.errores import ErrorConfiguracion
 
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(ErrorConfiguracion):
             fuente.obtener_variaciones([_PM1], "invalido")  # type: ignore[arg-type]
 
     def test_usa_indicador_periodica(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_PM1], "periodica")
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones([_PM1], "periodica")
         url = mock_get.call_args[0][0]
         assert "910399" in url
 
     def test_usa_indicador_interanual(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_PM1], "interanual")
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones([_PM1], "interanual")
         url = mock_get.call_args[0][0]
         assert "910406" in url
 
     def test_usa_indicador_acumulada_anual(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones(
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones(
             [_PM1], "acumulada_anual"
         )
         url = mock_get.call_args[0][0]
@@ -326,7 +326,7 @@ class TestObtenerVariaciones:
 
     def test_reutiliza_cache_de_obtener(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         # primera llamada llena cache con indicador 910399
         fuente.obtener_variaciones([_PM1], "periodica")
         # segunda llamada con mismo indicador no hace request
@@ -335,7 +335,7 @@ class TestObtenerVariaciones:
 
     def test_subcomponentes_devuelven_claves_correctas(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        fuente = FuenteValidacionApi(token="token", tipo="INFLACION SUBCOMPONENTE")
         resultado = fuente.obtener_variaciones([_PM1], "periodica")
         assert set(resultado.keys()) == {
             "mercancias",
@@ -346,7 +346,7 @@ class TestObtenerVariaciones:
 
     def test_periodo_antes_de_min_ausente_del_resultado(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         periodo_antiguo = PeriodoMensual(2000, 1)
         resultado = fuente.obtener_variaciones([_PM1, periodo_antiguo], "periodica")
         # min_p = _PM2 (Feb 2026); periodo_antiguo < min_p → no está en resultado
@@ -371,7 +371,7 @@ class TestObtenerVariacionesQuincenal:
         mock_get = mocker.patch(
             "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
         )
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_P1], "periodica")
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones([_P1], "periodica")
         url = mock_get.call_args[0][0]
         assert "910427" in url
 
@@ -379,7 +379,7 @@ class TestObtenerVariacionesQuincenal:
         mock_get = mocker.patch(
             "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
         )
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones([_P1], "interanual")
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones([_P1], "interanual")
         url = mock_get.call_args[0][0]
         assert "910438" in url
 
@@ -387,7 +387,7 @@ class TestObtenerVariacionesQuincenal:
         mock_get = mocker.patch(
             "requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL)
         )
-        FuenteValidacionApi(token="token", tipo="inpc").obtener_variaciones(
+        FuenteValidacionApi(token="token", tipo="INPC").obtener_variaciones(
             [_P1], "acumulada_anual"
         )
         url = mock_get.call_args[0][0]
@@ -395,14 +395,14 @@ class TestObtenerVariacionesQuincenal:
 
     def test_valores_para_periodos_pedidos(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         resultado = fuente.obtener_variaciones([_P1, _P2], "periodica")
         assert resultado["INPC"][_P1] == pytest.approx(0.62)
         assert resultado["INPC"][_P2] == pytest.approx(0.45)
 
     def test_periodo_antes_de_min_ausente_del_resultado(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inpc")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
         periodo_antiguo = PeriodoQuincenal(2000, 1, 1)
         resultado = fuente.obtener_variaciones([_P1, periodo_antiguo], "periodica")
         # min_p = _P2 (2026/02/02); periodo_antiguo < min_p → ausente
@@ -411,7 +411,7 @@ class TestObtenerVariacionesQuincenal:
 
     def test_subcomponentes_quincenal_claves_correctas(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_VAR_QUINCENAL))
-        fuente = FuenteValidacionApi(token="token", tipo="inflacion subcomponente")
+        fuente = FuenteValidacionApi(token="token", tipo="INFLACION SUBCOMPONENTE")
         resultado = fuente.obtener_variaciones([_P1], "periodica")
         assert set(resultado.keys()) == {
             "mercancias",

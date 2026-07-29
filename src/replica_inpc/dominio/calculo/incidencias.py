@@ -1,7 +1,7 @@
 """Cálculo de incidencias a partir de `ResultadoIndice`.
 
 Tres funciones producen `ResultadoIncidencia` combinando el INPC con un
-resultado de clasificación (`COG`, `CCIF division`, etc.):
+resultado de clasificación (`COG`, `CCIF DIVISION`, etc.):
 
 - `incidencia_periodica` — incidencia periodo a periodo por genérico.
 - `incidencia_acumulada_anual` — enero..periodo vs diciembre del año anterior.
@@ -47,6 +47,7 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
     RANGOS_CANASTAS,
+    TIPO_INPC,
     ManifestDerivado,
     VersionCanasta,
 )
@@ -99,9 +100,10 @@ def _validar_entradas(
     canastas: dict[int, CanastaCanonica],
 ) -> None:
     tipo_inpc = str(df_inpc["tipo"].iloc[0])
-    if tipo_inpc != "inpc":
+    if tipo_inpc != TIPO_INPC:
         raise ErrorConfiguracion(
-            f"El primer argumento debe ser un resultado de tipo 'inpc', se recibió '{tipo_inpc}'."
+            f"El primer argumento debe ser un resultado de tipo '{TIPO_INPC}', "
+            f"se recibió '{tipo_inpc}'."
         )
     tipo_clas = str(df_clas["tipo"].iloc[0])
     if tipo_clas not in COLUMNAS_CLASIFICACION:

@@ -17,7 +17,7 @@ from replica_inpc.dominio.tipos import ManifestCalculo
 
 def _manifiesto(
     version: int = 2018,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     calculador: str = "LaspeyresDirecto",
 ) -> ManifestCalculo:
     return ManifestCalculo(
@@ -31,7 +31,7 @@ def _manifiesto(
 def _resultado(
     rows: list[tuple[Any, str, float | None, str, str | None]],
     version: int = 2018,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     periodo_referencia: Any = None,
 ) -> ResultadoIndice:
     """rows = list of (periodo, indice, valor, estado, motivo)."""
@@ -150,7 +150,7 @@ def test_empalmar_cadena_pares_con_fronteras() -> None:
 
 
 def test_empalmar_tipo_distinto_falla() -> None:
-    r_inpc = _resultado([(_p1, "INPC", 100.0, "ok", None)], tipo="inpc")
+    r_inpc = _resultado([(_p1, "INPC", 100.0, "ok", None)], tipo="INPC")
     r_cog = _resultado([(_p3, "Alimentos", 100.0, "ok", None)], tipo="COG")
     with pytest.raises(InvarianteViolado):
         empalmar([r_inpc, r_cog])
@@ -214,12 +214,12 @@ def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
     r_2018 = _resultado(
         [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
         [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     out = empalmar([r_2018, r_2024])  # version_nombres=None → max=2024
     indices_df = set(out.df.index.get_level_values("indice"))
@@ -233,12 +233,12 @@ def test_empalmar_version_nombres_explicito_2024() -> None:
     r_2018 = _resultado(
         [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
         [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     out = empalmar([r_2024, r_2018], version_nombres=2024)
     assert set(out.df.index.get_level_values("indice")) == {"informacion y comunicacion"}
@@ -249,12 +249,12 @@ def test_empalmar_version_nombres_explicito_2018_invierte() -> None:
     r_2018 = _resultado(
         [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
         [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     out = empalmar([r_2018, r_2024], version_nombres=2018)
     assert set(out.df.index.get_level_values("indice")) == {"comunicaciones"}
@@ -299,12 +299,12 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
     r_2018 = _resultado(
         [(_p1, "comunicaciones", 100.0, "ok", None), (_p3, "comunicaciones", 108.0, "ok", None)],
         version=2018,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
         [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
         version=2024,
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
     )
     intermedio = empalmar([r_2018, r_2024])
     # Después de empalmar, nomenclatura=2024. Todas las filas tienen índice
@@ -391,7 +391,7 @@ def test_rebasar_nan_con_estado_ok_inconsistente_falla() -> None:
                 "periodo": _r1,
                 "indice": "INPC",
                 "version": 2018,
-                "tipo": "inpc",
+                "tipo": "INPC",
                 "indice_replicado": 120.0,
                 "estado_calculo": "ok",
                 "motivo_error": None,
@@ -400,7 +400,7 @@ def test_rebasar_nan_con_estado_ok_inconsistente_falla() -> None:
                 "periodo": _r2,
                 "indice": "INPC",
                 "version": 2018,
-                "tipo": "inpc",
+                "tipo": "INPC",
                 "indice_replicado": float("nan"),
                 "estado_calculo": "ok",
                 "motivo_error": None,
@@ -520,7 +520,7 @@ def test_a_mensual_version_de_2q_preferida() -> None:
                 "periodo": _q1,
                 "indice": "INPC",
                 "version": 2018,
-                "tipo": "inpc",
+                "tipo": "INPC",
                 "indice_replicado": 100.0,
                 "estado_calculo": "ok",
                 "motivo_error": None,
@@ -529,7 +529,7 @@ def test_a_mensual_version_de_2q_preferida() -> None:
                 "periodo": _q2,
                 "indice": "INPC",
                 "version": 2024,
-                "tipo": "inpc",
+                "tipo": "INPC",
                 "indice_replicado": 102.0,
                 "estado_calculo": "ok",
                 "motivo_error": None,

@@ -28,7 +28,7 @@ _M9 = PeriodoMensual(2099, 9)
 def _rv(
     data: dict[str, list[tuple[PeriodoMensual, float]]],
     *,
-    tipo: str = "inpc",
+    tipo: str = "INPC",
     clase: str = "periodica_mensual",
 ) -> ResultadoVariacion:
     rows = []

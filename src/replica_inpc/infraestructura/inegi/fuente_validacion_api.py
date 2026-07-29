@@ -12,14 +12,14 @@ from replica_inpc.dominio.errores import (
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 _INDICADORES_QUINCENALES: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910420",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910421",
         "no subyacente": "910424",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910422",
         "servicios": "910423",
         "agropecuarios": "910425",
@@ -28,14 +28,14 @@ _INDICADORES_QUINCENALES: dict[str, dict[str, str]] = {
 }
 
 _INDICADORES_MENSUALES: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910392",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910393",
         "no subyacente": "910396",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910394",
         "servicios": "910395",
         "agropecuarios": "910397",
@@ -44,14 +44,14 @@ _INDICADORES_MENSUALES: dict[str, dict[str, str]] = {
 }
 
 _VARIACIONES_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910399",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910400",
         "no subyacente": "910403",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910401",
         "servicios": "910402",
         "agropecuarios": "910404",
@@ -60,14 +60,14 @@ _VARIACIONES_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
 }
 
 _VARIACIONES_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910406",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910407",
         "no subyacente": "910410",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910408",
         "servicios": "910409",
         "agropecuarios": "910411",
@@ -76,14 +76,14 @@ _VARIACIONES_INTERANUAL_MENSUAL: dict[str, dict[str, str]] = {
 }
 
 _VARIACIONES_ACUMULADA_ANUAL_MENSUAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910413",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910414",
         "no subyacente": "910417",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910415",
         "servicios": "910416",
         "agropecuarios": "910418",
@@ -98,14 +98,14 @@ _VARIACIONES_POR_TIPO_MENSUAL: dict[str, dict[str, dict[str, str]]] = {
 }
 
 _VARIACIONES_PERIODICA_QUINCENAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910427",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910428",
         "no subyacente": "910431",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910429",
         "servicios": "910430",
         "agropecuarios": "910432",
@@ -114,14 +114,14 @@ _VARIACIONES_PERIODICA_QUINCENAL: dict[str, dict[str, str]] = {
 }
 
 _VARIACIONES_INTERANUAL_QUINCENAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910438",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910439",
         "no subyacente": "910442",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910440",
         "servicios": "910441",
         "agropecuarios": "910443",
@@ -130,14 +130,14 @@ _VARIACIONES_INTERANUAL_QUINCENAL: dict[str, dict[str, str]] = {
 }
 
 _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "910445",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "910446",
         "no subyacente": "910449",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "910447",
         "servicios": "910448",
         "agropecuarios": "910450",
@@ -146,14 +146,14 @@ _VARIACIONES_ACUMULADA_ANUAL_QUINCENAL: dict[str, dict[str, str]] = {
 }
 
 _INCIDENCIAS_PERIODICA_MENSUAL: dict[str, dict[str, str]] = {
-    "inpc": {
+    "INPC": {
         "INPC": "909281",
     },
-    "inflacion componente": {
+    "INFLACION COMPONENTE": {
         "subyacente": "909282",
         "no subyacente": "909290",
     },
-    "inflacion subcomponente": {
+    "INFLACION SUBCOMPONENTE": {
         "mercancias": "909283",
         "servicios": "909286",
         "agropecuarios": "909291",

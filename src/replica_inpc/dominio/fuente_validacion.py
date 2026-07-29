@@ -11,7 +11,7 @@ class FuenteValidacion(Protocol):
     """Contrato para obtener series publicadas por INEGI para validación.
 
     Cubre tres tipos de dato: niveles de índice, variaciones e incidencias.
-    El `tipo` (`"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`)
+    El `tipo` (`"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"`)
     se fija en el constructor del implementador, no en el método.
 
     Implementado por `infraestructura/inegi/fuente_validacion_api.py`

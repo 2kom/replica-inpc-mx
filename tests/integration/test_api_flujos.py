@@ -34,7 +34,7 @@ def test_calcular_historia_defaults_sin_argumentos_extra() -> None:
 def test_calcular_historia_2018_standalone_quincenal() -> None:
     resultado = rep.calcular_historia(
         [(2018, _CANASTA_2018, _SERIE_2018)],
-        tipo="inpc",
+        tipo="INPC",
         referencia="2q jul 2018",
         periodicidad="quincenal",
     )
@@ -60,7 +60,7 @@ def test_calcular_historia_smoke_pipeline_completo() -> None:
     # Variación y consulta sobre el resultado del flujo orquestado.
     resultado = rep.calcular_historia(
         [(2018, _CANASTA_2018, _SERIE_2018)],
-        tipo="inpc",
+        tipo="INPC",
         referencia="2Q Jul 2018",
         periodicidad="quincenal",
     )

@@ -10,10 +10,10 @@ _GENERICOS = ("arroz", "frijol", "leche", "huevo")
 _PONDERADORES = ("10.0", "20.0", "30.0", "40.0")
 _COLUMNAS_CORE = (
     "COG",
-    "inflacion componente",
-    "inflacion subcomponente",
-    "inflacion agrupacion",
-    "canasta basica",
+    "INFLACION COMPONENTE",
+    "INFLACION SUBCOMPONENTE",
+    "INFLACION AGRUPACION",
+    "CANASTA BASICA",
 )
 
 

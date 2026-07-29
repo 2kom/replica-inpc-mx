@@ -53,7 +53,7 @@ def _canasta_comp(version: int = 2018) -> CanastaCanonica:
         {
             "ponderador": ["60.0", "40.0"],
             "encadenamiento": [float("nan"), float("nan")],
-            "inflacion componente": ["A", "B"],
+            "INFLACION COMPONENTE": ["A", "B"],
         },
         index=pd.Index(["gen_a", "gen_b"], name="generico"),
     )
@@ -66,7 +66,7 @@ def _canasta_solo_a(version: int) -> CanastaCanonica:
         {
             "ponderador": ["100.0"],
             "encadenamiento": [float("nan")],
-            "inflacion componente": ["A"],
+            "INFLACION COMPONENTE": ["A"],
         },
         index=pd.Index(["gen_a"], name="generico"),
     )
@@ -79,7 +79,7 @@ def _canasta_ccif(categoria: str, version: int) -> CanastaCanonica:
         {
             "ponderador": ["100.0"],
             "encadenamiento": [float("nan")],
-            "CCIF division": [categoria],
+            "CCIF DIVISION": [categoria],
         },
         index=pd.Index(["gen_a"], name="generico"),
     )
@@ -183,7 +183,7 @@ def test_directo_indice_incidencia_igual_replicado() -> None:
     serie = SerieNormalizada(
         pd.DataFrame({"gen_a": [100.0, 110.0], "gen_b": [100.0, 90.0]}, index=[_Q1, _Q2]).T
     )
-    largo = LaspeyresDirecto().calcular(can, serie, "inpc")._completo
+    largo = LaspeyresDirecto().calcular(can, serie, "INPC")._completo
     assert (largo["indice_incidencia"] == largo["indice_replicado"]).all()
 
 
@@ -191,7 +191,7 @@ def test_t2_indice_incidencia_es_i_tramo() -> None:
     ref = 134.471
     largo = (
         LaspeyresEncadenadoT2({"INPC": ref})
-        .calcular(_canasta_t2(), _serie_t2(), "inpc")
+        .calcular(_canasta_t2(), _serie_t2(), "INPC")
         ._completo
     )
     # i_tramo en el traslape == 100 (serie/f_k = 100 por construcción T2)
@@ -210,7 +210,7 @@ def test_a_mensual_promedia_indice_incidencia() -> None:
     r = _res_inc(
         {"INPC": [(_Q1, 150.0), (_Q2, 153.0)]},
         {"INPC": [(_Q1, 100.0), (_Q2, 102.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
         version=2024,
     )
@@ -224,7 +224,7 @@ def test_rebasar_no_toca_indice_incidencia() -> None:
     r = _res_inc(
         {"INPC": [(_Q1, 150.0), (_Q2, 300.0)]},
         {"INPC": [(_Q1, 90.0), (_Q2, 180.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
         version=2024,
     )
@@ -244,14 +244,14 @@ def test_empalmar_preserva_indice_incidencia() -> None:
     tramo_a = _res_inc(
         {"INPC": [(p1, 150.0), (p2, 153.0)]},
         {"INPC": [(p1, 100.0), (p2, 102.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="a",
         version=2024,
     )
     tramo_b = _res_inc(
         {"INPC": [(p2, 153.0), (p3, 156.0)]},
         {"INPC": [(p2, 102.0), (p3, 104.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="b",
         version=2024,
     )
@@ -268,7 +268,7 @@ def _inpc_within() -> ResultadoIndice:
     return _res_inc(
         {"INPC": [(_DIC18, 130.0), (_ENE, 132.6)]},
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
 
@@ -278,7 +278,7 @@ def _clas_within() -> ResultadoIndice:
     return _res_inc(
         {"A": [(_DIC18, 150.0), (_ENE, 165.0)], "B": [(_DIC18, 200.0), (_ENE, 180.0)]},
         {"A": [(_DIC18, 100.0), (_ENE, 110.0)], "B": [(_DIC18, 100.0), (_ENE, 90.0)]},
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
 
@@ -316,7 +316,7 @@ def test_cross_canasta_detectable_y_usa_visible() -> None:
     # ENE en 2018, FEB en 2024 → la comparación FEB vs ENE cruza canastas.
     inpc = _res_multi(
         [(_ENE, "INPC", 2018, 100.0, 100.0, "ok"), (_FEB, "INPC", 2024, 142.0, 100.0, "ok")],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     clas = _res_multi(
@@ -326,7 +326,7 @@ def test_cross_canasta_detectable_y_usa_visible() -> None:
             (_ENE, "B", 2018, 100.0, 100.0, "ok"),
             (_FEB, "B", 2024, 142.0, 100.0, "ok"),
         ],
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
     canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
@@ -351,7 +351,7 @@ def test_frontera_version_mixta_detecta_por_fila_no_por_periodo() -> None:
     mar = PeriodoMensual(2024, 3)
     inpc = _res_multi(
         [(feb, "INPC", 2024, 100.0, 100.0, "ok"), (mar, "INPC", 2024, 102.0, 102.0, "ok")],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     clas = _res_multi(
@@ -361,7 +361,7 @@ def test_frontera_version_mixta_detecta_por_fila_no_por_periodo() -> None:
             (mar, "A", 2024, 101.0, 101.0, "ok"),
             (mar, "B", 2024, 104.0, 104.0, "ok"),
         ],
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
     canastas = {2018: _canasta_solo_a(2018), 2024: _canasta_comp(2024)}
@@ -377,19 +377,19 @@ def test_cross_canasta_renombre_alinea_ponderador() -> None:
     # (2024), pero el ponderador 2018 se indexa con el nombre NATIVO. Sin alinear vocabularios
     # la fila cross (base 2018) caería como "sin ponderador". El fix renombra el ponderador
     # al vocabulario canónico antes de buscarlo.
-    mapa = _construir_mapa_renombre("CCIF division", 2018, 2024)
+    mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
     nativo_2018, canonico = next((k, v) for k, v in mapa.items() if k != v)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)
     inpc = _res_multi(
         [(feb, "INPC", 2018, 100.0, 100.0, "ok"), (mar, "INPC", 2024, 102.0, 102.0, "ok")],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     # clasificación ya normalizada al nombre canónico; versiones mixtas frontera/post
     clas = _res_multi(
         [(feb, canonico, 2018, 100.0, 100.0, "ok"), (mar, canonico, 2024, 104.0, 104.0, "ok")],
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
         id_corrida="cc",
     )
     canastas = {2018: _canasta_ccif(nativo_2018, 2018), 2024: _canasta_ccif(canonico, 2024)}
@@ -405,13 +405,13 @@ def test_vc_inferido_soporta_version_nombres_no_max() -> None:
     # nombres de índice son los NATIVOS de 2018 aunque haya filas versión 2024. `vc` NO puede
     # inferirse como max(version)=2024; se infiere como la versión cuyos nombres caben en su
     # canasta nativa (2018). Si fallara, la fila cross caería como "sin ponderador".
-    mapa = _construir_mapa_renombre("CCIF division", 2018, 2024)
+    mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
     nativo_2018, nativo_2024 = next((k, v) for k, v in mapa.items() if k != v)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)
     inpc = _res_multi(
         [(feb, "INPC", 2018, 100.0, 100.0, "ok"), (mar, "INPC", 2024, 102.0, 102.0, "ok")],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     # vocabulario 2018: nombre nativo_2018 incluso en la fila versión 2024
@@ -420,7 +420,7 @@ def test_vc_inferido_soporta_version_nombres_no_max() -> None:
             (feb, nativo_2018, 2018, 100.0, 100.0, "ok"),
             (mar, nativo_2018, 2024, 104.0, 104.0, "ok"),
         ],
-        tipo="CCIF division",
+        tipo="CCIF DIVISION",
         id_corrida="cc",
     )
     canastas = {2018: _canasta_ccif(nativo_2018, 2018), 2024: _canasta_ccif(nativo_2024, 2024)}
@@ -432,7 +432,7 @@ def test_periodica_verifica_periodo_referencia() -> None:
     inpc = _res_inc(
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0)]},
         {"INPC": [(_DIC18, 100.0), (_ENE, 102.0)]},
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
         periodo_referencia=_ENE,
     )
@@ -485,7 +485,7 @@ def _inpc_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndi
     filas = [(b, "INPC", 2018, 102.0, 102.0, "ok"), (t, "INPC", 2024, 105.04, 101.0, "ok")]
     if e is not None:
         filas.insert(1, (e, "INPC", 2018, 104.0, 104.0, "ok"))
-    return _res_multi(filas, tipo="inpc", id_corrida="ci")
+    return _res_multi(filas, tipo="INPC", id_corrida="ci")
 
 
 def _clas_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
@@ -498,7 +498,7 @@ def _clas_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndi
     ]
     if e is not None:
         filas[2:2] = [(e, "A", 2018, 120.0, 120.0, "ok"), (e, "B", 2018, 80.0, 80.0, "ok")]
-    return _res_multi(filas, tipo="inflacion componente", id_corrida="cc")
+    return _res_multi(filas, tipo="INFLACION COMPONENTE", id_corrida="cc")
 
 
 def test_cross_segmentado_quincenal_es_aditivo() -> None:
@@ -612,7 +612,7 @@ def test_cross_tres_segmentos_aditivo() -> None:
             (e2, "INPC", 2018, 108.16, 104.0, "ok"),  # vis = 104 * 1.04
             (t, "INPC", 2024, 109.2416, 101.0, "ok"),  # vis = 101 * 1.0816
         ],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     clas = _res_multi(
@@ -626,7 +626,7 @@ def test_cross_tres_segmentos_aditivo() -> None:
             (t, "A", 2024, 113.568, 105.0, "ok"),  # 105 * 1.0816
             (t, "B", 2024, 102.752, 95.0, "ok"),
         ],
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
     canastas = {2013: _canasta_comp(2013), 2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
@@ -654,7 +654,7 @@ def test_cross_t1_diferido_cruza_2010_2013() -> None:
             (e, "INPC", 2010, 104.0, 104.0, "ok"),
             (t, "INPC", 2013, 105.04, 101.0, "ok"),
         ],
-        tipo="inpc",
+        tipo="INPC",
         id_corrida="ci",
     )
     clas = _res_multi(
@@ -666,7 +666,7 @@ def test_cross_t1_diferido_cruza_2010_2013() -> None:
             (t, "A", 2013, 109.2, 105.0, "ok"),
             (t, "B", 2013, 98.8, 95.0, "ok"),
         ],
-        tipo="inflacion componente",
+        tipo="INFLACION COMPONENTE",
         id_corrida="cc",
     )
     canastas = {2010: _canasta_comp(2010), 2013: _canasta_comp(2013)}
@@ -685,7 +685,7 @@ def _canasta_cb(version: int) -> CanastaCanonica:
         {
             "ponderador": ["60.0", "40.0"],
             "encadenamiento": [float("nan"), float("nan")],
-            "canasta basica": ["dentro", "fuera"],
+            "CANASTA BASICA": ["dentro", "fuera"],
         },
         index=pd.Index(["gen_a", "gen_b"], name="generico"),
     )
@@ -697,7 +697,7 @@ def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
     # segmentación exacta, no solo componente/subcomponente. 'canasta basica' es content-exact
     # con los CSV reales → cross_segmentado. (Sin indicador BIE; exactitud algebraica.)
     canastas = {2018: _canasta_cb(2018), 2024: _canasta_cb(2024)}
-    assert _es_content_exact("canasta basica", canastas) is True
+    assert _es_content_exact("CANASTA BASICA", canastas) is True
     inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
     clas = _res_multi(
         [
@@ -708,7 +708,7 @@ def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
             (_T_Q, "dentro", 2024, 109.2, 105.0, "ok"),
             (_T_Q, "fuera", 2024, 98.8, 95.0, "ok"),
         ],
-        tipo="canasta basica",
+        tipo="CANASTA BASICA",
         id_corrida="cc",
     )
     res = incidencia_desde(inpc, clas, canastas, desde=_B_Q, hasta=_T_Q)
@@ -727,7 +727,7 @@ def test_cross_visible_no_content_exact() -> None:
             {
                 "ponderador": ["60.0", "40.0"],
                 "encadenamiento": [None, None],
-                "SCIAN rama": ["X", "Y"],
+                "SCIAN RAMA": ["X", "Y"],
             },
             index=["g1", "g2"],
         ),
@@ -738,13 +738,13 @@ def test_cross_visible_no_content_exact() -> None:
             {
                 "ponderador": ["60.0", "40.0"],
                 "encadenamiento": [None, None],
-                "SCIAN rama": ["Y", "X"],
+                "SCIAN RAMA": ["Y", "X"],
             },
             index=["g1", "g2"],  # g1 cruza X→Y: NO content-exact
         ),
         2024,
     )
-    assert _es_content_exact("SCIAN rama", {2018: can2018, 2024: can2024}) is False
+    assert _es_content_exact("SCIAN RAMA", {2018: can2018, 2024: can2024}) is False
     inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
     clas = _res_multi(
         [
@@ -752,7 +752,7 @@ def test_cross_visible_no_content_exact() -> None:
             (_E24, "X", 2018, 120.0, 120.0, "ok"),
             (_T_Q, "X", 2024, 109.2, 105.0, "ok"),
         ],
-        tipo="SCIAN rama",
+        tipo="SCIAN RAMA",
         id_corrida="cc",
     )
     res = incidencia_desde(inpc, clas, {2018: can2018, 2024: can2024}, desde=_B_Q, hasta=_T_Q)
@@ -761,14 +761,14 @@ def test_cross_visible_no_content_exact() -> None:
 
 def test_es_content_exact_componente_true() -> None:
     canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
-    assert _es_content_exact("inflacion componente", canastas) is True
+    assert _es_content_exact("INFLACION COMPONENTE", canastas) is True
 
 
 def test_es_content_exact_categoria_distinta_false() -> None:
     # conjunto de categorías distinto entre versiones → no content-exact.
     can2018 = _canasta_comp(2018)  # {A, B}
     can2024 = _canasta_solo_a(2024)  # {A}
-    assert _es_content_exact("inflacion componente", {2018: can2018, 2024: can2024}) is False
+    assert _es_content_exact("INFLACION COMPONENTE", {2018: can2018, 2024: can2024}) is False
 
 
 def test_segmentos_entre_dos_y_tres_segmentos() -> None:

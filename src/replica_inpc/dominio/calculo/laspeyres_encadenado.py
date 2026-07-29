@@ -19,8 +19,8 @@ from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.tipos import (
     COLUMNAS_CLASIFICACION,
-    INDICE_POR_TIPO,
     RANGOS_CANASTAS,
+    TIPO_INPC,
     ManifestCalculo,
     VersionCanasta,
 )
@@ -212,9 +212,9 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                 f"{self._CALCULADOR_NOMBRE} requiere canasta.version="
                 f"{self._VERSION_ESPERADA}; recibió {canasta.version}"
             )
-        if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
+        if tipo != TIPO_INPC and tipo not in COLUMNAS_CLASIFICACION:
             raise InvarianteViolado(
-                f"tipo='{tipo}' no está en INDICE_POR_TIPO ni en COLUMNAS_CLASIFICACION"
+                f"tipo='{tipo}' no es '{TIPO_INPC}' ni está en COLUMNAS_CLASIFICACION"
             )
         if tipo in COLUMNAS_CLASIFICACION and canasta.df[tipo].dropna().empty:
             raise InvarianteViolado(
@@ -223,8 +223,8 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
                 "clasificaciones aplican a cada versión (docs/diseño.md §5.4)."
             )
 
-        if tipo in INDICE_POR_TIPO:
-            indice = INDICE_POR_TIPO[tipo]
+        if tipo == TIPO_INPC:
+            indice = tipo
             df_s_raw = _recortar_al_rango(serie.df, canasta.version)
             df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
                 df_s_raw, canasta.version, tipo

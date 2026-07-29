@@ -30,7 +30,7 @@ def _serie_con_nan() -> SerieNormalizada:
 
 def test_periodo_con_nan_rellenable_marca_rellenado() -> None:
     # arroz NaN en 1Q Aug — fillable via ffill desde 2Q Jul
-    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "INPC")
     p_nan = _periodos[1]
     fila = r.resultado.largo.loc[(p_nan, "INPC")]
     assert fila["estado_calculo"] == "rellenado"
@@ -38,7 +38,7 @@ def test_periodo_con_nan_rellenable_marca_rellenado() -> None:
 
 
 def test_periodo_sin_nan_es_ok() -> None:
-    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "INPC")
     p_ok = _periodos[0]
     fila = r.resultado.largo.loc[(p_ok, "INPC")]
     assert fila["estado_calculo"] == "ok"
@@ -47,7 +47,7 @@ def test_periodo_sin_nan_es_ok() -> None:
 
 def test_reporte_cobertura_correcta() -> None:
     # Después de relleno, arroz tiene dato → cobertura 100%
-    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "INPC")
     p_nan = _periodos[1]
     fila_rep = r.reporte.loc[(p_nan, "INPC")]
     assert fila_rep["genericos_esperados"] == 2
@@ -60,12 +60,12 @@ def test_reporte_cobertura_correcta() -> None:
 
 def test_diagnostico_lista_faltante() -> None:
     # NaN rellenado → tipo_faltante="rellenado", no "indice"
-    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), _serie_con_nan(), "INPC")
     diag = r.diagnostico
     assert len(diag) == 1
     fila = diag.iloc[0]
     assert fila["version"] == 2018
-    assert fila["tipo"] == "inpc"
+    assert fila["tipo"] == "INPC"
     assert fila["generico"] == "arroz"
     assert fila["periodo"] == _periodos[1]
     assert fila["tipo_faltante"] == "rellenado"
@@ -74,7 +74,7 @@ def test_diagnostico_lista_faltante() -> None:
 def test_diagnostico_vacio_cuando_serie_completa() -> None:
     df = pd.DataFrame({"arroz": [100.0, 101.0], "frijol": [100.0, 102.0]}, index=_periodos).T
     serie = SerieNormalizada(df)
-    r = LaspeyresDirecto().calcular(_canasta(), serie, "inpc")
+    r = LaspeyresDirecto().calcular(_canasta(), serie, "INPC")
     assert len(r.diagnostico) == 0
     assert list(r.diagnostico.columns) == [
         "version",
