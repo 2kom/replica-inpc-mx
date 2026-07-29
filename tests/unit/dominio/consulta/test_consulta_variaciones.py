@@ -46,7 +46,7 @@ def _rv(
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        id_corrida=["c1"], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018], tipo=tipo, clase=clase, descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     return ResultadoVariacion(df, manifiesto, pd.DataFrame(), pd.DataFrame())

@@ -125,7 +125,7 @@ def test_periodica_fuente_sin_datos_ausente_y_en_reporte() -> None:
 def test_periodica_manifiesto_y_diagnostico() -> None:
     indice = _indice({"INPC": [(_Q1, 100.0), (_Q2, 103.0), (_Q3, None), (_Q4, 109.0)]})
     r = variacion_periodica(indice, "quincenal")
-    assert r.manifiesto.id_corrida == ["inpc:2018"]
+    assert r.manifiesto.versiones == [2018]
     assert len(r.diagnostico) == 3
     assert r.indices_parciales is None
 

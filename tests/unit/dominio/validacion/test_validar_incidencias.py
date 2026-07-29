@@ -42,7 +42,7 @@ def _ri(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        id_corrida=["ci", "cc"], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018, 2018], tipo=tipo, clase=clase, descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     reporte = pd.DataFrame(
@@ -139,7 +139,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        id_corrida=["ci", "cc"], tipo="inflacion componente",
+        versiones=[2018, 2018], tipo="inflacion componente",
         clase="periodica_mensual", descripcion="", fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())

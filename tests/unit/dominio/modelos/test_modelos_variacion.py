@@ -18,7 +18,7 @@ def _manifiesto(
     descripcion: str = "",
 ) -> ManifestDerivado:
     return ManifestDerivado(
-        id_corrida=["c1"],
+        versiones=[2024],
         tipo=tipo,
         clase=clase,
         descripcion=descripcion,

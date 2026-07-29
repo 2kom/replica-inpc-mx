@@ -44,7 +44,12 @@ from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import COLUMNAS_CLASIFICACION, RANGOS_CANASTAS, ManifestDerivado
+from replica_inpc.dominio.tipos import (
+    COLUMNAS_CLASIFICACION,
+    RANGOS_CANASTAS,
+    ManifestDerivado,
+    VersionCanasta,
+)
 
 Periodo = PeriodoQuincenal | PeriodoMensual
 
@@ -65,7 +70,7 @@ _COLS_REPORTE = [
     "cobertura_pct_lag",
 ]
 _COLS_DIAGNOSTICO = [
-    "id_corrida",
+    "versiones",
     "tipo",
     "clase_incidencia",
     "periodo",
@@ -475,8 +480,8 @@ def _construir_resultado(
     descartan de `df_out` (siguen visibles en `reporte`).
     """
     tipo_clas = str(df_emitir["tipo"].iloc[0])
-    ids_inpc = [f"{m.tipo}:{m.version}" for m in inpc.manifiesto]
-    ids_clas = [f"{m.tipo}:{m.version}" for m in clasificacion.manifiesto]
+    versiones_inpc: list[VersionCanasta] = [m.version for m in inpc.manifiesto]
+    versiones_clas: list[VersionCanasta] = [m.version for m in clasificacion.manifiesto]
 
     # El resultado de clasificación ya viene normalizado al vocabulario canónico `vc` que usó
     # empalmar. Los ponderadores se indexan con el nombre NATIVO de cada canasta, así que se
@@ -655,13 +660,13 @@ def _construir_resultado(
         inpc_base_serie,
         derivado,
         computable,
-        ids_inpc + ids_clas,
+        versiones_inpc + versiones_clas,
         tipo_clas,
         clase,
         metodo,
     )
     manifiesto = ManifestDerivado(
-        id_corrida=ids_inpc + ids_clas,
+        versiones=versiones_inpc + versiones_clas,
         tipo=tipo_clas,
         clase=clase,
         descripcion=descripcion,
@@ -696,7 +701,7 @@ def _construir_reporte_diagnostico(
     inpc_base_serie: pd.Series,
     derivado: pd.Series,
     computable: pd.Series,
-    ids: list[str],
+    versiones: list[VersionCanasta],
     tipo: str,
     clase: str,
     metodo: np.ndarray,
@@ -748,7 +753,7 @@ def _construir_reporte_diagnostico(
     no_computable = ~computable
     diagnostico_df = pd.DataFrame(
         {
-            "id_corrida": ",".join(ids),
+            "versiones": ",".join(str(v) for v in versiones),
             "tipo": tipo,
             "clase_incidencia": clase,
             "periodo": df_emitir.index.get_level_values("periodo"),

@@ -27,7 +27,7 @@ from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestDerivado
+from replica_inpc.dominio.tipos import ManifestDerivado, VersionCanasta
 
 Periodo = PeriodoQuincenal | PeriodoMensual
 
@@ -43,7 +43,7 @@ _COLS_REPORTE = [
     "cobertura_pct_lag",
 ]
 _COLS_DIAGNOSTICO = [
-    "id_corrida",
+    "versiones",
     "tipo",
     "clase_variacion",
     "periodo",
@@ -126,7 +126,7 @@ def _calcular_con_base(
     `base_de` mapea cada periodo `t` a su periodo base.
     """
     largo = resultado.resultado.largo
-    ids = [f"{m.tipo}:{m.version}" for m in resultado.manifiesto]
+    versiones: list[VersionCanasta] = [m.version for m in resultado.manifiesto]
     tipo = str(largo["tipo"].iloc[0])
 
     indices_lvl = largo.index.get_level_values("indice")
@@ -173,12 +173,12 @@ def _calcular_con_base(
         base_idx,
         derivado,
         computable,
-        ids,
+        versiones,
         tipo,
         clase,
     )
     manifiesto = ManifestDerivado(
-        id_corrida=ids,
+        versiones=versiones,
         tipo=tipo,
         clase=clase,
         descripcion=descripcion,
@@ -197,7 +197,7 @@ def _construir_reporte_diagnostico(
     base_idx: pd.MultiIndex,
     derivado: pd.Series,
     computable: pd.Series,
-    ids: list[str],
+    versiones: list[VersionCanasta],
     tipo: str,
     clase: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -238,7 +238,7 @@ def _construir_reporte_diagnostico(
     no_computable = ~computable
     diagnostico_df = pd.DataFrame(
         {
-            "id_corrida": ",".join(ids),
+            "versiones": ",".join(str(v) for v in versiones),
             "tipo": tipo,
             "clase_variacion": clase,
             "periodo": largo.index.get_level_values("periodo"),
@@ -269,7 +269,7 @@ def variacion_desde(
     registra en `indices_parciales`.
     """
     largo = resultado.resultado.largo
-    ids = [f"{m.tipo}:{m.version}" for m in resultado.manifiesto]
+    versiones_manifiesto: list[VersionCanasta] = [m.version for m in resultado.manifiesto]
     tipo = str(largo["tipo"].iloc[0])
 
     periodos_todos = sorted(set(largo.index.get_level_values("periodo")))
@@ -289,7 +289,7 @@ def variacion_desde(
     versiones = largo["version"]
     cobertura = _cobertura(resultado.reporte)
     indices = sorted(set(largo.index.get_level_values("indice")))
-    id_corrida_str = ",".join(ids)
+    versiones_str = ",".join(str(v) for v in versiones_manifiesto)
 
     filas_df: list[dict[str, object]] = []
     filas_rep: list[dict[str, object]] = []
@@ -322,7 +322,7 @@ def variacion_desde(
             )
             filas_diag.append(
                 {
-                    "id_corrida": id_corrida_str,
+                    "versiones": versiones_str,
                     "tipo": tipo,
                     "clase_variacion": "desde",
                     "periodo": hasta_efectivo,
@@ -398,7 +398,7 @@ def variacion_desde(
     ).set_index("indice")
 
     manifiesto = ManifestDerivado(
-        id_corrida=ids,
+        versiones=versiones_manifiesto,
         tipo=tipo,
         clase="desde",
         descripcion=f"desde {desde} hasta {hasta_efectivo}",

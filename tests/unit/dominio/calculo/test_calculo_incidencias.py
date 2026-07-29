@@ -135,7 +135,7 @@ def test_periodica_indices_parciales_none() -> None:
 
 def test_periodica_manifiesto_ids() -> None:
     r = incidencia_periodica(_inpc(), _clas(), _canastas(), "mensual")
-    assert r.manifiesto.id_corrida == ["inpc:2018", "inflacion componente:2018"]
+    assert r.manifiesto.versiones == [2018, 2018]
 
 
 def test_periodica_estado_parcial_propagado() -> None:

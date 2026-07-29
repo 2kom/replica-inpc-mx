@@ -52,7 +52,7 @@ class ManifestCalculo:
 
 @dataclass
 class ManifestDerivado:
-    id_corrida: list[str]
+    versiones: list[VersionCanasta]
     tipo: str
     clase: str
     descripcion: str

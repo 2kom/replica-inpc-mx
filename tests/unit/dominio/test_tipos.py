@@ -117,7 +117,7 @@ def test_manifest_calculo_rutas_y_fecha_por_defecto() -> None:
 def test_manifest_derivado_clase_vacia_falla() -> None:
     with pytest.raises(InvarianteViolado):
         ManifestDerivado(
-            id_corrida=["x"],
+            versiones=[2018],
             tipo="inpc",
             clase="",
             descripcion="",
@@ -127,6 +127,6 @@ def test_manifest_derivado_clase_vacia_falla() -> None:
 
 def test_manifest_derivado_fecha_por_defecto() -> None:
     antes = datetime.now()
-    m = ManifestDerivado(id_corrida=["x"], tipo="inpc", clase="periodica_mensual", descripcion="")
+    m = ManifestDerivado(versiones=[2018], tipo="inpc", clase="periodica_mensual", descripcion="")
     despues = datetime.now()
     assert antes <= m.fecha <= despues

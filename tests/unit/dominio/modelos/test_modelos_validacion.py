@@ -34,7 +34,7 @@ def _manif_calculo(tipo: str = "inpc", version: int = 2018) -> ManifestCalculo:
 
 def _manif_derivado(tipo: str = "inpc", clase: str = "periodica_mensual") -> ManifestDerivado:
     return ManifestDerivado(
-        id_corrida=["c1"],
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",

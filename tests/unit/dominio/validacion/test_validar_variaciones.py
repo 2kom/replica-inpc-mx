@@ -42,7 +42,7 @@ def _rv(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        id_corrida=["c1"], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018], tipo=tipo, clase=clase, descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     reporte = pd.DataFrame(
@@ -140,7 +140,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        id_corrida=["c1"], tipo="inpc", clase="periodica_mensual", descripcion="",
+        versiones=[2018], tipo="inpc", clase="periodica_mensual", descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoVariacion(df, manifiesto, reporte, pd.DataFrame())
