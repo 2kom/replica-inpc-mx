@@ -93,8 +93,8 @@ class LaspeyresDirecto(CalculadorBase):
         tipo: str,
         ruta_canasta: Path | None = None,
         ruta_series: Path | None = None,
-        fecha: datetime | None = None,
     ) -> ResultadoIndice:
+        fecha = datetime.now()
         if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
             raise InvarianteViolado(
                 f"tipo='{tipo}' no está en INDICE_POR_TIPO ni en COLUMNAS_CLASIFICACION"
@@ -241,6 +241,6 @@ class LaspeyresDirecto(CalculadorBase):
             calculador="LaspeyresDirecto",
             ruta_canasta=ruta_canasta,
             ruta_series=ruta_series,
-            fecha=fecha if fecha is not None else datetime.now(),
+            fecha=fecha,
         )
         return ResultadoIndice(df_calc, [manifiesto], df_reporte, df_diag)

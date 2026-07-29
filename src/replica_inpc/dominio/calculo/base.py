@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -98,7 +97,6 @@ class CalculadorBase(ABC):
         tipo: str,
         ruta_canasta: Path | None = None,
         ruta_series: Path | None = None,
-        fecha: datetime | None = None,
     ) -> ResultadoIndice:
         """Calcula `ResultadoIndice` para una canasta y serie dadas."""
 

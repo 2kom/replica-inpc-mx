@@ -205,8 +205,8 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         tipo: str,
         ruta_canasta: Path | None = None,
         ruta_series: Path | None = None,
-        fecha: datetime | None = None,
     ) -> ResultadoIndice:
+        fecha = datetime.now()
         if canasta.version != self._VERSION_ESPERADA:
             raise InvarianteViolado(
                 f"{self._CALCULADOR_NOMBRE} requiere canasta.version="
@@ -357,7 +357,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             calculador=self._CALCULADOR_NOMBRE,
             ruta_canasta=ruta_canasta,
             ruta_series=ruta_series,
-            fecha=fecha if fecha is not None else datetime.now(),
+            fecha=fecha,
         )
         return ResultadoIndice(df_calc, [manifiesto], df_reporte, df_diag)
 
