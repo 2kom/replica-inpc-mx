@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import cast
 
+import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -11,13 +13,13 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 
-def _rellenar_faltantes(
+def _rellenar_dato_serie_faltante(
     df_serie: pd.DataFrame,
     version: VersionCanasta,
     tipo: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, set[object]]:
-    """Rellena NaN via bfill→ffill por fila. Retorna (df_rellenado, df_corr_relleno, periodos_rellenados)."""
-    columnas = [
+    """Rellena NaN vía bfill→ffill por fila; documenta cada relleno con su periodo fuente."""
+    columnas_diagnostico = [
         "version",
         "tipo",
         "periodo",
@@ -26,54 +28,63 @@ def _rellenar_faltantes(
         "tipo_faltante",
         "detalle",
     ]
-    mask_antes = df_serie.isna()
-    if not mask_antes.any(axis=None):
-        return df_serie, pd.DataFrame(columns=columnas), set()
+    mascara_faltante = df_serie.isna()
+    if not mascara_faltante.any(axis=None):
+        return df_serie, pd.DataFrame(columns=columnas_diagnostico), set()
 
-    df_rel = df_serie.bfill(axis=1).ffill(axis=1).infer_objects(copy=False)
-    mask_rel = mask_antes & df_rel.notna()
-    periodos_rellenados: set[object] = set(df_rel.columns[mask_rel.any(axis=0)])
+    df_serie_rellenada = df_serie.bfill(axis=1).ffill(axis=1).infer_objects(copy=False)
+    mascara_rellenada = mascara_faltante & df_serie_rellenada.notna()
+    periodos_rellenados: set[object] = set(
+        df_serie_rellenada.columns[mascara_rellenada.any(axis=0)]
+    )
 
-    cols_list = list(df_serie.columns)
-    filas = []
-    for generico in mask_rel.index:
-        for periodo in mask_rel.columns:
-            if not mask_rel.at[generico, periodo]:
-                continue
-            idx = cols_list.index(periodo)
-            fuente = None
-            for j in range(idx + 1, len(cols_list)):
-                if pd.notna(df_serie.at[generico, cols_list[j]]):
-                    fuente = cols_list[j]
-                    break
-            if fuente is None:
-                for j in range(idx - 1, -1, -1):
-                    if pd.notna(df_serie.at[generico, cols_list[j]]):
-                        fuente = cols_list[j]
-                        break
-            filas.append(
-                {
-                    "version": version,
-                    "tipo": tipo,
-                    "periodo": periodo,
-                    "generico": generico,
-                    "nivel_faltante": "periodo",
-                    "tipo_faltante": "rellenado",
-                    "detalle": f"NaN sustituido con valor de {fuente}",
-                }
-            )
+    # Ubica el periodo fuente de cada relleno propagando la ETIQUETA de columna
+    # (en vez del dato) con el mismo bfill→ffill: evita re-escanear columnas por
+    # celda rellenada (antes O(genéricos × rellenos × periodos), ahora vectorizado.
+    etiquetas_columna = pd.DataFrame(
+        np.tile(df_serie.columns.to_numpy(), (len(df_serie.index), 1)),
+        index=df_serie.index,
+        columns=df_serie.columns,
+    ).where(df_serie.notna())
+    periodo_fuente_adelante = etiquetas_columna.bfill(axis=1)
+    periodo_fuente_atras = etiquetas_columna.ffill(axis=1)
+    periodo_fuente = periodo_fuente_adelante.where(
+        periodo_fuente_adelante.notna(), periodo_fuente_atras
+    )
 
-    return df_rel, pd.DataFrame(filas, columns=columnas), periodos_rellenados
+    celdas_rellenadas = cast("pd.Series[bool]", mascara_rellenada.stack())
+    celdas_rellenadas = celdas_rellenadas[celdas_rellenadas]
+    if celdas_rellenadas.empty:
+        return df_serie_rellenada, pd.DataFrame(columns=columnas_diagnostico), periodos_rellenados
+
+    fuentes = periodo_fuente.stack().reindex(celdas_rellenadas.index)
+    diagnostico = pd.DataFrame(
+        {
+            "version": version,
+            "tipo": tipo,
+            "periodo": celdas_rellenadas.index.get_level_values(1),
+            "generico": celdas_rellenadas.index.get_level_values(0),
+            "nivel_faltante": "periodo",
+            "tipo_faltante": "rellenado",
+            "detalle": "NaN sustituido con valor de " + fuentes.astype(str),
+        },
+        columns=columnas_diagnostico,
+    )
+
+    return df_serie_rellenada, diagnostico, periodos_rellenados
 
 
-def _recortar_al_rango(df_serie: pd.DataFrame, version: VersionCanasta) -> pd.DataFrame:
-    inicio, fin = RANGOS_CANASTAS[version]
-    cols = [
-        p
-        for p in df_serie.columns
-        if isinstance(p, PeriodoQuincenal) and p >= inicio and (fin is None or p <= fin)
+def _recortar_series_fecha(df_serie: pd.DataFrame, version: VersionCanasta) -> pd.DataFrame:
+    """Recorta las columnas de periodo de la serie al rango vigente de la versión de canasta."""
+    periodo_inicio, periodo_fin = RANGOS_CANASTAS[version]
+    columnas_en_rango = [
+        periodo
+        for periodo in df_serie.columns
+        if isinstance(periodo, PeriodoQuincenal)
+        and periodo >= periodo_inicio
+        and (periodo_fin is None or periodo <= periodo_fin)
     ]
-    return df_serie[cols]
+    return df_serie[columnas_en_rango]
 
 
 class CalculadorBase(ABC):
@@ -148,7 +159,7 @@ def _construir_diagnostico(
     `df_canasta.index` (los del subgrupo).
     """
     _ = df_canasta
-    columnas = [
+    columnas_diagnostico = [
         "version",
         "tipo",
         "periodo",
@@ -158,23 +169,24 @@ def _construir_diagnostico(
         "detalle",
     ]
     mascara_faltante = df_serie.isna()
-    if not mascara_faltante.any(axis=None):
-        return pd.DataFrame(columns=columnas)
+    # nonzero() en un solo paso: evita escanear la máscara dos veces (antes: una
+    # para detectar si hay NaN con .any(), otra para ubicarlos con .nonzero())
+    genericos_idx, periodos_idx = mascara_faltante.to_numpy().nonzero()
+    if genericos_idx.size == 0:
+        return pd.DataFrame(columns=columnas_diagnostico)
 
-    # nonzero() sobre matriz booleana: índices (fila, col) donde hay NaN
-    filas_idx, cols_idx = mascara_faltante.values.nonzero()
-    genericos_f = mascara_faltante.index[filas_idx]
-    periodos_f = mascara_faltante.columns[cols_idx]
+    genericos_faltantes = mascara_faltante.index[genericos_idx]
+    periodos_faltantes = mascara_faltante.columns[periodos_idx]
 
     return pd.DataFrame(
         {
             "version": version,
             "tipo": tipo,
-            "periodo": periodos_f,
-            "generico": genericos_f,
+            "periodo": periodos_faltantes,
+            "generico": genericos_faltantes,
             "nivel_faltante": "periodo",
             "tipo_faltante": "indice",
             "detalle": "valor NaN en serie publicada",
         },
-        columns=columnas,
+        columns=columnas_diagnostico,
     )

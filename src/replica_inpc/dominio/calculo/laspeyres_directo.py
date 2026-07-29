@@ -9,9 +9,8 @@ import pandas as pd
 from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
-    _construir_reporte,
-    _recortar_al_rango,
-    _rellenar_faltantes,
+    _recortar_series_fecha,
+    _rellenar_dato_serie_faltante,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -22,62 +21,7 @@ from replica_inpc.dominio.tipos import (
     RANGOS_CANASTAS,
     TIPO_INPC,
     ManifestCalculo,
-    VersionCanasta,
 )
-
-
-def _calcular_df(
-    df_canasta: pd.DataFrame,
-    df_serie: pd.DataFrame,
-    indice: str,
-    tipo: str,
-    version: VersionCanasta,
-    periodos_rellenados: set[object] | None = None,
-    referencia_empalme: float | None = None,
-) -> pd.DataFrame:
-    if periodos_rellenados is None:
-        periodos_rellenados = set()
-    periodos_null = df_serie.isnull().any(axis=0)
-    ponderadores = df_canasta["ponderador"].astype(float)
-    resultado = df_serie.multiply(ponderadores, axis=0).sum().divide(ponderadores.sum())
-    indice_incidencia = resultado  # nivel crudo, antes de factor_h
-    if referencia_empalme is not None:
-        traslape = RANGOS_CANASTAS[version][0]
-        if traslape not in resultado.index:
-            raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
-        factor_h = referencia_empalme / float(resultado[traslape])
-        resultado = resultado * factor_h
-
-    idx = pd.MultiIndex.from_tuples(
-        [(p, indice) for p in resultado.index],
-        names=["periodo", "indice"],
-    )
-    df = pd.DataFrame(
-        {
-            "version": version,
-            "tipo": tipo,
-            "indice_replicado": resultado.values,
-            "indice_incidencia": indice_incidencia.values,
-            "estado_calculo": "ok",
-            "motivo_error": None,
-        },
-        index=idx,
-    )
-    periodos_null_idx = [(p, indice) for p in resultado.index[periodos_null]]
-    if periodos_null_idx:
-        df.loc[periodos_null_idx, "estado_calculo"] = "sin_datos"
-        df.loc[periodos_null_idx, "indice_replicado"] = None
-        df.loc[periodos_null_idx, "indice_incidencia"] = None
-        df.loc[periodos_null_idx, "motivo_error"] = "faltantes en serie"
-    periodos_null_set = {p for p, _ in periodos_null_idx}
-    periodos_rel_idx = [
-        (p, indice)
-        for p in resultado.index
-        if p in periodos_rellenados and p not in periodos_null_set
-    ]
-    if periodos_rel_idx:
-        df.loc[periodos_rel_idx, "estado_calculo"] = "rellenado"
-    return df
 
 
 class LaspeyresDirecto(CalculadorBase):
@@ -106,133 +50,118 @@ class LaspeyresDirecto(CalculadorBase):
                 "clasificaciones aplican a cada versión (docs/diseño.md §5.4)."
             )
 
+        # tipo==TIPO_INPC: c = 1 solo grupo constante (I_INS/INPC). Clasificación:
+        # c = categoría (dropna excluye genéricos sin valor en esa columna).
         if tipo == TIPO_INPC:
-            indice = tipo
-            serie_recortada = _recortar_al_rango(serie.df, canasta.version)
-            df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
-                serie_recortada, canasta.version, tipo
-            )
-            df_calc = _calcular_df(
-                canasta.df,
-                df_s,
-                indice,
-                tipo,
-                canasta.version,
-                periodos_rel,
-                self._referencia_empalme.get(indice),
-            )
-            df_reporte = _construir_reporte(df_calc, canasta.df, df_s, canasta.version)
-            df_diag = pd.concat(
-                [
-                    _construir_diagnostico(canasta.df, df_s, canasta.version, tipo),
-                    df_corr_relleno,
-                ],
-                ignore_index=True,
-            )
+            categoria_por_generico = pd.Series(TIPO_INPC, index=canasta.df.index)
         else:
-            # Vectorizado: un groupby reemplaza el loop por cada categoría SCIAN/CCIF.
-            # El fill bfill→ffill opera por fila (genérico), independiente del grupo.
-            cat_por_gen = canasta.df[tipo].dropna()
-            gens = cat_por_gen.index
+            categoria_por_generico = canasta.df[tipo].dropna()
+        genericos_del_grupo = categoria_por_generico.index
 
-            serie_recortada = _recortar_al_rango(serie.df.loc[gens], canasta.version)
-            df_s, df_corr_relleno, _ = _rellenar_faltantes(serie_recortada, canasta.version, tipo)
-            pond = canasta.df.loc[gens, "ponderador"].astype(float)
+        serie_recortada = _recortar_series_fecha(serie.df.loc[genericos_del_grupo], canasta.version)
+        serie_rellenada, df_diagnostico, _ = _rellenar_dato_serie_faltante(
+            serie_recortada, canasta.version, tipo
+        )
+        ponderador = canasta.df.loc[genericos_del_grupo, "ponderador"].astype(float)
 
-            # Laspeyres: media ponderada por categoría
-            weighted = df_s.multiply(pond, axis=0)
-            pond_sum = weighted.groupby(cat_por_gen).sum()  # cat × periodo
-            pond_total = pond.groupby(cat_por_gen).sum()  # cat
-            resultado_mat = pond_sum.divide(pond_total, axis=0)  # cat × periodo
-            resultado_mat_crudo = resultado_mat.copy()  # nivel crudo, antes de factor_h
+        serie_ponderada = serie_rellenada.multiply(ponderador, axis=0)
+        suma_ponderada_por_grupo = serie_ponderada.groupby(categoria_por_generico).sum()
+        ponderador_total_por_grupo = ponderador.groupby(categoria_por_generico).sum()
+        indice_por_grupo = suma_ponderada_por_grupo.divide(ponderador_total_por_grupo, axis=0)
+        indice_incidencia_por_grupo = indice_por_grupo.copy()  # antes del rebase (r_c)
 
-            # referencia_empalme por categoría (solo LaspeyresDirecto usado como T0 de encadenado)
-            if self._referencia_empalme:
-                traslape = RANGOS_CANASTAS[canasta.version][0]
-                if traslape not in resultado_mat.columns:
-                    raise ErrorCalculo(
-                        f"PeriodoQuincenal de traslape {traslape} no está en la serie."
-                    )
-                cats_ref = [c for c in resultado_mat.index if c in self._referencia_empalme]
-                if cats_ref:
-                    refs_s = pd.Series({c: self._referencia_empalme[c] for c in cats_ref})
-                    factor_h = refs_s / resultado_mat.loc[cats_ref, cast(Any, traslape)].astype(
-                        float
-                    )
-                    resultado_mat.loc[cats_ref] = resultado_mat.loc[cats_ref].multiply(
-                        factor_h, axis=0
-                    )
+        # self._referencia_empalme (R_c) está keyed por grupo — para INPC la única
+        # key posible es TIPO_INPC; para clasificación, una key por categoría.
+        if self._referencia_empalme:
+            traslape = RANGOS_CANASTAS[canasta.version][0]
+            if traslape not in indice_por_grupo.columns:
+                raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
+            grupos_con_referencia = [
+                g for g in indice_por_grupo.index if g in self._referencia_empalme
+            ]
+            if grupos_con_referencia:
+                referencia_rebase = pd.Series(
+                    {g: self._referencia_empalme[g] for g in grupos_con_referencia}
+                )
+                factor_rebase = referencia_rebase / indice_por_grupo.loc[
+                    grupos_con_referencia, cast(Any, traslape)
+                ].astype(float)
+                indice_por_grupo.loc[grupos_con_referencia] = indice_por_grupo.loc[
+                    grupos_con_referencia
+                ].multiply(factor_rebase, axis=0)
 
-            # Estado por (cat, periodo)
-            has_null = df_s.isna().groupby(cat_por_gen).any()  # cat × bool
-            has_rel = (
-                (serie_recortada.isna() & df_s.notna()).groupby(cat_por_gen).any()
-            )  # cat × bool
+        # NaN irrellenable → sin_datos; celda imputada → rellenado
+        hay_faltante = serie_rellenada.isna().groupby(categoria_por_generico).any()
+        hubo_relleno = (
+            (serie_recortada.isna() & serie_rellenada.notna()).groupby(categoria_por_generico).any()
+        )
 
-            # Reshape a MultiIndex (periodo, indice=cat)
-            df_stacked = resultado_mat.T.stack()
-            df_stacked.index = df_stacked.index.set_names(["periodo", "indice"])
-            idx = df_stacked.index
+        indice_apilado = indice_por_grupo.T.stack()
+        indice_apilado.index = indice_apilado.index.set_names(["periodo", "indice"])
+        idx = indice_apilado.index
 
-            null_flat = has_null.T.stack().reindex(idx).fillna(False)
-            rel_flat = has_rel.T.stack().reindex(idx).fillna(False)
+        faltante_alineado = hay_faltante.T.stack().reindex(idx).fillna(False)
+        relleno_alineado = hubo_relleno.T.stack().reindex(idx).fillna(False)
 
-            null_bool = null_flat.to_numpy(dtype=bool)
-            rel_bool = rel_flat.to_numpy(dtype=bool)
-            estado_arr = np.where(
-                null_bool, "sin_datos", np.where(rel_bool & ~null_bool, "rellenado", "ok")
-            )
-            motivo_arr = np.where(null_bool, "faltantes en serie", None)  # type: ignore[call-overload]
+        faltante_bool = faltante_alineado.to_numpy(dtype=bool)
+        relleno_bool = relleno_alineado.to_numpy(dtype=bool)
+        estado_calculo_arr = np.where(
+            faltante_bool, "sin_datos", np.where(relleno_bool & ~faltante_bool, "rellenado", "ok")
+        )
+        motivo_error_arr = np.where(faltante_bool, "faltantes en serie", None)  # type: ignore[call-overload]
 
-            df_calc = pd.DataFrame(
-                {
-                    "version": canasta.version,
-                    "tipo": tipo,
-                    "indice_replicado": df_stacked.where(~null_bool).values,
-                    "indice_incidencia": (
-                        resultado_mat_crudo.T.stack().reindex(idx).where(~null_bool).values
-                    ),
-                    "estado_calculo": estado_arr,
-                    "motivo_error": motivo_arr,
-                },
-                index=idx,
-            )
+        df_calc = pd.DataFrame(
+            {
+                "version": canasta.version,
+                "tipo": tipo,
+                "indice_replicado": indice_apilado.where(~faltante_bool).values,
+                "indice_incidencia": (
+                    indice_incidencia_por_grupo.T.stack().reindex(idx).where(~faltante_bool).values
+                ),
+                "estado_calculo": estado_calculo_arr,
+                "motivo_error": motivo_error_arr,
+            },
+            index=idx,
+        )
 
-            # Reporte vectorizado para todos los grupos de una vez
-            cubierto = df_s.notna()
-            con_by_cat = cubierto.groupby(cat_por_gen).sum()
-            pond_cub_by_cat = cubierto.multiply(pond, axis=0).groupby(cat_por_gen).sum()
-            gen_esp_by_cat = cat_por_gen.groupby(cat_por_gen).size()
-            pond_esp_by_cat = pond.groupby(cat_por_gen).sum()
+        cubierto = serie_rellenada.notna()
+        con_indice_por_grupo = cubierto.groupby(categoria_por_generico).sum()
+        ponderador_cubierto_por_grupo = (
+            cubierto.multiply(ponderador, axis=0).groupby(categoria_por_generico).sum()
+        )
+        genericos_esperados_por_grupo = categoria_por_generico.groupby(
+            categoria_por_generico
+        ).size()
+        ponderador_esperado_por_grupo = ponderador.groupby(categoria_por_generico).sum()
 
-            con_flat = con_by_cat.T.stack().reindex(idx).to_numpy()
-            pond_cub_flat = pond_cub_by_cat.T.stack().reindex(idx).to_numpy()
-            cats_col = idx.get_level_values("indice")
-            gen_esp = gen_esp_by_cat.reindex(cats_col).to_numpy()
-            pond_esp = pond_esp_by_cat.reindex(cats_col).to_numpy()
+        con_indice_flat = con_indice_por_grupo.T.stack().reindex(idx).to_numpy()
+        ponderador_cubierto_flat = ponderador_cubierto_por_grupo.T.stack().reindex(idx).to_numpy()
+        grupos_col = idx.get_level_values("indice")
+        genericos_esperados_flat = genericos_esperados_por_grupo.reindex(grupos_col).to_numpy()
+        ponderador_esperado_flat = ponderador_esperado_por_grupo.reindex(grupos_col).to_numpy()
 
-            df_reporte = pd.DataFrame(
-                {
-                    "version": canasta.version,
-                    "estado_calculo": estado_arr,
-                    "motivo_error": motivo_arr,
-                    "genericos_esperados": gen_esp,
-                    "genericos_con_indice": con_flat,
-                    "genericos_sin_indice": gen_esp - con_flat,
-                    "cobertura_genericos_pct": 100.0 * con_flat / gen_esp,
-                    "ponderador_esperado": pond_esp,
-                    "ponderador_cubierto": pond_cub_flat,
-                },
-                index=idx,
-            )
+        df_reporte = pd.DataFrame(
+            {
+                "version": canasta.version,
+                "estado_calculo": estado_calculo_arr,
+                "motivo_error": motivo_error_arr,
+                "genericos_esperados": genericos_esperados_flat,
+                "genericos_con_indice": con_indice_flat,
+                "genericos_sin_indice": genericos_esperados_flat - con_indice_flat,
+                "cobertura_genericos_pct": 100.0 * con_indice_flat / genericos_esperados_flat,
+                "ponderador_esperado": ponderador_esperado_flat,
+                "ponderador_cubierto": ponderador_cubierto_flat,
+            },
+            index=idx,
+        )
 
-            df_diag = pd.concat(
-                [
-                    _construir_diagnostico(canasta.df, df_s, canasta.version, tipo),
-                    df_corr_relleno,
-                ],
-                ignore_index=True,
-            )
+        df_diag = pd.concat(
+            [
+                _construir_diagnostico(canasta.df, serie_rellenada, canasta.version, tipo),
+                df_diagnostico,
+            ],
+            ignore_index=True,
+        )
 
         manifiesto = ManifestCalculo(
             version=canasta.version,

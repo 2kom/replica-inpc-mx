@@ -10,8 +10,8 @@ from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
     _construir_reporte,
-    _recortar_al_rango,
-    _rellenar_faltantes,
+    _recortar_series_fecha,
+    _rellenar_dato_serie_faltante,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -225,8 +225,8 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
 
         if tipo == TIPO_INPC:
             indice = tipo
-            df_s_raw = _recortar_al_rango(serie.df, canasta.version)
-            df_s, df_corr_relleno, periodos_rel = _rellenar_faltantes(
+            df_s_raw = _recortar_series_fecha(serie.df, canasta.version)
+            df_s, df_corr_relleno, periodos_rel = _rellenar_dato_serie_faltante(
                 df_s_raw, canasta.version, tipo
             )
             df_calc = self._calcular_df_para(
@@ -251,8 +251,10 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             cat_por_gen = canasta.df[tipo].dropna()
             gens = cat_por_gen.index
 
-            df_s_raw = _recortar_al_rango(serie.df.loc[gens], canasta.version)
-            df_s, df_corr_relleno, _ = _rellenar_faltantes(df_s_raw, canasta.version, tipo)
+            df_s_raw = _recortar_series_fecha(serie.df.loc[gens], canasta.version)
+            df_s, df_corr_relleno, _ = _rellenar_dato_serie_faltante(
+                df_s_raw, canasta.version, tipo
+            )
             pond = canasta.df.loc[gens, "ponderador"].astype(float)
 
             enc_raw = canasta.df.loc[gens, "encadenamiento"]
