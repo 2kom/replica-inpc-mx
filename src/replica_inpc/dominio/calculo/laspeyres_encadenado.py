@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -203,10 +202,12 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         serie: SerieNormalizada,
         id_corrida: str,
         tipo: str,
-        ruta_canasta: Path | None = None,
-        ruta_series: Path | None = None,
     ) -> ResultadoIndice:
+
         fecha = datetime.now()
+        ruta_canasta = canasta.df.attrs.get("origen")
+        ruta_serie = serie.df.attrs.get("origen")
+
         if canasta.version != self._VERSION_ESPERADA:
             raise InvarianteViolado(
                 f"{self._CALCULADOR_NOMBRE} requiere canasta.version="
@@ -356,7 +357,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
             tipo=tipo,
             calculador=self._CALCULADOR_NOMBRE,
             ruta_canasta=ruta_canasta,
-            ruta_series=ruta_series,
+            ruta_series=ruta_serie,
             fecha=fecha,
         )
         return ResultadoIndice(df_calc, [manifiesto], df_reporte, df_diag)

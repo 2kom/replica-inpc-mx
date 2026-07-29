@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -91,10 +90,12 @@ class LaspeyresDirecto(CalculadorBase):
         serie: SerieNormalizada,
         id_corrida: str,
         tipo: str,
-        ruta_canasta: Path | None = None,
-        ruta_series: Path | None = None,
     ) -> ResultadoIndice:
+
         fecha = datetime.now()
+        ruta_canasta = canasta.df.attrs.get("origen")
+        ruta_serie = serie.df.attrs.get("origen")
+
         if tipo not in INDICE_POR_TIPO and tipo not in COLUMNAS_CLASIFICACION:
             raise InvarianteViolado(
                 f"tipo='{tipo}' no está en INDICE_POR_TIPO ni en COLUMNAS_CLASIFICACION"
@@ -240,7 +241,7 @@ class LaspeyresDirecto(CalculadorBase):
             tipo=tipo,
             calculador="LaspeyresDirecto",
             ruta_canasta=ruta_canasta,
-            ruta_series=ruta_series,
+            ruta_series=ruta_serie,
             fecha=fecha,
         )
         return ResultadoIndice(df_calc, [manifiesto], df_reporte, df_diag)
