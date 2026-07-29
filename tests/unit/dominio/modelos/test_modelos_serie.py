@@ -38,14 +38,8 @@ def _df(
 
 
 def test_construccion_valida() -> None:
-    s = SerieNormalizada(_df(), {"arroz": "Arroz"})
-    assert list(s.df.index) == list(_GENERICOS)
-    assert s.mapeo == {"arroz": "Arroz"}
-
-
-def test_construccion_sin_mapeo_usa_diccionario_vacio() -> None:
     s = SerieNormalizada(_df())
-    assert s.mapeo == {}
+    assert list(s.df.index) == list(_GENERICOS)
 
 
 # ---------- Invariantes ----------

@@ -198,7 +198,6 @@ def test_lector_series_csv_extraccion_jerarquica_bie(tmp_path: Path) -> None:
     }
     assert len(resultado.df) == 5
     assert set(resultado.df.index) == {_normalizar(nombre) for nombre in esperados}
-    assert set(resultado.mapeo.values()) == esperados
 
 
 @pytest.mark.requires_data

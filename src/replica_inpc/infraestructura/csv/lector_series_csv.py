@@ -32,16 +32,16 @@ _Extraccion = tuple[str, str, pd.Series]
 
 class LectorSeriesCsv:
     def leer(self, ruta: Path) -> SerieNormalizada:
-        df = self._leer_csv(ruta)
-        if not df.columns[0] == "Título":
+        serie = self._leer_csv(ruta)
+        if not serie.columns[0] == "Título":
             raise ArchivoCorrupto(
-                f"La primera columna sin importar orientación debe ser 'Título', pero se encontró: {df.columns[0]}"
+                f"La primera columna sin importar orientación debe ser 'Título', pero se encontró: {serie.columns[0]}"
             )
 
-        if "Cifra" in df.columns:
-            data = self._horizontal(df)
-        elif "Cifra" in df.iloc[:, 0].values:
-            data = self._vertical(df)
+        if "Cifra" in serie.columns:
+            data = self._horizontal(serie)
+        elif "Cifra" in serie.iloc[:, 0].values:
+            data = self._vertical(serie)
         else:
             raise OrientacionNoDetectable(
                 "No se pudo detectar orientacion de la serie, se esperaba encontrar 'Serie' y 'Cifra' como columnas o filas"
@@ -56,13 +56,16 @@ class LectorSeriesCsv:
 
         periodos = [PeriodoQuincenal.desde_str(c) for c in data.columns]
 
-        genericos_originales, genericos_limpios, filas = zip(*extracciones)
+        _, genericos_limpios, series_valores = zip(*extracciones)
 
-        df_num = pd.DataFrame(filas, columns=data.columns).apply(pd.to_numeric, errors="coerce")
-        df_num.index = pd.Index(genericos_limpios, name="generico")
-        df_num.columns = periodos
-        mapeo = dict(zip(genericos_limpios, genericos_originales))
-        return SerieNormalizada(df_num, mapeo)
+        df_serie = pd.DataFrame(series_valores, columns=data.columns).apply(
+            pd.to_numeric, errors="coerce"
+        )
+        df_serie.index = pd.Index(genericos_limpios, name="generico")
+        df_serie.columns = periodos
+        df_serie.attrs["origen"] = ruta
+
+        return SerieNormalizada(df_serie)
 
     def _leer_csv(self, ruta: Path) -> pd.DataFrame:
         for encoding in ["utf-8", "cp1252"]:
@@ -87,12 +90,12 @@ class LectorSeriesCsv:
         except pd.errors.ParserError:
             raise ArchivoCorrupto(f"El archivo está corrupto o no es un CSV válido: {ruta}")
 
-    def _horizontal(self, df: pd.DataFrame) -> pd.DataFrame:
-        columnas_validas = [col for col in df.columns if _PATRON_PERIODO.match(str(col))]
-        return df.set_index("Título")[columnas_validas]
+    def _horizontal(self, serie: pd.DataFrame) -> pd.DataFrame:
+        columnas_validas = [col for col in serie.columns if _PATRON_PERIODO.match(str(col))]
+        return serie.set_index("Título")[columnas_validas]
 
-    def _vertical(self, df: pd.DataFrame) -> pd.DataFrame:
-        filas_validas = df[df.iloc[:, 0].apply(lambda x: bool(_PATRON_PERIODO.match(str(x))))]
+    def _vertical(self, serie: pd.DataFrame) -> pd.DataFrame:
+        filas_validas = serie[serie.iloc[:, 0].apply(lambda x: bool(_PATRON_PERIODO.match(str(x))))]
         return filas_validas.set_index("Título").T
 
     def _extraer_por_codigo(self, data: pd.DataFrame) -> list[_Extraccion]:

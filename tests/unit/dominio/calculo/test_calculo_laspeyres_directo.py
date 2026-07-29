@@ -39,7 +39,7 @@ def _serie() -> SerieNormalizada:
         },
         index=_periodos,
     ).T
-    return SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    return SerieNormalizada(df)
 
 
 def test_calcular_retorna_resultado_indice() -> None:
@@ -94,7 +94,7 @@ def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
         },
         index=periodos_con_extra,
     ).T
-    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie_extra = SerieNormalizada(df)
 
     r = LaspeyresDirecto().calcular(_canasta(), serie_extra, "c1", "inpc")
 
@@ -107,13 +107,21 @@ def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
 
 def test_nan_parcial_produce_estado_rellenado() -> None:
     # arroz sin dato en 2Q Aug 2018 — otros genéricos sí tienen dato
-    periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1), PeriodoQuincenal(2018, 8, 2)]
+    periodos = [
+        PeriodoQuincenal(2018, 7, 2),
+        PeriodoQuincenal(2018, 8, 1),
+        PeriodoQuincenal(2018, 8, 2),
+    ]
     df = pd.DataFrame(
-        {"arroz": [100.0, None, 102.0], "frijol": [100.0, 102.0, 104.0],
-         "leche": [100.0, 103.0, 106.0], "huevo": [100.0, 104.0, 108.0]},
+        {
+            "arroz": [100.0, None, 102.0],
+            "frijol": [100.0, 102.0, 104.0],
+            "leche": [100.0, 103.0, 106.0],
+            "huevo": [100.0, 104.0, 108.0],
+        },
         index=periodos,
     ).T
-    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie = SerieNormalizada(df)
 
     r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
 
@@ -129,11 +137,15 @@ def test_nan_total_generico_produce_sin_datos() -> None:
     # arroz con NaN en TODOS los periodos — no hay valor adyacente con qué rellenar
     periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
     df = pd.DataFrame(
-        {"arroz": [None, None], "frijol": [100.0, 102.0],
-         "leche": [100.0, 103.0], "huevo": [100.0, 104.0]},
+        {
+            "arroz": [None, None],
+            "frijol": [100.0, 102.0],
+            "leche": [100.0, 103.0],
+            "huevo": [100.0, 104.0],
+        },
         index=periodos,
     ).T
-    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie = SerieNormalizada(df)
 
     r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
 

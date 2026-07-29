@@ -37,7 +37,7 @@ def _serie_t2() -> SerieNormalizada:
         },
         index=[_traslape_t2, _post_t2],
     ).T
-    return SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    return SerieNormalizada(df)
 
 
 _F_H_T2 = (10 * 1.5 + 20 * 1.4 + 30 * 1.6 + 40 * 1.3) / 100
@@ -125,7 +125,7 @@ def _serie_t1() -> SerieNormalizada:
         },
         index=[_traslape_t1, _post_t1],
     ).T
-    return SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    return SerieNormalizada(df)
 
 
 def test_t1_sin_referencia_factor_h_es_1() -> None:
@@ -172,11 +172,15 @@ def test_periodos_fuera_de_rango_2024_se_recortan() -> None:
     pre_traslape = PeriodoQuincenal(2024, 1, 1)
     periodos_con_extra = [pre_traslape, _traslape_t2, _post_t2]
     df = pd.DataFrame(
-        {"arroz": [140.0, 150.0, 151.5], "frijol": [130.0, 140.0, 144.2],
-         "leche": [150.0, 160.0, 168.0], "huevo": [120.0, 130.0, 132.6]},
+        {
+            "arroz": [140.0, 150.0, 151.5],
+            "frijol": [130.0, 140.0, 144.2],
+            "leche": [150.0, 160.0, 168.0],
+            "huevo": [120.0, 130.0, 132.6],
+        },
         index=periodos_con_extra,
     ).T
-    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie_extra = SerieNormalizada(df)
 
     r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie_extra, "c1", "inpc")
 
@@ -191,11 +195,15 @@ def test_periodos_fuera_de_rango_2013_se_recortan() -> None:
     pre_traslape = PeriodoQuincenal(2013, 1, 1)
     periodos_con_extra = [pre_traslape, _traslape_t1, _post_t1]
     df = pd.DataFrame(
-        {"arroz": [110.0, 120.0, 123.0], "frijol": [70.0, 80.0, 82.0],
-         "leche": [100.0, 110.0, 113.0], "huevo": [80.0, 90.0, 91.5]},
+        {
+            "arroz": [110.0, 120.0, 123.0],
+            "frijol": [70.0, 80.0, 82.0],
+            "leche": [100.0, 110.0, 113.0],
+            "huevo": [80.0, 90.0, 91.5],
+        },
         index=periodos_con_extra,
     ).T
-    serie_extra = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie_extra = SerieNormalizada(df)
 
     r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie_extra, "c1", "inpc")
 
@@ -208,11 +216,15 @@ def test_periodos_fuera_de_rango_2013_se_recortan() -> None:
 def test_nan_parcial_t2_produce_estado_rellenado() -> None:
     # arroz sin dato en _post_t2 — otros genéricos sí tienen dato
     df = pd.DataFrame(
-        {"arroz": [150.0, None], "frijol": [140.0, 144.2],
-         "leche": [160.0, 168.0], "huevo": [130.0, 132.6]},
+        {
+            "arroz": [150.0, None],
+            "frijol": [140.0, 144.2],
+            "leche": [160.0, 168.0],
+            "huevo": [130.0, 132.6],
+        },
         index=[_traslape_t2, _post_t2],
     ).T
-    serie = SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    serie = SerieNormalizada(df)
 
     r = LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie, "c1", "inpc")
 

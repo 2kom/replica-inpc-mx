@@ -12,8 +12,6 @@ class SerieNormalizada:
     Args:
         df: DataFrame en formato ancho con `generico` como índice,
             columnas `PeriodoQuincenal` y valores numéricos no negativos o `NaN`.
-        mapeo: Correspondencia de trazabilidad `generico ->
-            generico_original`. Si se omite, se usa un diccionario vacío.
 
     Raises:
         InvarianteViolado: Si el índice contiene duplicados o cadenas vacías,
@@ -34,20 +32,13 @@ class SerieNormalizada:
         | frijol          | 100.0       | 102.0       | 104.0       |
         | leche           | 100.0       | NaN         | 106.0       |
 
-        Trazabilidad (`generico -> generico_original`):
-        | generico | generico_original |
-        | :------- | :---------------- |
-        | arroz    | Arroz             |
-        | frijol   | Frijol            |
-        | leche    | Leche             |
-
         `NaN` indica que no hubo índice disponible para un genérico en ese
         periodo.
 
-    Ver: docs/diseño.md §5.4, §11.1, §11.2
+    Ver: docs/diseño.md §5.4, §11.1
     """
 
-    def __init__(self, df: pd.DataFrame, mapeo: dict[str, str] | None = None) -> None:
+    def __init__(self, df: pd.DataFrame) -> None:
         if df.index.duplicated().any():
             raise InvarianteViolado("El índice del DataFrame no puede contener valores duplicados.")
         if (df.index == "").any():
@@ -67,16 +58,10 @@ class SerieNormalizada:
             raise InvarianteViolado("Los valores del DataFrame no pueden ser negativos.")
 
         self._df = df
-        self._mapeo = mapeo or {}
 
     @property
     def df(self) -> pd.DataFrame:
         return self._df
-
-    @property
-    def mapeo(self) -> dict[str, str]:
-        """Devuelve la trazabilidad `generico -> generico_original`."""
-        return self._mapeo
 
     def _repr_html_(self) -> str:
         """Renderiza la serie como tabla HTML en entornos interactivos."""

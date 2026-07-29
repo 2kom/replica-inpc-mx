@@ -35,7 +35,7 @@ def _serie(
     vals_b: list[float],
 ) -> SerieNormalizada:
     df = pd.DataFrame({"a": vals_a, "b": vals_b}, index=periodos).T
-    return SerieNormalizada(df, {"a": "A", "b": "B"})
+    return SerieNormalizada(df)
 
 
 class _LectorCanastaFake:
@@ -57,7 +57,12 @@ class _LectorSeriesFake:
 # Periodos: traslape 2013 = Q(2013,3,2); traslape 2018 = Q(2018,7,2).
 # _P13 incluye Q(2018,7,2) para compartir frontera con _P18 (requisito topología PATH).
 _P10 = [PeriodoQuincenal(2013, 2, 2), PeriodoQuincenal(2013, 3, 1), PeriodoQuincenal(2013, 3, 2)]
-_P13 = [PeriodoQuincenal(2013, 3, 2), PeriodoQuincenal(2013, 4, 1), PeriodoQuincenal(2013, 4, 2), PeriodoQuincenal(2018, 7, 2)]
+_P13 = [
+    PeriodoQuincenal(2013, 3, 2),
+    PeriodoQuincenal(2013, 4, 1),
+    PeriodoQuincenal(2013, 4, 2),
+    PeriodoQuincenal(2018, 7, 2),
+]
 _P18 = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
 
 _RC10, _RC13, _RC18 = Path("c2010"), Path("c2013"), Path("c2018")

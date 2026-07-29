@@ -24,10 +24,8 @@ def _canasta() -> CanastaCanonica:
 
 
 def _serie_con_nan() -> SerieNormalizada:
-    df = pd.DataFrame(
-        {"arroz": [100.0, float("nan")], "frijol": [100.0, 102.0]}, index=_periodos
-    ).T
-    return SerieNormalizada(df, {"arroz": "Arroz", "frijol": "Frijol"})
+    df = pd.DataFrame({"arroz": [100.0, float("nan")], "frijol": [100.0, 102.0]}, index=_periodos).T
+    return SerieNormalizada(df)
 
 
 def test_periodo_con_nan_rellenable_marca_rellenado() -> None:
@@ -75,10 +73,8 @@ def test_diagnostico_lista_faltante() -> None:
 
 
 def test_diagnostico_vacio_cuando_serie_completa() -> None:
-    df = pd.DataFrame(
-        {"arroz": [100.0, 101.0], "frijol": [100.0, 102.0]}, index=_periodos
-    ).T
-    serie = SerieNormalizada(df, {"arroz": "Arroz", "frijol": "Frijol"})
+    df = pd.DataFrame({"arroz": [100.0, 101.0], "frijol": [100.0, 102.0]}, index=_periodos).T
+    serie = SerieNormalizada(df)
     r = LaspeyresDirecto().calcular(_canasta(), serie, "c1", "inpc")
     assert len(r.diagnostico) == 0
     assert list(r.diagnostico.columns) == [

@@ -38,7 +38,7 @@ class LectorCanastaCsv:
 
         # leemos la canasta desde el csv
         try:
-            df = pd.read_csv(
+            canasta = pd.read_csv(
                 ruta,
                 index_col="generico",
                 dtype={"ponderador": str, "encadenamiento": str},
@@ -54,12 +54,14 @@ class LectorCanastaCsv:
                 f"No se pudo leer el archivo debido a un problema de encoding: {ruta}"
             )
 
-        df.index = pd.Index([_normalizar(g) for g in df.index], name="generico")
+        canasta.index = pd.Index([_normalizar(g) for g in canasta.index], name="generico")
 
-        if not all(col in df.columns for col in COLUMNAS_REQUERIDAS):
-            columnas_faltantes = [col for col in COLUMNAS_REQUERIDAS if col not in df.columns]
+        if not all(col in canasta.columns for col in COLUMNAS_REQUERIDAS):
+            columnas_faltantes = [col for col in COLUMNAS_REQUERIDAS if col not in canasta.columns]
             raise ColumnasMinFaltantes(
                 f"Faltan columnas requeridas: {', '.join(columnas_faltantes)}"
             )
 
-        return CanastaCanonica(df, version)
+        canasta.attrs["origen"] = ruta
+
+        return CanastaCanonica(canasta, version)

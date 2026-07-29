@@ -33,7 +33,7 @@ def _serie() -> SerieNormalizada:
         },
         index=_periodos,
     ).T
-    return SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    return SerieNormalizada(df)
 
 
 def test_subindice_genera_indices_por_categoria() -> None:

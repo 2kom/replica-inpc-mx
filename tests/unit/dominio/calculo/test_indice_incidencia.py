@@ -166,7 +166,7 @@ def _serie_t2() -> SerieNormalizada:
         },
         index=[_TRASLAPE_T2, _POST_T2],
     ).T
-    return SerieNormalizada(df, {g: g.capitalize() for g in df.index})
+    return SerieNormalizada(df)
 
 
 # -- calculadores pueblan indice_incidencia ------------------------------------
@@ -181,8 +181,7 @@ def test_directo_indice_incidencia_igual_replicado() -> None:
         2018,
     )
     serie = SerieNormalizada(
-        pd.DataFrame({"gen_a": [100.0, 110.0], "gen_b": [100.0, 90.0]}, index=[_Q1, _Q2]).T,
-        {"gen_a": "gen_a", "gen_b": "gen_b"},
+        pd.DataFrame({"gen_a": [100.0, 110.0], "gen_b": [100.0, 90.0]}, index=[_Q1, _Q2]).T
     )
     largo = LaspeyresDirecto().calcular(can, serie, "c1", "inpc")._completo
     assert (largo["indice_incidencia"] == largo["indice_replicado"]).all()
