@@ -72,7 +72,7 @@ El historial de cambios vive en git.
     - [11.7 Reglas de `estado_calculo`](#117-reglas-de-estado_calculo)
     - [11.8 Detección de `null_por_faltantes`](#118-detección-de-null_por_faltantes)
     - [11.9 Firma de `validacion/indices.py`](#119-firma-de-validacionindicespy)
-    - [11.10 `id_corrida` en `ResultadoIndice`](#1110-id_corrida-en-resultadoindice)
+    - [11.10 `id_corrida` eliminado de `ResultadoIndice`](#1110-id_corrida-eliminado-de-resultadoindice)
     - [11.11 Schema condicional en `ReporteDetalladoValidacion`](#1111-schema-condicional-en-reportedetalladovalidacion)
     - [11.12 `INDICES_VALIDABLES` en el dominio](#1112-indices_validables-en-el-dominio)
     - [11.13 Cache de clase en `FuenteValidacionApi`](#1113-cache-de-clase-en-fuentevalidacionapi)
@@ -94,6 +94,8 @@ El historial de cambios vive en git.
     - [11.27 `a_mensual` — filtrado de manifiestos huérfanos](#1127-a_mensual--filtrado-de-manifiestos-huérfanos)
     - [11.28 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales](#1128-manifestcalculoruta_canasta-y-ruta_series-opcionales)
     - [11.29 `indice_incidencia` y de-encadenamiento de incidencias](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias)
+    - [11.30 Provenencia vía `DataFrame.attrs` — simplificación de `calcular`](#1130-provenencia-vía-dataframeattrs--simplificación-de-calcular)
+    - [11.31 Eliminación final de `id_corrida`](#1131-eliminación-final-de-id_corrida)
   - [12. Gaps conocidos](#12-gaps-conocidos)
     - [12.1 Validación por niveles en `LectorCanastaCsv`](#121-validación-por-niveles-en-lectorcanastacsv)
     - [12.2 Detección dinámica del header en `LectorSeriesCsv`](#122-detección-dinámica-del-header-en-lectorseriescsv)
@@ -524,13 +526,12 @@ Trazabilidad de una corrida elemental sobre una sola canasta. `empalmar` concate
 
 | Campo | Tipo | Notas |
 | ----- | ---- | ----- |
-| `id_corrida` | `str` | `f"{tipo}:{version}"`, determinista; único dentro de un `ResultadoIndice`, no entre ejecuciones repetidas |
 | `version` | `VersionCanasta` | versión de canasta usada en el tramo |
 | `tipo` | `str` | tipo de índice calculado |
 | `calculador` | `Literal[...]` | `"LaspeyresDirecto"`, `"LaspeyresEncadenadoT1"`, `"LaspeyresEncadenadoT2"` |
-| `ruta_canasta` | `Path \| None` | origen físico; `None` cuando construido desde memoria |
-| `ruta_series` | `Path \| None` | origen físico; `None` cuando construido desde memoria |
-| `fecha` | `datetime` | marca temporal; default `datetime.now()` |
+| `ruta_canasta` | `Path \| None` | origen físico, leído de `canasta.df.attrs.get("origen")`; `None` cuando la canasta se construyó en memoria (sin pasar por un loader) |
+| `ruta_series` | `Path \| None` | origen físico, leído de `serie.df.attrs.get("origen")`; `None` cuando la serie se construyó en memoria |
+| `fecha` | `datetime` | marca temporal; capturada al inicio de `calcular()`, no al construir el manifiesto |
 
 Sin invariantes en construcción.
 
@@ -540,7 +541,7 @@ Trazabilidad de un resultado derivado. Terminal — no combinable vía `empalmar
 
 | Campo | Tipo | Notas |
 | ----- | ---- | ----- |
-| `id_corrida` | `list[str]` | IDs de todas las corridas origen |
+| `versiones` | `list[VersionCanasta]` | versiones de canasta que contribuyeron al derivado |
 | `tipo` | `str` | tipo de índice derivado |
 | `clase` | `str` | clase del derivado; ver catálogo en secciones 5.8 y 5.9 |
 | `descripcion` | `str` | no vacío cuando `clase = "desde"`; vacío en otros casos |
@@ -795,13 +796,11 @@ def calcular(
     self,
     canasta: CanastaCanonica,
     serie: SerieNormalizada,
-    id_corrida: str,
     tipo: str,
-    ruta_canasta: Path | None = None,
-    ruta_series: Path | None = None,
-    fecha: datetime | None = None,
 ) -> ResultadoIndice:
 ```
+
+`ruta_canasta`/`ruta_series` del `ManifestCalculo` resultante se leen de `canasta.df.attrs.get("origen")` y `serie.df.attrs.get("origen")` — no son parámetros; solo los loaders (`LectorCanastaCsv`, `LectorSeriesCsv`) los setean. `fecha` se captura con `datetime.now()` al inicio de `calcular()`, antes del cómputo.
 
 `tipo` debe estar en `INDICE_POR_TIPO` o `COLUMNAS_CLASIFICACION` → `InvarianteViolado` si no. Cuando `tipo in COLUMNAS_CLASIFICACION`, el calculador divide la canasta por categoría y produce una fila por categoría; el nivel `indice` = valor de la categoría (ej. `"subyacente"`). Si `tipo in COLUMNAS_CLASIFICACION` pero la columna está 100% vacía en `canasta.df` (categoría fina sin fuente para esa versión — ver `FUENTES_POSIBLES` en `tools/canasta_inpc/esquema.py`) → `InvarianteViolado` también, en vez de agrupar en silencio sobre `NaN`.
 
@@ -922,12 +921,10 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 
 **`.resumen` — esquema**
 
-Índice: `id_corrida`. Una fila por `ManifestCalculo`. `estado_calculo` = peor estado del tramo.
+Índice: MultiIndex `(version, tipo)`. Una fila por `ManifestCalculo`. `estado_calculo` = peor estado del tramo.
 
 | Columna | Tipo |
 | --- | --- |
-| `version` | `int` |
-| `tipo` | `str` |
 | `estado_calculo` | `str` |
 | `periodo_inicio` | `PeriodoQuincenal \| PeriodoMensual` |
 | `periodo_fin` | `PeriodoQuincenal \| PeriodoMensual` |
@@ -955,7 +952,6 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 
 | Columna | Tipo |
 | --- | --- |
-| `id_corrida` | `str` |
 | `version` | `int` |
 | `tipo` | `str` |
 | `periodo` | `PeriodoQuincenal` |
@@ -1067,7 +1063,7 @@ Solo filas computables — sin filas `sin_datos`/`fallida`.
 
 | Columna | Variacion | Incidencia |
 | --- | --- | --- |
-| `id_corrida` | ✓ | ✓ |
+| `versiones` | ✓ | ✓ |
 | `tipo` | ✓ | ✓ |
 | `clase_variacion` | ✓ | — |
 | `clase_incidencia` | — | ✓ |
@@ -1138,7 +1134,7 @@ Hereda columnas de `ResultadoIndice.resultado.largo` y agrega columnas de compar
 
 **`.resumen` — esquema**
 
-Extiende `ResultadoIndice.resumen`. Índice: `id_corrida`. Una fila por `ManifestCalculo`. Agrega columnas de validación:
+Extiende `ResultadoIndice.resumen`. Índice: MultiIndex `(version, tipo)`. Una fila por `ManifestCalculo`. Agrega columnas de validación:
 
 | Columna | Tipo | Descripción |
 | --- | --- | --- |
@@ -1167,7 +1163,6 @@ Extiende `ResultadoIndice.reporte`. Índice: MultiIndex `(periodo, indice)`. Agr
 
 | Columna | Tipo | NaN cuando |
 | --- | --- | --- |
-| `id_corrida` | `str` | nunca |
 | `version` | `int` | nunca |
 | `tipo` | `str` | nunca |
 | `periodo` | `PeriodoQuincenal \| PeriodoMensual` | nunca |
@@ -1629,7 +1624,7 @@ Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_inci
 | --- | --- |
 | `.resultado.largo` | DataFrame con columna calculada, valor INEGI, `error_absoluto[_pp]` y `estado_validacion` |
 | `.resultado.ancho` | mismo transpuesto, columnas = periodo |
-| `.resumen` | una fila por corrida (`ValidacionIndice`, índice = `id_corrida`) o una fila global (variación/incidencia) |
+| `.resumen` | una fila por corrida (`ValidacionIndice`, índice MultiIndex `(version, tipo)`) o una fila global (variación/incidencia) |
 | `.reporte` | todas las filas, incluyendo no computables (`fuera_rango_inegi`, `no_disponible`, `sin_calculo`) |
 | `.diagnostico` | solo filas con `estado_validacion ≠ ok` |
 
@@ -3529,11 +3524,13 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ---
 
-### 11.10 `id_corrida` en `ResultadoIndice`
+### 11.10 `id_corrida` eliminado de `ResultadoIndice`
 
-**Decisión:** `CalcularHistoria` arma `id_corrida` como `f"{tipo}:{version}"` (determinista, no UUID) y lo pasa como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador crea un `ManifestCalculo(id_corrida, version, tipo, ...)` por corrida. Después de `empalmar`, el `manifiesto` del resultado combinado agrega las entradas de todos los tramos.
+**Decisión original (superada):** `CalcularHistoria` armaba `id_corrida` como `f"{tipo}:{version}"` (determinista, no UUID) y lo pasaba como parámetro `id_corrida: str` a `CalculadorBase.calcular()`. El calculador creaba un `ManifestCalculo(id_corrida, version, tipo, ...)` por corrida.
 
-**Razón:** el calculador no debe generar IDs — esa responsabilidad pertenece al caso de uso. Pasar `id_corrida` como parámetro mantiene el calculador como función pura. El esquema `tipo:version` es único dentro de un mismo `ResultadoIndice` (cada versión aparece una sola vez por ejecución de `ejecutar()`) y legible en `resumen.index` — no es único entre ejecuciones repetidas de la misma historia, eso no es una garantía que el diseño requiera. El `ManifestCalculo` como unidad de manifiesto (en lugar de un solo string) permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo.
+**Decisión final:** `id_corrida` se elimina por completo — de `CalculadorBase.calcular()`, de `ManifestCalculo` y de `ManifestDerivado` ([11.31](#1131-eliminación-final-de-id_corrida)). `.resumen` pasa a indexar por `(version, tipo)` directamente.
+
+**Razón del cambio:** `f"{tipo}:{version}"` no aportaba información que `version`+`tipo` (ya presentes en `ManifestCalculo`) no dieran — era una serialización redundante de los mismos dos campos, no un identificador con semántica propia. Mantenerlo obligaba a construirlo en el caso de uso y a parsearlo implícitamente donde se necesitaba `version` o `tipo` por separado. El `ManifestCalculo` como unidad de manifiesto (en lugar de un solo string) sigue siendo lo que permite que un `ResultadoIndice` empalmado registre la procedencia de cada tramo — eso no cambió, solo se quitó el campo redundante.
 
 ---
 
@@ -3581,7 +3578,7 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 **Decisión:** el dispatch entre INPC y subíndices vive dentro de cada implementación de `CalculadorBase` (no en `CalcularHistoria`). El split por categoría lo hace el helper `grupos_por_clasificacion(canasta, serie, tipo)` en `dominio/calculo/subindices.py` — un generador que hace un solo `groupby` y entrega pares `(categoria, df_canasta, df_serie)` crudos. Cada calculador aplica su propia fórmula sobre esos pares. Los ponderadores no se renormalizan: la fórmula usa $\sum w_j$ como denominador, válido tanto para la canasta completa ($\sum w_j = 100$) como para subgrupos ($\sum w_j < 100$). La firma de `CalculadorBase.calcular()` incluye `tipo` como parámetro — se deriva el nombre del índice internamente con `INDICE_POR_TIPO[tipo]`.
 
-**Razón:** `CalcularHistoria` queda con una sola llamada `calculador.calcular(canasta, serie, id_corrida, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre $\sum w_j$.
+**Razón:** `CalcularHistoria` queda con una sola llamada `calculador.calcular(canasta, serie, tipo)` sin conocer el tipo de cálculo. `grupos_por_clasificacion` hace el split una vez en O(n) y es reutilizable por `LaspeyresEncadenado`. La renormalización desaparece — el denominador correcto es siempre $\sum w_j$.
 
 ---
 
@@ -3663,7 +3660,7 @@ Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un peri
 
 **Algoritmo:** `bfill(axis=1).ffill(axis=1)` sobre el DataFrame de la serie (columnas = periodos ordenados ascendente). Ver §11.23 para la mecánica exacta y los estados resultantes.
 
-**Implementación:** función privada `_rellenar_faltantes(df_serie, id_corrida, version, tipo)` en `dominio/calculo/base.py`. Se llama dentro de cada calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`) antes del cálculo Laspeyres. El `df_corr_relleno` que devuelve — un DataFrame con columnas `(id_corrida, version, tipo, periodo, generico, nivel_faltante, tipo_faltante, detalle)` — se concatena con el diagnóstico de faltantes de la corrida (`_construir_diagnostico`).
+**Implementación:** función privada `_rellenar_faltantes(df_serie, version, tipo)` en `dominio/calculo/base.py`. Se llama dentro de cada calculador (`LaspeyresDirecto`, `LaspeyresEncadenado`) antes del cálculo Laspeyres. El `df_corr_relleno` que devuelve — un DataFrame con columnas `(version, tipo, periodo, generico, nivel_faltante, tipo_faltante, detalle)` — se concatena con el diagnóstico de faltantes de la corrida (`_construir_diagnostico`).
 
 **Por qué en el dominio y no en aplicación:** el calculador es quien conoce la serie cruda y puede registrar exactamente qué genérico fue imputado y desde qué periodo. Delegar la imputación a `CalcularHistoria` requeriría pasar información interna del calculador hacia afuera — acopla la interfaz innecesariamente.
 
@@ -3852,7 +3849,7 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 ### 11.28 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales
 
-**Decisión:** `ruta_canasta: Path | None = None` y `ruta_series: Path | None = None` en `ManifestCalculo`. Los calculadores (`LaspeyresDirecto`, `LaspeyresEncadenadoT1/T2`) no reciben rutas — operan sobre `CanastaCanonica` y `SerieNormalizada` ya en memoria. Solo la capa I/O (`LectorCanastaCsv`, `cargar_canasta`, `cargar_serie`) conoce la ruta de origen e inyecta los campos al construir el manifiesto.
+**Decisión:** `ruta_canasta: Path | None = None` y `ruta_series: Path | None = None` en `ManifestCalculo`. Los calculadores (`LaspeyresDirecto`, `LaspeyresEncadenadoT1/T2`) no reciben rutas como parámetro — las leen de `canasta.df.attrs.get("origen")` y `serie.df.attrs.get("origen")` al construir el manifiesto ([11.30](#1130-provenencia-vía-dataframeattrs--simplificación-de-calcular)). Solo la capa I/O (`LectorCanastaCsv`, `LectorSeriesCsv`) setea ese `attrs["origen"]` al cargar.
 
 **Razón:** los calculadores son funciones puras que transforman objetos de dominio; inyectarles rutas de filesystem viola la separación de capas — el dominio no debe conocer infraestructura. Con los campos opcionales, el manifiesto puede construirse tanto desde la capa I/O (con ruta) como desde código que genera datos directamente (sin ruta, p. ej. tests o notebooks con DataFrames manuales).
 
@@ -3895,6 +3892,22 @@ con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada ju
 **Frontera por tipo de resultado.** `_frontera` del INPC guarda `INPC_visible(e)` y `J_INPC_old(e)`; la de clasificación guarda `J_K_old(e)` por categoría y **no** `INPC_visible(e)` — `rebasar(clasificacion)` no conoce el factor de rebase del INPC (`k_INPC`), así que `INPC_visible(e)` vive solo en `inpc._frontera` y `_incidencia_cross_encadenada` lo lee de ahí. `rebasar` reescala el campo visible (`INPC_visible(e)`) por el mismo `k` que `indice_replicado` y preserva los `indice_incidencia_old`; así `S_m` queda consistente y la incidencia cross sigue invariante al rebase.
 
 **Diferido a Fase 2B.** Queda pendiente: (1) T1 exacto (2010→2013) reteniendo el ancla del tramo nuevo (hoy `cross_t1_diferido` → visible, porque `i_tramo_2013(2Q Mar 2013) = 108.81 ≠ 100`); (2) clasificaciones finas no content-exact (`SCIAN rama`, `CCIF *`) vía ledger por genérico + matriz de asignación `A_{h,g,m}` (`Σ_h A = 1` ⟹ total exacto) que operacionalice las tablas hoy inertes (`DESAGREGACIONES_GENERICOS`, `FUSIONES_GENERICOS`, `NUEVOS_GENERICOS`, `ELIMINADOS_GENERICOS`) + bucket "reclasificación" para splits/fusiones; (3) validación contra las incidencias publicadas por INEGI (BIE).
+
+---
+
+### 11.30 Provenencia vía `DataFrame.attrs` — simplificación de `calcular`
+
+**Decisión:** `CalculadorBase.calcular(self, canasta, serie, tipo) -> ResultadoIndice` — sin `fecha`, sin rutas, sin `id_corrida` como parámetros. `ruta_canasta`/`ruta_series` del `ManifestCalculo` resultante se leen de `canasta.df.attrs.get("origen")` y `serie.df.attrs.get("origen")` — `pandas.DataFrame.attrs` (verificado empíricamente en pandas 2.3.3) es metadata no computacional adjunta al DataFrame. Solo `LectorCanastaCsv`/`LectorSeriesCsv` setean `attrs["origen"] = ruta` al cargar; código que construye `CanastaCanonica`/`SerieNormalizada` en memoria (tests, notebooks) deja `attrs` vacío → `origen` resuelve a `None`. `fecha` se captura con `datetime.now()` al inicio del cuerpo de `calcular()` — antes de cualquier cómputo, no al construir el manifiesto — y se pasa explícita al `ManifestCalculo`.
+
+**Razón:** `fecha` como parámetro de entrada no la pasaba ningún caller real — siempre quedaba en su default. Las rutas como parámetro explícito duplicaban información que ya vive en el objeto que las originó; `attrs` evita que el caso de uso tenga que re-transportar algo que el loader ya conoce. `SerieNormalizada` pierde su parámetro `mapeo` (ver `SerieNormalizada(df)` en [5.4](#54-modelos-de-entrada)) por la misma razón: era información de proveniencia, no de dominio.
+
+---
+
+### 11.31 Eliminación final de `id_corrida`
+
+**Decisión:** `id_corrida` se elimina de `ManifestCalculo` (ver [11.10](#1110-id_corrida-eliminado-de-resultadoindice)) y de `ManifestDerivado`, donde se reemplaza por `versiones: list[VersionCanasta]`.
+
+**Razón:** los dos casos tienen semántica distinta. En `ManifestCalculo`, `id_corrida` era 100% redundante — `f"{tipo}:{version}"` no decía nada que `version`+`tipo` (ya campos propios) no dijeran; se elimina sin reemplazo, y `.resumen`/`.diagnostico` pasan a indexar/filtrar por `(version, tipo)` directo. En `ManifestDerivado`, en cambio, `id_corrida: list[str]` era la única fuente real de "qué versiones contribuyeron al derivado" — `ManifestDerivado` no tiene un campo `version` propio (es terminal, no de una sola canasta) — así que no es una eliminación limpia sino un reemplazo: `versiones: list[VersionCanasta]` expresa la misma información sin pasar por una serialización a string que había que parsear para recuperar la versión.
 
 ---
 
