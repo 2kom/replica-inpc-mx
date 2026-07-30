@@ -13,39 +13,87 @@ _ESTADOS_VALIDOS = frozenset(_ORDEN_SEVERIDAD)
 
 
 class ResultadoIndice(Resultado):
+    """Resultado de un cálculo de índice elemental sobre una canasta, o de un empalme entre tramos.
+
+    Args:
+        df_resultado: DataFrame con MultiIndex `(periodo, indice)` — ver Esquema abajo.
+        manifiesto: Un `ManifestCalculo` por corrida elemental que compone este
+            resultado; `empalmar` concatena listas sin colapsar.
+        df_reporte: DataFrame paralelo a `df_resultado` (mismo MultiIndex) con
+            columnas de cobertura/calidad por fila.
+        df_diagnostico: DataFrame plano, una fila por celda `(periodo, generico)`
+            sin dato — esquema `DiagnosticoFaltantes`, no comparte índice con
+            `df_resultado`.
+        periodo_referencia: Periodo en el que los valores del índice son
+            `valor_base` (default 100). `None` = resultado en escala natural
+            del cálculo; lo setea `rebasar()`.
+        frontera: Anclas de junta de canasta para reconstrucción cross-canasta
+            mensual (Fase 2A). `None` en quincenal y en resultados directos sin
+            junta; lo crea `a_mensual`.
+
+    Raises:
+        InvarianteViolado: Si `manifiesto` está vacío, si `df_resultado` no
+            trae las columnas mínimas (`version`, `tipo`, `indice_replicado`,
+            `estado_calculo`), si `estado_calculo` tiene valores fuera de
+            `{ok, rellenado, parcial, sin_datos, fallida}`, o si algún
+            `ManifestCalculo` no tiene fila correspondiente en `df_resultado`.
+
+    Esquema de `df_resultado` (MultiIndex: `(periodo, indice)`):
+        version (int): versión de canasta de la corrida.
+        tipo (str): tipo de índice calculado (`"INPC"` o categoría de clasificación).
+        indice_replicado (float): valor del índice; `NaN` si `estado_calculo`
+            es `sin_datos` o `fallida`.
+        indice_incidencia (float): columna interna, índice de-encadenado que
+            preserva `Σ inc = var`; no se expone en ninguna vista pública, el
+            motor de incidencias la lee vía `._completo`.
+        estado_calculo (str): `{ok, rellenado, parcial, sin_datos, fallida}`.
+        motivo_error (str | None): motivo cuando `estado_calculo` no es `ok`,
+            `parcial` ni `rellenado`.
+
+    Example:
+        `.resumen`:
+        | version_tipo | estado_calculo | periodo_inicio | periodo_fin |
+        | ------------ | -------------- | -------------- | ----------- |
+        | 2018:INPC    | ok             | 2Q Jul 2018    | 2Q Jun 2024 |
+
+    Ver: docs/diseño.md §5.7
+    """
+
     def __init__(
         self,
-        df: pd.DataFrame,
+        df_resultado: pd.DataFrame,
         manifiesto: list[ManifestCalculo],
-        reporte_df: pd.DataFrame,
-        diagnostico_df: pd.DataFrame,
+        df_reporte: pd.DataFrame,
+        df_diagnostico: pd.DataFrame,
         periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
         frontera: pd.DataFrame | None = None,
     ) -> None:
         if not manifiesto:
             raise InvarianteViolado("ResultadoIndice.manifiesto no puede estar vacío")
-        faltantes = _COLUMNAS_MINIMAS - set(df.columns)
+        faltantes = _COLUMNAS_MINIMAS - set(df_resultado.columns)
         if faltantes:
             raise InvarianteViolado(
-                f"ResultadoIndice.df requiere columnas mínimas {sorted(faltantes)}"
+                f"ResultadoIndice.df_resultado requiere columnas mínimas {sorted(faltantes)}"
             )
-        estados_invalidos = set(df["estado_calculo"].unique()) - _ESTADOS_VALIDOS
+        estados_invalidos = set(df_resultado["estado_calculo"].unique()) - _ESTADOS_VALIDOS
         if estados_invalidos:
             raise InvarianteViolado(
-                f"ResultadoIndice.df.estado_calculo admite solo "
+                f"ResultadoIndice.df_resultado.estado_calculo admite solo "
                 f"{sorted(_ESTADOS_VALIDOS)}; recibió {sorted(estados_invalidos)}"
             )
         for m in manifiesto:
-            if not ((df["version"] == m.version) & (df["tipo"] == m.tipo)).any():
+            if not (
+                (df_resultado["version"] == m.version) & (df_resultado["tipo"] == m.tipo)
+            ).any():
                 raise InvarianteViolado(
                     f"ManifestCalculo(version={m.version}, tipo={m.tipo!r}) "
-                    "no tiene filas correspondientes en df"
+                    "no tiene filas correspondientes en df_resultado"
                 )
-        super().__init__(df[["indice_replicado"]])
-        self._df_completo = df
+        super().__init__(df_resultado[["indice_replicado"]])
+        self._df_resultado = df_resultado
         self._manifiesto = manifiesto
-        self._reporte_df = reporte_df
-        self._diagnostico_df = diagnostico_df
+        self._df_reporte = df_reporte
+        self._df_diagnostico = df_diagnostico
         self._periodo_referencia = periodo_referencia
         # Anclas de junta de canasta para reconstrucción cross-canasta mensual (Fase 2A).
         # `None` en quincenal y en resultados directos sin junta. Lo crea `a_mensual`.
@@ -69,7 +117,7 @@ class ResultadoIndice(Resultado):
         # `indice_incidencia` es columna interna (la consume el motor de incidencias vía
         # `_completo`); no se expone en la vista pública.
         return Vista(
-            self._df_completo.drop(columns=["indice_incidencia"], errors="ignore"),
+            self._df_resultado.drop(columns=["indice_incidencia"], errors="ignore"),
             ["indice_replicado"],
         )
 
@@ -81,19 +129,19 @@ class ResultadoIndice(Resultado):
         pública. `indice_incidencia` es el índice de-encadenado que preserva la
         aditividad `Σ inc = var`.
         """
-        return self._df_completo
+        return self._df_resultado
 
     @property
     def reporte(self) -> pd.DataFrame:
-        return self._reporte_df
+        return self._df_reporte
 
     @property
     def diagnostico(self) -> pd.DataFrame:
-        return self._diagnostico_df
+        return self._df_diagnostico
 
     @property
     def resumen(self) -> pd.DataFrame:
-        df = self._df_completo
+        df = self._df_resultado
         filas = []
         for m in self._manifiesto:
             mascara = (df["version"] == m.version) & (df["tipo"] == m.tipo)
@@ -105,15 +153,14 @@ class ResultadoIndice(Resultado):
             periodo_fin = max(periodos)
             filas.append(
                 {
-                    "version": m.version,
-                    "tipo": m.tipo,
+                    "version_tipo": f"{m.version}:{m.tipo}",
                     "estado_calculo": estado,
                     "periodo_inicio": periodo_inicio,
                     "periodo_fin": periodo_fin,
                     "fecha": m.fecha,
                 }
             )
-        return pd.DataFrame(filas).set_index(["version", "tipo"])
+        return pd.DataFrame(filas).set_index("version_tipo")
 
     def _repr_html_(self) -> str:
         return self.resumen._repr_html_()  # type: ignore[operator]

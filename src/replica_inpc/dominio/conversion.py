@@ -116,7 +116,7 @@ def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
 
 def _validar_topologia(ordenados: list[ResultadoIndice]) -> list[object]:
     """Valida topología PATH y devuelve lista de periodos frontera entre pares consecutivos."""
-    conjuntos = [set(r._df_completo.index.get_level_values("periodo")) for r in ordenados]
+    conjuntos = [set(r._df_resultado.index.get_level_values("periodo")) for r in ordenados]
     fronteras: list[object] = []
     for i in range(len(ordenados) - 1):
         compartidos = conjuntos[i] & conjuntos[i + 1]
@@ -161,13 +161,13 @@ def empalmar(
             f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
         )
 
-    tipos_periodo = {type(r._df_completo.index.get_level_values("periodo")[0]) for r in resultados}
+    tipos_periodo = {type(r._df_resultado.index.get_level_values("periodo")[0]) for r in resultados}
     if len(tipos_periodo) > 1:
         raise InvarianteViolado(
             "empalmar requiere que todos los inputs tengan la misma periodicidad "
             "(quincenales o mensuales); no se pueden mezclar."
         )
-    primer_periodo = resultados[0]._df_completo.index.get_level_values("periodo")[0]
+    primer_periodo = resultados[0]._df_resultado.index.get_level_values("periodo")[0]
     if not isinstance(primer_periodo, PeriodoQuincenal):
         warnings.warn(
             "empalmar recibió ResultadoIndice mensuales. El mes frontera puede perder "
@@ -178,7 +178,7 @@ def empalmar(
 
     ordenados = sorted(
         resultados,
-        key=lambda r: r._df_completo.index.get_level_values("periodo").min(),
+        key=lambda r: r._df_resultado.index.get_level_values("periodo").min(),
     )
 
     fronteras = _validar_topologia(ordenados)
@@ -196,7 +196,7 @@ def empalmar(
             warnings.warn(msg, UserWarning, stacklevel=2)
 
     if version_nombres is None:
-        vc = max(int(v) for r in ordenados for v in r._df_completo["version"].unique())
+        vc = max(int(v) for r in ordenados for v in r._df_resultado["version"].unique())
     else:
         vc = int(version_nombres)
 
@@ -221,7 +221,7 @@ def empalmar(
         version_origen = max(m.version for m in r.manifiesto)
         mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
 
-        df_completo = _aplicar_renombre(r._df_completo, mapa)
+        df_completo = _aplicar_renombre(r._df_resultado, mapa)
         reporte = _aplicar_renombre(r.reporte, mapa)
         # El renombre puede colapsar dos variantes del mismo índice cuando el
         # catálogo 2010→2013 está incompleto y acc acumula ambas formas. Se
@@ -317,7 +317,7 @@ def rebasar(
     Endógeno: el denominador es el valor replicado del propio resultado en
     `periodo_referencia`.
     """
-    df = resultado._df_completo.copy()
+    df = resultado._df_resultado.copy()
     indices_unicos = df.index.get_level_values("indice").unique()
     huerfanos: list[str] = []
 
@@ -446,7 +446,7 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
 
     Promedio simple 1Q+2Q. Si solo una quincena disponible → `parcial`.
     """
-    df = resultado._df_completo
+    df = resultado._df_resultado
     periodos = df.index.get_level_values("periodo")
 
     if not all(isinstance(p, PeriodoQuincenal) for p in periodos):

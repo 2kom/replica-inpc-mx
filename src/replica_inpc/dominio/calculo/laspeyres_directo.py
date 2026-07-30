@@ -59,7 +59,7 @@ class LaspeyresDirecto(CalculadorBase):
         genericos_del_grupo = categoria_por_generico.index
 
         serie_recortada = _recortar_series_fecha(serie.df.loc[genericos_del_grupo], canasta.version)
-        serie_rellenada, df_diagnostico, _ = _rellenar_dato_serie_faltante(
+        serie_rellenada, df_diagnostico_relleno, _ = _rellenar_dato_serie_faltante(
             serie_recortada, canasta.version, tipo
         )
         ponderador = canasta.df.loc[genericos_del_grupo, "ponderador"].astype(float)
@@ -110,7 +110,7 @@ class LaspeyresDirecto(CalculadorBase):
         )
         motivo_error_arr = np.where(faltante_bool, "faltantes en serie", None)  # type: ignore[call-overload]
 
-        df_calc = pd.DataFrame(
+        df_indice_resultado = pd.DataFrame(
             {
                 "version": canasta.version,
                 "tipo": tipo,
@@ -155,10 +155,10 @@ class LaspeyresDirecto(CalculadorBase):
             index=idx,
         )
 
-        df_diag = pd.concat(
+        df_diagnostico = pd.concat(
             [
                 _construir_diagnostico(canasta.df, serie_rellenada, canasta.version, tipo),
-                df_diagnostico,
+                df_diagnostico_relleno,
             ],
             ignore_index=True,
         )
@@ -171,4 +171,4 @@ class LaspeyresDirecto(CalculadorBase):
             ruta_series=ruta_serie,
             fecha=fecha,
         )
-        return ResultadoIndice(df_calc, [manifiesto], df_reporte, df_diag)
+        return ResultadoIndice(df_indice_resultado, [manifiesto], df_reporte, df_diagnostico)

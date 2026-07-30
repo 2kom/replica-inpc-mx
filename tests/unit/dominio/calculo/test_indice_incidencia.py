@@ -190,9 +190,7 @@ def test_directo_indice_incidencia_igual_replicado() -> None:
 def test_t2_indice_incidencia_es_i_tramo() -> None:
     ref = 134.471
     largo = (
-        LaspeyresEncadenadoT2({"INPC": ref})
-        .calcular(_canasta_t2(), _serie_t2(), "INPC")
-        ._completo
+        LaspeyresEncadenadoT2({"INPC": ref}).calcular(_canasta_t2(), _serie_t2(), "INPC")._completo
     )
     # i_tramo en el traslape == 100 (serie/f_k = 100 por construcción T2)
     assert largo.at[(_TRASLAPE_T2, "INPC"), "indice_incidencia"] == pytest.approx(100.0)
@@ -450,7 +448,7 @@ _T_Q = PeriodoQuincenal(2024, 8, 1)  # 2024, post-junta
 
 def _con_frontera(r: ResultadoIndice, frontera: pd.DataFrame | None) -> ResultadoIndice:
     return ResultadoIndice(
-        r._df_completo,
+        r._df_resultado,
         r.manifiesto,
         r.reporte,
         r.diagnostico,

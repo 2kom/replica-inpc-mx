@@ -882,10 +882,10 @@ Resultado de un cálculo elemental sobre una sola canasta, o de un empalme entre
 
 ```python
 ResultadoIndice(
-    df: pd.DataFrame,
+    df_resultado: pd.DataFrame,
     manifiesto: list[ManifestCalculo],
-    reporte_df: pd.DataFrame,
-    diagnostico_df: pd.DataFrame,
+    df_reporte: pd.DataFrame,
+    df_diagnostico: pd.DataFrame,
     periodo_referencia: PeriodoQuincenal | PeriodoMensual | None = None,
 )
 ```
@@ -895,9 +895,9 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 | Invariante | Condición | Error |
 | --- | --- | --- |
 | `manifiesto` no vacío | `len(manifiesto) >= 1` | `InvarianteViolado` |
-| Columnas mínimas | `df` contiene `version`, `tipo`, `indice_replicado`, `estado_calculo` | `InvarianteViolado` |
+| Columnas mínimas | `df_resultado` contiene `version`, `tipo`, `indice_replicado`, `estado_calculo` | `InvarianteViolado` |
 | `estado_calculo` válido | valores ⊆ `{"ok", "rellenado", "parcial", "sin_datos", "fallida"}` | `InvarianteViolado` |
-| Coherencia manifiesto↔df | cada `ManifestCalculo` tiene ≥1 fila en `df` con su `version` y `tipo` | `InvarianteViolado` |
+| Coherencia manifiesto↔df_resultado | cada `ManifestCalculo` tiene ≥1 fila en `df_resultado` con su `version` y `tipo` | `InvarianteViolado` |
 
 **`.manifiesto`**
 
@@ -917,13 +917,13 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 | `estado_calculo` | `str` | nunca |
 | `motivo_error` | `str` | `estado_calculo` = `ok`, `parcial` o `rellenado` |
 
-**Columna interna `indice_incidencia`.** El `_df_completo` subyacente carga, además de las columnas de arriba, una columna interna `indice_incidencia` — el índice de-encadenado que el motor de incidencias usa para preservar la aditividad (ver [5.11](#511-cálculo-de-variaciones-e-incidencias) y [11.29](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias)). **No se expone en ninguna vista pública**: `.resultado` (`Vista`) la excluye explícitamente, y `.df`/`.resumen`/`.reporte` tampoco la traen. El motor la lee por un accesor interno (`._completo`). La pueblan los calculadores ([5.6](#56-calculadores-de-índice)); `empalmar`/`rebasar` la preservan sin reescalarla (el rebase NO la toca) y `a_mensual` la promedia explícito ([5.10](#510-conversión-y-combinación)).
+**Columna interna `indice_incidencia`.** El `_df_resultado` subyacente carga, además de las columnas de arriba, una columna interna `indice_incidencia` — el índice de-encadenado que el motor de incidencias usa para preservar la aditividad (ver [5.11](#511-cálculo-de-variaciones-e-incidencias) y [11.29](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias)). **No se expone en ninguna vista pública**: `.resultado` (`Vista`) la excluye explícitamente, y `.df`/`.resumen`/`.reporte` tampoco la traen. El motor la lee por un accesor interno (`._completo`). La pueblan los calculadores ([5.6](#56-calculadores-de-índice)); `empalmar`/`rebasar` la preservan sin reescalarla (el rebase NO la toca) y `a_mensual` la promedia explícito ([5.10](#510-conversión-y-combinación)).
 
 **Campo interno `_frontera` (Fase 2A).** `ResultadoIndice` lleva un campo interno opcional `_frontera` (`None` por defecto y en resultados quincenales), creado por `a_mensual` para preservar las anclas de junta de canasta que el promedio mensual destruiría. Es una tabla con índice `(periodo_junta, indice)` y columnas `version_old`, `version_new`, `indice_incidencia_old`, `indice_replicado_old`; el motor de incidencias la usa para la descomposición cross-canasta mensual. Contenido por tipo de resultado y propagación en [11.29](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias).
 
 **`.resumen` — esquema**
 
-Índice: MultiIndex `(version, tipo)`. Una fila por `ManifestCalculo`. `estado_calculo` = peor estado del tramo.
+Índice: `version_tipo` (string, formato `"{version}:{tipo}"`, ej. `"2018:INPC"`). Una fila por `ManifestCalculo`. `estado_calculo` = peor estado del tramo. Índice plano en vez de MultiIndex por decisión de legibilidad en notebook — solo existen 4 versiones de canasta, no hay filtrado por nivel que justifique el MultiIndex.
 
 | Columna | Tipo |
 | --- | --- |
@@ -972,18 +972,18 @@ Invariantes adicionales a los de `Resultado` (ver [5.5](#55-modelo-base)):
 
 ```python
 ResultadoVariacion(
-    df: pd.DataFrame,
+    df_resultado: pd.DataFrame,
     manifiesto: ManifestDerivado,
-    reporte_df: pd.DataFrame,
-    diagnostico_df: pd.DataFrame,
+    df_reporte: pd.DataFrame,
+    df_diagnostico: pd.DataFrame,
     indices_parciales: pd.DataFrame | None = None,
 )
 
 ResultadoIncidencia(
-    df: pd.DataFrame,
+    df_resultado: pd.DataFrame,
     manifiesto: ManifestDerivado,
-    reporte_df: pd.DataFrame,
-    diagnostico_df: pd.DataFrame,
+    df_reporte: pd.DataFrame,
+    df_diagnostico: pd.DataFrame,
     indices_parciales: pd.DataFrame | None = None,
 )
 ```
@@ -992,7 +992,7 @@ Invariantes adicionales a los de `Resultado`:
 
 | Invariante | Condición | Error |
 | --- | --- | --- |
-| Columnas mínimas | `df` contiene `tipo`, `clase_X`, columna calculada, `estado_calculo` | `InvarianteViolado` |
+| Columnas mínimas | `df_resultado` contiene `tipo`, `clase_X`, columna calculada, `estado_calculo` | `InvarianteViolado` |
 | `clase_X` homogénea | todas las filas tienen el mismo valor de `clase_variacion`/`clase_incidencia` | `InvarianteViolado` |
 | `clase_X` en catálogo | ver catálogo abajo | `InvarianteViolado` |
 | `tipo` homogéneo | todas las filas tienen el mismo `tipo` | `InvarianteViolado` |
@@ -3859,7 +3859,7 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 ### 11.29 `indice_incidencia` y de-encadenamiento de incidencias
 
-**Decisión:** la incidencia se calcula con `inc_i = w_i × (J_i(t) − J_i(base)) / J_INPC(base)`, donde `J` es la escala **seleccionada por fila** `(periodo, indice)` — ese es el contrato, no una excepción: en filas within-canasta `J = indice_incidencia` (de-encadenado); en filas cross-canasta `J = indice_replicado` visible. `indice_incidencia` se materializa en la fuente: `= i_tramo` en los calculadores encadenados (antes de `factor_h`), `= nivel crudo` en los directos. Vive en `ResultadoIndice._df_completo`, **fuera de toda vista pública** (`.resultado`/`.df`/`.resumen`/`.reporte` no la exponen); el motor de incidencias la lee por un accesor interno (`ResultadoIndice._completo`).
+**Decisión:** la incidencia se calcula con `inc_i = w_i × (J_i(t) − J_i(base)) / J_INPC(base)`, donde `J` es la escala **seleccionada por fila** `(periodo, indice)` — ese es el contrato, no una excepción: en filas within-canasta `J = indice_incidencia` (de-encadenado); en filas cross-canasta `J = indice_replicado` visible. `indice_incidencia` se materializa en la fuente: `= i_tramo` en los calculadores encadenados (antes de `factor_h`), `= nivel crudo` en los directos. Vive en `ResultadoIndice._df_resultado`, **fuera de toda vista pública** (`.resultado`/`.df`/`.resumen`/`.reporte` no la exponen); el motor de incidencias la lee por un accesor interno (`ResultadoIndice._completo`).
 
 **Razón — por qué hace falta.** La incidencia compara diferencias de nivel (`I_i(t) − I_i(base)`), no cocientes. El rebase multiplica cada subíndice por un factor propio `k_i = valor_base / I_i(R)`; el encadenamiento lo multiplica por `factor_h_i`. Ambos rompen la identidad de aditividad:
 
@@ -3876,7 +3876,7 @@ Las variaciones sobreviven (el factor se cancela en el cociente); las incidencia
 
 **Cross-canasta: prohibido `i_tramo` directo, exacto por segmentos (Fase 2A).** `i_tramo` es una escala interna de cada tramo, discontinua en la junta de canastas (`J_INPC ≈ 142` en el último periodo de 2018 vs `≈ 100.7` en el primero de 2024). Calcular una incidencia que cruce la junta comparando esos dos `J` directo daría un total implícito de `100.7/142 − 1 ≈ −0.29` — catastróficamente erróneo. La solución exacta (Fase 2A, ver subsección abajo) **parte el rango en segmentos por junta**, descompone cada segmento within-canasta con su propio `i_tramo` (exacto) y encadena las contribuciones con `S_m = INPC_visible(inicio_m)/INPC_visible(b)`. La **selección de escala sigue siendo por fila** `(periodo, indice)`: within-canasta usa `indice_incidencia` directo; cross-canasta de tipos **content-exact** (criterio `_es_content_exact`: `INFLACION COMPONENTE`, `INFLACION SUBCOMPONENTE`, `COG`, `CANASTA BASICA`) usa el encadenado por segmentos; cross-canasta de tipos finos no content-exact (`SCIAN RAMA`, `CCIF *`) cae al `indice_replicado` visible sin garantía (diferido a Fase 2B). Solo `componente`/`subcomponente` tienen indicador BIE; los demás content-exact son exactos algebraicamente pero sin validación contra INEGI.
 
-**Marcador `metodo_incidencia` (interno).** Cada fila lleva un marcador del método usado, en `{within, cross_segmentado, cross_t1_diferido, cross_visible, cross_sin_frontera}`. Vive **solo en `.reporte`** (todas las filas; fuente operativa de auditoría) y se repite en `.diagnostico` (que conserva su semántica: solo filas no computables). **No** se agrega a `df_out`/`.resultado.largo`: `ResultadoIncidencia.resultado` pasa `_df_completo` a `Vista` y `Vista.largo` devuelve el DataFrame completo, así que cualquier columna en `df_out` se filtraría a la vista pública; mantener el marcador fuera de `df_out` preserva la API pública (`incidencia_pp`). El cruce sigue siendo detectable además por `version_t != version_lag` en `.reporte`. No se reusa `estado_calculo = "parcial"` (ya significa "una sola quincena disponible", [11.7](#117-reglas-de-estado_calculo)).
+**Marcador `metodo_incidencia` (interno).** Cada fila lleva un marcador del método usado, en `{within, cross_segmentado, cross_t1_diferido, cross_visible, cross_sin_frontera}`. Vive **solo en `.reporte`** (todas las filas; fuente operativa de auditoría) y se repite en `.diagnostico` (que conserva su semántica: solo filas no computables). **No** se agrega a `df_out`/`.resultado.largo`: `ResultadoIncidencia.resultado` pasa `_df_resultado` a `Vista` y `Vista.largo` devuelve el DataFrame completo, así que cualquier columna en `df_out` se filtraría a la vista pública; mantener el marcador fuera de `df_out` preserva la API pública (`incidencia_pp`). El cruce sigue siendo detectable además por `version_t != version_lag` en `.reporte`. No se reusa `estado_calculo = "parcial"` (ya significa "una sola quincena disponible", [11.7](#117-reglas-de-estado_calculo)).
 
 **Versión por fila, no por periodo.** `version_t`/`version_lag` (y el `cross` que selecciona la escala, y la versión de canasta de la que se toma el ponderador base en el Fix 1) se derivan **por fila** `(periodo, indice)`: `version_t` de `df_emitir["version"]`, `version_lag` de `df_lookup["version"].reindex(base_idx)` (con fallback a `version_t` cuando el periodo base no existe). Nunca por periodo: usar `groupby("periodo").first()` clasificaría mal las filas en un periodo frontera donde coexisten índices de dos versiones — daría una etiqueta falsa y, peor, buscaría el ponderador base en la canasta equivocada, tirando como no computable una alta within-canasta que sí tiene ponderador en su propia versión. Por eso `version_t != version_lag` coincide exactamente con la decisión real de escala.
 
@@ -3889,7 +3889,7 @@ contribucion_K(b,t) = Σ_m  S_m · w_K^(version_m) · (J_K(fin_m) − J_K(inicio
 S_m = INPC_visible(inicio_m) / INPC_visible(b)        (S_1 = 1)
 ```
 
-con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada junta vale `100` por contrato (el tramo nuevo ancla `i_tramo = 100` en su junta; directo 2018, T2 2024). El lado viejo (`J_K_old(e)`, `INPC_visible(e)`) en **quincenal** está en `_df_completo` (el empalme se lo asigna al tramo viejo); en **mensual** `a_mensual` promedia la quincena de enlace, así que se preserva en el campo interno `_frontera` ([5.7](#57-resultadoindice), [5.10](#510-conversión-y-combinación)). Componentes nuevos: `_segmentos_entre`, `_incidencia_cross_encadenada`, `_es_content_exact` (`incidencias.py`); `_construir_frontera` y la propagación de `_frontera` por `a_mensual`/`rebasar`/`empalmar` (`conversion.py`). Estados (con `valor=None` → el llamador conserva el visible de Fase 1): `cross_segmentado` (exacto), `cross_sin_frontera` (mensual content-exact sin metadatos de enlace → visible, sin garantía), `cross_t1_diferido` (la junta entra a un tramo T1/2013 → visible, sin garantía). **Verificado con dato real:** `i_tramo_2024(2Q Jul 2024) = 100.0007` (contrato vale) vs `i_tramo_2013(2Q Mar 2013) = 108.81` (NO ancla en 100); por eso T1-como-lado-nuevo no es segmentable con el contrato =100 y se difiere a Fase 2B. El alcance content-exact NO se limita a componente/subcomponente: `_es_content_exact` también da `True` para `COG` y `CANASTA BASICA`, que reciben segmentación (algebraicamente exacta, sin validación BIE porque no tienen indicador).
+con `J = indice_incidencia` de-encadenado por segmento. El lado nuevo de cada junta vale `100` por contrato (el tramo nuevo ancla `i_tramo = 100` en su junta; directo 2018, T2 2024). El lado viejo (`J_K_old(e)`, `INPC_visible(e)`) en **quincenal** está en `_df_resultado` (el empalme se lo asigna al tramo viejo); en **mensual** `a_mensual` promedia la quincena de enlace, así que se preserva en el campo interno `_frontera` ([5.7](#57-resultadoindice), [5.10](#510-conversión-y-combinación)). Componentes nuevos: `_segmentos_entre`, `_incidencia_cross_encadenada`, `_es_content_exact` (`incidencias.py`); `_construir_frontera` y la propagación de `_frontera` por `a_mensual`/`rebasar`/`empalmar` (`conversion.py`). Estados (con `valor=None` → el llamador conserva el visible de Fase 1): `cross_segmentado` (exacto), `cross_sin_frontera` (mensual content-exact sin metadatos de enlace → visible, sin garantía), `cross_t1_diferido` (la junta entra a un tramo T1/2013 → visible, sin garantía). **Verificado con dato real:** `i_tramo_2024(2Q Jul 2024) = 100.0007` (contrato vale) vs `i_tramo_2013(2Q Mar 2013) = 108.81` (NO ancla en 100); por eso T1-como-lado-nuevo no es segmentable con el contrato =100 y se difiere a Fase 2B. El alcance content-exact NO se limita a componente/subcomponente: `_es_content_exact` también da `True` para `COG` y `CANASTA BASICA`, que reciben segmentación (algebraicamente exacta, sin validación BIE porque no tienen indicador).
 
 **Frontera por tipo de resultado.** `_frontera` del INPC guarda `INPC_visible(e)` y `J_INPC_old(e)`; la de clasificación guarda `J_K_old(e)` por categoría y **no** `INPC_visible(e)` — `rebasar(clasificacion)` no conoce el factor de rebase del INPC (`k_INPC`), así que `INPC_visible(e)` vive solo en `inpc._frontera` y `_incidencia_cross_encadenada` lo lee de ahí. `rebasar` reescala el campo visible (`INPC_visible(e)`) por el mismo `k` que `indice_replicado` y preserva los `indice_incidencia_old`; así `S_m` queda consistente y la incidencia cross sigue invariante al rebase.
 

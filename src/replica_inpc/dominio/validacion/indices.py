@@ -114,7 +114,8 @@ def _construir_resumen(largo_val: pd.DataFrame, resultado: ResultadoIndice) -> p
     base = resultado.resumen
     filas = []
     for idx, fila in base.iterrows():
-        version, tipo = cast(tuple[VersionCanasta, str], idx)
+        version_str, tipo = cast(str, idx).split(":", 1)
+        version = cast(VersionCanasta, int(version_str))
         mascara = (largo_val["version"] == version) & (largo_val["tipo"] == tipo)
         sub = largo_val[mascara]
         conteos = contar(sub["estado_validacion"])

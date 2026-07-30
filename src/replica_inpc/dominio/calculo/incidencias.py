@@ -16,7 +16,7 @@ Corrige la escala de los índices antes de descomponer:
   se descompone exacto por segmentos (Fase 2A, `_incidencia_cross_encadenada`); para tipos
   finos no content-exact cae al `indice_replicado` visible (`cross_visible`, sin garantía).
   El método por fila se marca en `metodo_incidencia` — en `.reporte`/`.diagnostico`, NO en
-  `.resultado.largo` (`Vista.largo` devuelve el `_df_completo` entero). El cruce es además
+  `.resultado.largo` (`Vista.largo` devuelve el `_df_resultado` entero). El cruce es además
   detectable por `version_t != version_lag`.
 """
 
