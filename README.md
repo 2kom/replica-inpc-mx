@@ -50,7 +50,7 @@ conda create -n replica-inpc python=3.10
 conda activate replica-inpc
 
 # Instalar el paquete en modo editable
-pip install -e '.[dev]'
+pip install .
 ```
 
 Para generar canastas desde PDF/xlsx oficial de INEGI (`tools/generar_canasta.py`) hace
@@ -79,8 +79,8 @@ rep.set_token("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 # Serie histórica 2018 + 2024, mensual, base 2Q Jul 2018 = 100
 resultado = rep.calcular_historia(
     insumos=[
-        (2018, "data/inputs/ponderadores_2018.csv", "data/inputs/series_2018.CSV"),
-        (2024, "data/inputs/ponderadores_2024.csv", "data/inputs/series_2024.CSV"),
+        (2018, "ruta/a/ponderadores_2018.csv", "ruta/a/series_2018.CSV"),
+        (2024, "ruta/a/ponderadores_2024.csv", "ruta/a/series_2024.CSV"),
     ],
     tipo="inpc",
     referencia="2Q Jul 2018",

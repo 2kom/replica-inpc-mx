@@ -33,7 +33,7 @@ class Vista:
         """Pivotea `columnas` por `periodo`: filas=`indice` si 1 columna, MultiIndex `(indice, metrica)` si N."""
         if len(self._columnas) == 1:
             return self._df[self._columnas[0]].unstack("periodo")
-        return self._df[self._columnas].stack().unstack("periodo")  # type: ignore
+        return self._df[self._columnas].stack(future_stack=True).unstack("periodo")  # type: ignore
 
     def _repr_html_(self) -> str:
         """Delega el render HTML a `.largo`."""

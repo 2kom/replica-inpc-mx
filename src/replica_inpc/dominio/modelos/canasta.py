@@ -86,13 +86,23 @@ class CanastaCanonica:
             raise InvarianteViolado("La versión de la canasta debe ser 2010, 2013, 2018 o 2024.")
         if (df.index == "").any():
             raise InvarianteViolado("El índice del DataFrame no puede contener cadenas vacías.")
-        if not (df["ponderador"].astype(float) > 0).all():
+        try:
+            ponderador_float = df["ponderador"].astype(float)
+        except ValueError as e:
+            raise InvarianteViolado(
+                f"La columna 'ponderador' contiene un valor no numérico: {e}"
+            ) from e
+        if not (ponderador_float > 0).all():
             raise InvarianteViolado("La columna 'ponderador' debe contener solo valores positivos.")
-        if (
-            abs(df["ponderador"].astype(float).sum() - 100) > 1e-5
-        ):  # Permitir una pequeña tolerancia numérica
+        if abs(ponderador_float.sum() - 100) > 1e-5:  # Permitir una pequeña tolerancia numérica
             raise InvarianteViolado("La suma de los ponderadores debe ser igual a 100.")
-        if df["encadenamiento"].notnull().any() and (df["encadenamiento"].astype(float) <= 0).any():
+        try:
+            encadenamiento_float = df["encadenamiento"].astype(float)
+        except ValueError as e:
+            raise InvarianteViolado(
+                f"La columna 'encadenamiento' contiene un valor no numérico: {e}"
+            ) from e
+        if df["encadenamiento"].notnull().any() and (encadenamiento_float <= 0).any():
             raise InvarianteViolado(
                 "La columna 'encadenamiento' debe contener solo valores positivos cuando no es nula."
             )

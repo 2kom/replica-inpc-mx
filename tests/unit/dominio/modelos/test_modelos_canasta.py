@@ -96,6 +96,18 @@ def test_encadenamiento_nulo_no_falla() -> None:
     CanastaCanonica(_df(), 2018)
 
 
+def test_ponderador_no_numerico_falla_con_invariante_no_value_error() -> None:
+    df = _df(ponderadores=("abc", "20.0", "30.0", "40.0"))
+    with pytest.raises(InvarianteViolado):
+        CanastaCanonica(df, 2018)
+
+
+def test_encadenamiento_no_numerico_falla_con_invariante_no_value_error() -> None:
+    df = _df(encadenamiento=("abc", None, None, None))
+    with pytest.raises(InvarianteViolado):
+        CanastaCanonica(df, 2018)
+
+
 # ---------- Columnas core de clasificación ----------
 
 
@@ -112,6 +124,15 @@ def _df_con_core(vacia: str | None = None) -> pd.DataFrame:
 def test_columna_core_vacia_falla(columna: str) -> None:
     with pytest.raises(InvarianteViolado):
         CanastaCanonica(_df_con_core(vacia=columna), 2018)
+
+
+@pytest.mark.parametrize("valor_vacio", ["", "   "])
+@pytest.mark.parametrize("columna", _COLUMNAS_CORE)
+def test_columna_core_cadena_vacia_o_blancos_falla(columna: str, valor_vacio: str) -> None:
+    df = _df_con_core()
+    df.loc["arroz", columna] = valor_vacio
+    with pytest.raises(InvarianteViolado):
+        CanastaCanonica(df, 2018)
 
 
 def test_columnas_core_pobladas_no_falla() -> None:

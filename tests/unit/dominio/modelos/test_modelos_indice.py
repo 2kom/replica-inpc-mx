@@ -33,9 +33,7 @@ def _df_indice(
     estados = estados or ["ok", "ok"]
     n = len(estados)
     periodos = [PeriodoQuincenal(año, 1, q) for q in range(1, n + 1)]
-    idx = pd.MultiIndex.from_tuples(
-        [(p, "INPC") for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     return pd.DataFrame(
         {
             "version": [version] * n,
@@ -95,6 +93,15 @@ def test_resultado_retorna_vista() -> None:
     assert "estado_calculo" in vista.largo.columns
 
 
+def test_indice_incidencia_oculto_en_resultado_pero_presente_en_completo() -> None:
+    df = _df_indice()
+    df["indice_incidencia"] = [95.0, 105.0]
+    r = ResultadoIndice(df, [_manifiesto()], _reporte_vacio(), _diagnostico_vacio())
+    assert "indice_incidencia" not in r.resultado.largo.columns
+    assert "indice_incidencia" in r._completo.columns
+    assert list(r._completo["indice_incidencia"]) == [95.0, 105.0]
+
+
 def test_reporte_y_diagnostico_propagados() -> None:
     rep = pd.DataFrame({"x": [1]})
     diag = pd.DataFrame({"y": [2]})
@@ -127,6 +134,10 @@ def test_resumen_una_fila_por_manifiesto() -> None:
         "fecha",
     ]
     assert list(res["fecha"]) == [datetime(2024, 1, 1), datetime(2024, 1, 1)]
+    assert res.loc["2018:INPC", "periodo_inicio"] == PeriodoQuincenal(2018, 1, 1)
+    assert res.loc["2018:INPC", "periodo_fin"] == PeriodoQuincenal(2018, 1, 2)
+    assert res.loc["2024:INPC", "periodo_inicio"] == PeriodoQuincenal(2024, 1, 1)
+    assert res.loc["2024:INPC", "periodo_fin"] == PeriodoQuincenal(2024, 1, 2)
 
 
 def test_resumen_peor_estado_segun_severidad() -> None:
@@ -147,3 +158,21 @@ def test_resumen_estado_fallida_mas_severo_que_sin_datos() -> None:
         _diagnostico_vacio(),
     )
     assert r.resumen.loc["2018:INPC", "estado_calculo"] == "fallida"
+
+
+@pytest.mark.parametrize(
+    ("estados", "esperado"),
+    [
+        (["ok", "rellenado"], "rellenado"),
+        (["rellenado", "parcial"], "parcial"),
+        (["rellenado", "sin_datos"], "sin_datos"),
+        (["parcial", "sin_datos"], "sin_datos"),
+    ],
+)
+def test_resumen_severidad_cadena_completa_incluye_rellenado(
+    estados: list[str], esperado: str
+) -> None:
+    r = ResultadoIndice(
+        _df_indice(estados=estados), [_manifiesto()], _reporte_vacio(), _diagnostico_vacio()
+    )
+    assert r.resumen.loc["2018:INPC", "estado_calculo"] == esperado

@@ -119,6 +119,20 @@ def test_vista_ancho_ncols_preserva_nan() -> None:
     assert ancho.loc[("002", "b"), cast(Any, q2)] == 40.0
 
 
+def test_vista_ancho_metrica_nan_en_todos_los_periodos_no_desaparece_fila() -> None:
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (PeriodoQuincenal(2024, 1, 1), "001"),
+            (PeriodoQuincenal(2024, 1, 2), "001"),
+        ],
+        names=["periodo", "indice"],
+    )
+    df = pd.DataFrame({"a": [np.nan, np.nan], "b": [10.0, 20.0]}, index=idx)
+    ancho = Vista(df, ["a", "b"]).ancho
+    assert ("001", "a") in ancho.index
+    assert ancho.loc[cast(Any, ("001", "a"))].isna().all()
+
+
 # ---------- Resultado ----------
 
 
@@ -185,6 +199,15 @@ def test_resultado_df_property_retorna_lo_guardado() -> None:
 def test_resultado_pipe_aplica_funcion() -> None:
     r = _ResultadoMinimo(_df_largo_1col())
     assert r.pipe(lambda res: res.df.shape) == (2, 1)
+
+
+def test_resultado_pipe_reenvia_args_y_kwargs() -> None:
+    r = _ResultadoMinimo(_df_largo_1col())
+
+    def fn(res: Resultado, factor: int, *, offset: int) -> int:
+        return res.df.shape[0] * factor + offset
+
+    assert r.pipe(fn, 3, offset=1) == 7
 
 
 # ---------- Validacion ----------
