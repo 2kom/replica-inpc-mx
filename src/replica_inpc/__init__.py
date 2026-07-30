@@ -17,6 +17,7 @@ from replica_inpc.api.consultas import (
     consultar_variacion,
 )
 from replica_inpc.api.flujos import calcular_historia
+from replica_inpc.api.graficas import graficar
 from replica_inpc.api.incidencias import (
     incidencia_acumulada,
     incidencia_acumulada_anual,
@@ -129,6 +130,8 @@ __all__ = [
     "consultar_variacion",
     # flujos
     "calcular_historia",
+    # graficas
+    "graficar",
     # errores
     "ArchivoCorrupto",
     "ArchivoNoEncontrado",

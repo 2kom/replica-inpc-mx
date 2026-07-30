@@ -1682,6 +1682,7 @@ Capa de acceso público. Estilo flat: `import replica_inpc as rep` → `rep.<fun
 | `incidencias.py` | Análisis de incidencias |
 | `validaciones.py` | Validaciones contra INEGI |
 | `flujos.py` | Flujos orquestados completos |
+| `graficas.py` | Graficación de resultados |
 | `__init__.py` | Vacío — re-export y proxy de módulo en paquete raíz |
 
 **Convenciones de naming**
