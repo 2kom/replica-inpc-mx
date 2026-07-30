@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import re
 import warnings
 
 import pandas as pd
 
-from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
+from replica_inpc.dominio.correspondencia_canastas import (
+    ERRORES_CLASIFICACION_INDICES,
+    ERRORES_TIPOGRAFICOS_INDICES,
+    RENOMBRES_CODIGOS_INDICES,
+    RENOMBRES_INDICES,
+)
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -12,6 +18,16 @@ from replica_inpc.dominio.tipos import RANGOS_CANASTAS, TIPO_INPC, VersionCanast
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 _ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
+
+# CCIF DIVISION/GRUPO/CLASE traen código numérico de prefijo cuando la canasta viene de
+# pdf ("12 bienes y servicios diversos"), pero no cuando viene de xlsx ("bienes y
+# servicios diversos") — LectorCanastaCsv no lo normaliza. RENOMBRES_INDICES,
+# ERRORES_TIPOGRAFICOS_INDICES y ERRORES_CLASIFICACION_INDICES asumen el nombre sin
+# código; el código se separa antes de esas tablas y se reconcilia al final con
+# RENOMBRES_CODIGOS_INDICES. SCIAN/INFLACION AGRUPACION no tienen este problema — sus
+# llaves en RENOMBRES_INDICES ya incluyen el código tal como viene en el dato crudo.
+_TIPOS_CON_CODIGO_SEPARADO = frozenset({"CCIF DIVISION", "CCIF GRUPO", "CCIF CLASE"})
+_PATRON_CODIGO = re.compile(r"^([\d.]+)\s+(.*)$")
 
 # Juntas de canasta: (periodo_quincenal_enlace, version_old, version_new). El enlace es el
 # límite inferior del tramo nuevo; el tramo viejo lo posee en el empalme.
@@ -76,9 +92,29 @@ def _componer_mapas(m1: dict[str, str], m2: dict[str, str]) -> dict[str, str]:
     return resultado
 
 
+def _separar_codigo(x: str) -> tuple[str | None, str]:
+    """Separa el código numérico de prefijo (formato pdf) del nombre; `None` si no trae (xlsx)."""
+    m = _PATRON_CODIGO.match(x)
+    if m:
+        return m.group(1), m.group(2)
+    return None, x
+
+
+def _corregir_nombre(nombre: str, tipo: str, version: int) -> str:
+    """Aplica typo y error de clasificación conocidos de `version`, antes de renombrar entre versiones."""
+    nombre = ERRORES_TIPOGRAFICOS_INDICES.get(tipo, {}).get(version, {}).get(nombre, nombre)
+    nombre = ERRORES_CLASIFICACION_INDICES.get(tipo, {}).get(version, {}).get(nombre, nombre)
+    return nombre
+
+
 def _construir_mapa_renombre(
     tipo: str, version_origen: int, version_canonica: int
-) -> dict[str, str]:
+) -> dict[str, tuple[str, str | None]]:
+    """nombre_origen (ya corregido de typos/clasificación) -> (nombre_destino, código_destino).
+
+    `código_destino` es `None` cuando el código no cambia en el tramo recorrido — el
+    llamador conserva el código original del dato crudo en ese caso.
+    """
     if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
         return {}
     orden: list[int] = list(_ORDEN_VERSIONES)
@@ -87,25 +123,72 @@ def _construir_mapa_renombre(
         idx_c = orden.index(version_canonica)
     except ValueError:
         return {}
-    mapa: dict[str, str] = {}
-    if idx_o < idx_c:
-        for paso in range(idx_o, idx_c):
-            mapa_paso = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
-            mapa = _componer_mapas(mapa, mapa_paso)
-    else:
-        pasos_inv = []
-        for paso in range(idx_c, idx_o):
-            mapa_fwd = dict(RENOMBRES_INDICES[tipo].get(orden[paso], {}))
-            pasos_inv.append({v: k for k, v in mapa_fwd.items()})
-        for mapa_inv in reversed(pasos_inv):
-            mapa = _componer_mapas(mapa, mapa_inv)
-    return mapa
+    forward = idx_o < idx_c
+    rango = range(idx_o, idx_c) if forward else range(idx_c, idx_o)
+
+    pasos: list[tuple[dict[str, str], dict[str, tuple[str, str]]]] = []
+    for paso in rango:
+        version_paso = orden[paso]
+        tabla_nombre = RENOMBRES_INDICES[tipo].get(version_paso, {})
+        tabla_codigo = RENOMBRES_CODIGOS_INDICES.get(tipo, {}).get(version_paso, {})
+        if forward:
+            pasos.append((tabla_nombre, tabla_codigo))
+        else:
+            tabla_nombre_inv = {v: k for k, v in tabla_nombre.items()}
+            # Código-solo (nombre sin cambio) también se invierte: la llave usa el
+            # nombre tal como queda tras el renombre de este paso (o el mismo si no
+            # cambió), igual que hace tabla_nombre_inv para las entradas con nombre.
+            tabla_codigo_inv: dict[str, tuple[str, str]] = {
+                tabla_nombre.get(nombre_ant, nombre_ant): (cod_nuevo, cod_ant)
+                for nombre_ant, (cod_ant, cod_nuevo) in tabla_codigo.items()
+            }
+            pasos.append((tabla_nombre_inv, tabla_codigo_inv))
+    if not forward:
+        pasos.reverse()
+
+    mapa: dict[str, tuple[str, str | None]] = {}
+    for tabla_nombre_paso, tabla_codigo_paso in pasos:
+        # Unión: una entrada puede cambiar de nombre, de código, o ambos — código-solo
+        # (nombre sin cambio) no aparece en tabla_nombre_paso, solo en tabla_codigo_paso.
+        for origen in set(tabla_nombre_paso) | set(tabla_codigo_paso):
+            mapa.setdefault(origen, (origen, None))
+        for k, (actual, cod) in list(mapa.items()):
+            if actual in tabla_nombre_paso or actual in tabla_codigo_paso:
+                nuevo_nombre = tabla_nombre_paso.get(actual, actual)
+                nuevo_cod = tabla_codigo_paso[actual][1] if actual in tabla_codigo_paso else cod
+                mapa[k] = (nuevo_nombre, nuevo_cod)
+    return {k: v for k, v in mapa.items() if v != (k, None)}
 
 
-def _aplicar_renombre(df: pd.DataFrame, mapa: dict[str, str]) -> pd.DataFrame:
-    if not mapa or df.empty:
+def _renombrar_valor(
+    x: str, tipo: str, version_origen: int, mapa: dict[str, tuple[str, str | None]]
+) -> str:
+    """Aplica typo/clasificación/renombre/código a un valor crudo de `indice` o categoría CCIF."""
+    if tipo not in _TIPOS_CON_CODIGO_SEPARADO:
+        return mapa.get(x, (x, None))[0]
+    codigo, nombre = _separar_codigo(x)
+    nombre = _corregir_nombre(nombre, tipo, version_origen)
+    nombre_destino, codigo_destino = mapa.get(nombre, (nombre, None))
+    if codigo is None:
+        return nombre_destino
+    return f"{codigo_destino if codigo_destino is not None else codigo} {nombre_destino}"
+
+
+def _aplicar_renombre(
+    df: pd.DataFrame,
+    tipo: str,
+    version_origen: int,
+    mapa: dict[str, tuple[str, str | None]],
+) -> pd.DataFrame:
+    if df.empty or (not mapa and tipo not in _TIPOS_CON_CODIGO_SEPARADO):
         return df
-    new_indice = df.index.get_level_values("indice").map(lambda x: mapa.get(x, x))
+
+    def renombrar(x: object) -> object:
+        if not isinstance(x, str):
+            return x
+        return _renombrar_valor(x, tipo, version_origen, mapa)
+
+    new_indice = df.index.get_level_values("indice").map(renombrar)
     new_periodo = df.index.get_level_values("periodo")
     df_nuevo = df.copy()
     df_nuevo.index = pd.MultiIndex.from_arrays(
@@ -221,8 +304,8 @@ def empalmar(
         version_origen = max(m.version for m in r.manifiesto)
         mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
 
-        df_completo = _aplicar_renombre(r._df_resultado, mapa)
-        reporte = _aplicar_renombre(r.reporte, mapa)
+        df_completo = _aplicar_renombre(r._df_resultado, tipo_unico, version_origen, mapa)
+        reporte = _aplicar_renombre(r.reporte, tipo_unico, version_origen, mapa)
         # El renombre puede colapsar dos variantes del mismo índice cuando el
         # catálogo 2010→2013 está incompleto y acc acumula ambas formas. Se
         # preserva la primera aparición (orden cronológico = tramo anterior
@@ -291,7 +374,7 @@ def empalmar(
             continue
         version_origen = max(m.version for m in r.manifiesto)
         mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
-        fronteras_df.append(_aplicar_renombre(fr, mapa))
+        fronteras_df.append(_aplicar_renombre(fr, tipo_unico, version_origen, mapa))
     frontera_out: pd.DataFrame | None = None
     if fronteras_df:
         frontera_out = pd.concat(fronteras_df)

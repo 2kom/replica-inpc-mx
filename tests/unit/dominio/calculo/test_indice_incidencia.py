@@ -376,7 +376,7 @@ def test_cross_canasta_renombre_alinea_ponderador() -> None:
     # la fila cross (base 2018) caería como "sin ponderador". El fix renombra el ponderador
     # al vocabulario canónico antes de buscarlo.
     mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
-    nativo_2018, canonico = next((k, v) for k, v in mapa.items() if k != v)
+    nativo_2018, (canonico, _codigo) = next((k, v) for k, v in mapa.items() if v[0] != k)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)
     inpc = _res_multi(
@@ -404,7 +404,7 @@ def test_vc_inferido_soporta_version_nombres_no_max() -> None:
     # inferirse como max(version)=2024; se infiere como la versión cuyos nombres caben en su
     # canasta nativa (2018). Si fallara, la fila cross caería como "sin ponderador".
     mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
-    nativo_2018, nativo_2024 = next((k, v) for k, v in mapa.items() if k != v)
+    nativo_2018, (nativo_2024, _codigo) = next((k, v) for k, v in mapa.items() if v[0] != k)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)
     inpc = _res_multi(

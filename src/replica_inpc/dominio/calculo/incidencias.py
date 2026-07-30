@@ -37,7 +37,11 @@ from replica_inpc.dominio.calculo._temporal import (
     restar_meses,
     restar_quincenas,
 )
-from replica_inpc.dominio.conversion import _componer_mapas, _construir_mapa_renombre
+from replica_inpc.dominio.conversion import (
+    _componer_mapas,
+    _construir_mapa_renombre,
+    _renombrar_valor,
+)
 from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_GENERICOS
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -184,7 +188,7 @@ def _es_content_exact(tipo: str, canastas: dict[int, CanastaCanonica]) -> bool:
         d: dict[str, str] = {}
         for gen_nat, cat_nat in serie.items():
             gen_c = mapa_gen.get(str(gen_nat), str(gen_nat))
-            cat_c = mapa_cat.get(str(cat_nat), str(cat_nat))
+            cat_c = _renombrar_valor(str(cat_nat), tipo, int(v), mapa_cat)
             d[gen_c] = cat_c
         gen_cat.append(d)
         cat_sets.append(set(d.values()))
@@ -511,8 +515,10 @@ def _construir_resultado(
     for v, c in canastas.items():
         ponds = c.df["ponderador"].astype(float).groupby(c.df[tipo_clas]).sum()
         mapa = _construir_mapa_renombre(tipo_clas, int(v), vc)
-        if mapa:
-            ponds = ponds.rename(index=mapa).groupby(level=0).sum()
+        renombres = {
+            cast(str, x): _renombrar_valor(str(x), tipo_clas, int(v), mapa) for x in ponds.index
+        }
+        ponds = ponds.rename(index=renombres).groupby(level=0).sum()
         pond_por_version[v] = ponds
     indices_clas = df_emitir.index.get_level_values("indice")
     base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])

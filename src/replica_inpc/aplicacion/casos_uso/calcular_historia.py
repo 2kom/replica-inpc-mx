@@ -17,6 +17,7 @@ from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.conversion import (
     _construir_mapa_renombre,
+    _renombrar_valor,
     a_mensual,
     empalmar,
     rebasar,
@@ -58,7 +59,7 @@ def _referencias_normalizadas(
             continue
         if pd.isna(valor):
             continue
-        refs[mapa.get(str(indice), str(indice))] = float(valor)  # type: ignore[arg-type]
+        refs[_renombrar_valor(str(indice), tipo, version_origen, mapa)] = float(valor)  # type: ignore[arg-type]
     return refs
 
 
