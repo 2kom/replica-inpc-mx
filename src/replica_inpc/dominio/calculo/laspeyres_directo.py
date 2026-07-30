@@ -80,12 +80,22 @@ class LaspeyresDirecto(CalculadorBase):
                 g for g in indice_por_grupo.index if g in self._referencia_empalme
             ]
             if grupos_con_referencia:
+                denominador = indice_por_grupo.loc[
+                    grupos_con_referencia, cast(Any, traslape)
+                ].astype(float)
                 referencia_rebase = pd.Series(
                     {g: self._referencia_empalme[g] for g in grupos_con_referencia}
                 )
-                factor_rebase = referencia_rebase / indice_por_grupo.loc[
-                    grupos_con_referencia, cast(Any, traslape)
-                ].astype(float)
+                grupos_invalidos = denominador[
+                    ~np.isfinite(denominador) | (denominador == 0) | ~np.isfinite(referencia_rebase)
+                ].index.tolist()
+                if grupos_invalidos:
+                    raise ErrorCalculo(
+                        f"No se puede rebasar {grupos_invalidos} en el periodo de traslape "
+                        f"{traslape}: índice crudo o referencia de empalme no válidos "
+                        "(cero o no finito)."
+                    )
+                factor_rebase = referencia_rebase / denominador
                 indice_por_grupo.loc[grupos_con_referencia] = indice_por_grupo.loc[
                     grupos_con_referencia
                 ].multiply(factor_rebase, axis=0)

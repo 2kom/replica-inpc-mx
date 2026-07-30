@@ -57,7 +57,10 @@ class SerieNormalizada:
         if (df < 0).any().any():
             raise InvarianteViolado("Los valores del DataFrame no pueden ser negativos.")
 
-        self._df = df
+        # Orden cronológico explícito: el relleno bfill/ffill de calculo/base.py opera
+        # por posición física de columna, no por valor — columnas desordenadas
+        # propagarían el dato del vecino físico equivocado en vez del cronológico.
+        self._df = df.sort_index(axis=1)
 
     @property
     def df(self) -> pd.DataFrame:

@@ -89,6 +89,16 @@ def test_valores_con_nan_no_falla() -> None:
 # ---------- Properties ----------
 
 
+def test_columnas_desordenadas_se_ordenan_cronologicamente() -> None:
+    # calculo/base.py rellena NaN con bfill/ffill por posición física de columna —
+    # si SerieNormalizada no ordena, el relleno propaga el dato del vecino físico
+    # equivocado en vez del cronológico.
+    periodos_desordenados = (_PERIODOS[0], _PERIODOS[2], _PERIODOS[1])
+    df = _df(periodos=periodos_desordenados)
+    s = SerieNormalizada(df)
+    pd.testing.assert_frame_equal(s.df, df.sort_index(axis=1))
+
+
 def test_repr_html_devuelve_string() -> None:
     s = SerieNormalizada(_df())
     assert isinstance(s._repr_html_(), str)

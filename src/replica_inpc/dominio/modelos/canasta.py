@@ -25,7 +25,8 @@ class CanastaCanonica:
 
     Raises:
         InvarianteViolado: Si la versión no es válida, si el índice contiene
-            duplicados o cadenas vacías, si algún ponderador no es positivo, si
+            duplicados o cadenas vacías, si `ponderador` o `encadenamiento`
+            contienen texto no numérico, si algún ponderador no es positivo, si
             la suma de ponderadores no es 100, si algún encadenamiento no nulo
             no es positivo, o si `COG`/`INFLACION COMPONENTE`/`INFLACION
             SUBCOMPONENTE`/`INFLACION AGRUPACION`/`CANASTA BASICA` tienen

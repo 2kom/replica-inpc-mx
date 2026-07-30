@@ -99,7 +99,7 @@ def test_indice_incidencia_oculto_en_resultado_pero_presente_en_completo() -> No
     r = ResultadoIndice(df, [_manifiesto()], _reporte_vacio(), _diagnostico_vacio())
     assert "indice_incidencia" not in r.resultado.largo.columns
     assert "indice_incidencia" in r._completo.columns
-    assert list(r._completo["indice_incidencia"]) == [95.0, 105.0]
+    assert list(r._completo["indice_incidencia"]) == pytest.approx([95.0, 105.0])
 
 
 def test_reporte_y_diagnostico_propagados() -> None:
