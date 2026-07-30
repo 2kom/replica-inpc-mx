@@ -1,4 +1,5 @@
 import operator
+from dataclasses import FrozenInstanceError
 
 import pandas as pd
 import pytest
@@ -40,19 +41,19 @@ def test_año_invalido(cls, args):
 
 
 @pytest.mark.parametrize(
-    "fn",
+    "cls,texto",
     [
-        lambda: PeriodoQuincenal.desde_str("formato incorrecto"),  # conteo de palabras
-        lambda: PeriodoMensual.desde_str("formato incorrecto x"),
-        lambda: PeriodoQuincenal.desde_str("1Q Xyz 2024"),  # mes fuera de catálogo
-        lambda: PeriodoMensual.desde_str("Xyz 2024"),
-        lambda: PeriodoQuincenal.desde_str("1Q Ene abcd"),  # año no numérico
-        lambda: PeriodoMensual.desde_str("Ene abcd"),
+        (PeriodoQuincenal, "formato incorrecto"),  # conteo de palabras
+        (PeriodoMensual, "formato incorrecto x"),
+        (PeriodoQuincenal, "1Q Xyz 2024"),  # mes fuera de catálogo
+        (PeriodoMensual, "Xyz 2024"),
+        (PeriodoQuincenal, "1Q Ene abcd"),  # año no numérico
+        (PeriodoMensual, "Ene abcd"),
     ],
 )
-def test_desde_str_invalido(fn):
+def test_desde_str_invalido(cls, texto):
     with pytest.raises(PeriodoNoInterpretable):
-        fn()
+        cls.desde_str(texto)
 
 
 def test_mensual_cross_type_no_compara():
@@ -113,7 +114,7 @@ def test_periodo_desde_str_normaliza_espacios_extra():
 
 @pytest.mark.parametrize("op", [operator.le, operator.gt, operator.ge])
 def test_cross_type_operadores_derivados_lanzan_typeerror(op):
-    # <=, >, >= son derivados por total_ordering a partir de __lt__/__eq__
+    # <=, >, >= son generados por dataclass(order=True) a partir de (año, mes, quincena)
     p_q = PeriodoQuincenal(2024, 7, 1)
     p_m = PeriodoMensual(2024, 7)
     with pytest.raises(TypeError):
@@ -236,6 +237,22 @@ def test_hash():
 
     assert hash(p1) == hash(p2)
     assert len({p1, p2}) == 1  # mismo elemento, no se duplica en el set
+
+
+@pytest.mark.parametrize(
+    "periodo,atributo",
+    [
+        (PeriodoQuincenal(2018, 1, 1), "mes"),
+        (PeriodoQuincenal(2018, 1, 1), "año"),
+        (PeriodoQuincenal(2018, 1, 1), "quincena"),
+        (PeriodoMensual(2018, 1), "mes"),
+        (PeriodoMensual(2018, 1), "año"),
+    ],
+)
+def test_inmutable(periodo, atributo):
+    # mutar rompería el hash de un periodo ya usado como clave en dict/set/MultiIndex
+    with pytest.raises(FrozenInstanceError):
+        setattr(periodo, atributo, 999)
 
 
 def test_to_timestamp():

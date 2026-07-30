@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import calendar
-import functools
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -42,13 +42,13 @@ def _validar_año_mes(año: int, mes: int) -> None:
         raise InvarianteViolado(f"año debe ser un entero positivo, se recibio {año}")
 
 
-@functools.total_ordering
+@dataclass(frozen=True, order=True)
 class PeriodoQuincenal:
     """Representa un periodo quincenal del dominio.
 
-    Un periodo se modela como el triplete `(año, mes, quincena)`. Su orden
-    natural es cronológico, se puede usar como clave hashable y su
-    serialización canónica es `"1Q Ene 2024"`.
+    Un periodo se modela como el triplete `(año, mes, quincena)`. Es
+    inmutable, su orden natural es cronológico, se puede usar como clave
+    hashable y su serialización canónica es `"1Q Ene 2024"`.
 
     Args:
         año: Año calendario del periodo. Debe ser un entero positivo.
@@ -62,34 +62,14 @@ class PeriodoQuincenal:
     Ver: docs/diseño.md §5.3, §11.6
     """
 
-    def __init__(self, año: int, mes: int, quincena: int) -> None:
-        if quincena not in (1, 2):
-            raise InvarianteViolado(f"quincena debe ser 1 o 2, se recibio {quincena}")
-        _validar_año_mes(año, mes)
-        self.año = año
-        self.mes = mes
-        self.quincena = quincena
+    año: int
+    mes: int
+    quincena: int
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, PeriodoQuincenal):
-            return NotImplemented
-        return (self.año, self.mes, self.quincena) == (
-            other.año,
-            other.mes,
-            other.quincena,
-        )
-
-    def __lt__(self, other: PeriodoQuincenal) -> bool:
-        if not isinstance(other, PeriodoQuincenal):
-            return NotImplemented
-        return (self.año, self.mes, self.quincena) < (
-            other.año,
-            other.mes,
-            other.quincena,
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.año, self.mes, self.quincena))
+    def __post_init__(self) -> None:
+        if self.quincena not in (1, 2):
+            raise InvarianteViolado(f"quincena debe ser 1 o 2, se recibio {self.quincena}")
+        _validar_año_mes(self.año, self.mes)
 
     def __str__(self) -> str:
         return f"{self.quincena}Q {_MESES_INV[self.mes]} {self.año}"
@@ -145,9 +125,12 @@ class PeriodoQuincenal:
         return pd.Timestamp(year=self.año, month=self.mes, day=dia)
 
 
-@functools.total_ordering
+@dataclass(frozen=True, order=True)
 class PeriodoMensual:
     """Representa un periodo mensual del dominio.
+
+    Es inmutable, su orden natural es cronológico y se puede usar como
+    clave hashable.
 
     Args:
         año: Año calendario. Debe ser entero positivo.
@@ -159,23 +142,11 @@ class PeriodoMensual:
     Ver: docs/diseño.md §5.3
     """
 
-    def __init__(self, año: int, mes: int) -> None:
-        _validar_año_mes(año, mes)
-        self.año = año
-        self.mes = mes
+    año: int
+    mes: int
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, PeriodoMensual):
-            return NotImplemented
-        return (self.año, self.mes) == (other.año, other.mes)
-
-    def __lt__(self, other: PeriodoMensual) -> bool:
-        if not isinstance(other, PeriodoMensual):
-            return NotImplemented
-        return (self.año, self.mes) < (other.año, other.mes)
-
-    def __hash__(self) -> int:
-        return hash((self.año, self.mes))
+    def __post_init__(self) -> None:
+        _validar_año_mes(self.año, self.mes)
 
     def __str__(self) -> str:
         return f"{_MESES_INV[self.mes]} {self.año}"
