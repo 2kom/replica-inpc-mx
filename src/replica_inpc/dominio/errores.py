@@ -104,6 +104,12 @@ class InvarianteViolado(ErrorDominio):
     pass
 
 
+class PeriodoNoDisponible(ErrorDominio):
+    """El periodo pedido no está presente en los datos consultados o graficados."""
+
+    pass
+
+
 class ErrorCalculo(ReplicaInpcError):
     """Error durante el cálculo del índice que falla la corrida.
 
