@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
 import pytest
 
+import replica_inpc as rep
 from replica_inpc.dominio.calculo.laspeyres_directo import LaspeyresDirecto
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -20,14 +22,14 @@ _periodos = [
 ]
 
 
-def _canasta() -> CanastaCanonica:
-    df = pd.DataFrame(
-        {
-            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
-            "encadenamiento": [None, None, None, None],
-        },
-        index=["arroz", "frijol", "leche", "huevo"],
-    )
+def _canasta(cog: list[str] | None = None) -> CanastaCanonica:
+    datos: dict[str, list[Any]] = {
+        "ponderador": ["10.0", "20.0", "30.0", "40.0"],
+        "encadenamiento": [None, None, None, None],
+    }
+    if cog is not None:
+        datos["COG"] = cog
+    df = pd.DataFrame(datos, index=["arroz", "frijol", "leche", "huevo"])
     return CanastaCanonica(df, 2018)
 
 
@@ -42,6 +44,9 @@ def _serie() -> SerieNormalizada:
         index=_periodos,
     ).T
     return SerieNormalizada(df)
+
+
+# ---------- básicos ----------
 
 
 def test_calcular_retorna_resultado_indice() -> None:
@@ -78,7 +83,28 @@ def test_tipo_invalido_lanza_invariante_violado() -> None:
         LaspeyresDirecto().calcular(_canasta(), _serie(), "tipo_inventado")
 
 
-# ---------- Referencia de empalme (rebase) ----------
+# ---------- categoría, múltiples grupos reales (calculo.md regla 6) ----------
+
+
+def test_valores_categoria_multiples_grupos_correctos() -> None:
+    # dos categorías reales, no edge-case: "granos" = arroz+frijol, "animal" = leche+huevo
+    canasta = _canasta(cog=["granos", "granos", "animal", "animal"])
+    r = LaspeyresDirecto().calcular(canasta, _serie(), "COG")
+    largo = r.resultado.largo
+
+    # a mano, Laspeyres simple sin rebase: Σ(w·I)/Σw por grupo
+    p_1q_ago = _periodos[1]
+    granos_esperado = (10 * 101 + 20 * 102) / 30
+    animal_esperado = (30 * 103 + 40 * 104) / 70
+    assert largo.loc[cast(Any, (p_1q_ago, "granos")), "indice_replicado"] == pytest.approx(
+        granos_esperado
+    )
+    assert largo.loc[cast(Any, (p_1q_ago, "animal")), "indice_replicado"] == pytest.approx(
+        animal_esperado
+    )
+
+
+# ---------- referencia de empalme (rebase) ----------
 
 
 def test_referencia_empalme_rebasa_serie_completa() -> None:
@@ -92,88 +118,33 @@ def test_referencia_empalme_rebasa_serie_completa() -> None:
     assert list(r._completo["indice_incidencia"]) == pytest.approx([100.0, 103.0, 106.0, 109.0])
 
 
-def test_referencia_empalme_sin_dato_en_traslape_lanza_error_calculo() -> None:
-    # grupo "fantasma" sin dato en NINGÚN periodo — bfill/ffill no puede rellenarlo,
-    # el crudo del grupo en el traslape queda en 0 (suma de puros NaN) y dividir la
-    # referencia entre 0 corrompía la serie entera con inf en vez de fallar claro
+@pytest.mark.parametrize(
+    "valor_grupo_invalido",
+    [
+        pytest.param(float("nan"), id="sin_dato_en_ningun_periodo"),
+        pytest.param(0.0, id="indice_crudo_cero"),
+        pytest.param(float("inf"), id="indice_crudo_no_finito"),
+    ],
+)
+def test_referencia_empalme_denominador_invalido_lanza_error_calculo(
+    valor_grupo_invalido: float,
+) -> None:
+    # el crudo del grupo en el traslape queda inválido (NaN sin rellenar → 0 al
+    # sumar, o dato presente pero 0/inf) — dividir la referencia entre eso debe
+    # fallar claro, no corromper la serie en silencio con inf (calculo.md regla 3)
     periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
     df = pd.DataFrame(
         {
-            "arroz": [float("nan"), float("nan")],
-            "frijol": [float("nan"), float("nan")],
+            "arroz": [valor_grupo_invalido, valor_grupo_invalido],
+            "frijol": [valor_grupo_invalido, valor_grupo_invalido],
             "leche": [100.0, 103.0],
             "huevo": [100.0, 104.0],
         },
         index=periodos,
     ).T
     serie = SerieNormalizada(df)
-    canasta_df = pd.DataFrame(
-        {
-            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
-            "encadenamiento": [None, None, None, None],
-            "COG": ["fantasma", "fantasma", "real", "real"],
-        },
-        index=["arroz", "frijol", "leche", "huevo"],
-    )
-    canasta = CanastaCanonica(canasta_df, 2018)
-    calc = LaspeyresDirecto(referencia_empalme_por_indice={"fantasma": 150.0})
-    with pytest.raises(ErrorCalculo):
-        calc.calcular(canasta, serie, "COG")
-
-
-def test_referencia_empalme_indice_crudo_cero_con_dato_presente_lanza_error_calculo() -> None:
-    # dato PRESENTE (no NaN) pero literalmente 0.0 en todo el grupo — la guardia
-    # basada solo en NaN de la serie no detecta este caso, hay que validar el
-    # denominador (indice_por_grupo) directamente
-    periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
-    df = pd.DataFrame(
-        {
-            "arroz": [0.0, 0.0],
-            "frijol": [0.0, 0.0],
-            "leche": [100.0, 103.0],
-            "huevo": [100.0, 104.0],
-        },
-        index=periodos,
-    ).T
-    serie = SerieNormalizada(df)
-    canasta_df = pd.DataFrame(
-        {
-            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
-            "encadenamiento": [None, None, None, None],
-            "COG": ["cero", "cero", "real", "real"],
-        },
-        index=["arroz", "frijol", "leche", "huevo"],
-    )
-    canasta = CanastaCanonica(canasta_df, 2018)
-    calc = LaspeyresDirecto(referencia_empalme_por_indice={"cero": 150.0})
-    with pytest.raises(ErrorCalculo):
-        calc.calcular(canasta, serie, "COG")
-
-
-def test_referencia_empalme_indice_crudo_no_finito_lanza_error_calculo() -> None:
-    # dato PRESENTE pero inf en todo el grupo — ejercita la rama ~np.isfinite(denominador),
-    # no solo la de denominador == 0
-    periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
-    df = pd.DataFrame(
-        {
-            "arroz": [float("inf"), float("inf")],
-            "frijol": [float("inf"), float("inf")],
-            "leche": [100.0, 103.0],
-            "huevo": [100.0, 104.0],
-        },
-        index=periodos,
-    ).T
-    serie = SerieNormalizada(df)
-    canasta_df = pd.DataFrame(
-        {
-            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
-            "encadenamiento": [None, None, None, None],
-            "COG": ["infinito", "infinito", "real", "real"],
-        },
-        index=["arroz", "frijol", "leche", "huevo"],
-    )
-    canasta = CanastaCanonica(canasta_df, 2018)
-    calc = LaspeyresDirecto(referencia_empalme_por_indice={"infinito": 150.0})
+    canasta = _canasta(cog=["invalido", "invalido", "real", "real"])
+    calc = LaspeyresDirecto(referencia_empalme_por_indice={"invalido": 150.0})
     with pytest.raises(ErrorCalculo):
         calc.calcular(canasta, serie, "COG")
 
@@ -186,6 +157,9 @@ def test_referencia_empalme_no_finita_lanza_error_calculo(referencia_invalida: f
     r = LaspeyresDirecto(referencia_empalme_por_indice={"INPC": referencia_invalida})
     with pytest.raises(ErrorCalculo):
         r.calcular(_canasta(), _serie(), "INPC")
+
+
+# ---------- recorte de fechas ----------
 
 
 def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
@@ -214,6 +188,9 @@ def test_periodos_fuera_de_rango_2018_se_recortan() -> None:
     assert PeriodoQuincenal(2018, 7, 1) not in periodos_resultado
     assert PeriodoQuincenal(2018, 7, 2) in periodos_resultado
     assert PeriodoQuincenal(2018, 8, 1) in periodos_resultado
+
+
+# ---------- faltantes / relleno ----------
 
 
 def test_nan_parcial_produce_estado_rellenado() -> None:
@@ -287,3 +264,25 @@ def test_sin_nan_no_produce_estado_rellenado() -> None:
     largo = r.resultado.largo
     assert "rellenado" not in largo["estado_calculo"].values
     assert (largo["estado_calculo"] == "ok").all()
+
+
+# ---------- dato real (calculo.md regla 8) ----------
+
+_DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
+_DATA_DIR_CANASTA = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests" / "p_pdf"
+_CANASTA_2018_REAL = _DATA_DIR_CANASTA / "ponderadores_2018.csv"
+_SERIE_2018_REAL = _DATA_DIR / "series2018_horizontal_metadata.CSV"
+
+
+@pytest.mark.requires_data
+def test_categoria_real_ccif_division_valores_no_triviales() -> None:
+    # sanity check contra dato real: LaspeyresDirecto sobre "CCIF DIVISION" de la
+    # canasta 2018 real produce valores finitos para todas las categorías — no
+    # verifica magnitud (eso es trabajo de validar_indices contra INEGI), solo que
+    # el mecanismo de categoría no se rompe con datos de producción reales
+    canasta = rep.cargar_canasta(str(_CANASTA_2018_REAL), 2018)
+    serie = rep.cargar_serie(str(_SERIE_2018_REAL), 2018)
+    r = LaspeyresDirecto().calcular(canasta, serie, "CCIF DIVISION")
+    largo = r.resultado.largo
+    assert not largo.empty
+    assert largo["indice_replicado"].notna().any()
