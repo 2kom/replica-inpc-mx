@@ -281,6 +281,47 @@ def test_empalmar_traslape_queda_en_anterior() -> None:
     assert fila_largo["indice_replicado"] == 105.0
 
 
+def test_empalmar_indice_reaparecido_en_frontera_posterior_no_se_pierde() -> None:
+    # Regresión: "A" existe en un periodo viejo de tramo0 (fuera de cualquier frontera),
+    # desaparece, y reaparece en la frontera tramo1↔tramo2 (donde tramo1 solo trae "B").
+    # El acumulado histórico de índices NO debe bloquear la aparición nueva de "A" en esa
+    # frontera posterior — solo la frontera INMEDIATA decide propiedad.
+    pa = PeriodoQuincenal(2011, 1, 1)
+    pb = PeriodoQuincenal(2013, 3, 2)
+    pc = PeriodoQuincenal(2015, 1, 1)
+    pd_ = PeriodoQuincenal(2018, 7, 2)
+    pe = PeriodoQuincenal(2020, 1, 1)
+    r_2010 = _resultado(
+        [(pa, "A", 100.0, "ok", None), (pb, "B", 100.0, "ok", None)], version=2010, tipo="COG"
+    )
+    r_2013 = _resultado(
+        [
+            (pb, "B", 100.0, "ok", None),
+            (pc, "B", 105.0, "ok", None),
+            (pd_, "B", 130.0, "ok", None),  # frontera con tramo2: solo B, sin A
+        ],
+        version=2013,
+        tipo="COG",
+    )
+    r_2018 = _resultado(
+        [
+            (pd_, "A", 120.0, "ok", None),  # A reaparece justo en esta frontera
+            (pd_, "B", 130.0, "ok", None),
+            (pe, "A", 140.0, "ok", None),
+            (pe, "B", 150.0, "ok", None),
+        ],
+        version=2018,
+        tipo="COG",
+    )
+    out = empalmar([r_2010, r_2013, r_2018], forzar=True)
+    fila_a = out.resultado.largo.loc[cast(Any, (pd_, "A"))]
+    assert fila_a["indice_replicado"] == 120.0
+    fila_b = out.resultado.largo.loc[cast(Any, (pd_, "B"))]
+    assert fila_b["indice_replicado"] == 130.0
+    assert (pd_, "A") in out.reporte.index
+    assert (pd_, "B") in out.reporte.index
+
+
 def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
     # CCIF division: "comunicaciones" (2018) → "informacion y comunicacion" (2024)
     r_2018 = _resultado(
@@ -438,6 +479,21 @@ def test_empalmar_mensual_emite_warning() -> None:
     )
     with pytest.warns(UserWarning):
         empalmar([r1, r2])
+
+
+def test_empalmar_periodicidad_mezclada_dentro_de_un_resultado_falla() -> None:
+    # Regresión: la validación de periodicidad recorre TODOS los periodos de cada
+    # resultado (no solo el primero) — un único ResultadoIndice con quincenal y
+    # mensual mezclados debe fallar, no solo la mezcla ENTRE resultados distintos.
+    r_mixto = _resultado(
+        [
+            (_p1, "INPC", 100.0, "ok", None),
+            (PeriodoMensual(2018, 7), "INPC", 101.0, "ok", None),
+        ]
+    )
+    r_otro = _resultado([(_p3, "INPC", 110.0, "ok", None)], version=2024)
+    with pytest.raises(InvarianteViolado):
+        empalmar([r_mixto, r_otro])
 
 
 # --------------------------------------------------------------------------- rebasar

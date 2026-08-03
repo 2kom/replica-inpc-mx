@@ -3692,8 +3692,8 @@ Las series del INEGI ocasionalmente contienen `NaN` para un genérico en un peri
 1. Ordenar cronológicamente por el mínimo de periodos de cada resultado.
 2. Validar topología PATH (ver §11.21) — exactamente un periodo compartido entre cada par consecutivo.
 3. Aplicar `_construir_mapa_renombre` + dedup defensivo por tramo (ver §11.20). Dedup con `keep="first"` — el tramo anterior prevalece cuando un renombre colapsa dos variantes en el mismo índice.
-4. Acumular tramos: cada tramo posterior contribuye solo sus periodos NO presentes ya en el acumulador; en el periodo frontera, aporta únicamente índices nuevos que el acumulador no tiene aún. En la práctica el periodo frontera queda del primer tramo — el segundo no añade nada para índices ya vistos.
-5. `pd.concat` de los DataFrames filtrados.
+4. Concatenar los tramos ya renombrados, en orden cronológico.
+5. Deduplicar filas EXACTAS por `(periodo, indice)` con `keep="first"` — el tramo anterior prevalece únicamente cuando comparte esa fila exacta con el tramo posterior (la frontera validada en el paso 2). Fuera de la frontera, `_validar_topologia` garantiza que no hay otros duplicados posibles, así que el dedup nunca descarta nada fuera de ese punto. A diferencia de una versión anterior del algoritmo (que acumulaba el conjunto de índices vistos en TODA la historia y excluía cualquier reaparición futura en una frontera posterior, perdiendo filas válidas), esta versión solo compara contra la frontera inmediata de cada par.
 6. El `manifiesto` del resultado combinado agrega las entradas `ManifestCalculo` de todos los tramos.
 
 **Invariantes que se preservan:** el df combinado cumple todos los invariantes de `ResultadoIndice`. Un df con filas de versión 2018 y 2024 es válido porque `version` es columna por fila.
@@ -3712,7 +3712,7 @@ resultado = empalmar([acc_rebased, r2018, r2024], forzar=True)
 
 **Problema:** al combinar `ResultadoIndice` de canastas distintas, el nivel `indice` del MultiIndex contiene el nombre de la categoría tal como lo generó cada corrida. Para `CCIF DIVISION`, los nombres cambiaron entre 2018 y 2024 (ej. `"comunicaciones"` → `"informacion y comunicacion"`). Sin normalización, `empalmar` produce dos filas separadas para lo que conceptualmente es la misma serie.
 
-**Decisión:** constante `RENOMBRES_INDICES` en `dominio/correspondencia_canastas.py`. Funciones privadas `_construir_mapa_renombre(tipo, version_origen, version_canonica)` y `_aplicar_renombre(df, mapa)` en `conversion.py`. `empalmar` las invoca por tramo antes de acumular.
+**Decisión:** constante `RENOMBRES_INDICES` y funciones privadas `_construir_mapa_renombre(tipo, version_origen, version_canonica)`/`_aplicar_renombre(df, mapa)`, todas en `dominio/correspondencia_canastas.py` — junto a las tablas que consumen, ya que `empalmar` (`conversion.py`), `incidencias.py` y `calcular_historia.py` las comparten por igual. `empalmar` las invoca por tramo antes de acumular.
 
 **Determinación de `version_origen` por tramo:** `empalmar` usa `max(manifest.versions)` del tramo input como `version_origen` al llamar `_construir_mapa_renombre` — NO la columna `version` por fila del df. Razón: tras un `empalmar` previo, todas las filas del resultado quedan en la nomenclatura de la versión más reciente del tramo; la columna `version` por fila solo registra el origen del cálculo de cada fila, no la nomenclatura vigente del tramo.
 

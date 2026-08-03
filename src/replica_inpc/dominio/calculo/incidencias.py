@@ -37,12 +37,13 @@ from replica_inpc.dominio.calculo._temporal import (
     restar_meses,
     restar_quincenas,
 )
-from replica_inpc.dominio.conversion import (
+from replica_inpc.dominio.correspondencia_canastas import (
+    _ORDEN_VERSIONES,
+    RENOMBRES_GENERICOS,
     _componer_mapas,
     _construir_mapa_renombre,
     _renombrar_valor,
 )
-from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_GENERICOS
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
@@ -57,8 +58,6 @@ from replica_inpc.dominio.tipos import (
 )
 
 Periodo = PeriodoQuincenal | PeriodoMensual
-
-_ORDEN_VERSIONES = (2010, 2013, 2018, 2024)
 
 _COLS_REPORTE = [
     "estado_calculo",

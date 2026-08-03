@@ -15,19 +15,17 @@ import pandas as pd
 from replica_inpc.aplicacion.puertos.lector_canasta import LectorCanasta
 from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.dominio.calculo.estrategia import para_canasta
-from replica_inpc.dominio.conversion import (
+from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
+from replica_inpc.dominio.correspondencia_canastas import (
+    _ORDEN_VERSIONES,
     _construir_mapa_renombre,
     _renombrar_valor,
-    a_mensual,
-    empalmar,
-    rebasar,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
-_ORDEN_VERSIONES: tuple[int, ...] = (2010, 2013, 2018, 2024)
 # Cada versión encadenada requiere su versión base contigua en `insumos`.
 _BASE_ENCADENADA: dict[int, int] = {2013: 2010, 2024: 2018}
 _PERIODICIDADES = ("quincenal", "mensual")

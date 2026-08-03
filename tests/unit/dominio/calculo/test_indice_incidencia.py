@@ -21,12 +21,8 @@ from replica_inpc.dominio.calculo.incidencias import (
 )
 from replica_inpc.dominio.calculo.laspeyres_directo import LaspeyresDirecto
 from replica_inpc.dominio.calculo.laspeyres_encadenado import LaspeyresEncadenadoT2
-from replica_inpc.dominio.conversion import (
-    _construir_mapa_renombre,
-    a_mensual,
-    empalmar,
-    rebasar,
-)
+from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
+from replica_inpc.dominio.correspondencia_canastas import _construir_mapa_renombre
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice

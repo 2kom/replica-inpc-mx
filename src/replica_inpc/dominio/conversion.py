@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import math
-import re
 import warnings
 
 import pandas as pd
 
 from replica_inpc.dominio.correspondencia_canastas import (
-    ERRORES_CLASIFICACION_INDICES,
-    ERRORES_TIPOGRAFICOS_INDICES,
-    RENOMBRES_CODIGOS_INDICES,
-    RENOMBRES_INDICES,
+    _ORDEN_VERSIONES,
+    _aplicar_renombre,
+    _construir_mapa_renombre,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
@@ -18,17 +16,6 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_CANASTAS, TIPO_INPC, VersionCanasta
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
-_ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
-
-# CCIF DIVISION/GRUPO/CLASE traen código numérico de prefijo cuando la canasta viene de
-# pdf ("12 bienes y servicios diversos"), pero no cuando viene de xlsx ("bienes y
-# servicios diversos") — LectorCanastaCsv no lo normaliza. RENOMBRES_INDICES,
-# ERRORES_TIPOGRAFICOS_INDICES y ERRORES_CLASIFICACION_INDICES asumen el nombre sin
-# código; el código se separa antes de esas tablas y se reconcilia al final con
-# RENOMBRES_CODIGOS_INDICES. SCIAN/INFLACION AGRUPACION no tienen este problema — sus
-# llaves en RENOMBRES_INDICES ya incluyen el código tal como viene en el dato crudo.
-_TIPOS_CON_CODIGO_SEPARADO = frozenset({"CCIF DIVISION", "CCIF GRUPO", "CCIF CLASE"})
-_PATRON_CODIGO = re.compile(r"^([\d.]+)\s+(.*)$")
 
 # Juntas de canasta: (periodo_quincenal_enlace, version_old, version_new). El enlace es el
 # límite inferior del tramo nuevo; el tramo viejo lo posee en el empalme.
@@ -92,121 +79,6 @@ _COLS_REPORTE_INT = (
 )
 
 
-def _componer_mapas(m1: dict[str, str], m2: dict[str, str]) -> dict[str, str]:
-    resultado: dict[str, str] = {}
-    for nombre in set(m1) | set(m2):
-        v1 = m1.get(nombre, nombre)
-        v2 = m2.get(v1, v1)
-        if v2 != nombre:
-            resultado[nombre] = v2
-    return resultado
-
-
-def _separar_codigo(x: str) -> tuple[str | None, str]:
-    """Separa el código numérico de prefijo (formato pdf) del nombre; `None` si no trae (xlsx)."""
-    m = _PATRON_CODIGO.match(x)
-    if m:
-        return m.group(1), m.group(2)
-    return None, x
-
-
-def _corregir_nombre(nombre: str, tipo: str, version: int) -> str:
-    """Aplica typo y error de clasificación conocidos de `version`, antes de renombrar entre versiones."""
-    nombre = ERRORES_TIPOGRAFICOS_INDICES.get(tipo, {}).get(version, {}).get(nombre, nombre)
-    nombre = ERRORES_CLASIFICACION_INDICES.get(tipo, {}).get(version, {}).get(nombre, nombre)
-    return nombre
-
-
-def _construir_mapa_renombre(
-    tipo: str, version_origen: int, version_canonica: int
-) -> dict[str, tuple[str, str | None]]:
-    """nombre_origen (ya corregido de typos/clasificación) -> (nombre_destino, código_destino).
-
-    `código_destino` es `None` cuando el código no cambia en el tramo recorrido — el
-    llamador conserva el código original del dato crudo en ese caso.
-    """
-    if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
-        return {}
-    orden: list[int] = list(_ORDEN_VERSIONES)
-    try:
-        idx_o = orden.index(version_origen)
-        idx_c = orden.index(version_canonica)
-    except ValueError:
-        return {}
-    forward = idx_o < idx_c
-    rango = range(idx_o, idx_c) if forward else range(idx_c, idx_o)
-
-    pasos: list[tuple[dict[str, str], dict[str, tuple[str, str]]]] = []
-    for paso in rango:
-        version_paso = orden[paso]
-        tabla_nombre = RENOMBRES_INDICES[tipo].get(version_paso, {})
-        tabla_codigo = RENOMBRES_CODIGOS_INDICES.get(tipo, {}).get(version_paso, {})
-        if forward:
-            pasos.append((tabla_nombre, tabla_codigo))
-        else:
-            tabla_nombre_inv = {v: k for k, v in tabla_nombre.items()}
-            # Código-solo (nombre sin cambio) también se invierte: la llave usa el
-            # nombre tal como queda tras el renombre de este paso (o el mismo si no
-            # cambió), igual que hace tabla_nombre_inv para las entradas con nombre.
-            tabla_codigo_inv: dict[str, tuple[str, str]] = {
-                tabla_nombre.get(nombre_ant, nombre_ant): (cod_nuevo, cod_ant)
-                for nombre_ant, (cod_ant, cod_nuevo) in tabla_codigo.items()
-            }
-            pasos.append((tabla_nombre_inv, tabla_codigo_inv))
-    if not forward:
-        pasos.reverse()
-
-    mapa: dict[str, tuple[str, str | None]] = {}
-    for tabla_nombre_paso, tabla_codigo_paso in pasos:
-        # Unión: una entrada puede cambiar de nombre, de código, o ambos — código-solo
-        # (nombre sin cambio) no aparece en tabla_nombre_paso, solo en tabla_codigo_paso.
-        for origen in set(tabla_nombre_paso) | set(tabla_codigo_paso):
-            mapa.setdefault(origen, (origen, None))
-        for k, (actual, cod) in list(mapa.items()):
-            if actual in tabla_nombre_paso or actual in tabla_codigo_paso:
-                nuevo_nombre = tabla_nombre_paso.get(actual, actual)
-                nuevo_cod = tabla_codigo_paso[actual][1] if actual in tabla_codigo_paso else cod
-                mapa[k] = (nuevo_nombre, nuevo_cod)
-    return {k: v for k, v in mapa.items() if v != (k, None)}
-
-
-def _renombrar_valor(
-    x: str, tipo: str, version_origen: int, mapa: dict[str, tuple[str, str | None]]
-) -> str:
-    """Aplica typo/clasificación/renombre/código a un valor crudo de `indice` o categoría CCIF."""
-    if tipo not in _TIPOS_CON_CODIGO_SEPARADO:
-        return mapa.get(x, (x, None))[0]
-    codigo, nombre = _separar_codigo(x)
-    nombre = _corregir_nombre(nombre, tipo, version_origen)
-    nombre_destino, codigo_destino = mapa.get(nombre, (nombre, None))
-    if codigo is None:
-        return nombre_destino
-    return f"{codigo_destino if codigo_destino is not None else codigo} {nombre_destino}"
-
-
-def _aplicar_renombre(
-    df: pd.DataFrame,
-    tipo: str,
-    version_origen: int,
-    mapa: dict[str, tuple[str, str | None]],
-) -> pd.DataFrame:
-    if df.empty or (not mapa and tipo not in _TIPOS_CON_CODIGO_SEPARADO):
-        return df
-
-    def renombrar(x: object) -> object:
-        if not isinstance(x, str):
-            return x
-        return _renombrar_valor(x, tipo, version_origen, mapa)
-
-    new_indice = df.index.get_level_values("indice").map(renombrar)
-    new_periodo = df.index.get_level_values("periodo")
-    df_nuevo = df.copy()
-    df_nuevo.index = pd.MultiIndex.from_arrays(
-        [new_periodo, new_indice], names=["periodo", "indice"]
-    )
-    return df_nuevo
-
-
 def _validar_topologia(ordenados: list[ResultadoIndice]) -> list[object]:
     """Valida topología PATH y devuelve lista de periodos frontera entre pares consecutivos."""
     conjuntos = [set(r._df_resultado.index.get_level_values("periodo")) for r in ordenados]
@@ -254,7 +126,9 @@ def empalmar(
             f"empalmar requiere mismo 'tipo' entre todos los inputs; recibió {sorted(tipos)}"
         )
 
-    tipos_periodo = {type(r._df_resultado.index.get_level_values("periodo")[0]) for r in resultados}
+    tipos_periodo = {
+        type(p) for r in resultados for p in r._df_resultado.index.get_level_values("periodo")
+    }
     if len(tipos_periodo) > 1:
         raise InvarianteViolado(
             "empalmar requiere que todos los inputs tengan la misma periodicidad "
@@ -304,13 +178,11 @@ def empalmar(
 
     tipo_unico = next(iter(tipos))
 
-    indices_acumulados: set[object] = set()
-    periodos_acumulados: set[object] = set()
     dfs_indice: list[pd.DataFrame] = []
     dfs_reporte: list[pd.DataFrame] = []
     dfs_diag: list[pd.DataFrame] = []
 
-    for i, r in enumerate(ordenados):
+    for r in ordenados:
         version_origen = max(m.version for m in r.manifiesto)
         mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
 
@@ -324,48 +196,22 @@ def empalmar(
             df_completo = df_completo[~df_completo.index.duplicated(keep="first")]
         if reporte.index.duplicated().any():
             reporte = reporte[~reporte.index.duplicated(keep="first")]
-        periodos_propios = set(df_completo.index.get_level_values("periodo"))
-        frontera = fronteras[i - 1] if i > 0 else None
 
-        if frontera is not None:
-            # Periodos normales: excluir los ya acumulados (excepto la frontera)
-            periodos_normales = periodos_propios - periodos_acumulados - {frontera}
-            # Frontera: solo índices que el acumulado no tiene (nombres canónicos)
-            mask_frontera = df_completo.index.get_level_values("periodo") == frontera
-            df_frontera_todos = df_completo[mask_frontera]
-            indices_frontera_nuevos = ~df_frontera_todos.index.get_level_values("indice").isin(
-                indices_acumulados
-            )
-            df_frontera_nuevos = df_frontera_todos[indices_frontera_nuevos]
-
-            rep_frontera_todos = reporte[reporte.index.get_level_values("periodo") == frontera]
-            rep_frontera_nuevos = rep_frontera_todos[
-                ~rep_frontera_todos.index.get_level_values("indice").isin(indices_acumulados)
-            ]
-
-            mask_normales = df_completo.index.get_level_values("periodo").isin(periodos_normales)
-            df_filtrado = pd.concat([df_completo[mask_normales], df_frontera_nuevos])
-            rep_filtrado = pd.concat(
-                [
-                    reporte[reporte.index.get_level_values("periodo").isin(periodos_normales)],
-                    rep_frontera_nuevos,
-                ]
-            )
-        else:
-            df_filtrado = df_completo
-            rep_filtrado = reporte
-
-        dfs_indice.append(df_filtrado)
-        dfs_reporte.append(rep_filtrado)
+        dfs_indice.append(df_completo)
+        dfs_reporte.append(reporte)
         dfs_diag.append(r.diagnostico)
 
-        periodos_acumulados |= periodos_propios
-        indices_acumulados |= set(df_completo.index.get_level_values("indice"))
-
+    # Propiedad de la frontera: el tramo anterior posee (periodo, indice) si tiene esa
+    # fila exacta (keep="first", tramos concatenados en orden cronológico); el posterior
+    # la aporta solo si el anterior no la tiene ahí. `_validar_topologia` garantiza que
+    # duplicados de índice solo ocurren en el periodo de frontera entre tramos consecutivos
+    # — nunca en un periodo normal, porque la topología PATH ya lo prohíbe.
     df_combinado = pd.concat(dfs_indice)
+    df_combinado = df_combinado[~df_combinado.index.duplicated(keep="first")]
     df_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
     reporte_combinado = pd.concat(dfs_reporte)
+    reporte_combinado = reporte_combinado[~reporte_combinado.index.duplicated(keep="first")]
     reporte_combinado.sort_index(level="periodo", sort_remaining=False, inplace=True)
 
     diag_combinado = pd.concat(dfs_diag, ignore_index=True)
