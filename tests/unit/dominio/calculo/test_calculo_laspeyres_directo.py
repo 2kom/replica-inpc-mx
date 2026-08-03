@@ -85,10 +85,12 @@ def test_tipo_invalido_lanza_invariante_violado() -> None:
 
 # ---------- categoría, múltiples grupos reales ----------
 
+_COG = ["granos", "granos", "animal", "animal"]
+
 
 def test_valores_categoria_multiples_grupos_correctos() -> None:
     # dos categorías reales, no edge-case: "granos" = arroz+frijol, "animal" = leche+huevo
-    canasta = _canasta(cog=["granos", "granos", "animal", "animal"])
+    canasta = _canasta(cog=_COG)
     r = LaspeyresDirecto().calcular(canasta, _serie(), "COG")
     largo = r.resultado.largo
 
@@ -102,6 +104,38 @@ def test_valores_categoria_multiples_grupos_correctos() -> None:
     assert largo.loc[cast(Any, (p_1q_ago, "animal")), "indice_replicado"] == pytest.approx(
         animal_esperado
     )
+
+
+def test_valores_categoria_genera_indices_unicos_por_categoria() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(cog=_COG), _serie(), "COG")
+    indices = sorted(r.df.index.get_level_values("indice").unique())
+    assert indices == ["animal", "granos"]
+
+
+def test_valores_categoria_periodo_base_es_100() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(cog=_COG), _serie(), "COG")
+    p0 = _periodos[0]
+    assert r.df.at[(p0, "granos"), "indice_replicado"] == pytest.approx(100.0)
+    assert r.df.at[(p0, "animal"), "indice_replicado"] == pytest.approx(100.0)
+
+
+def test_valores_categoria_reporte_ponderador_esperado_es_del_subgrupo() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(cog=_COG), _serie(), "COG")
+    p0 = _periodos[0]
+    assert r.reporte.at[(p0, "granos"), "ponderador_esperado"] == pytest.approx(30.0)
+    assert r.reporte.at[(p0, "animal"), "ponderador_esperado"] == pytest.approx(70.0)
+
+
+def test_valores_categoria_reporte_genericos_esperados_es_del_subgrupo() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(cog=_COG), _serie(), "COG")
+    p0 = _periodos[0]
+    assert r.reporte.at[(p0, "granos"), "genericos_esperados"] == 2
+    assert r.reporte.at[(p0, "animal"), "genericos_esperados"] == 2
+
+
+def test_valores_categoria_manifiesto_tipo_es_clasificacion() -> None:
+    r = LaspeyresDirecto().calcular(_canasta(cog=_COG), _serie(), "COG")
+    assert r.manifiesto[0].tipo == "COG"
 
 
 # ---------- referencia de empalme (rebase) ----------
