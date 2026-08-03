@@ -37,9 +37,7 @@ def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:
     referencia = SimpleNamespace(
         manifiesto=[SimpleNamespace(version=2018), SimpleNamespace(version=2018)]
     )
-    refs = mocker.patch.object(
-        indices, "_referencias_normalizadas", return_value={"INPC": 100.0}
-    )
+    refs = mocker.patch.object(indices, "_referencias_normalizadas", return_value={"INPC": 100.0})
     para_canasta = mocker.patch.object(indices, "para_canasta")
 
     indices.calcular_indice(canasta, "serie", "inpc", referencia=referencia)
@@ -58,6 +56,17 @@ def test_rebasar_parsea_periodo_case_insensible(mocker) -> None:
 
     assert salida == "rebased"
     _rebasar.assert_called_once_with("resultado", PeriodoQuincenal(2018, 7, 2), 100.0)
+
+
+def test_rebasar_reenvia_valor_referencia_custom(mocker) -> None:
+    # Regresión: el wrapper solo se probaba con el default (100.0) — no
+    # detectaría que se dejara de reenviar un valor_referencia distinto.
+    _rebasar = mocker.patch.object(indices, "_rebasar", return_value="rebased")
+
+    salida = indices.rebasar("resultado", "2q jul 2018", 200.0)
+
+    assert salida == "rebased"
+    _rebasar.assert_called_once_with("resultado", PeriodoQuincenal(2018, 7, 2), 200.0)
 
 
 def test_empalmar_delega(mocker) -> None:

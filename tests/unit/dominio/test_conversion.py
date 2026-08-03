@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import pytest
@@ -33,6 +33,7 @@ def _resultado(
     version: int = 2018,
     tipo: str = "INPC",
     periodo_referencia: Any = None,
+    frontera: pd.DataFrame | None = None,
 ) -> ResultadoIndice:
     """rows = list of (periodo, indice, valor, estado, motivo)."""
     filas = []
@@ -74,6 +75,7 @@ def _resultado(
         reporte,
         diag,
         periodo_referencia=periodo_referencia,
+        frontera=frontera,
     )
 
 
@@ -92,8 +94,12 @@ def test_empalmar_requiere_minimo_dos() -> None:
 
 
 def test_empalmar_construccion_valida_concatena_manifiestos() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     out = empalmar([r_2018, r_2024])
     assert len(out.manifiesto) == 2
 
@@ -107,8 +113,12 @@ def test_empalmar_sin_frontera_compartida_falla() -> None:
 
 
 def test_empalmar_pares_con_frontera_aceptados() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     out = empalmar([r_2018, r_2024])
     assert len(out.manifiesto) == 2
 
@@ -119,9 +129,15 @@ def test_empalmar_tres_versiones_en_una_llamada_ok() -> None:
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
     pd_ = PeriodoQuincenal(2018, 8, 1)
-    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
-    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
-    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 112.0, "ok", None)], version=2018)
+    r_2010 = _resultado(
+        [(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010
+    )
+    r_2013 = _resultado(
+        [(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013
+    )
+    r_2018 = _resultado(
+        [(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 112.0, "ok", None)], version=2018
+    )
     out = empalmar([r_2010, r_2013, r_2018], forzar=True)
     assert len(out.manifiesto) == 3
     periodos = list(out.df.index.get_level_values("periodo"))
@@ -134,11 +150,19 @@ def test_empalmar_cadena_pares_con_fronteras() -> None:
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
     pd_ = PeriodoQuincenal(2024, 7, 2)
-    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
-    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
-    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018)
+    r_2010 = _resultado(
+        [(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010
+    )
+    r_2013 = _resultado(
+        [(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013
+    )
+    r_2018 = _resultado(
+        [(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018
+    )
     pe = PeriodoQuincenal(2024, 8, 1)
-    r_2024 = _resultado([(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024)
+    r_2024 = _resultado(
+        [(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024
+    )
 
     intermedio_a = empalmar([r_2010, r_2013])
     intermedio_b = empalmar([intermedio_a, r_2018], forzar=True)
@@ -164,8 +188,12 @@ def test_empalmar_periodo_referencia_distintos_sin_forzar_falla() -> None:
 
 
 def test_empalmar_periodo_referencia_distintos_con_forzar_warning() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], periodo_referencia=_p1)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], periodo_referencia=_p1
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3
+    )
     with pytest.warns(UserWarning):
         out = empalmar([r_2018, r_2024], forzar=True)
     # último cronológico es r_2024 con _p3
@@ -173,22 +201,37 @@ def test_empalmar_periodo_referencia_distintos_con_forzar_warning() -> None:
 
 
 def test_empalmar_mezcla_none_con_valor_hereda_valor() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], periodo_referencia=None)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)],
+        periodo_referencia=None,
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], periodo_referencia=_p3
+    )
     out = empalmar([r_2018, r_2024])
     assert out.periodo_referencia == _p3
 
 
 def test_empalmar_todos_none_resulta_none() -> None:
     r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)])
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     out = empalmar([r_2018, r_2024])
     assert out.periodo_referencia is None
 
 
 def test_empalmar_ordena_cronologicamente() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p2, "INPC", 101.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)])
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2018 = _resultado(
+        [
+            (_p1, "INPC", 100.0, "ok", None),
+            (_p2, "INPC", 101.0, "ok", None),
+            (_p3, "INPC", 108.0, "ok", None),
+        ]
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     out = empalmar([r_2024, r_2018])  # orden inverso
     periodos = list(out.df.index.get_level_values("periodo"))
     assert periodos == sorted(periodos)
@@ -204,7 +247,7 @@ def test_empalmar_traslape_queda_en_anterior() -> None:
     out = empalmar([r_2018, r_2024])
     # En _p3 prevalece r_2018 (valor 105, version 2018) — el valor de r_2024
     # en el traslape es derivado de r_2018 por construcción.
-    fila_largo = out.resultado.largo.loc[(_p3, "INPC")]
+    fila_largo = out.resultado.largo.loc[cast(Any, (_p3, "INPC"))]
     assert fila_largo["version"] == 2018
     assert fila_largo["indice_replicado"] == 105.0
 
@@ -217,7 +260,10 @@ def test_empalmar_normalizacion_aplica_a_df_y_reporte() -> None:
         tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
+        [
+            (_p3, "informacion y comunicacion", 110.0, "ok", None),
+            (_p4, "informacion y comunicacion", 112.0, "ok", None),
+        ],
         version=2024,
         tipo="CCIF DIVISION",
     )
@@ -236,7 +282,10 @@ def test_empalmar_version_nombres_explicito_2024() -> None:
         tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
+        [
+            (_p3, "informacion y comunicacion", 110.0, "ok", None),
+            (_p4, "informacion y comunicacion", 112.0, "ok", None),
+        ],
         version=2024,
         tipo="CCIF DIVISION",
     )
@@ -252,7 +301,10 @@ def test_empalmar_version_nombres_explicito_2018_invierte() -> None:
         tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
+        [
+            (_p3, "informacion y comunicacion", 110.0, "ok", None),
+            (_p4, "informacion y comunicacion", 112.0, "ok", None),
+        ],
         version=2024,
         tipo="CCIF DIVISION",
     )
@@ -270,10 +322,18 @@ def test_empalmar_bloques_preempalmados_ok() -> None:
     pc = PeriodoQuincenal(2018, 7, 2)
     pd_ = PeriodoQuincenal(2024, 7, 2)
     pe = PeriodoQuincenal(2024, 8, 1)
-    r_2010 = _resultado([(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010)
-    r_2013 = _resultado([(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013)
-    r_2018 = _resultado([(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024)
+    r_2010 = _resultado(
+        [(pa, "INPC", 100.0, "ok", None), (pb, "INPC", 103.0, "ok", None)], version=2010
+    )
+    r_2013 = _resultado(
+        [(pb, "INPC", 103.0, "ok", None), (pc, "INPC", 108.0, "ok", None)], version=2013
+    )
+    r_2018 = _resultado(
+        [(pc, "INPC", 110.0, "ok", None), (pd_, "INPC", 118.0, "ok", None)], version=2018
+    )
+    r_2024 = _resultado(
+        [(pd_, "INPC", 120.0, "ok", None), (pe, "INPC", 122.0, "ok", None)], version=2024
+    )
     pre_r = empalmar([r_2010, r_2013])
     inpc_pos = empalmar([r_2018, r_2024])
     final = empalmar([pre_r, inpc_pos])
@@ -284,8 +344,12 @@ def test_empalmar_bloques_preempalmados_ok() -> None:
 
 def test_empalmar_version_nombres_fuera_de_rango_falla() -> None:
     # inputs 2018+2024, pide 2010 como destino: fuera del rango [2018, 2024].
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     with pytest.raises(InvarianteViolado, match="fuera del rango"):
         empalmar([r_2018, r_2024], version_nombres=2010)
 
@@ -302,7 +366,10 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
         tipo="CCIF DIVISION",
     )
     r_2024 = _resultado(
-        [(_p3, "informacion y comunicacion", 110.0, "ok", None), (_p4, "informacion y comunicacion", 112.0, "ok", None)],
+        [
+            (_p3, "informacion y comunicacion", 110.0, "ok", None),
+            (_p4, "informacion y comunicacion", 112.0, "ok", None),
+        ],
         version=2024,
         tipo="CCIF DIVISION",
     )
@@ -315,15 +382,31 @@ def test_empalmar_input_multiversion_usa_nomenclatura_max() -> None:
 
 
 def test_empalmar_inpc_no_afectado_por_normalizacion() -> None:
-    r_2018 = _resultado([(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018)
-    r_2024 = _resultado([(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024)
+    r_2018 = _resultado(
+        [(_p1, "INPC", 100.0, "ok", None), (_p3, "INPC", 108.0, "ok", None)], version=2018
+    )
+    r_2024 = _resultado(
+        [(_p3, "INPC", 110.0, "ok", None), (_p4, "INPC", 112.0, "ok", None)], version=2024
+    )
     out = empalmar([r_2018, r_2024])
     assert set(out.df.index.get_level_values("indice")) == {"INPC"}
 
 
 def test_empalmar_mensual_emite_warning() -> None:
-    r1 = _resultado([(PeriodoMensual(2024, 1), "INPC", 100.0, "ok", None), (PeriodoMensual(2024, 2), "INPC", 101.0, "ok", None)], version=2018)
-    r2 = _resultado([(PeriodoMensual(2024, 2), "INPC", 101.5, "ok", None), (PeriodoMensual(2024, 3), "INPC", 102.0, "ok", None)], version=2024)
+    r1 = _resultado(
+        [
+            (PeriodoMensual(2024, 1), "INPC", 100.0, "ok", None),
+            (PeriodoMensual(2024, 2), "INPC", 101.0, "ok", None),
+        ],
+        version=2018,
+    )
+    r2 = _resultado(
+        [
+            (PeriodoMensual(2024, 2), "INPC", 101.5, "ok", None),
+            (PeriodoMensual(2024, 3), "INPC", 102.0, "ok", None),
+        ],
+        version=2024,
+    )
     with pytest.warns(UserWarning):
         empalmar([r1, r2])
 
@@ -360,13 +443,64 @@ def test_rebasar_proporcional() -> None:
     assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(135.0 * 100.0 / 133.112)
 
 
-def test_rebasar_periodo_inexistente_emite_warning_y_no_rebase() -> None:
-    # Índice sin dato en periodo_referencia → warning + valores originales intactos.
+def test_rebasar_periodo_inexistente_falla() -> None:
+    # periodo_referencia no existe para NINGÚN índice → toda la operación falla
+    # (antes devolvía el resultado sin reescalar con periodo_referencia seteado,
+    # un estado engañoso: ver hallazgo de auditoría 2026-08-03).
     r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r3, "INPC", 135.0, "ok", None)])
-    with pytest.warns(UserWarning, match="sin dato"):
+    with pytest.raises(InvarianteViolado, match="ningún índice tiene dato"):
+        rebasar(r, _r2)
+
+
+def test_rebasar_indice_sin_referencia_emite_warning_y_no_rebase() -> None:
+    # 2 índices: "INPC" sí tiene dato en periodo_referencia, "COG" no → "COG"
+    # queda sin rebasar (warning), "INPC" sí se reescala normal.
+    r = _resultado(
+        [
+            (_r1, "INPC", 120.0, "ok", None),
+            (_r2, "INPC", 133.112, "ok", None),
+            (_r3, "INPC", 135.0, "ok", None),
+            (_r1, "COG", 50.0, "ok", None),
+            (_r3, "COG", 55.0, "ok", None),
+        ]
+    )
+    with pytest.warns(UserWarning, match="COG"):
         rb = rebasar(r, _r2)
-    assert rb.df.at[(_r1, "INPC"), "indice_replicado"] == pytest.approx(120.0)
-    assert rb.df.at[(_r3, "INPC"), "indice_replicado"] == pytest.approx(135.0)
+    assert rb.df.at[(_r2, "INPC"), "indice_replicado"] == pytest.approx(100.0)
+    assert rb.df.at[(_r1, "COG"), "indice_replicado"] == pytest.approx(50.0)
+    assert rb.df.at[(_r3, "COG"), "indice_replicado"] == pytest.approx(55.0)
+
+
+def test_rebasar_frontera_indice_sin_referencia_queda_intacta() -> None:
+    # "COG" no tiene dato en periodo_referencia (huérfano) pero SÍ tiene ancla de
+    # junta válida en _frontera — no debe pisarse con NaN (ver hallazgo de
+    # auditoría 2026-08-03: antes multiplicaba por factores.get(i, NaN)).
+    frontera_in = pd.DataFrame(
+        {
+            "version_old": [2018, 2018],
+            "version_new": [2024, 2024],
+            "indice_incidencia_old": [99.5, 48.0],
+            "indice_replicado_old": [99.5, 48.0],
+        },
+        index=pd.MultiIndex.from_arrays([[_r3, _r3], ["INPC", "COG"]], names=["periodo", "indice"]),
+    )
+    r = _resultado(
+        [
+            (_r1, "INPC", 120.0, "ok", None),
+            (_r2, "INPC", 133.112, "ok", None),
+            (_r3, "INPC", 135.0, "ok", None),
+            (_r3, "COG", 55.0, "ok", None),
+        ],
+        frontera=frontera_in,
+    )
+    with pytest.warns(UserWarning, match="COG"):
+        rb = rebasar(r, _r2)
+    assert rb._frontera is not None
+    assert rb._frontera.at[(_r3, "COG"), "indice_replicado_old"] == pytest.approx(48.0)
+    factor_inpc = 100.0 / 133.112
+    assert rb._frontera.at[(_r3, "INPC"), "indice_replicado_old"] == pytest.approx(
+        99.5 * factor_inpc
+    )
 
 
 def test_rebasar_sin_datos_en_referencia_falla() -> None:
@@ -382,48 +516,9 @@ def test_rebasar_sin_datos_en_referencia_falla() -> None:
 
 
 def test_rebasar_nan_con_estado_ok_inconsistente_falla() -> None:
-    # estado_calculo=ok pero indice_replicado=NaN → inconsistente
-    # Necesitamos construir el ResultadoIndice manualmente para esquivar invariantes
-    # de cálculo previas (que normalmente impedirían ese estado).
-    df = pd.DataFrame(
-        [
-            {
-                "periodo": _r1,
-                "indice": "INPC",
-                "version": 2018,
-                "tipo": "INPC",
-                "indice_replicado": 120.0,
-                "estado_calculo": "ok",
-                "motivo_error": None,
-            },
-            {
-                "periodo": _r2,
-                "indice": "INPC",
-                "version": 2018,
-                "tipo": "INPC",
-                "indice_replicado": float("nan"),
-                "estado_calculo": "ok",
-                "motivo_error": None,
-            },
-        ]
-    )
-    df.index = pd.MultiIndex.from_arrays(
-        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
-    )
-    reporte = pd.DataFrame({"version": 2018, "estado_calculo": ["ok", "ok"]}, index=df.index)
-    diag = pd.DataFrame(
-        columns=[
-            "id_corrida",
-            "version",
-            "tipo",
-            "periodo",
-            "generico",
-            "nivel_faltante",
-            "tipo_faltante",
-            "detalle",
-        ]
-    )
-    r = ResultadoIndice(df, [_manifiesto()], reporte, diag)
+    # estado_calculo=ok pero indice_replicado=NaN → inconsistente (no debería
+    # ocurrir con datos reales, pero rebasar debe detectarlo si pasa).
+    r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r2, "INPC", None, "ok", None)])
     with pytest.raises(InvarianteViolado, match="NaN"):
         rebasar(r, _r2)
 
@@ -447,6 +542,15 @@ def test_rebasar_valor_base_distinto_de_100() -> None:
     assert rb.df.at[(_r1, "INPC"), "indice_replicado"] == pytest.approx(120.0 * 200.0 / 130.0)
 
 
+@pytest.mark.parametrize(
+    "valor_base", [float("nan"), float("inf"), float("-inf"), 0.0, -100.0], ids=str
+)
+def test_rebasar_valor_base_invalido_falla(valor_base: float) -> None:
+    r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r2, "INPC", 130.0, "ok", None)])
+    with pytest.raises(InvarianteViolado, match="valor_base"):
+        rebasar(r, _r2, valor_base=valor_base)
+
+
 def test_rebasar_setea_periodo_referencia() -> None:
     r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r2, "INPC", 130.0, "ok", None)])
     rb = rebasar(r, _r2)
@@ -457,6 +561,71 @@ def test_rebasar_propaga_manifiesto() -> None:
     r = _resultado([(_r1, "INPC", 120.0, "ok", None), (_r2, "INPC", 130.0, "ok", None)])
     rb = rebasar(r, _r2)
     assert rb.manifiesto == r.manifiesto
+
+
+def test_rebasar_referencia_parcial_acepta() -> None:
+    # estado "parcial" en periodo_referencia (solo 1 quincena disponible en el
+    # mes) trae valor real → se acepta como base, igual que "ok"/"rellenado".
+    r = _resultado(
+        [
+            (_r1, "INPC", 120.0, "ok", None),
+            (_r2, "INPC", 130.0, "parcial", None),
+            (_r3, "INPC", 135.0, "ok", None),
+        ]
+    )
+    rb = rebasar(r, _r2)
+    assert rb.df.at[(_r2, "INPC"), "indice_replicado"] == pytest.approx(100.0)
+
+
+def test_rebasar_referencia_fallida_falla() -> None:
+    r = _resultado(
+        [
+            (_r1, "INPC", 120.0, "ok", None),
+            (_r2, "INPC", None, "fallida", "error interno"),
+            (_r3, "INPC", 135.0, "ok", None),
+        ]
+    )
+    with pytest.raises(InvarianteViolado):
+        rebasar(r, _r2)
+
+
+def test_rebasar_filas_sin_datos_y_fallida_fuera_de_referencia_preservadas() -> None:
+    # Filas con estado sin_datos/fallida en OTROS periodos (no el de referencia)
+    # no se tocan. Valores centinela FINITOS (999.0/888.0, no NaN real — situación
+    # que no ocurre con datos reales, ver test_rebasar_nan_con_estado_ok_inconsistente_falla
+    # para el caso inverso) para que el assert distinga "la máscara excluyó la fila"
+    # de "la fila era NaN de por sí y multiplicar por cualquier factor sigue dando NaN".
+    r = _resultado(
+        [
+            (_r1, "INPC", 999.0, "sin_datos", "faltantes"),
+            (_r2, "INPC", 130.0, "ok", None),
+            (_r3, "INPC", 888.0, "fallida", "error interno"),
+        ]
+    )
+    rb = rebasar(r, _r2)
+    fila_sin_datos = rb.resultado.largo.loc[cast(Any, (_r1, "INPC"))]
+    assert fila_sin_datos["indice_replicado"] == pytest.approx(999.0)
+    assert fila_sin_datos["estado_calculo"] == "sin_datos"
+    assert fila_sin_datos["motivo_error"] == "faltantes"
+    fila_fallida = rb.resultado.largo.loc[cast(Any, (_r3, "INPC"))]
+    assert fila_fallida["indice_replicado"] == pytest.approx(888.0)
+    assert fila_fallida["estado_calculo"] == "fallida"
+    assert fila_fallida["motivo_error"] == "error interno"
+
+
+def test_rebasar_acepta_referencia_rellenado() -> None:
+    # periodo_referencia con estado "rellenado" tiene valor → debe rebasar sin error
+    r = _resultado(
+        [
+            (_r1, "INPC", 120.0, "ok", None),
+            (_r2, "INPC", 125.0, "rellenado", None),
+            (_r3, "INPC", 130.0, "ok", None),
+        ]
+    )
+    rb = rebasar(r, _r2)
+    fila = rb.resultado.largo.loc[cast(Any, (_r2, "INPC"))]
+    assert fila["indice_replicado"] == pytest.approx(100.0)
+    assert fila["estado_calculo"] == "rellenado"
 
 
 # --------------------------------------------------------------------------- a_mensual
@@ -634,19 +803,3 @@ def test_a_mensual_reporte_tiene_periodo_mensual() -> None:
     assert all(isinstance(p, PeriodoMensual) for p in periodos_rep)
     assert rm.reporte["version"].iloc[0] == 2018
     assert rm.reporte["estado_calculo"].iloc[0] == "ok"
-
-
-def test_rebasar_acepta_referencia_rellenado() -> None:
-    # periodo_referencia con estado "rellenado" tiene valor → debe rebasar sin error
-    r = _resultado(
-        [
-            (_p1, "INPC", 120.0, "ok", None),
-            (_p2, "INPC", 125.0, "rellenado", None),
-            (_p3, "INPC", 130.0, "ok", None),
-        ],
-        version=2024,
-    )
-    rb = rebasar(r, _p2)
-    fila = rb.resultado.largo.loc[(_p2, "INPC")]
-    assert fila["indice_replicado"] == pytest.approx(100.0)
-    assert fila["estado_calculo"] == "rellenado"

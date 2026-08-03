@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 import pytest
@@ -21,7 +22,7 @@ from replica_inpc.dominio.tipos import ManifestCalculo, VersionCanasta
 
 
 def _canasta(version: int, *, encadenado: bool) -> CanastaCanonica:
-    enc = [float("nan"), float("nan")] if encadenado else [None, None]
+    enc: list[float | None] = [float("nan"), float("nan")] if encadenado else [None, None]
     df = pd.DataFrame(
         {"ponderador": ["50.0", "50.0"], "encadenamiento": enc},
         index=pd.Index(["a", "b"], name="generico"),
@@ -83,7 +84,7 @@ def _historia_3_versiones() -> CalcularHistoria:
     return CalcularHistoria(_LectorCanastaFake(canastas), _LectorSeriesFake(series))
 
 
-_INSUMOS_3 = [
+_INSUMOS_3: list[tuple[VersionCanasta, Path, Path]] = [
     (2010, _RC10, _RS10),
     (2013, _RC13, _RS13),
     (2018, _RC18, _RS18),
@@ -121,15 +122,18 @@ def test_tres_versiones_propagacion_referencia_empalme() -> None:
     traslape = PeriodoQuincenal(2013, 3, 2)
     cadena = historia.ejecutar(_INSUMOS_3, "INPC", base, "quincenal")
     solo_2010 = historia.ejecutar([(2010, _RC10, _RS10)], "INPC", base, "quincenal")
-    assert cadena.df.loc[(traslape, "INPC"), "indice_replicado"] == pytest.approx(
-        solo_2010.df.loc[(traslape, "INPC"), "indice_replicado"]
+    assert cadena.df.loc[cast(Any, (traslape, "INPC")), "indice_replicado"] == pytest.approx(
+        solo_2010.df.loc[cast(Any, (traslape, "INPC")), "indice_replicado"]
     )
 
 
 def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
+    # _P18 solo trae 2Q Jul y 1Q Ago 2018 — la referencia debe caer en un mes con
+    # su 2Q real presente (2Q Jul), si no el rebase (quincenal, previo a a_mensual)
+    # no tiene dato para ningún índice y falla.
     historia = _historia_3_versiones()
-    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoMensual(2018, 8), "mensual")
-    assert r.periodo_referencia == PeriodoMensual(2018, 8)
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoMensual(2018, 7), "mensual")
+    assert r.periodo_referencia == PeriodoMensual(2018, 7)
     assert all(isinstance(p, PeriodoMensual) for p in r.df.index.get_level_values("periodo"))
 
 
@@ -155,10 +159,12 @@ def test_validaciones_fallan(insumos: list, periodicidad: str) -> None:
         historia.ejecutar(insumos, "INPC", PeriodoQuincenal(2018, 7, 2), periodicidad)  # type: ignore[arg-type]
 
 
-def test_periodo_referencia_inexistente_emite_warning() -> None:
-    # Periodo de referencia fuera de rango → todos los índices huérfanos → warning.
+def test_periodo_referencia_inexistente_falla() -> None:
+    # Periodo de referencia fuera de rango → ningún índice tiene dato ahí → falla
+    # entera (ver hallazgo de auditoría 2026-08-03: antes devolvía el resultado
+    # sin reescalar con periodo_referencia seteado igual).
     historia = _historia_3_versiones()
-    with pytest.warns(UserWarning, match="sin dato"):
+    with pytest.raises(InvarianteViolado, match="ningún índice tiene dato"):
         historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoQuincenal(2099, 1, 1), "quincenal")
 
 

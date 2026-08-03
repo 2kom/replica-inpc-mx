@@ -91,13 +91,13 @@ s2024 = rep.cargar_serie("data/series_2024.csv", version=2024)
 i2018 = rep.calcular_indice(c2018, s2018, tipo="inpc")
 i2024 = rep.calcular_indice(c2024, s2024, tipo="inpc", referencia=i2018)
 
-# 3. Empalmar → a_mensual → rebasar (orden obligatorio)
+# 3. Empalmar → a_mensual → rebasar
 hist  = rep.empalmar([i2018, i2024])
-hist_m = rep.a_mensual(hist)        # siempre antes de rebasar
+hist_m = rep.a_mensual(hist)
 inpc   = rep.rebasar(hist_m, "Jul 2018")
 ```
 
-`cargar_serie` devuelve siempre periodos quincenales. `a_mensual` debe ir **antes** de `rebasar` — el orden inverso anula la referencia.
+`cargar_serie` devuelve siempre periodos quincenales. Este orden (mensualizar, luego rebasar con referencia mensual) ancla exacto en 100 el promedio 1Q+2Q de "Jul 2018". El orden inverso (`rebasar` con referencia quincenal, luego `a_mensual`) — el que usa `calcular_historia()` internamente — ancla exacto la quincena oficial de base (2Q Jul 2018, ver `data/glosario.md`) y deja el promedio mensual solo aproximado. Ninguno anula la referencia (`a_mensual` la propaga, no la descarta); son dos definiciones válidas de "Jul 2018 = 100", no un error si se invierte.
 
 ### Caso completo: 4 versiones
 

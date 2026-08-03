@@ -1307,10 +1307,14 @@ Comportamiento por índice:
 
 | Condición | Resultado |
 | --- | --- |
-| `(periodo_referencia, indice)` no existe en el df | `UserWarning` + skip (huérfano; conserva escala original) |
+| `(periodo_referencia, indice)` no existe en el df | `UserWarning` + skip (huérfano; conserva escala original, incluida su ancla en `_frontera` si tiene una) |
+| NINGÚN índice tiene dato en `periodo_referencia` (periodo inexistente, o periodicidad de `periodo_referencia` distinta a la del resultado) | `InvarianteViolado` — la operación entera falla, nunca devuelve un resultado sin reescalar con `periodo_referencia` seteado |
 | `estado_calculo ∉ {ok, parcial, rellenado}` en `periodo_referencia` | `InvarianteViolado` |
 | `indice_replicado` es NaN en `periodo_referencia` | `InvarianteViolado` |
 | `indice_replicado == 0` en `periodo_referencia` | `InvarianteViolado` |
+| `valor_base` no es finito y positivo (`NaN`, `inf`, `-inf`, `0`, negativo) | `InvarianteViolado` |
+
+`indice_replicado` en `periodo_referencia` NO se valida `inf`/negativo — a diferencia de `valor_base` (parámetro de usuario, límite de sistema real), es dato ya calculado por `dominio/calculo/`, garantizado finito y positivo en su origen (`SerieNormalizada` valida finitud; `_laspeyres_por_grupo` valida desbordamiento). Auditado y descartado agregar la guardia duplicada aquí (2026-08-03): no hay ruta de producción real que produzca un `indice_replicado` no finito o negativo llegando a `rebasar`.
 
 Solo reescala filas con `estado_calculo ∈ {ok, parcial, rellenado}`; filas `sin_datos`/`fallida` en otros periodos no se modifican.
 
@@ -1348,13 +1352,13 @@ La columna interna `indice_incidencia` ([5.7](#57-resultadoindice)) se promedia 
 
 `a_mensual` también **crea** el campo interno `_frontera` ([5.7](#57-resultadoindice)): por cada junta de canasta presente en el input quincenal (detectada por `RANGOS_CANASTAS` + presencia del periodo de enlace, no por "cambio de versión dentro del mes"), captura los valores del tramo viejo en la quincena de enlace antes de promediar. `rebasar` reescala su campo visible (`indice_replicado_old`) por el mismo `k` y preserva `indice_incidencia_old`; `empalmar` lo renombra con el mismo mapa `RENOMBRES_INDICES`. Detalle en [11.29](#1129-indice_incidencia-y-de-encadenamiento-de-incidencias).
 
-Retorno: `ResultadoIndice` con periodos `PeriodoMensual` y `.periodo_referencia = None`. El `None` es invariante — el promedio destruye la escala del rebase original; usar siempre `a_mensual` antes de `rebasar` cuando se necesitan datos mensuales rebased.
+Retorno: `ResultadoIndice` con periodos `PeriodoMensual`. Si el input traía `.periodo_referencia` (`PeriodoQuincenal`), se propaga convertida a `PeriodoMensual` (mismo año/mes) — no se anula. El orden `a_mensual` → `rebasar` (referencia mensual) ancla exacto en 100 el promedio 1Q+2Q; el orden inverso `rebasar` (referencia quincenal) → `a_mensual` — el que usa `CalcularHistoria` internamente ([7.2](#72-casos-de-uso)) — ancla exacto la quincena oficial de base (el periodo base del INPC siempre es una quincena, nunca un promedio mensual; ver `data/glosario.md`) y deja el promedio mensual solo aproximado. Ambos órdenes son válidos — cambian únicamente qué queda exacto en 100, ninguno "anula" la referencia.
 
 Único mecanismo para obtener datos mensuales — nunca cargar CSV mensuales directamente.
 
 ```python
 mensual = a_mensual(indice)
-mensual_rebased = rebasar(a_mensual(indice), periodo_referencia=PeriodoMensual(2018, 7))
+mensual_rebased = rebasar(mensual, periodo_referencia=PeriodoMensual(2018, 7))
 ```
 
 ---
@@ -2541,10 +2545,10 @@ Devuelve `ResultadoIndice` empalmado, rebased a `referencia`, en `periodicidad` 
 1. Por cada `(version, ruta_canasta, ruta_series)` en `insumos`: `cargar_canasta` + `cargar_serie`
 2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
 3. Si `len(insumos) > 1`: `empalmar` encadenado por pares vecinos en orden cronológico; nomenclatura final = versión más reciente
-4. Si `periodicidad="mensual"`: `a_mensual`
-5. `rebasar` al periodo `referencia`
+4. `rebasar` al periodo `referencia` (siempre quincenal en esta fachada — el `ErrorConfiguracion` de arriba lo garantiza)
+5. Si `periodicidad="mensual"`: `a_mensual`
 
-`a_mensual` precede a `rebasar`: `a_mensual` devuelve `periodo_referencia=None`, por lo que rebasear antes lo anularía; además, con `periodicidad="mensual"` el `referencia` resuelto es `PeriodoMensual` y `rebasar` exige que exista en el resultado.
+`rebasar` precede a `a_mensual`: el periodo base oficial del INPC siempre es una quincena (`data/glosario.md`), así que se ancla ahí antes de mensualizar. `a_mensual` propaga `periodo_referencia` (convertida a `PeriodoMensual`, mismo año/mes) en vez de anularla.
 
 **Funciones diferidas**
 
@@ -2914,10 +2918,10 @@ Pasos en orden; el llamador no tiene acceso a resultados intermedios:
 1. Por cada `(version, ruta_canasta, ruta_series)` en `insumos`: `lector_canasta.leer` + `lector_series.leer`
 2. `calcular_indice` por versión con encadenamiento automático entre versiones consecutivas
 3. Si `len(insumos) > 1`: `empalmar` por pares vecinos (fold-left), `version_nombres` de la versión más reciente de cada par
-4. Si `periodicidad="mensual"`: `a_mensual`
-5. `rebasar` al `periodo_referencia` — sobre el resultado ya en la periodicidad final
+4. `rebasar` — si `periodo_referencia` es `PeriodoMensual` y `periodicidad="mensual"`, se traduce primero a `PeriodoQuincenal(año, mes, 2)` (2Q del mes: el periodo base oficial del INPC siempre es una quincena, ver `data/glosario.md`); rebasa sobre el resultado empalmado, todavía quincenal
+5. Si `periodicidad="mensual"`: `a_mensual` — propaga `periodo_referencia` (convertida a `PeriodoMensual`, mismo año/mes)
 
-> **Orden `a_mensual` → `rebasar`:** `a_mensual` devuelve `periodo_referencia=None`; si se rebaseara antes, la conversión a mensual anularía el rebase. Además, con `periodicidad="mensual"` el `periodo_referencia` es `PeriodoMensual` y `rebasar` requiere que exista en el resultado, lo que solo ocurre tras `a_mensual`.
+> **Orden `rebasar` → `a_mensual`:** ancla exacto en 100 la quincena oficial de base antes de promediar — coincide con la definición metodológica del INEGI (el periodo base nunca es un promedio mensual). Invertir el orden con una referencia mensual real (`a_mensual` → `rebasar`) también es válido, pero el anclaje queda solo aproximado (promedio de 1Q+2Q ya escalados) — es el patrón de composición manual de `docs/uso.md`, no el que usa este orquestador.
 
 **Errores**
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import warnings
 
@@ -398,75 +399,112 @@ def rebasar(
     """Reexpresa cada índice a una nueva referencia usando el valor replicado propio.
 
     Endógeno: el denominador es el valor replicado del propio resultado en
-    `periodo_referencia`.
+    `periodo_referencia`. Un índice sin dato válido ahí queda sin rebasar
+    (`UserWarning`); si NINGÚN índice tiene dato en `periodo_referencia` (periodo
+    inexistente, o periodicidad de `periodo_referencia` distinta a la del
+    resultado), la operación entera falla en vez de devolver un resultado sin
+    reescalar con `periodo_referencia` seteado.
+
+    Raises:
+        InvarianteViolado: si `periodo_referencia` no tiene dato para ningún
+            índice; si la base de algún índice es NaN o exactamente 0 (`inf`
+            o negativo NO se validan — el dato ya está garantizado finito y
+            positivo aguas arriba, en `dominio/calculo/`); o si `valor_base`
+            no es finito y positivo (parámetro de usuario, sin garantía
+            previa — a diferencia de la base, sí es límite de sistema).
+
+    Ver: docs/diseño.md §5.10
     """
+    if not (math.isfinite(valor_base) and valor_base > 0):
+        raise InvarianteViolado(f"rebasar: valor_base={valor_base} debe ser finito y positivo.")
+
     df = resultado._df_resultado.copy()
     indices_unicos = df.index.get_level_values("indice").unique()
-    huerfanos: list[str] = []
+    indices_sin_referencia: list[str] = []
 
-    # Extraer fila base de cada índice en el periodo de referencia
-    mask_ref = df.index.get_level_values("periodo") == periodo_referencia
-    df_ref = df[mask_ref].copy()
-    df_ref.index = df_ref.index.droplevel("periodo")
+    # Aislar, por índice, la fila en el periodo de referencia (el futuro denominador).
+    mask_periodo_referencia = df.index.get_level_values("periodo") == periodo_referencia
+    df_en_referencia = df[mask_periodo_referencia].copy()
+    df_en_referencia.index = df_en_referencia.index.droplevel("periodo")
 
-    factores: dict[object, float] = {}
+    factores_por_indice: dict[object, float] = {}
     for indice in indices_unicos:
-        if indice not in df_ref.index:
-            huerfanos.append(str(indice))
+        if indice not in df_en_referencia.index:
+            indices_sin_referencia.append(str(indice))
             continue
-        fila_base: pd.Series = df_ref.loc[indice]  # type: ignore[assignment]
-        estado_base = fila_base["estado_calculo"]
-        if estado_base not in _ESTADOS_CON_VALOR:
+        fila_referencia: pd.Series = df_en_referencia.loc[indice]  # type: ignore[assignment]
+        estado_en_referencia = fila_referencia["estado_calculo"]
+        if estado_en_referencia not in _ESTADOS_CON_VALOR:
             raise InvarianteViolado(
                 f"El valor base de '{indice}' en {periodo_referencia} no está disponible "
-                f"(estado_calculo='{estado_base}')."
+                f"(estado_calculo='{estado_en_referencia}')."
             )
-        base_raw = fila_base["indice_replicado"]
-        if pd.isna(base_raw):
+        valor_en_referencia_raw = fila_referencia["indice_replicado"]
+        if pd.isna(valor_en_referencia_raw):
             raise InvarianteViolado(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es NaN; "
-                f"estado_calculo='{estado_base}' es inconsistente."
+                f"estado_calculo='{estado_en_referencia}' es inconsistente."
             )
-        base = float(base_raw)  # type: ignore[arg-type]
-        if base == 0:
+        valor_en_referencia = float(valor_en_referencia_raw)  # type: ignore[arg-type]
+        if valor_en_referencia == 0:
             raise InvarianteViolado(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es 0; no rebasable."
             )
-        factores[indice] = valor_base / base
+        factores_por_indice[indice] = valor_base / valor_en_referencia
 
-    if factores:
-        mask_valor = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
-        indice_per_row = df.index.get_level_values("indice")
-        factor_series = pd.Series(
-            indice_per_row.map(factores),  # type: ignore[arg-type]
-            index=df.index,
-            dtype=float,
-        )
-        aplicar = mask_valor & factor_series.notna()
-        df.loc[aplicar, "indice_replicado"] = (  # type: ignore[index]
-            df.loc[aplicar, "indice_replicado"].astype(float).to_numpy()  # type: ignore[union-attr]
-            * factor_series.loc[aplicar].to_numpy()
+    if not factores_por_indice:
+        raise InvarianteViolado(
+            f"rebasar: ningún índice tiene dato en {periodo_referencia}; no se puede "
+            "rebasar (periodo inexistente en el resultado, o periodicidad de "
+            "periodo_referencia distinta a la del resultado)."
         )
 
-    if huerfanos:
+    # Solo se reescalan filas cuyo estado ya trae un valor confiable (`sin_datos`/
+    # `fallida` quedan como NaN, intactas); índices sin referencia (huérfanos) no
+    # tienen entrada en `factores_por_indice`, así que `factor_por_fila` les da NaN
+    # y `mask_aplicar_factor` los excluye — quedan en su escala original.
+    mask_estado_rebasable = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
+    indice_por_fila = df.index.get_level_values("indice")
+    factor_por_fila = pd.Series(
+        indice_por_fila.map(factores_por_indice),  # type: ignore[arg-type]
+        index=df.index,
+        dtype=float,
+    )
+    mask_aplicar_factor = mask_estado_rebasable & factor_por_fila.notna()
+    df.loc[mask_aplicar_factor, "indice_replicado"] = (  # type: ignore[index]
+        df.loc[mask_aplicar_factor, "indice_replicado"].astype(float).to_numpy()  # type: ignore[union-attr]
+        * factor_por_fila.loc[mask_aplicar_factor].to_numpy()
+    )
+
+    if indices_sin_referencia:
         warnings.warn(
-            f"rebasar: {len(huerfanos)} índice(s) sin dato en {periodo_referencia} "
-            f"quedan sin rebasar (base original): {huerfanos}",
+            f"rebasar: {len(indices_sin_referencia)} índice(s) sin dato en {periodo_referencia} "
+            f"quedan sin rebasar (base original): {indices_sin_referencia}",
             UserWarning,
             stacklevel=2,
         )
 
     # Reescalar la frontera: el campo visible (`indice_replicado_old` = INPC_visible(e))
-    # se multiplica por el mismo factor `k` por índice; `indice_incidencia_old` queda
-    # intacto (es de-encadenado, invariante al rebase). En la frontera de clasificación
-    # `indice_replicado_old` es NaN, así que no se toca nada visible ahí.
+    # se multiplica por el mismo factor por índice, solo para índices con factor
+    # calculado — los huérfanos quedan intactos (mismo criterio que `indice_replicado`,
+    # nunca se pisan con NaN). `indice_incidencia_old` queda intacto (es de-encadenado,
+    # invariante al rebase). En la frontera de clasificación `indice_replicado_old` es
+    # NaN, así que no se toca nada visible ahí.
     frontera_out = resultado._frontera
-    if frontera_out is not None and factores:
+    if frontera_out is not None:
         frontera_out = frontera_out.copy()
-        ind_fr = frontera_out.index.get_level_values("indice")
-        f_fr = pd.Series([factores.get(i, float("nan")) for i in ind_fr], index=frontera_out.index)
-        frontera_out["indice_replicado_old"] = (
-            frontera_out["indice_replicado_old"].astype(float) * f_fr
+        indices_frontera = frontera_out.index.get_level_values("indice")
+        mask_frontera_con_factor = indices_frontera.isin(factores_por_indice)
+        factores_frontera = (
+            indices_frontera[mask_frontera_con_factor]
+            .map(factores_por_indice)  # type: ignore[arg-type]
+            .astype(float)
+        )
+        frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"] = (  # type: ignore[index]
+            frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"]  # type: ignore[union-attr]
+            .astype(float)
+            .to_numpy()
+            * factores_frontera.to_numpy()
         )
 
     return ResultadoIndice(
