@@ -81,6 +81,15 @@ def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
 _COLS_REPORTE_STRUCT = ("genericos_esperados", "ponderador_esperado")
 _COLS_REPORTE_MIN = ("genericos_con_indice", "cobertura_genericos_pct", "ponderador_cubierto")
 _COLS_REPORTE_MAX = ("genericos_sin_indice",)
+# reindex/fillna sobre columnas con NaN en un lado (mes con 1 sola quincena) las
+# sube a float64 aunque el resultado final nunca tenga NaN real — se restauran a
+# int explícito, únicas columnas de docs/diseño.md §5.7/§5.10 tipadas `int`.
+_COLS_REPORTE_INT = (
+    "version",
+    "genericos_esperados",
+    "genericos_con_indice",
+    "genericos_sin_indice",
+)
 
 
 def _componer_mapas(m1: dict[str, str], m2: dict[str, str]) -> dict[str, str]:
@@ -559,13 +568,37 @@ def _reporte_a_mensual(df_result: pd.DataFrame, reporte_q: pd.DataFrame) -> pd.D
         if col in reporte_q.columns:
             df_rep[col] = pd.concat([q1_r[col], q2_r[col]], axis=1).max(axis=1).values
 
+    for col in _COLS_REPORTE_INT:
+        if col in df_rep.columns:
+            df_rep[col] = df_rep[col].astype(int)
+
     return df_rep[list(reporte_q.columns)]
 
 
 def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     """Convierte un ResultadoIndice quincenal a periodos mensuales.
 
-    Promedio simple 1Q+2Q. Si solo una quincena disponible → `parcial`.
+    Promedio simple 1Q+2Q por `(año, mes, indice)`; si solo una quincena está
+    disponible, usa su valor solo y marca `parcial`. También agrega `.reporte`
+    (peor caso de cobertura entre 1Q/2Q), filtra `.manifiesto` a las versiones
+    con al menos una fila tras la agregación (conserva la lista original si
+    todas quedarían huérfanas), convierte `.periodo_referencia` de quincenal a
+    mensual si existía, y crea `._frontera` para preservar las anclas de junta
+    de canasta que el promedio destruiría. `.diagnostico` se propaga sin tocar
+    (queda indexado por quincena, a diferencia de `.reporte`/`.resultado`).
+
+    Precedencia de `motivo_error` entre dos quincenas con el mismo estado
+    irregular: para `sin_datos`, prioriza 2Q (mismo criterio que
+    version/tipo); para `fallida`, prioriza la quincena que realmente falló
+    (1Q si ambas fallaron) — asimetría intencional, no un descuido.
+
+    Args:
+        resultado: `ResultadoIndice` con periodos `PeriodoQuincenal`.
+
+    Raises:
+        InvarianteViolado: si `resultado` no es quincenal.
+
+    Ver: docs/diseño.md §5.10
     """
     df = resultado._df_resultado
     periodos = df.index.get_level_values("periodo")
@@ -587,7 +620,10 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     q1_r = q1.reindex(all_groups)
     q2_r = q2.reindex(all_groups)
 
-    version = q2_r["version"].fillna(q1_r["version"])
+    # reindex sube "version" a float64 cuando un mes tiene una sola quincena
+    # (NaN del lado ausente) — se restaura int explícito, el resultado nunca
+    # tiene NaN real porque all_groups garantiza al menos un lado presente.
+    version = q2_r["version"].fillna(q1_r["version"]).astype(int)
     tipo = q2_r["tipo"].fillna(q1_r["tipo"])
 
     v1 = q1_r["indice_replicado"]

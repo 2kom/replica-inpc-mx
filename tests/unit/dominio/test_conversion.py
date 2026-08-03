@@ -10,7 +10,7 @@ from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestCalculo
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, ManifestCalculo
 
 # --------------------------------------------------------------------------- helpers
 
@@ -77,6 +77,35 @@ def _resultado(
         periodo_referencia=periodo_referencia,
         frontera=frontera,
     )
+
+
+def _resultado_manual(
+    filas: list[dict[str, object]], manifiestos: list[ManifestCalculo]
+) -> ResultadoIndice:
+    """Como `_resultado()`, pero fila por fila (dict con periodo/indice/version/tipo/...) —
+    para casos que `_resultado()` no cubre: `version` distinta por fila, columna
+    `indice_incidencia`.
+    """
+    df = pd.DataFrame(filas)
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    reporte = pd.DataFrame(
+        {"version": df["version"], "estado_calculo": df["estado_calculo"]}, index=df.index
+    )
+    diag = pd.DataFrame(
+        columns=[
+            "id_corrida",
+            "version",
+            "tipo",
+            "periodo",
+            "generico",
+            "nivel_faltante",
+            "tipo_faltante",
+            "detalle",
+        ]
+    )
+    return ResultadoIndice(df, manifiestos, reporte, diag)
 
 
 # --------------------------------------------------------------------------- empalmar
@@ -655,16 +684,21 @@ def test_a_mensual_una_quincena_es_parcial(periodo: PeriodoQuincenal, valor: flo
 
 
 def test_a_mensual_ambas_sin_datos() -> None:
+    # motivos distintos por quincena (no el mismo repetido) para que el assert de
+    # motivo_error distinga "toma el de 2Q" de "coincide con cualquiera de los 2"
+    # — contrato: entre 2 sin_datos, se prioriza el motivo de 2Q (mismo criterio
+    # que version/tipo en esta función), a diferencia de "fallida" (ver abajo).
     r = _resultado(
         [
-            (_q1, "INPC", None, "sin_datos", "faltantes"),
-            (_q2, "INPC", None, "sin_datos", "faltantes"),
+            (_q1, "INPC", None, "sin_datos", "motivo Q1"),
+            (_q2, "INPC", None, "sin_datos", "motivo Q2"),
         ]
     )
     rm = a_mensual(r)
     fila = rm.resultado.largo.iloc[0]
     assert fila["estado_calculo"] == "sin_datos"
     assert pd.isna(fila["indice_replicado"])
+    assert fila["motivo_error"] == "motivo Q2"
 
 
 def test_a_mensual_una_fallida_propaga() -> None:
@@ -681,51 +715,243 @@ def test_a_mensual_una_fallida_propaga() -> None:
     assert fila["motivo_error"] == "error de calculo"
 
 
-def test_a_mensual_version_de_2q_preferida() -> None:
-    # Construir manualmente df con versiones distintas en q1 y q2
-    df = pd.DataFrame(
+def test_a_mensual_ambas_fallida_motivo_prefiere_q1() -> None:
+    # Contrato inverso al de "ambas sin_datos": entre 2 fallida, se prioriza el
+    # motivo de 1Q, no de 2Q — asimetría real del código (motivo_q1.where(fallida_q1,
+    # motivo_q2)), no un descuido; documentada también en el docstring de a_mensual.
+    r = _resultado(
         [
-            {
-                "periodo": _q1,
-                "indice": "INPC",
-                "version": 2018,
-                "tipo": "INPC",
-                "indice_replicado": 100.0,
-                "estado_calculo": "ok",
-                "motivo_error": None,
-            },
-            {
-                "periodo": _q2,
-                "indice": "INPC",
-                "version": 2024,
-                "tipo": "INPC",
-                "indice_replicado": 102.0,
-                "estado_calculo": "ok",
-                "motivo_error": None,
-            },
+            (_q1, "INPC", None, "fallida", "error Q1"),
+            (_q2, "INPC", None, "fallida", "error Q2"),
         ]
     )
-    df.index = pd.MultiIndex.from_arrays(
-        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
-    )
-    reporte = pd.DataFrame(
-        {"version": [2018, 2024], "estado_calculo": ["ok", "ok"]}, index=df.index
-    )
-    diag = pd.DataFrame(
-        columns=[
-            "id_corrida",
-            "version",
-            "tipo",
-            "periodo",
-            "generico",
-            "nivel_faltante",
-            "tipo_faltante",
-            "detalle",
+    rm = a_mensual(r)
+    fila = rm.resultado.largo.iloc[0]
+    assert fila["estado_calculo"] == "fallida"
+    assert fila["motivo_error"] == "error Q1"
+
+
+def test_a_mensual_motivo_error_de_q1_fallida() -> None:
+    # Q1 fallida (no Q2) -- motivo_error debe venir de Q1, no del default Q2. El
+    # único test previo de "fallida" solo cubría Q2 fallida, donde ambos caminos
+    # (correcto e invertido) coinciden por casualidad en el mismo resultado.
+    r = _resultado(
+        [
+            (_q1, "INPC", None, "fallida", "error en Q1"),
+            (_q2, "INPC", 102.0, "ok", None),
         ]
     )
-    r = ResultadoIndice(df, [_manifiesto(version=2018), _manifiesto(version=2024)], reporte, diag)
+    rm = a_mensual(r)
+    fila = rm.resultado.largo.iloc[0]
+    assert fila["estado_calculo"] == "fallida"
+    assert fila["motivo_error"] == "error en Q1"
+
+
+def test_a_mensual_indice_incidencia_promediado_independiente() -> None:
+    # indice_incidencia se promedia con las mismas máscaras que indice_replicado,
+    # pero es columna independiente (no siempre coincide en valor) — ver
+    # docs/diseño.md §5.10. _resultado() no arma esta columna, de ahí manual.
+    filas = [
+        {
+            "periodo": _q1,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "indice_incidencia": 50.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": _q2,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 102.0,
+            "indice_incidencia": 60.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(filas, [_manifiesto(version=2018)])
+    rm = a_mensual(r)
+    assert rm._df_resultado["indice_replicado"].iloc[0] == pytest.approx(101.0)
+    assert rm._df_resultado["indice_incidencia"].iloc[0] == pytest.approx(55.0)
+
+
+def test_a_mensual_crea_frontera_en_junta_real() -> None:
+    # a_mensual CREA el campo interno _frontera cuando el input quincenal cruza
+    # una junta de canasta real (ver docs/diseño.md §5.10, §11.29).
+    junta = RANGOS_CANASTAS[2024][0]
+    q_antes = PeriodoQuincenal(junta.año, junta.mes, 1)
+    q_despues = PeriodoQuincenal(junta.año, junta.mes + 1, 1)
+    filas = [
+        {
+            "periodo": q_antes,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 99.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": junta,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 100.5,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": q_despues,
+            "indice": "INPC",
+            "version": 2024,
+            "tipo": "INPC",
+            "indice_replicado": 101.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(filas, [_manifiesto(version=2018), _manifiesto(version=2024)])
+    rm = a_mensual(r)
+    assert rm._frontera is not None
+    fila_frontera = rm._frontera.loc[cast(Any, (junta, "INPC"))]
+    assert fila_frontera["indice_replicado_old"] == pytest.approx(100.5)
+    assert fila_frontera["version_old"] == 2018
+    assert fila_frontera["version_new"] == 2024
+
+
+def test_a_mensual_frontera_clasificacion_replicado_old_es_nan() -> None:
+    # Clasificación (tipo != INPC): indice_replicado_old queda NaN por diseño (no
+    # se guarda INPC_visible en la frontera de clasificación, ver docs/diseño.md
+    # §11.31); indice_incidencia_old SÍ se conserva, a diferencia de INPC.
+    junta = RANGOS_CANASTAS[2024][0]
+    q_antes = PeriodoQuincenal(junta.año, junta.mes, 1)
+    q_despues = PeriodoQuincenal(junta.año, junta.mes + 1, 1)
+    filas = [
+        {
+            "periodo": q_antes,
+            "indice": "Alimentos",
+            "version": 2018,
+            "tipo": "COG",
+            "indice_replicado": 99.0,
+            "indice_incidencia": 40.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": junta,
+            "indice": "Alimentos",
+            "version": 2018,
+            "tipo": "COG",
+            "indice_replicado": 100.5,
+            "indice_incidencia": 41.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": q_despues,
+            "indice": "Alimentos",
+            "version": 2024,
+            "tipo": "COG",
+            "indice_replicado": 101.0,
+            "indice_incidencia": 42.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(
+        filas, [_manifiesto(version=2018, tipo="COG"), _manifiesto(version=2024, tipo="COG")]
+    )
+    rm = a_mensual(r)
+    assert rm._frontera is not None
+    fila_frontera = rm._frontera.loc[cast(Any, (junta, "Alimentos"))]
+    assert pd.isna(fila_frontera["indice_replicado_old"])
+    assert fila_frontera["indice_incidencia_old"] == pytest.approx(41.0)
+
+
+def test_a_mensual_sin_junta_frontera_es_none() -> None:
+    r = _resultado([(_q1, "INPC", 100.0, "ok", None), (_q2, "INPC", 102.0, "ok", None)])
+    rm = a_mensual(r)
+    assert rm._frontera is None
+
+
+def test_a_mensual_manifiesto_huerfano_descartado() -> None:
+    # version=2018 solo tiene Q1, version=2024 solo tiene Q2 del mismo mes -> tras
+    # la agregación (preferencia Q2) 2018 no tiene NINGUNA fila -> se descarta del
+    # manifiesto (comentario explícito en a_mensual, conversion.py).
+    filas = [
+        {
+            "periodo": _q1,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": _q2,
+            "indice": "INPC",
+            "version": 2024,
+            "tipo": "INPC",
+            "indice_replicado": 102.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(filas, [_manifiesto(version=2018), _manifiesto(version=2024)])
+    rm = a_mensual(r)
+    assert {m.version for m in rm.manifiesto} == {2024}
+
+
+def test_a_mensual_version_de_2q_preferida() -> None:
+    # version distinta en q1 y q2 -> gana la de 2Q.
+    filas = [
+        {
+            "periodo": _q1,
+            "indice": "INPC",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+        {
+            "periodo": _q2,
+            "indice": "INPC",
+            "version": 2024,
+            "tipo": "INPC",
+            "indice_replicado": 102.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(filas, [_manifiesto(version=2018), _manifiesto(version=2024)])
     rm = a_mensual(r)
     assert rm.resultado.largo["version"].iloc[0] == 2024
+
+
+def test_a_mensual_version_de_q1_cuando_q2_ausente() -> None:
+    # Q2 no existe en absoluto para ese mes -> version cae a Q1 (fillna). version=2013
+    # (no el default 2018) para no confundir "cayó a Q1" con "coincidió con el default".
+    filas = [
+        {
+            "periodo": _q1,
+            "indice": "INPC",
+            "version": 2013,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        },
+    ]
+    r = _resultado_manual(filas, [_manifiesto(version=2013)])
+    rm = a_mensual(r)
+    assert rm.resultado.largo["version"].iloc[0] == 2013
+    assert rm.resultado.largo["version"].dtype == "int64"
 
 
 def test_a_mensual_multiples_meses() -> None:
@@ -742,6 +968,27 @@ def test_a_mensual_multiples_meses() -> None:
     periodos = list(rm.df.index.get_level_values("periodo"))
     assert periodos[0] == PeriodoMensual(2024, 1)
     assert periodos[1] == PeriodoMensual(2024, 2)
+
+
+def test_a_mensual_multiples_indices_sin_contaminacion_cruzada() -> None:
+    # 2 índices en el mismo mes, con patrones de faltantes DISTINTOS: "A" trae
+    # ambas quincenas (ok), "B" solo trae 1Q (parcial, 2Q ni existe como fila).
+    # El groupby es (año, mes, indice) — si agrupara solo por (año, mes),
+    # el reindex de "B" heredaría por error el 2Q de "A".
+    r = _resultado(
+        [
+            (_q1, "A", 100.0, "ok", None),
+            (_q2, "A", 102.0, "ok", None),
+            (_q1, "B", 50.0, "ok", None),
+        ]
+    )
+    rm = a_mensual(r)
+    fila_a = rm.resultado.largo.loc[cast(Any, (PeriodoMensual(2024, 1), "A"))]
+    fila_b = rm.resultado.largo.loc[cast(Any, (PeriodoMensual(2024, 1), "B"))]
+    assert fila_a["estado_calculo"] == "ok"
+    assert fila_a["indice_replicado"] == pytest.approx(101.0)
+    assert fila_b["estado_calculo"] == "parcial"
+    assert fila_b["indice_replicado"] == pytest.approx(50.0)
 
 
 def test_a_mensual_input_mensual_falla() -> None:
@@ -803,3 +1050,129 @@ def test_a_mensual_reporte_tiene_periodo_mensual() -> None:
     assert all(isinstance(p, PeriodoMensual) for p in periodos_rep)
     assert rm.reporte["version"].iloc[0] == 2018
     assert rm.reporte["estado_calculo"].iloc[0] == "ok"
+
+
+def test_a_mensual_reporte_cobertura_struct_min_max() -> None:
+    # Valores ASIMÉTRICOS entre Q1/Q2 (no el mismo repetido) para distinguir cada
+    # regla de agregación: STRUCT (genericos_esperados/ponderador_esperado) toma
+    # 2Q con fallback a 1Q; MIN (genericos_con_indice/cobertura_genericos_pct/
+    # ponderador_cubierto) toma el peor caso (mínimo); MAX (genericos_sin_indice)
+    # toma el peor caso (máximo) — ver _COLS_REPORTE_STRUCT/_MIN/_MAX en conversion.py.
+    df = pd.DataFrame(
+        [
+            {
+                "periodo": _q1,
+                "indice": "INPC",
+                "version": 2018,
+                "tipo": "INPC",
+                "indice_replicado": 100.0,
+                "estado_calculo": "ok",
+                "motivo_error": None,
+            },
+            {
+                "periodo": _q2,
+                "indice": "INPC",
+                "version": 2018,
+                "tipo": "INPC",
+                "indice_replicado": 102.0,
+                "estado_calculo": "ok",
+                "motivo_error": None,
+            },
+        ]
+    )
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    reporte = pd.DataFrame(
+        {
+            "version": [2018, 2018],
+            "estado_calculo": ["ok", "ok"],
+            "genericos_esperados": [283, 290],
+            "genericos_con_indice": [280, 275],
+            "genericos_sin_indice": [3, 8],
+            "cobertura_genericos_pct": [98.9, 97.2],
+            "ponderador_esperado": [100.0, 99.5],
+            "ponderador_cubierto": [97.0, 95.0],
+        },
+        index=df.index,
+    )
+    diag = pd.DataFrame(
+        columns=[
+            "id_corrida",
+            "version",
+            "tipo",
+            "periodo",
+            "generico",
+            "nivel_faltante",
+            "tipo_faltante",
+            "detalle",
+        ]
+    )
+    r = ResultadoIndice(df, [_manifiesto(version=2018)], reporte, diag)
+    rm = a_mensual(r)
+    fila = rm.reporte.iloc[0]
+    assert fila["genericos_esperados"] == 290
+    assert fila["ponderador_esperado"] == pytest.approx(99.5)
+    assert fila["genericos_con_indice"] == 275
+    assert fila["cobertura_genericos_pct"] == pytest.approx(97.2)
+    assert fila["ponderador_cubierto"] == pytest.approx(95.0)
+    assert fila["genericos_sin_indice"] == 8
+    assert rm.reporte["genericos_esperados"].dtype == "int64"
+    assert rm.reporte["genericos_con_indice"].dtype == "int64"
+    assert rm.reporte["genericos_sin_indice"].dtype == "int64"
+
+
+def test_a_mensual_reporte_struct_una_quincena_usa_fallback() -> None:
+    # Solo 1Q presente en el reporte (mes parcial) -- STRUCT/MIN/MAX deben caer al
+    # único lado disponible, no a NaN.
+    df = pd.DataFrame(
+        [
+            {
+                "periodo": _q1,
+                "indice": "INPC",
+                "version": 2018,
+                "tipo": "INPC",
+                "indice_replicado": 100.0,
+                "estado_calculo": "ok",
+                "motivo_error": None,
+            },
+        ]
+    )
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    reporte = pd.DataFrame(
+        {
+            "version": [2018],
+            "estado_calculo": ["ok"],
+            "genericos_esperados": [283],
+            "genericos_con_indice": [280],
+            "genericos_sin_indice": [3],
+            "cobertura_genericos_pct": [98.9],
+            "ponderador_esperado": [100.0],
+            "ponderador_cubierto": [97.0],
+        },
+        index=df.index,
+    )
+    diag = pd.DataFrame(
+        columns=[
+            "id_corrida",
+            "version",
+            "tipo",
+            "periodo",
+            "generico",
+            "nivel_faltante",
+            "tipo_faltante",
+            "detalle",
+        ]
+    )
+    r = ResultadoIndice(df, [_manifiesto(version=2018)], reporte, diag)
+    rm = a_mensual(r)
+    fila = rm.reporte.iloc[0]
+    assert fila["genericos_esperados"] == 283
+    assert fila["genericos_con_indice"] == 280
+    assert fila["genericos_sin_indice"] == 3
+    assert rm.reporte["version"].dtype == "int64"
+    assert rm.reporte["genericos_esperados"].dtype == "int64"
+    assert rm.reporte["genericos_con_indice"].dtype == "int64"
+    assert rm.reporte["genericos_sin_indice"].dtype == "int64"
