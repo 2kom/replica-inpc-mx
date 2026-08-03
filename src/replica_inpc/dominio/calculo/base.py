@@ -6,6 +6,7 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
+from replica_inpc.dominio.errores import ErrorCalculo
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
@@ -84,6 +85,12 @@ def _recortar_series_fecha(df_serie: pd.DataFrame, version: VersionCanasta) -> p
         and periodo >= periodo_inicio
         and (periodo_fin is None or periodo <= periodo_fin)
     ]
+    if not columnas_en_rango:
+        raise ErrorCalculo(
+            f"La serie no tiene ningún periodo dentro del rango vigente de la "
+            f"canasta versión {version} ({periodo_inicio} - {periodo_fin or 'sin límite'}). "
+            "Revisa que la serie y la canasta correspondan a la misma versión."
+        )
     return df_serie[columnas_en_rango]
 
 
@@ -111,12 +118,21 @@ def _laspeyres_por_grupo(
     cat_por_gen: pd.Series,
 ) -> pd.DataFrame:
     """Laspeyres por grupo: Σ(ponderador·numerador)/Σponderador, agrupado por `cat_por_gen`."""
-    return (
+    resultado = (
         numerador.multiply(ponderador, axis=0)
         .groupby(cat_por_gen)
         .sum()
         .divide(ponderador.groupby(cat_por_gen).sum(), axis=0)
     )
+    valores = resultado.to_numpy(dtype=float)
+    # numerador ya viene finito-o-NaN (SerieNormalizada lo garantiza), pero
+    # ponderar puede desbordar a inf incluso con entradas finitas (ej. 1e308)
+    if (~pd.isna(valores) & ~np.isfinite(valores)).any():
+        raise ErrorCalculo(
+            "El cálculo de Laspeyres por grupo produjo un valor no finito — "
+            "posible desbordamiento al ponderar la serie."
+        )
+    return resultado
 
 
 def _construir_diagnostico(

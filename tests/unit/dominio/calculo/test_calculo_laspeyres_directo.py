@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -157,15 +158,18 @@ def test_referencia_empalme_rebasa_serie_completa() -> None:
     [
         pytest.param(float("nan"), id="sin_dato_en_ningun_periodo"),
         pytest.param(0.0, id="indice_crudo_cero"),
-        pytest.param(float("inf"), id="indice_crudo_no_finito"),
     ],
 )
 def test_referencia_empalme_denominador_invalido_lanza_error_calculo(
     valor_grupo_invalido: float,
 ) -> None:
     # el crudo del grupo en el traslape queda inválido (NaN sin rellenar → 0 al
-    # sumar, o dato presente pero 0/inf) — dividir la referencia entre eso debe
-    # fallar claro, no corromper la serie en silencio con inf
+    # sumar, o dato presente en cero) — dividir la referencia entre eso debe
+    # fallar claro, no corromper la serie en silencio con inf. El caso "crudo
+    # no finito" (inf) ya no es alcanzable vía SerieNormalizada — la rechaza
+    # en construcción (ver test_modelos_serie.py::test_valores_no_finitos_falla);
+    # el chequeo de finitud en la guardia de acá queda como defensa adicional,
+    # no hay repro conocido que lo alcance con SerieNormalizada ya validada
     periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
     df = pd.DataFrame(
         {
@@ -303,20 +307,24 @@ def test_sin_nan_no_produce_estado_rellenado() -> None:
 # ---------- dato real ----------
 
 _DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
-_DATA_DIR_CANASTA = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests" / "p_pdf"
-_CANASTA_2018_REAL = _DATA_DIR_CANASTA / "ponderadores_2018.csv"
+_DATA_DIR_TESTS = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests"
 _SERIE_2018_REAL = _DATA_DIR / "series2018_horizontal_metadata.CSV"
+_N_CATEGORIAS_CCIF_DIVISION_2018 = 12
 
 
 @pytest.mark.requires_data
-def test_categoria_real_ccif_division_valores_no_triviales() -> None:
+@pytest.mark.parametrize("fuente", ["p_pdf", "p_xlsx"])
+def test_categoria_real_ccif_division_valores_no_triviales(fuente: str) -> None:
     # sanity check contra dato real: LaspeyresDirecto sobre "CCIF DIVISION" de la
     # canasta 2018 real produce valores finitos para todas las categorías — no
     # verifica magnitud (eso es trabajo de validar_indices contra INEGI), solo que
     # el mecanismo de categoría no se rompe con datos de producción reales
-    canasta = rep.cargar_canasta(str(_CANASTA_2018_REAL), 2018)
+    canasta_real = _DATA_DIR_TESTS / fuente / "ponderadores_2018.csv"
+    canasta = rep.cargar_canasta(str(canasta_real), 2018)
     serie = rep.cargar_serie(str(_SERIE_2018_REAL), 2018)
     r = LaspeyresDirecto().calcular(canasta, serie, "CCIF DIVISION")
     largo = r.resultado.largo
     assert not largo.empty
-    assert largo["indice_replicado"].notna().any()
+    assert len(largo.index.get_level_values("indice").unique()) == _N_CATEGORIAS_CCIF_DIVISION_2018
+    assert (largo["estado_calculo"] == "ok").all()
+    assert np.isfinite(largo["indice_replicado"]).all()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
@@ -11,13 +12,14 @@ class SerieNormalizada:
 
     Args:
         df: DataFrame en formato ancho con `generico` como índice,
-            columnas `PeriodoQuincenal` y valores numéricos no negativos o `NaN`.
+            columnas `PeriodoQuincenal` y valores numéricos finitos no
+            negativos o `NaN`.
 
     Raises:
         InvarianteViolado: Si el índice contiene duplicados o cadenas vacías,
             si no hay columnas, si alguna columna no es `PeriodoQuincenal`, si
-            hay columnas de periodo duplicadas o si el DataFrame contiene
-            valores negativos.
+            hay columnas de periodo duplicadas, si el DataFrame contiene
+            valores negativos, o si contiene valores no finitos (`inf`/`-inf`).
 
     Esquema del DataFrame:
         Índice (str): `generico`.
@@ -56,6 +58,8 @@ class SerieNormalizada:
 
         if (df < 0).any().any():
             raise InvarianteViolado("Los valores del DataFrame no pueden ser negativos.")
+        if not (df.isna() | np.isfinite(df.astype(float))).all().all():
+            raise InvarianteViolado("Los valores del DataFrame deben ser finitos o NaN (no ±inf).")
 
         # Orden cronológico explícito: el relleno bfill/ffill de calculo/base.py opera
         # por posición física de columna, no por valor — columnas desordenadas

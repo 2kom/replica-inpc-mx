@@ -86,6 +86,13 @@ def test_valores_con_nan_no_falla() -> None:
     SerieNormalizada(_df())
 
 
+@pytest.mark.parametrize("valor_no_finito", [float("inf"), float("-inf")])
+def test_valores_no_finitos_falla(valor_no_finito: float) -> None:
+    df = _df(valores=((100.0, valor_no_finito, 102.0), (100.0, 102.0, 104.0), (100.0, None, 106.0)))
+    with pytest.raises(InvarianteViolado):
+        SerieNormalizada(df)
+
+
 # ---------- Properties ----------
 
 

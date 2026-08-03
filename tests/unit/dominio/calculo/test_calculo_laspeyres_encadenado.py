@@ -347,7 +347,7 @@ def test_nan_total_categoria_produce_sin_datos() -> None:
     # arroz sin dato en NINGÚN periodo dentro de "granos" — frijol sigue con dato
     df = pd.DataFrame(
         {
-            "arroz": [None, None],
+            "arroz": [float("nan"), float("nan")],
             "frijol": [80.0, 82.0],
             "leche": [110.0, 113.0],
             "huevo": [90.0, 91.5],
@@ -439,8 +439,8 @@ def test_t1_categoria_denominador_invalido_en_traslape_lanza_error_calculo() -> 
     # categoría "fantasma" sin dato en ningún periodo, con referencia asignada
     df = pd.DataFrame(
         {
-            "arroz": [None, None],
-            "frijol": [None, None],
+            "arroz": [float("nan"), float("nan")],
+            "frijol": [float("nan"), float("nan")],
             "leche": [110.0, 113.0],
             "huevo": [90.0, 91.5],
         },

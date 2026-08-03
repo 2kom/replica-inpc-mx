@@ -11,6 +11,7 @@ from replica_inpc.dominio.calculo.base import (
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
 )
+from replica_inpc.dominio.errores import ErrorCalculo
 from replica_inpc.dominio.periodos import PeriodoQuincenal
 
 _ANTES_2018 = PeriodoQuincenal(2018, 7, 1)
@@ -48,6 +49,13 @@ def test_recortar_version_sin_fin_incluye_todo_lo_posterior_al_inicio() -> None:
     assert list(resultado.columns) == [inicio_2024, lejano]
 
 
+def test_recortar_sin_periodos_en_rango_lanza_error_calculo() -> None:
+    # serie de una versión distinta, sin ningún periodo dentro del rango de 2018
+    df = _serie({"arroz": [1.0, 2.0]}, [PeriodoQuincenal(2010, 1, 1), PeriodoQuincenal(2010, 1, 2)])
+    with pytest.raises(ErrorCalculo):
+        _recortar_series_fecha(df, 2018)
+
+
 # -- _rellenar_dato_serie_faltante --
 
 
@@ -67,7 +75,7 @@ def test_rellenar_hueco_interior_marca_rellenado_con_periodo_fuente() -> None:
 def test_rellenar_fila_totalmente_faltante_no_se_rellena_ni_se_marca() -> None:
     # huevo sin dato en NINGÚN periodo — bfill/ffill no tiene de dónde tomar
     df = _serie(
-        {"arroz": [100.0, 101.0], "huevo": [None, None]},
+        {"arroz": [100.0, 101.0], "huevo": [float("nan"), float("nan")]},
         [_P1, _P2],
     )
     rellenada, diagnostico, periodos_rel = _rellenar_dato_serie_faltante(df, 2018, "INPC")
@@ -112,6 +120,15 @@ def test_laspeyres_por_grupo_un_solo_elemento_devuelve_su_propio_valor() -> None
     cat_por_gen = pd.Series({"a": "X"})
     resultado = _laspeyres_por_grupo(numerador, ponderador, cat_por_gen)
     assert resultado.at["X", _P1] == pytest.approx(80.0)
+
+
+def test_laspeyres_por_grupo_desbordamiento_al_ponderar_lanza_error_calculo() -> None:
+    # numerador finito (1e308, pasa SerieNormalizada) pero ponderar desborda a inf
+    numerador = _serie({"a": [1e308]}, [_P1])
+    ponderador = pd.Series({"a": 40.0})
+    cat_por_gen = pd.Series({"a": "X"})
+    with pytest.raises(ErrorCalculo):
+        _laspeyres_por_grupo(numerador, ponderador, cat_por_gen)
 
 
 # -- _construir_diagnostico --
