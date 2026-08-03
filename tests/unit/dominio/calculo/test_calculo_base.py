@@ -7,7 +7,7 @@ import pytest
 
 from replica_inpc.dominio.calculo.base import (
     _construir_diagnostico,
-    _promedio_ponderado_por_grupo,
+    _laspeyres_por_grupo,
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
 )
@@ -93,24 +93,24 @@ def test_rellenar_sin_faltantes_devuelve_serie_intacta() -> None:
     assert periodos_rel == set()
 
 
-# -- _promedio_ponderado_por_grupo --
+# -- _laspeyres_por_grupo --
 
 
-def test_promedio_ponderado_por_grupo_valores_correctos() -> None:
+def test_laspeyres_por_grupo_valores_correctos() -> None:
     numerador = _serie({"a": [100.0], "b": [200.0], "c": [50.0], "d": [150.0]}, [_P1])
     ponderador = pd.Series({"a": 10.0, "b": 30.0, "c": 20.0, "d": 40.0})
     cat_por_gen = pd.Series({"a": "X", "b": "X", "c": "Y", "d": "Y"})
-    resultado = _promedio_ponderado_por_grupo(numerador, ponderador, cat_por_gen)
+    resultado = _laspeyres_por_grupo(numerador, ponderador, cat_por_gen)
     # a mano: X=(10*100+30*200)/40=175; Y=(20*50+40*150)/60=116.6667
     assert resultado.at["X", _P1] == pytest.approx(175.0)
     assert resultado.at["Y", _P1] == pytest.approx(116.6667, abs=1e-3)
 
 
-def test_promedio_ponderado_por_grupo_un_solo_elemento_devuelve_su_propio_valor() -> None:
+def test_laspeyres_por_grupo_un_solo_elemento_devuelve_su_propio_valor() -> None:
     numerador = _serie({"a": [80.0]}, [_P1])
     ponderador = pd.Series({"a": 15.0})
     cat_por_gen = pd.Series({"a": "X"})
-    resultado = _promedio_ponderado_por_grupo(numerador, ponderador, cat_por_gen)
+    resultado = _laspeyres_por_grupo(numerador, ponderador, cat_por_gen)
     assert resultado.at["X", _P1] == pytest.approx(80.0)
 
 

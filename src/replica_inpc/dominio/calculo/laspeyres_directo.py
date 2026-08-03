@@ -9,7 +9,7 @@ import pandas as pd
 from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
-    _promedio_ponderado_por_grupo,
+    _laspeyres_por_grupo,
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
 )
@@ -65,9 +65,7 @@ class LaspeyresDirecto(CalculadorBase):
         )
         ponderador = canasta.df.loc[genericos_del_grupo, "ponderador"].astype(float)
 
-        indice_por_grupo = _promedio_ponderado_por_grupo(
-            serie_rellenada, ponderador, categoria_por_generico
-        )
+        indice_por_grupo = _laspeyres_por_grupo(serie_rellenada, ponderador, categoria_por_generico)
         indice_incidencia_por_grupo = indice_por_grupo.copy()  # antes del rebase (r_c)
 
         # self._referencia_empalme (R_c) está keyed por grupo — para INPC la única

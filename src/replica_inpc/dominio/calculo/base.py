@@ -105,12 +105,12 @@ class CalculadorBase(ABC):
         """Calcula `ResultadoIndice` para una canasta y serie dadas."""
 
 
-def _promedio_ponderado_por_grupo(
+def _laspeyres_por_grupo(
     numerador: pd.DataFrame,
     ponderador: pd.Series,
     cat_por_gen: pd.Series,
 ) -> pd.DataFrame:
-    """Media ponderada por grupo: Σ(ponderador·numerador)/Σponderador, agrupado por `cat_por_gen`."""
+    """Laspeyres por grupo: Σ(ponderador·numerador)/Σponderador, agrupado por `cat_por_gen`."""
     return (
         numerador.multiply(ponderador, axis=0)
         .groupby(cat_por_gen)

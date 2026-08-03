@@ -9,7 +9,7 @@ import pandas as pd
 from replica_inpc.dominio.calculo.base import (
     CalculadorBase,
     _construir_diagnostico,
-    _promedio_ponderado_por_grupo,
+    _laspeyres_por_grupo,
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
 )
@@ -26,7 +26,7 @@ from replica_inpc.dominio.tipos import (
 )
 
 
-def _obtener_f_k(
+def _obtener_f_j(
     df_canasta: pd.DataFrame,
     df_serie: pd.DataFrame,
     version: VersionCanasta,
@@ -41,13 +41,13 @@ def _obtener_f_k(
                 f"PeriodoQuincenal de traslape {traslape} no está en la serie "
                 "y falta encadenamiento en canasta"
             )
-        f_k_serie: pd.Series = df_serie[cast(Any, traslape)] / 100
-        f_k = enc_raw.astype(float)
-        f_k = f_k.where(~necesita_fallback, f_k_serie)
+        f_j_serie: pd.Series = df_serie[cast(Any, traslape)] / 100
+        f_j = enc_raw.astype(float)
+        f_j = f_j.where(~necesita_fallback, f_j_serie)
     else:
-        f_k = enc_raw.astype(float)
+        f_j = enc_raw.astype(float)
 
-    return f_k
+    return f_j
 
 
 class _LaspeyresEncadenadoBase(CalculadorBase):
@@ -60,7 +60,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
     def _factor_h_para_cats(
         self,
         i_tramo_mat: pd.DataFrame,
-        f_k: pd.Series,
+        f_j: pd.Series,
         cat_por_gen: pd.Series,
         pond: pd.Series,
     ) -> pd.Series:
@@ -104,13 +104,13 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         df_s_raw = _recortar_series_fecha(serie.df.loc[gens], canasta.version)
         df_s, df_corr_relleno, _ = _rellenar_dato_serie_faltante(df_s_raw, canasta.version, tipo)
         pond = canasta.df.loc[gens, "ponderador"].astype(float)
-        f_k = _obtener_f_k(canasta.df.loc[gens], df_s, canasta.version)
+        f_j = _obtener_f_j(canasta.df.loc[gens], df_s, canasta.version)
 
-        # i_tramo por grupo: media ponderada de (serie / f_k), de-encadenada
-        df_base = df_s.divide(f_k, axis=0)
-        i_tramo_mat = _promedio_ponderado_por_grupo(df_base, pond, cat_por_gen)
+        # i_tramo por grupo: media ponderada de (serie / f_j), de-encadenada
+        df_base = df_s.divide(f_j, axis=0)
+        i_tramo_mat = _laspeyres_por_grupo(df_base, pond, cat_por_gen)
 
-        factor_h = self._factor_h_para_cats(i_tramo_mat, f_k, cat_por_gen, pond)
+        factor_h = self._factor_h_para_cats(i_tramo_mat, f_j, cat_por_gen, pond)
         resultado_mat = i_tramo_mat.multiply(factor_h, axis=0)
 
         has_null = df_s.isna().groupby(cat_por_gen).any()
@@ -197,10 +197,15 @@ class LaspeyresEncadenadoT1(_LaspeyresEncadenadoBase):
     def _factor_h_para_cats(
         self,
         i_tramo_mat: pd.DataFrame,
-        f_k: pd.Series,
+        f_j: pd.Series,
         cat_por_gen: pd.Series,
         pond: pd.Series,
     ) -> pd.Series:
+        # cociente puro contra referencia — i_tramo_mat ya viene agrupado por
+        # categoría desde calcular(), no hace falta reagrupar con pond/cat_por_gen
+        _ = f_j
+        _ = cat_por_gen
+        _ = pond
         factor_h = pd.Series(1.0, index=i_tramo_mat.index)
         cats_ref = [c for c in i_tramo_mat.index if c in self._referencia_empalme]
         if cats_ref:
@@ -228,13 +233,13 @@ class LaspeyresEncadenadoT2(_LaspeyresEncadenadoBase):
     def _factor_h_para_cats(
         self,
         i_tramo_mat: pd.DataFrame,
-        f_k: pd.Series,
+        f_j: pd.Series,
         cat_por_gen: pd.Series,
         pond: pd.Series,
     ) -> pd.Series:
         _ = i_tramo_mat
-        pond_fk_sum = (pond * f_k).groupby(cat_por_gen).sum()
-        factor_h = pond_fk_sum / pond.groupby(cat_por_gen).sum()
+        pond_fj_sum = (pond * f_j).groupby(cat_por_gen).sum()
+        factor_h = pond_fj_sum / pond.groupby(cat_por_gen).sum()
         cats_ref = [c for c in factor_h.index if c in self._referencia_empalme]
         if cats_ref:
             refs_s = pd.Series({c: self._referencia_empalme[c] / 100 for c in cats_ref})

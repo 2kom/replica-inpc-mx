@@ -74,12 +74,12 @@ def test_t2_difiere_de_directo() -> None:
 def test_t2_con_referencia_ancla_traslape_en_ref() -> None:
     ref = 134.471
     r = LaspeyresEncadenadoT2({"INPC": ref}).calcular(_canasta_t2(), _serie_t2(), "INPC")
-    # factor_h = ref/100, i_tramo[traslape] = 100 (porque serie/f_k = 100 en traslape)
+    # factor_h = ref/100, i_tramo[traslape] = 100 (porque serie/f_j = 100 en traslape)
     valor = r.df.at[(_traslape_t2, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(ref)
 
 
-def test_t2_fk_desde_serie_igual_a_desde_canasta() -> None:
+def test_t2_fj_desde_serie_igual_a_desde_canasta() -> None:
     r_can = LaspeyresEncadenadoT2().calcular(_canasta_t2(), _serie_t2(), "INPC")
     r_ser = LaspeyresEncadenadoT2().calcular(
         _canasta_t2([None, None, None, None]), _serie_t2(), "INPC"
@@ -146,9 +146,9 @@ def _serie_t1() -> SerieNormalizada:
 
 def test_t1_sin_referencia_factor_h_es_1() -> None:
     r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), _serie_t1(), "INPC")
-    f_k = _canasta_t1().df["encadenamiento"].astype(float)
+    f_j = _canasta_t1().df["encadenamiento"].astype(float)
     pond = _canasta_t1().df["ponderador"].astype(float)
-    serie_div = _serie_t1().df.divide(f_k, axis=0)
+    serie_div = _serie_t1().df.divide(f_j, axis=0)
     esperado = (serie_div[_traslape_t1] * pond).sum() / pond.sum()
     valor = r.df.at[(_traslape_t1, "INPC"), "indice_replicado"]
     assert valor == pytest.approx(esperado)
