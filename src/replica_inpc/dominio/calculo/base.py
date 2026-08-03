@@ -105,60 +105,30 @@ class CalculadorBase(ABC):
         """Calcula `ResultadoIndice` para una canasta y serie dadas."""
 
 
-def _construir_reporte(
-    df_calculo: pd.DataFrame,
-    df_canasta: pd.DataFrame,
-    df_serie: pd.DataFrame,
-    version: VersionCanasta,
+def _promedio_ponderado_por_grupo(
+    numerador: pd.DataFrame,
+    ponderador: pd.Series,
+    cat_por_gen: pd.Series,
 ) -> pd.DataFrame:
-    """Construye reporte de cobertura por (periodo, indice) para un subgrupo.
-
-    Para subíndices clasificados, `df_canasta` y `df_serie` deben ser los del
-    subgrupo (no la canasta entera) — `genericos_esperados` y
-    `ponderador_esperado` se derivan de su tamaño.
-    """
-    ponderadores = df_canasta["ponderador"].astype(float)
-    genericos_esperados = int(len(df_canasta))
-    ponderador_esperado = float(ponderadores.sum())
-
-    cubierto = df_serie.notna()
-    pond_cubierto_por_periodo = cubierto.multiply(ponderadores, axis=0).sum()
-    con_indice_por_periodo = cubierto.sum().astype(int)
-
-    periodos = df_calculo.index.get_level_values("periodo")
-    con_idx = con_indice_por_periodo.reindex(periodos).to_numpy()
-    pond_cub = pond_cubierto_por_periodo.reindex(periodos).to_numpy()
-    cobertura_pct = (100.0 * con_idx / genericos_esperados) if genericos_esperados else 0.0
-
-    return pd.DataFrame(
-        {
-            "version": version,
-            "estado_calculo": df_calculo["estado_calculo"].to_numpy(),
-            "motivo_error": df_calculo["motivo_error"].to_numpy(),
-            "genericos_esperados": genericos_esperados,
-            "genericos_con_indice": con_idx,
-            "genericos_sin_indice": genericos_esperados - con_idx,
-            "cobertura_genericos_pct": cobertura_pct,
-            "ponderador_esperado": ponderador_esperado,
-            "ponderador_cubierto": pond_cub,
-        },
-        index=df_calculo.index,
+    """Media ponderada por grupo: Σ(ponderador·numerador)/Σponderador, agrupado por `cat_por_gen`."""
+    return (
+        numerador.multiply(ponderador, axis=0)
+        .groupby(cat_por_gen)
+        .sum()
+        .divide(ponderador.groupby(cat_por_gen).sum(), axis=0)
     )
 
 
 def _construir_diagnostico(
-    df_canasta: pd.DataFrame,
     df_serie: pd.DataFrame,
     version: VersionCanasta,
     tipo: str,
 ) -> pd.DataFrame:
     """Lista (periodo, generico) faltantes con schema DiagnosticoFaltantes.
 
-    Para subíndices clasificados, `df_canasta` y `df_serie` deben ser los del
-    subgrupo. Una fila por celda NaN. Solo considera genéricos presentes en
-    `df_canasta.index` (los del subgrupo).
+    Para subíndices clasificados, `df_serie` debe ser el del subgrupo. Una
+    fila por celda NaN.
     """
-    _ = df_canasta
     columnas_diagnostico = [
         "version",
         "tipo",

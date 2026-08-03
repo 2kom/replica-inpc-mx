@@ -167,7 +167,7 @@ class LaspeyresDirecto(CalculadorBase):
 
         df_diagnostico = pd.concat(
             [
-                _construir_diagnostico(canasta.df, serie_rellenada, canasta.version, tipo),
+                _construir_diagnostico(serie_rellenada, canasta.version, tipo),
                 df_diagnostico_relleno,
             ],
             ignore_index=True,

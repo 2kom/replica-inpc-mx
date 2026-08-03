@@ -371,11 +371,33 @@ def test_nan_total_categoria_produce_sin_datos() -> None:
 
 
 # ---------- traslape ausente en la serie ----------
+#
+# Política permisiva: el traslape solo se valida si el cálculo efectivamente
+# lo necesita (hay referencia_empalme para ese índice). Sin referencia,
+# factor_h=1.0 nunca toca el traslape — su ausencia no debe tirar el cálculo
+# de los periodos que sí tienen dato.
 
 
-def test_t1_traslape_ausente_en_serie_lanza_error_calculo() -> None:
-    # serie sin la columna del periodo de traslape (2Q Mar 2013) en absoluto —
-    # ni _obtener_f_k puede caer al fallback ni _calcular_df_t1 puede validar
+def test_t1_traslape_ausente_sin_referencia_no_lanza_error() -> None:
+    otro_periodo = PeriodoQuincenal(2013, 4, 2)
+    df = pd.DataFrame(
+        {
+            "arroz": [123.0, 124.0],
+            "frijol": [82.0, 83.0],
+            "leche": [113.0, 114.0],
+            "huevo": [91.5, 92.0],
+        },
+        index=[_post_t1, otro_periodo],
+    ).T
+    serie = SerieNormalizada(df)
+    r = LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie, "INPC")
+    assert (_traslape_t1, "INPC") not in r.df.index
+    assert r.resultado.largo.at[(_post_t1, "INPC"), "estado_calculo"] == "ok"
+
+
+def test_t1_traslape_ausente_con_referencia_lanza_error_calculo() -> None:
+    # con referencia_empalme, factor_h SÍ necesita el traslape — su ausencia
+    # debe rechazarse
     otro_periodo = PeriodoQuincenal(2013, 4, 2)
     df = pd.DataFrame(
         {
@@ -388,7 +410,7 @@ def test_t1_traslape_ausente_en_serie_lanza_error_calculo() -> None:
     ).T
     serie = SerieNormalizada(df)
     with pytest.raises(ErrorCalculo):
-        LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie, "INPC")
+        LaspeyresEncadenadoT1({"INPC": 150.0}).calcular(_canasta_t1(), serie, "INPC")
 
 
 # ---------- guardia de división por cero/no finito ----------
