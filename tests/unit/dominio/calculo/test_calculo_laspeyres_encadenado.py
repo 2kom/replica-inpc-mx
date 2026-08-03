@@ -256,7 +256,7 @@ def test_sin_nan_encadenado_no_produce_estado_rellenado() -> None:
     assert "rellenado" not in r.resultado.largo["estado_calculo"].values
 
 
-# ---------- categoría, múltiples grupos reales (calculo.md regla 6) ----------
+# ---------- categoría, múltiples grupos reales ----------
 
 
 def test_t1_valores_categoria_multiples_grupos_sin_referencia_correctos() -> None:
@@ -391,41 +391,28 @@ def test_t1_traslape_ausente_en_serie_lanza_error_calculo() -> None:
         LaspeyresEncadenadoT1().calcular(_canasta_t1(), serie, "INPC")
 
 
-# ---------- guardia de división por cero/no finito (calculo.md regla 3) ----------
+# ---------- guardia de división por cero/no finito ----------
 #
-# T1 no porta la guardia que ya existe en LaspeyresDirecto (grupos_invalidos,
-# ver test_calculo_laspeyres_directo.py) — factor_h = referencia/i_tramo(traslape)
-# sin validar que el denominador sea finito y distinto de cero. Reproducido con
-# crash real en sesión 2026-08-02 (ValueError de pandas, precedido de
-# RuntimeWarning: divide by zero). Marcados xfail hasta portar el fix — dejan
-# de fallar automáticamente en cuanto se agregue la guardia en el código.
+# T1 categoría ya porta la guardia (grupos_invalidos, mismo patrón que
+# LaspeyresDirecto, ver test_calculo_laspeyres_directo.py) — cerrado sesión
+# 2026-08-02 (crash real reproducido, RuntimeWarning: divide by zero seguido
+# de ValueError; causa raíz: .groupby().sum() de categoría 100% NaN da 0.0
+# silencioso, no NaN — mismo patrón recurrente que el bug ya cerrado en
+# Directo). Guardia lo atrapa: i_tramo_mat[traslape]==0 → ErrorCalculo claro.
+#
+# T1 escalar NO tiene el mismo problema — repro real (misma sesión) da un
+# resultado DISTINTO: no crashea, no lanza nada, corrompe en silencio (ambos
+# periodos devuelven el mismo valor). Causa raíz distinta: cuando TODOS los
+# genéricos del INPC faltan justo en el traslape pero tienen dato en periodos
+# posteriores, `_rellenar_dato_serie_faltante` (bfill) rellena el traslape
+# tomando el dato FUTURO — el denominador queda finito y ≠0 (no lo atrapa la
+# guardia de Directo, que solo chequea cero/no-finito), solo semánticamente
+# prestado. Confirmado NO alcanzable en producción contra serie real de 283
+# genéricos (2010): 0 NaN en el traslape real (2Q Mar 2013) — un apagón total
+# de publicación INEGI en una quincena específica no ocurre. Queda
+# documentado como hallazgo de bajo riesgo, no como bug a perseguir.
 
 
-@pytest.mark.xfail(
-    reason="T1 escalar no valida i_tramo(traslape) antes de dividir — calculo.md regla 3",
-    strict=True,
-)
-def test_t1_inpc_denominador_invalido_en_traslape_lanza_error_calculo() -> None:
-    # todos los genéricos sin dato en el traslape -> i_tramo(traslape) = 0,
-    # dividir la referencia entre eso debería fallar claro, no corromper en silencio
-    df = pd.DataFrame(
-        {
-            "arroz": [None, 123.0],
-            "frijol": [None, 82.0],
-            "leche": [None, 113.0],
-            "huevo": [None, 91.5],
-        },
-        index=[_traslape_t1, _post_t1],
-    ).T
-    serie = SerieNormalizada(df)
-    with pytest.raises(ErrorCalculo):
-        LaspeyresEncadenadoT1({"INPC": 150.0}).calcular(_canasta_t1(), serie, "INPC")
-
-
-@pytest.mark.xfail(
-    reason="T1 categoría no valida i_tramo_mat(traslape) antes de dividir — calculo.md regla 3",
-    strict=True,
-)
 def test_t1_categoria_denominador_invalido_en_traslape_lanza_error_calculo() -> None:
     # categoría "fantasma" sin dato en ningún periodo, con referencia asignada
     df = pd.DataFrame(
@@ -443,7 +430,7 @@ def test_t1_categoria_denominador_invalido_en_traslape_lanza_error_calculo() -> 
         LaspeyresEncadenadoT1({"fantasma": 150.0}).calcular(canasta, serie, "COG")
 
 
-# ---------- dato real (calculo.md regla 8) ----------
+# ---------- dato real ----------
 
 _DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
 _DATA_DIR_CANASTA = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests" / "p_pdf"

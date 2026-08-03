@@ -124,7 +124,13 @@ def _calcular_df_t1(
     if traslape not in i_tramo.index:
         raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
     if referencia_empalme is not None:
-        factor_h = referencia_empalme / float(i_tramo[cast(Any, traslape)])
+        denominador = float(i_tramo[cast(Any, traslape)])
+        if not np.isfinite(denominador) or denominador == 0 or not np.isfinite(referencia_empalme):
+            raise ErrorCalculo(
+                f"No se puede encadenar en el periodo de traslape {traslape}: i_tramo "
+                "o referencia de empalme no válidos (cero o no finito)."
+            )
+        factor_h = referencia_empalme / denominador
     else:
         factor_h = 1.0
     resultado = i_tramo * factor_h
@@ -391,11 +397,17 @@ class LaspeyresEncadenadoT1(_LaspeyresEncadenadoBase):
             traslape = RANGOS_CANASTAS[2013][0]
             if traslape not in i_tramo_mat.columns:
                 raise ErrorCalculo(f"PeriodoQuincenal de traslape {traslape} no está en la serie.")
+            denominador = i_tramo_mat.loc[cats_ref, cast(Any, traslape)].astype(float)
             refs_s = pd.Series({c: self._referencia_empalme[c] for c in cats_ref})
-            factor_h.loc[cats_ref] = (
-                refs_s.to_numpy(dtype=float)
-                / i_tramo_mat.loc[cats_ref, cast(Any, traslape)].astype(float).to_numpy()
-            )
+            grupos_invalidos = denominador[
+                ~np.isfinite(denominador) | (denominador == 0) | ~np.isfinite(refs_s)
+            ].index.tolist()
+            if grupos_invalidos:
+                raise ErrorCalculo(
+                    f"No se puede encadenar {grupos_invalidos} en el periodo de traslape "
+                    f"{traslape}: i_tramo o referencia de empalme no válidos (cero o no finito)."
+                )
+            factor_h.loc[cats_ref] = refs_s.to_numpy(dtype=float) / denominador.to_numpy()
         return factor_h
 
 

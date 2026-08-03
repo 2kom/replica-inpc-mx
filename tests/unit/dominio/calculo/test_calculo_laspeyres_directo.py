@@ -83,7 +83,7 @@ def test_tipo_invalido_lanza_invariante_violado() -> None:
         LaspeyresDirecto().calcular(_canasta(), _serie(), "tipo_inventado")
 
 
-# ---------- categoría, múltiples grupos reales (calculo.md regla 6) ----------
+# ---------- categoría, múltiples grupos reales ----------
 
 
 def test_valores_categoria_multiples_grupos_correctos() -> None:
@@ -131,7 +131,7 @@ def test_referencia_empalme_denominador_invalido_lanza_error_calculo(
 ) -> None:
     # el crudo del grupo en el traslape queda inválido (NaN sin rellenar → 0 al
     # sumar, o dato presente pero 0/inf) — dividir la referencia entre eso debe
-    # fallar claro, no corromper la serie en silencio con inf (calculo.md regla 3)
+    # fallar claro, no corromper la serie en silencio con inf
     periodos = [PeriodoQuincenal(2018, 7, 2), PeriodoQuincenal(2018, 8, 1)]
     df = pd.DataFrame(
         {
@@ -266,7 +266,7 @@ def test_sin_nan_no_produce_estado_rellenado() -> None:
     assert (largo["estado_calculo"] == "ok").all()
 
 
-# ---------- dato real (calculo.md regla 8) ----------
+# ---------- dato real ----------
 
 _DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
 _DATA_DIR_CANASTA = Path(__file__).parent.parent.parent.parent.parent / "data" / "tests" / "p_pdf"
