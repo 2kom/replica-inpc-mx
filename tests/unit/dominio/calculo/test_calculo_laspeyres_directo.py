@@ -263,6 +263,14 @@ def test_nan_parcial_produce_estado_rellenado() -> None:
         (r.diagnostico["generico"] == "arroz") & (r.diagnostico["periodo"] == p_nan)
     ].iloc[0]
     assert "2Q Ago 2018" in fila_diag["detalle"]
+    assert fila_diag["tipo_faltante"] == "rellenado"
+    # tras el relleno, el reporte considera el genérico cubierto — cobertura 100%,
+    # a diferencia del caso sin_datos (test_nan_total_generico_produce_sin_datos),
+    # donde el genérico irrecuperable SÍ resta cobertura
+    fila_rep = r.reporte.loc[cast(Any, (p_nan, "INPC"))]
+    assert fila_rep["genericos_con_indice"] == 4
+    assert fila_rep["cobertura_genericos_pct"] == pytest.approx(100.0)
+    assert fila_rep["ponderador_cubierto"] == pytest.approx(100.0)
 
 
 def test_nan_total_generico_produce_sin_datos() -> None:
@@ -302,6 +310,17 @@ def test_sin_nan_no_produce_estado_rellenado() -> None:
     largo = r.resultado.largo
     assert "rellenado" not in largo["estado_calculo"].values
     assert (largo["estado_calculo"] == "ok").all()
+    # sin NaN en la serie, el diagnóstico queda vacío pero con el schema completo
+    assert r.diagnostico.empty
+    assert list(r.diagnostico.columns) == [
+        "version",
+        "tipo",
+        "periodo",
+        "generico",
+        "nivel_faltante",
+        "tipo_faltante",
+        "detalle",
+    ]
 
 
 # ---------- dato real ----------

@@ -153,7 +153,8 @@ def test_empalmar_pares_con_frontera_aceptados() -> None:
 
 
 def test_empalmar_tres_versiones_en_una_llamada_ok() -> None:
-    # Tres versiones en una sola llamada: renombre transitivo 2010→2013→2018.
+    # Tres versiones en una sola llamada: topología PATH multi-tramo (forzar=True)
+    # y orden cronológico. tipo="INPC" (default) no tiene renombre — no se ejerce aquí.
     pa = PeriodoQuincenal(2010, 12, 2)
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
@@ -386,7 +387,8 @@ def test_empalmar_bloques_preempalmados_ok() -> None:
     # Escenario real: dos bloques pre-empalmados con span>1 entre sus max_versions.
     # pre_r = empalmar([r_2010, r_2013]) → max_version=2013
     # inpc_pos = empalmar([r_2018, r_2024]) → max_version=2024
-    # empalmar([pre_r, inpc_pos]): renombre transitivo 2013→2018→2024.
+    # empalmar([pre_r, inpc_pos]): span>1 entre max_versions (2013→2024) en una sola
+    # llamada. tipo="INPC" (default) no tiene renombre — solo prueba manifiesto/orden.
     pa = PeriodoQuincenal(2010, 12, 2)
     pb = PeriodoQuincenal(2013, 3, 2)
     pc = PeriodoQuincenal(2018, 7, 2)
