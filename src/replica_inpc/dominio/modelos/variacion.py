@@ -49,7 +49,12 @@ class ResultadoVariacion(Resultado):
         tipo (str): tipo de índice sobre el que se calculó la variación.
         clase_variacion (str): periodicidad de la variación, ver catálogo en
             `_CLASES_VALIDAS` (ej. `periodica_mensual`, `acumulada_anual`, `desde`).
-        variacion_pp (float): variación en puntos porcentuales.
+        variacion_pp (float): variación en puntos porcentuales; finito cuando
+            `estado_calculo` es `ok`/`parcial`. La finitud la garantiza el
+            productor (`dominio/calculo/variaciones.py`), no este constructor
+            — mismo criterio que `ResultadoIndice.indice_replicado`: la
+            invariante vive en la capa que construye el DataFrame, el modelo
+            solo lo empaqueta.
         estado_calculo (str): `{ok, parcial}` — `parcial` cuando solo hay una
             quincena disponible en el periodo base o final.
 

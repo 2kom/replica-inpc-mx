@@ -1431,6 +1431,11 @@ Con `incluir_parciales = True`, un índice sin dato exacto en `desde`/`hasta` us
 | `hasta` no existe en el resultado | `variacion_desde` | `InvarianteViolado` |
 | `hasta < desde` | `variacion_desde` | `InvarianteViolado` |
 | sin periodos computables | todas | `InvarianteViolado` |
+| algún `indice_replicado` en `t`/`base` (o en ambos extremos de `variacion_desde`) no finito | todas | `InvarianteViolado` |
+| base = 0 (`variacion_periodica`/`variacion_acumulada_anual`) o extremo `desde` = 0 (`variacion_desde`) | todas | `InvarianteViolado` |
+| `variacion_pp` resultante no finita (overflow con extremos finitos) | todas | `InvarianteViolado` |
+
+El extremo `hasta`/`t` sí puede ser 0 — produce `variacion_pp = −100`, caso válido (deflación total), no un error.
 
 ---
 

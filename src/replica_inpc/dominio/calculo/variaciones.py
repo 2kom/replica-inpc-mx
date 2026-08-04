@@ -9,9 +9,11 @@ Tres funciones producen `ResultadoVariacion`:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.calculo._temporal import (
@@ -76,7 +78,15 @@ def _cobertura(reporte_fuente: pd.DataFrame) -> pd.Series | None:
 
 
 def variacion_periodica(resultado: ResultadoIndice, frecuencia: Frecuencia) -> ResultadoVariacion:
-    """Variación de cada periodo contra N periodos anteriores según `frecuencia`."""
+    """Variación de cada periodo contra N periodos anteriores según `frecuencia`.
+
+    Raises:
+        InvarianteViolado: Si `frecuencia` no aplica a la periodicidad del
+            resultado, si ningún periodo resulta computable, si algún
+            `indice_replicado` (en `t` o en la base) no es finito, si la base
+            es exactamente 0, o si la `variacion_pp` resultante no es finita
+            (overflow: extremos finitos que producen un cociente infinito).
+    """
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
     lag_map = LAG_MENSUAL if mensual else LAG_QUINCENAL
@@ -100,7 +110,14 @@ def variacion_periodica(resultado: ResultadoIndice, frecuencia: Frecuencia) -> R
 
 
 def variacion_acumulada_anual(resultado: ResultadoIndice) -> ResultadoVariacion:
-    """Variación de cada periodo contra diciembre del año anterior."""
+    """Variación de cada periodo contra diciembre del año anterior.
+
+    Raises:
+        InvarianteViolado: Si ningún periodo resulta computable, si algún
+            `indice_replicado` (en `t` o en la base) no es finito, si la base
+            es exactamente 0, o si la `variacion_pp` resultante no es finita
+            (overflow: extremos finitos que producen un cociente infinito).
+    """
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
     if mensual:
@@ -142,6 +159,21 @@ def _calcular_con_base(
 
     variacion_pp = (valores / valor_lag - 1.0) * 100.0
     computable = valores.notna() & valor_lag.notna()
+
+    invalido = computable & (
+        ~np.isfinite(valores.astype(float))
+        | ~np.isfinite(valor_lag.astype(float))
+        | (valor_lag == 0)
+        | ~np.isfinite(variacion_pp.astype(float))
+    )
+    if invalido.any():
+        ejemplo = largo.index[invalido][0]
+        raise InvarianteViolado(
+            f"variaciones: indice_replicado no finito, base=0, o variacion_pp resultante "
+            f"no finita (overflow) en {int(invalido.sum())} fila(s) computable(s); "
+            f"ejemplo {ejemplo}."
+        )
+
     derivado = pd.Series(
         [_estado_derivado(et, el) for et, el in zip(largo["estado_calculo"], estado_lag)],
         index=largo.index,
@@ -267,6 +299,15 @@ def variacion_desde(
     Con `incluir_parciales=True`, un índice sin dato exacto en `desde`/`hasta`
     usa el primer/último periodo válido del rango; el periodo real usado se
     registra en `indices_parciales`.
+
+    Raises:
+        InvarianteViolado: Si `desde`/`hasta` no existen en el resultado, si
+            `hasta` es anterior a `desde`, si ningún índice tiene datos
+            computables en el rango, si algún `indice_replicado` en alguno de
+            los dos extremos no es finito, si el extremo `desde` (la base) es
+            exactamente 0 (el extremo `hasta` sí puede ser 0: produce
+            `variacion_pp = -100`), o si la `variacion_pp` resultante no es
+            finita (overflow).
     """
     largo = resultado.resultado.largo
     versiones_manifiesto: list[VersionCanasta] = [m.version for m in resultado.manifiesto]
@@ -338,7 +379,17 @@ def variacion_desde(
 
         valor_desde = float(valores.at[(desde_real, indice)])  # type: ignore[arg-type]
         valor_hasta = float(valores.at[(hasta_real, indice)])  # type: ignore[arg-type]
+        if not (math.isfinite(valor_desde) and math.isfinite(valor_hasta) and valor_desde != 0):
+            raise InvarianteViolado(
+                f"variacion_desde: indice_replicado no finito, o base (desde)=0, para "
+                f"'{indice}' entre {desde_real} y {hasta_real}."
+            )
         variacion_pp = (valor_hasta / valor_desde - 1.0) * 100.0
+        if not math.isfinite(variacion_pp):
+            raise InvarianteViolado(
+                f"variacion_desde: variacion_pp resultante no finita (overflow) para "
+                f"'{indice}' entre {desde_real} y {hasta_real}."
+            )
         estado = _estado_derivado(
             str(estados.at[(hasta_real, indice)]),
             str(estados.at[(desde_real, indice)]),

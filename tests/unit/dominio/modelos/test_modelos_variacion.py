@@ -34,9 +34,7 @@ def _df_var(
     estados = estados or ["ok", "ok"]
     n = len(estados)
     periodos = [PeriodoQuincenal(2024, m, 2) for m in range(1, n + 1)]
-    idx = pd.MultiIndex.from_tuples(
-        [(p, "INPC") for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     return pd.DataFrame(
         {
             "tipo": [tipo] * n,
@@ -59,6 +57,7 @@ def _diag_vacio() -> pd.DataFrame:
 
 # ---------- Construcción ----------
 
+
 def test_construccion_valida_periodica() -> None:
     r = ResultadoVariacion(_df_var(), _manifiesto(), _rep_vacio(), _diag_vacio())
     assert r.df.shape == (2, 1)
@@ -75,6 +74,7 @@ def test_construccion_valida_desde() -> None:
 
 # ---------- Invariantes ----------
 
+
 @pytest.mark.parametrize("falta", ["tipo", "clase_variacion", "variacion_pp", "estado_calculo"])
 def test_df_falta_columna_minima_falla(falta: str) -> None:
     df = _df_var().drop(columns=[falta])
@@ -85,7 +85,7 @@ def test_df_falta_columna_minima_falla(falta: str) -> None:
 def test_clase_variacion_heterogenea_falla() -> None:
     df = _df_var()
     df.loc[df.index[1], "clase_variacion"] = "periodica_anual"
-    with pytest.raises(InvarianteViolado):
+    with pytest.raises(InvarianteViolado, match="homogénea"):
         ResultadoVariacion(df, _manifiesto(), _rep_vacio(), _diag_vacio())
 
 
@@ -106,7 +106,11 @@ def test_periodica_con_indices_parciales_falla() -> None:
     ip = pd.DataFrame({"x": []})
     with pytest.raises(InvarianteViolado):
         ResultadoVariacion(
-            df, _manifiesto(clase="periodica_mensual"), _rep_vacio(), _diag_vacio(), indices_parciales=ip
+            df,
+            _manifiesto(clase="periodica_mensual"),
+            _rep_vacio(),
+            _diag_vacio(),
+            indices_parciales=ip,
         )
 
 
@@ -119,14 +123,16 @@ def test_manifiesto_clase_mismatch_falla() -> None:
 def test_df_tipo_heterogeneo_falla() -> None:
     df = _df_var()
     df.loc[df.index[1], "tipo"] = "INFLACION COMPONENTE"
-    with pytest.raises(InvarianteViolado):
+    with pytest.raises(InvarianteViolado, match="homogéneo"):
         ResultadoVariacion(df, _manifiesto(), _rep_vacio(), _diag_vacio())
 
 
 def test_manifiesto_tipo_mismatch_falla() -> None:
     df = _df_var(tipo="INPC")
     with pytest.raises(InvarianteViolado):
-        ResultadoVariacion(df, _manifiesto(tipo="INFLACION COMPONENTE"), _rep_vacio(), _diag_vacio())
+        ResultadoVariacion(
+            df, _manifiesto(tipo="INFLACION COMPONENTE"), _rep_vacio(), _diag_vacio()
+        )
 
 
 @pytest.mark.parametrize("estado_invalido", ["sin_datos", "fallida"])
@@ -137,6 +143,7 @@ def test_estado_calculo_invalido_falla(estado_invalido: str) -> None:
 
 
 # ---------- Properties ----------
+
 
 def test_df_minimal_una_columna() -> None:
     r = ResultadoVariacion(_df_var(), _manifiesto(), _rep_vacio(), _diag_vacio())
@@ -190,7 +197,7 @@ def test_resumen_valores_concretos() -> None:
     r = ResultadoVariacion(
         _df_var(), _manifiesto(descripcion="ene→feb 2024"), _rep_vacio(), _diag_vacio()
     )
-    fila = r.resumen.loc[0]
+    fila: pd.Series = r.resumen.loc[0]  # type: ignore[assignment]
     assert fila["tipo"] == "INPC"
     assert fila["clase_variacion"] == "periodica_mensual"
     assert fila["descripcion"] == "ene→feb 2024"
