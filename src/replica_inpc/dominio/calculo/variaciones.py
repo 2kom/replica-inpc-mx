@@ -58,22 +58,22 @@ _COLS_DIAGNOSTICO = [
 ]
 
 
-def _estado_derivado(estado_t: str, estado_lag: object) -> str:
-    """Estado de una fila derivada: `parcial` si el fuente en `t` o lag lo es."""
-    return "parcial" if estado_t == "parcial" or estado_lag == "parcial" else "ok"
+def _estado_derivado(estado_t: str, estado_base: object) -> str:
+    """Estado de una fila derivada: `parcial` si el fuente en `t` o en la base lo es."""
+    return "parcial" if estado_t == "parcial" or estado_base == "parcial" else "ok"
 
 
-def _motivo_faltante(valor_t: float, valor_lag: float) -> str:
-    if pd.isna(valor_t) and pd.isna(valor_lag):
+def _motivo_faltante(valor_t: float, valor_base: float) -> str:
+    if pd.isna(valor_t) and pd.isna(valor_base):
         return "sin valor replicado en t ni en periodo base"
-    if pd.isna(valor_lag):
+    if pd.isna(valor_base):
         return "sin valor replicado en periodo base"
     return "sin valor replicado en t"
 
 
-def _cobertura(reporte_fuente: pd.DataFrame) -> pd.Series | None:
-    if "cobertura_genericos_pct" in reporte_fuente.columns:
-        return reporte_fuente["cobertura_genericos_pct"]
+def _extraer_columna_cobertura(df_reporte_fuente: pd.DataFrame) -> pd.Series | None:
+    if "cobertura_genericos_pct" in df_reporte_fuente.columns:
+        return df_reporte_fuente["cobertura_genericos_pct"]
     return None
 
 
@@ -89,24 +89,26 @@ def variacion_periodica(resultado: ResultadoIndice, frecuencia: Frecuencia) -> R
     """
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
-    lag_map = LAG_MENSUAL if mensual else LAG_QUINCENAL
-    if frecuencia not in lag_map:
+    periodos_atras_por_frecuencia = LAG_MENSUAL if mensual else LAG_QUINCENAL
+    if frecuencia not in periodos_atras_por_frecuencia:
         raise InvarianteViolado(
             f"Frecuencia '{frecuencia}' no aplica a periodos "
             f"{'mensuales' if mensual else 'quincenales'}. "
-            f"Válidas: {sorted(lag_map)}."
+            f"Válidas: {sorted(periodos_atras_por_frecuencia)}."
         )
-    lag = lag_map[frecuencia]
+    periodos_atras = periodos_atras_por_frecuencia[frecuencia]
     if mensual:
 
-        def base_de(p: Periodo) -> Periodo:
-            return restar_meses(p, lag)  # type: ignore[arg-type]
+        def calcular_periodo_base(periodo_t: Periodo) -> Periodo:
+            return restar_meses(periodo_t, periodos_atras)  # type: ignore[arg-type]
     else:
 
-        def base_de(p: Periodo) -> Periodo:
-            return restar_quincenas(p, lag)  # type: ignore[arg-type]
+        def calcular_periodo_base(periodo_t: Periodo) -> Periodo:
+            return restar_quincenas(periodo_t, periodos_atras)  # type: ignore[arg-type]
 
-    return _calcular_con_base(resultado, base_de, f"periodica_{frecuencia}", "")
+    return _variacion_contra_periodo_base(
+        resultado, calcular_periodo_base, f"periodica_{frecuencia}", ""
+    )
 
 
 def variacion_acumulada_anual(resultado: ResultadoIndice) -> ResultadoVariacion:
@@ -122,170 +124,185 @@ def variacion_acumulada_anual(resultado: ResultadoIndice) -> ResultadoVariacion:
     mensual = es_mensual(largo)
     if mensual:
 
-        def base_de(p: Periodo) -> Periodo:
-            return PeriodoMensual(p.año - 1, 12)
+        def calcular_periodo_base(periodo_t: Periodo) -> Periodo:
+            return PeriodoMensual(periodo_t.año - 1, 12)
     else:
 
-        def base_de(p: Periodo) -> Periodo:
-            return PeriodoQuincenal(p.año - 1, 12, 2)
+        def calcular_periodo_base(periodo_t: Periodo) -> Periodo:
+            return PeriodoQuincenal(periodo_t.año - 1, 12, 2)
 
-    return _calcular_con_base(resultado, base_de, "acumulada_anual", "")
+    return _variacion_contra_periodo_base(resultado, calcular_periodo_base, "acumulada_anual", "")
 
 
-def _calcular_con_base(
+def _variacion_contra_periodo_base(
     resultado: ResultadoIndice,
-    base_de: Callable[[Periodo], Periodo],
-    clase: str,
+    calcular_periodo_base: Callable[[Periodo], Periodo],
+    clase_variacion: str,
     descripcion: str,
 ) -> ResultadoVariacion:
     """Núcleo de `variacion_periodica` y `variacion_acumulada_anual`.
 
-    `base_de` mapea cada periodo `t` a su periodo base.
+    `calcular_periodo_base` mapea cada periodo `t` a su periodo base.
     """
     largo = resultado.resultado.largo
     versiones: list[VersionCanasta] = [m.version for m in resultado.manifiesto]
     tipo = str(largo["tipo"].iloc[0])
 
-    indices_lvl = largo.index.get_level_values("indice")
-    periodos_lvl = largo.index.get_level_values("periodo")
-    valores = largo["indice_replicado"]
+    indices_por_fila = largo.index.get_level_values("indice")
+    periodos_por_fila = largo.index.get_level_values("periodo")
+    valores_en_t = largo["indice_replicado"]
 
-    base_periodos = [base_de(p) for p in periodos_lvl]
-    base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_lvl], names=["periodo", "indice"])
-    valor_lag = pd.Series(valores.reindex(base_idx).to_numpy(), index=largo.index)
-    estado_lag = pd.Series(largo["estado_calculo"].reindex(base_idx).to_numpy(), index=largo.index)
-    version_lag = pd.Series(largo["version"].reindex(base_idx).to_numpy(), index=largo.index)
-    periodo_lag = pd.Series(base_periodos, index=largo.index, dtype=object)
+    periodos_base = [calcular_periodo_base(p) for p in periodos_por_fila]
+    multiindice_base = pd.MultiIndex.from_arrays(
+        [periodos_base, indices_por_fila], names=["periodo", "indice"]
+    )
+    valores_en_base = pd.Series(
+        valores_en_t.reindex(multiindice_base).to_numpy(), index=largo.index
+    )
+    estados_en_base = pd.Series(
+        largo["estado_calculo"].reindex(multiindice_base).to_numpy(), index=largo.index
+    )
+    versiones_en_base = pd.Series(
+        largo["version"].reindex(multiindice_base).to_numpy(), index=largo.index
+    )
+    periodos_base_series = pd.Series(periodos_base, index=largo.index, dtype=object)
 
-    variacion_pp = (valores / valor_lag - 1.0) * 100.0
-    computable = valores.notna() & valor_lag.notna()
+    variacion_pp = (valores_en_t / valores_en_base - 1.0) * 100.0
+    computable = valores_en_t.notna() & valores_en_base.notna()
 
     invalido = computable & (
-        ~np.isfinite(valores.astype(float))
-        | ~np.isfinite(valor_lag.astype(float))
-        | (valor_lag == 0)
+        ~np.isfinite(valores_en_t.astype(float))
+        | ~np.isfinite(valores_en_base.astype(float))
+        | (valores_en_base == 0)
         | ~np.isfinite(variacion_pp.astype(float))
     )
     if invalido.any():
-        ejemplo = largo.index[invalido][0]
+        primera_fila_invalida = largo.index[invalido][0]
         raise InvarianteViolado(
             f"variaciones: indice_replicado no finito, base=0, o variacion_pp resultante "
             f"no finita (overflow) en {int(invalido.sum())} fila(s) computable(s); "
-            f"ejemplo {ejemplo}."
+            f"ejemplo {primera_fila_invalida}."
         )
 
-    derivado = pd.Series(
-        [_estado_derivado(et, el) for et, el in zip(largo["estado_calculo"], estado_lag)],
+    estados_derivados = pd.Series(
+        [
+            _estado_derivado(estado_t, estado_base)
+            for estado_t, estado_base in zip(largo["estado_calculo"], estados_en_base)
+        ],
         index=largo.index,
     )
 
     df_out = pd.DataFrame(
         {
             "tipo": tipo,
-            "clase_variacion": clase,
+            "clase_variacion": clase_variacion,
             "variacion_pp": variacion_pp,
-            "estado_calculo": derivado,
+            "estado_calculo": estados_derivados,
             "version_t": largo["version"],
         },
         index=largo.index,
     )[computable].sort_index()
     if df_out.empty:
         raise InvarianteViolado(
-            f"Sin periodos computables para clase '{clase}'. "
+            f"Sin periodos computables para clase '{clase_variacion}'. "
             "Se requieren datos suficientes en el periodo base."
         )
 
-    reporte_df, diagnostico_df = _construir_reporte_diagnostico(
+    df_reporte, df_diagnostico = _construir_reporte_y_diagnostico(
         largo,
-        _cobertura(resultado.reporte),
-        valores,
-        valor_lag,
-        version_lag,
-        periodo_lag,
-        base_idx,
-        derivado,
+        _extraer_columna_cobertura(resultado.reporte),
+        valores_en_t,
+        valores_en_base,
+        versiones_en_base,
+        periodos_base_series,
+        multiindice_base,
+        estados_derivados,
         computable,
         versiones,
         tipo,
-        clase,
+        clase_variacion,
     )
     manifiesto = ManifestDerivado(
         versiones=versiones,
         tipo=tipo,
-        clase=clase,
+        clase=clase_variacion,
         descripcion=descripcion,
         fecha=datetime.now(),
     )
-    return ResultadoVariacion(df_out, manifiesto, reporte_df, diagnostico_df)
+    return ResultadoVariacion(df_out, manifiesto, df_reporte, df_diagnostico)
 
 
-def _construir_reporte_diagnostico(
+def _construir_reporte_y_diagnostico(
     largo: pd.DataFrame,
     cobertura: pd.Series | None,
-    valores: pd.Series,
-    valor_lag: pd.Series,
-    version_lag: pd.Series,
-    periodo_lag: pd.Series,
-    base_idx: pd.MultiIndex,
-    derivado: pd.Series,
+    valores_en_t: pd.Series,
+    valores_en_base: pd.Series,
+    versiones_en_base: pd.Series,
+    periodos_base: pd.Series,
+    multiindice_base: pd.MultiIndex,
+    estados_derivados: pd.Series,
     computable: pd.Series,
     versiones: list[VersionCanasta],
     tipo: str,
-    clase: str,
+    clase_variacion: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Construye `reporte_df` (todas las filas) y `diagnostico_df` (no computables)."""
+    """Construye `df_reporte` (todas las filas) y `df_diagnostico` (no computables)."""
     if cobertura is not None:
-        cob_t = cobertura.reindex(largo.index)
-        cob_lag = pd.Series(cobertura.reindex(base_idx).to_numpy(), index=largo.index)
+        cobertura_t = cobertura.reindex(largo.index)
+        cobertura_base = pd.Series(
+            cobertura.reindex(multiindice_base).to_numpy(), index=largo.index
+        )
     else:
-        cob_t = pd.Series(float("nan"), index=largo.index)
-        cob_lag = pd.Series(float("nan"), index=largo.index)
+        cobertura_t = pd.Series(float("nan"), index=largo.index)
+        cobertura_base = pd.Series(float("nan"), index=largo.index)
 
-    estados_rep: list[str] = []
+    estados_reporte: list[str] = []
     motivos: list[object] = []
-    for ok, est, vt, vl in zip(computable, derivado, valores, valor_lag):
-        if ok:
-            estados_rep.append(est)
+    for es_computable, estado, valor_t, valor_base in zip(
+        computable, estados_derivados, valores_en_t, valores_en_base
+    ):
+        if es_computable:
+            estados_reporte.append(estado)
             motivos.append(float("nan"))
         else:
-            estados_rep.append("sin_datos")
-            motivos.append(_motivo_faltante(vt, vl))
+            estados_reporte.append("sin_datos")
+            motivos.append(_motivo_faltante(valor_t, valor_base))
 
-    reporte_df = pd.DataFrame(
+    df_reporte = pd.DataFrame(
         {
-            "estado_calculo": estados_rep,
+            "estado_calculo": estados_reporte,
             "motivo_error": motivos,
-            "periodo_lag": periodo_lag,
-            "indice_t": valores.to_numpy(),
-            "indice_lag": valor_lag.to_numpy(),
+            "periodo_lag": periodos_base,
+            "indice_t": valores_en_t.to_numpy(),
+            "indice_lag": valores_en_base.to_numpy(),
             "version_t": largo["version"].to_numpy(),
-            "version_lag": version_lag.to_numpy(),
-            "cobertura_pct_t": cob_t.to_numpy(),
-            "cobertura_pct_lag": cob_lag.to_numpy(),
+            "version_lag": versiones_en_base.to_numpy(),
+            "cobertura_pct_t": cobertura_t.to_numpy(),
+            "cobertura_pct_lag": cobertura_base.to_numpy(),
         },
         index=largo.index,
         columns=_COLS_REPORTE,
     ).sort_index()
 
     no_computable = ~computable
-    diagnostico_df = pd.DataFrame(
+    df_diagnostico = pd.DataFrame(
         {
             "versiones": ",".join(str(v) for v in versiones),
             "tipo": tipo,
-            "clase_variacion": clase,
+            "clase_variacion": clase_variacion,
             "periodo": largo.index.get_level_values("periodo"),
             "indice": largo.index.get_level_values("indice"),
-            "estado_calculo": estados_rep,
+            "estado_calculo": estados_reporte,
             "motivo_error": motivos,
-            "periodo_lag": periodo_lag.to_numpy(),
+            "periodo_lag": periodos_base.to_numpy(),
             "version_t": largo["version"].to_numpy(),
-            "version_lag": version_lag.to_numpy(),
+            "version_lag": versiones_en_base.to_numpy(),
         },
         index=largo.index,
         columns=_COLS_DIAGNOSTICO,
     )[no_computable].reset_index(drop=True)
 
-    return reporte_df, diagnostico_df
+    return df_reporte, df_diagnostico
 
 
 def variacion_desde(
@@ -325,43 +342,43 @@ def variacion_desde(
         )
 
     rango = [p for p in periodos_todos if desde <= p <= hasta_efectivo]
-    valores = largo["indice_replicado"]
-    estados = largo["estado_calculo"]
-    versiones = largo["version"]
-    cobertura = _cobertura(resultado.reporte)
+    valores_replicados = largo["indice_replicado"]
+    estados_calculo = largo["estado_calculo"]
+    version_por_fila = largo["version"]
+    cobertura = _extraer_columna_cobertura(resultado.reporte)
     indices = sorted(set(largo.index.get_level_values("indice")))
     versiones_str = ",".join(str(v) for v in versiones_manifiesto)
 
-    filas_df: list[dict[str, object]] = []
-    filas_rep: list[dict[str, object]] = []
-    filas_diag: list[dict[str, object]] = []
+    filas_resultado: list[dict[str, object]] = []
+    filas_reporte: list[dict[str, object]] = []
+    filas_diagnostico: list[dict[str, object]] = []
     filas_parciales: list[dict[str, object]] = []
 
     for indice in indices:
-        validos = [p for p in rango if pd.notna(valores.get((p, indice)))]
-        desde_real = resolver_extremo(desde, validos, incluir_parciales, primero=True)
-        hasta_real = resolver_extremo(hasta_efectivo, validos, incluir_parciales, primero=False)
+        periodos_validos = [p for p in rango if pd.notna(valores_replicados.get((p, indice)))]
+        desde_real = resolver_extremo(desde, periodos_validos, incluir_parciales, primero=True)
+        hasta_real = resolver_extremo(
+            hasta_efectivo, periodos_validos, incluir_parciales, primero=False
+        )
 
         if desde_real is None or hasta_real is None:
-            valor_lag = float(valores.get((desde, indice), float("nan")))
-            valor_t = float(valores.get((hasta_efectivo, indice), float("nan")))
-            motivo = _motivo_faltante(valor_t, valor_lag)
-            filas_rep.append(
-                _fila_reporte(
+            valor_desde = float(valores_replicados.get((desde, indice), float("nan")))
+            valor_hasta = float(valores_replicados.get((hasta_efectivo, indice), float("nan")))
+            motivo = _motivo_faltante(valor_hasta, valor_desde)
+            filas_reporte.append(
+                _construir_fila_reporte(
                     hasta_efectivo,
                     indice,
                     desde,
                     "sin_datos",
                     motivo,
-                    valor_t,
-                    valor_lag,
-                    versiones,
+                    valor_hasta,
+                    valor_desde,
+                    version_por_fila,
                     cobertura,
-                    hasta_efectivo,
-                    desde,
                 )
             )
-            filas_diag.append(
+            filas_diagnostico.append(
                 {
                     "versiones": versiones_str,
                     "tipo": tipo,
@@ -371,14 +388,14 @@ def variacion_desde(
                     "estado_calculo": "sin_datos",
                     "motivo_error": motivo,
                     "periodo_lag": desde,
-                    "version_t": versiones.get((hasta_efectivo, indice), float("nan")),
-                    "version_lag": versiones.get((desde, indice), float("nan")),
+                    "version_t": version_por_fila.get((hasta_efectivo, indice), float("nan")),
+                    "version_lag": version_por_fila.get((desde, indice), float("nan")),
                 }
             )
             continue
 
-        valor_desde = float(valores.at[(desde_real, indice)])  # type: ignore[arg-type]
-        valor_hasta = float(valores.at[(hasta_real, indice)])  # type: ignore[arg-type]
+        valor_desde = float(valores_replicados.at[(desde_real, indice)])  # type: ignore[arg-type]
+        valor_hasta = float(valores_replicados.at[(hasta_real, indice)])  # type: ignore[arg-type]
         if not (math.isfinite(valor_desde) and math.isfinite(valor_hasta) and valor_desde != 0):
             raise InvarianteViolado(
                 f"variacion_desde: indice_replicado no finito, o base (desde)=0, para "
@@ -391,12 +408,12 @@ def variacion_desde(
                 f"'{indice}' entre {desde_real} y {hasta_real}."
             )
         estado = _estado_derivado(
-            str(estados.at[(hasta_real, indice)]),
-            str(estados.at[(desde_real, indice)]),
+            str(estados_calculo.at[(hasta_real, indice)]),
+            str(estados_calculo.at[(desde_real, indice)]),
         )
         # incluir_parciales=False excluye índices con estado derivado parcial.
         if incluir_parciales or estado != "parcial":
-            filas_df.append(
+            filas_resultado.append(
                 {
                     "periodo": hasta_real,
                     "indice": indice,
@@ -404,11 +421,11 @@ def variacion_desde(
                     "clase_variacion": "desde",
                     "variacion_pp": variacion_pp,
                     "estado_calculo": estado,
-                    "version_t": int(versiones.at[(hasta_real, indice)]),  # type: ignore[arg-type]
+                    "version_t": int(version_por_fila.at[(hasta_real, indice)]),  # type: ignore[arg-type]
                 }
             )
-        filas_rep.append(
-            _fila_reporte(
+        filas_reporte.append(
+            _construir_fila_reporte(
                 hasta_real,
                 indice,
                 desde_real,
@@ -416,10 +433,8 @@ def variacion_desde(
                 float("nan"),
                 valor_hasta,
                 valor_desde,
-                versiones,
+                version_por_fila,
                 cobertura,
-                hasta_real,
-                desde_real,
             )
         )
         if desde_real != desde or hasta_real != hasta_efectivo:
@@ -431,18 +446,18 @@ def variacion_desde(
                 }
             )
 
-    if not filas_df:
+    if not filas_resultado:
         raise InvarianteViolado(
             f"Ningún índice tiene datos computables en el rango [{desde}, {hasta_efectivo}]."
         )
 
-    df_out = pd.DataFrame(filas_df).set_index(["periodo", "indice"]).sort_index()
-    reporte_df = (
-        pd.DataFrame(filas_rep, columns=["periodo", "indice", *_COLS_REPORTE])
+    df_out = pd.DataFrame(filas_resultado).set_index(["periodo", "indice"]).sort_index()
+    df_reporte = (
+        pd.DataFrame(filas_reporte, columns=["periodo", "indice", *_COLS_REPORTE])
         .set_index(["periodo", "indice"])
         .sort_index()
     )
-    diagnostico_df = pd.DataFrame(filas_diag, columns=_COLS_DIAGNOSTICO)
+    df_diagnostico = pd.DataFrame(filas_diagnostico, columns=_COLS_DIAGNOSTICO)
     indices_parciales = pd.DataFrame(
         filas_parciales,
         columns=["indice", "periodo_desde_real", "periodo_hasta_real"],
@@ -455,29 +470,27 @@ def variacion_desde(
         descripcion=f"desde {desde} hasta {hasta_efectivo}",
         fecha=datetime.now(),
     )
-    return ResultadoVariacion(df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales)
+    return ResultadoVariacion(df_out, manifiesto, df_reporte, df_diagnostico, indices_parciales)
 
 
-def _fila_reporte(
+def _construir_fila_reporte(
     periodo: Periodo,
     indice: str,
-    periodo_lag: Periodo,
+    periodo_base: Periodo,
     estado: str,
     motivo: object,
-    indice_t: float,
-    indice_lag: float,
-    versiones: pd.Series,
+    valor_t: float,
+    valor_base: float,
+    version_por_fila: pd.Series,
     cobertura: pd.Series | None,
-    periodo_t_cob: Periodo,
-    periodo_lag_cob: Periodo,
 ) -> dict[str, object]:
-    """Construye una fila del `reporte_df` de `variacion_desde`."""
+    """Construye una fila del `df_reporte` de `variacion_desde`."""
 
-    def cob(p: Periodo) -> float:
+    def obtener_cobertura(periodo_objetivo: Periodo) -> float:
         if cobertura is None:
             return float("nan")
         try:
-            return float(cobertura.at[(p, indice)])  # type: ignore[arg-type]
+            return float(cobertura.at[(periodo_objetivo, indice)])  # type: ignore[arg-type]
         except KeyError:
             return float("nan")
 
@@ -486,11 +499,11 @@ def _fila_reporte(
         "indice": indice,
         "estado_calculo": estado,
         "motivo_error": motivo,
-        "periodo_lag": periodo_lag,
-        "indice_t": indice_t,
-        "indice_lag": indice_lag,
-        "version_t": versiones.get((periodo_t_cob, indice), float("nan")),
-        "version_lag": versiones.get((periodo_lag_cob, indice), float("nan")),
-        "cobertura_pct_t": cob(periodo_t_cob),
-        "cobertura_pct_lag": cob(periodo_lag_cob),
+        "periodo_lag": periodo_base,
+        "indice_t": valor_t,
+        "indice_lag": valor_base,
+        "version_t": version_por_fila.get((periodo, indice), float("nan")),
+        "version_lag": version_por_fila.get((periodo_base, indice), float("nan")),
+        "cobertura_pct_t": obtener_cobertura(periodo),
+        "cobertura_pct_lag": obtener_cobertura(periodo_base),
     }
