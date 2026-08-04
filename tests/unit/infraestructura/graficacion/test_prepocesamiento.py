@@ -8,8 +8,9 @@ import pytest
 
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
+from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestCalculo
+from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 from replica_inpc.infraestructura.graficacion import _prepocesamiento as pp
 
 # --------------------------------------------------------------------------- helpers
@@ -66,7 +67,7 @@ def _datos_n_categorias(n: int, con_inpc: bool = False) -> pd.DataFrame:
     if con_inpc:
         filas.append((_P1, "INPC", 100.0, "ok"))
     r = _resultado(filas, tipo="CCIF DIVISION")
-    return pp._aplanar_resultado_indice(r)
+    return pp._aplanar_resultado(r)
 
 
 # --------------------------------------------------------------------------- _titulo
@@ -82,12 +83,12 @@ def test_titulo_varios_tipos_unidos_con_mas() -> None:
     assert pp._titulo(datos) == "CCIF DIVISION + INPC"
 
 
-# --------------------------------------------------------------------------- _aplanar_resultado_indice
+# --------------------------------------------------------------------------- _aplanar_resultado
 
 
 def test_aplanar_sin_comparacion_linetype_solid() -> None:
     r = _resultado([(_P1, "INPC", 100.0, "ok")])
-    datos = pp._aplanar_resultado_indice(r)
+    datos = pp._aplanar_resultado(r)
     assert len(datos) == 1
     assert datos["linetype"].tolist() == ["solid"]
     assert "periodo_ts" in datos.columns
@@ -96,7 +97,7 @@ def test_aplanar_sin_comparacion_linetype_solid() -> None:
 def test_aplanar_con_comparacion_concatena_y_marca_linetype() -> None:
     principal = _resultado([(_P1, "CCIF DIVISION", 90.0, "ok")], tipo="CCIF DIVISION")
     comparacion = _resultado([(_P1, "INPC", 100.0, "ok")])
-    datos = pp._aplanar_resultado_indice(principal, comparacion)
+    datos = pp._aplanar_resultado(principal, comparacion)
     assert len(datos) == 2
     linetypes = dict(zip(datos["indice"], datos["linetype"], strict=True))
     assert linetypes == {"CCIF DIVISION": "solid", "INPC": "dashed"}
@@ -113,7 +114,7 @@ def _datos_tres_periodos() -> pd.DataFrame:
             (_P3, "INPC", 102.0, "ok"),
         ]
     )
-    return pp._aplanar_resultado_indice(r)
+    return pp._aplanar_resultado(r)
 
 
 def test_recortar_tramo_sin_limites_no_cambia_nada() -> None:
@@ -193,49 +194,45 @@ def test_ordenar_series_dibujo_sin_inpc_mantiene_orden_aparicion() -> None:
 def test_breaks_x_incluye_siempre_primero_y_ultimo() -> None:
     periodos = [PeriodoQuincenal(2018, m, q) for m in range(1, 13) for q in (1, 2)]
     r = _resultado([(p, "INPC", 100.0 + i, "ok") for i, p in enumerate(periodos)])
-    datos = pp._aplanar_resultado_indice(r)
+    datos = pp._aplanar_resultado(r)
     breaks, _ = pp._breaks_y_etiquetas_x(datos)
     assert breaks[0] == datos["periodo_ts"].min()
     assert breaks[-1] == datos["periodo_ts"].max()
 
 
-# --------------------------------------------------------------------------- _breaks_y_etiqueta_y
+# --------------------------------------------------------------------------- _breaks_y / _etiqueta_y_indice
 
 
 def test_breaks_y_incluye_minimo_y_maximo_reales() -> None:
     r = _resultado([(_P1, "INPC", 80.0, "ok"), (_P2, "INPC", 120.0, "ok")])
-    datos = pp._aplanar_resultado_indice(r)
-    breaks, _ = pp._breaks_y_etiqueta_y(datos, r)
+    datos = pp._aplanar_resultado(r)
+    breaks = pp._breaks_y(datos, "indice_replicado", pp._VALOR_BASE)
     assert breaks[0] == 80.0
     assert breaks[-1] == 120.0
 
 
 def test_breaks_y_incluye_100_si_esta_en_rango() -> None:
     r = _resultado([(_P1, "INPC", 80.0, "ok"), (_P2, "INPC", 120.0, "ok")])
-    datos = pp._aplanar_resultado_indice(r)
-    breaks, _ = pp._breaks_y_etiqueta_y(datos, r)
+    datos = pp._aplanar_resultado(r)
+    breaks = pp._breaks_y(datos, "indice_replicado", pp._VALOR_BASE)
     assert 100.0 in breaks
 
 
 def test_breaks_y_no_agrega_100_fuera_de_rango() -> None:
     r = _resultado([(_P1, "INPC", 120.0, "ok"), (_P2, "INPC", 150.0, "ok")])
-    datos = pp._aplanar_resultado_indice(r)
-    breaks, _ = pp._breaks_y_etiqueta_y(datos, r)
+    datos = pp._aplanar_resultado(r)
+    breaks = pp._breaks_y(datos, "indice_replicado", pp._VALOR_BASE)
     assert 100.0 not in breaks
 
 
 def test_etiqueta_y_sin_periodo_referencia() -> None:
     r = _resultado([(_P1, "INPC", 100.0, "ok")])
-    datos = pp._aplanar_resultado_indice(r)
-    _, etiqueta = pp._breaks_y_etiqueta_y(datos, r)
-    assert etiqueta == "Indice"
+    assert pp._etiqueta_y_indice(r) == "Indice"
 
 
 def test_etiqueta_y_con_periodo_referencia() -> None:
     r = _resultado([(_P1, "INPC", 100.0, "ok")], periodo_referencia=_P1)
-    datos = pp._aplanar_resultado_indice(r)
-    _, etiqueta = pp._breaks_y_etiqueta_y(datos, r)
-    assert etiqueta == f"Indice ({_P1} = 100)"
+    assert pp._etiqueta_y_indice(r) == f"Indice ({_P1} = 100)"
 
 
 # --------------------------------------------------------------------------- _colores_y_etiquetas
@@ -281,11 +278,20 @@ def test_etiquetas_limite_exacto_no_se_trunca() -> None:
 
 
 def test_primero_ultimo_none_si_hay_mas_de_una_serie() -> None:
-    r = _resultado(
-        [(_P1, "INPC", 100.0, "ok"), (_P1, "otra", 90.0, "ok")], tipo="CCIF DIVISION"
-    )
-    datos = pp._aplanar_resultado_indice(r)
+    r = _resultado([(_P1, "INPC", 100.0, "ok"), (_P1, "otra", 90.0, "ok")], tipo="CCIF DIVISION")
+    datos = pp._aplanar_resultado(r)
     assert pp._primero_y_ultimo_para_anotar(datos, ["INPC", "otra"]) is None
+
+
+def test_primero_ultimo_none_si_resultado_y_comparacion_comparten_indice() -> None:
+    # Mismo "indice" (INPC) en resultado y comparacion -> 2 grupos visuales
+    # (solid/dashed), aunque `series` (solo por indice) reporte 1. Antes de
+    # la guardia por (indice, linetype), esto mezclaba el primer punto de un
+    # grupo con el último del otro.
+    principal = _resultado([(_P1, "INPC", 100.0, "ok"), (_P2, "INPC", 105.0, "ok")])
+    comparacion = _resultado([(_P1, "INPC", 200.0, "ok"), (_P2, "INPC", 210.0, "ok")])
+    datos = pp._aplanar_resultado(principal, comparacion)
+    assert pp._primero_y_ultimo_para_anotar(datos, ["INPC"]) is None
 
 
 def test_primero_ultimo_devuelve_extremos_con_una_sola_serie() -> None:
@@ -296,9 +302,88 @@ def test_primero_ultimo_devuelve_extremos_con_una_sola_serie() -> None:
             (_P3, "INPC", 110.0, "ok"),
         ]
     )
-    datos = pp._aplanar_resultado_indice(r)
+    datos = pp._aplanar_resultado(r)
     resultado = pp._primero_y_ultimo_para_anotar(datos, ["INPC"])
     assert resultado is not None
     primero, ultimo = resultado
     assert primero["indice_replicado"] == 100.0
     assert ultimo["indice_replicado"] == 110.0
+
+
+# --------------------------------------------------------------------------- helpers variaciones
+
+
+def _manifiesto_variacion(tipo: str = "INPC", clase: str = "periodica_mensual") -> ManifestDerivado:
+    return ManifestDerivado(
+        versiones=[2018],  # type: ignore[list-item]
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
+        fecha=datetime(2024, 1, 1),
+    )
+
+
+def _resultado_variacion(
+    filas: list[tuple[Any, str, float, str]],
+    tipo: str = "INPC",
+    clase: str = "periodica_mensual",
+) -> ResultadoVariacion:
+    """filas = list of (periodo, indice, variacion_pp, estado)."""
+    registros = [
+        {
+            "periodo": p,
+            "indice": i,
+            "tipo": tipo,
+            "clase_variacion": clase,
+            "variacion_pp": v,
+            "estado_calculo": e,
+        }
+        for p, i, v, e in filas
+    ]
+    df = pd.DataFrame(registros)
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    reporte = df[[]].copy()
+    diag = pd.DataFrame(columns=["periodo", "indice", "estado_calculo", "motivo_error"])
+    return ResultadoVariacion(df, _manifiesto_variacion(tipo, clase), reporte, diag)
+
+
+# --------------------------------------------------------------------------- _aplanar_resultado (variaciones)
+
+
+def test_aplanar_variacion_sin_comparacion_linetype_solid() -> None:
+    rv = _resultado_variacion([(_P1, "INPC", 0.5, "ok")])
+    datos = pp._aplanar_resultado(rv)
+    assert len(datos) == 1
+    assert datos["variacion_pp"].tolist() == [0.5]
+    assert datos["linetype"].tolist() == ["solid"]
+    assert "periodo_ts" in datos.columns
+
+
+def test_aplanar_variacion_con_comparacion_marca_linetype() -> None:
+    principal = _resultado_variacion([(_P1, "cat", 0.5, "ok")], tipo="CCIF DIVISION")
+    comparacion = _resultado_variacion([(_P1, "INPC", 0.3, "ok")])
+    datos = pp._aplanar_resultado(principal, comparacion)
+    assert len(datos) == 2
+    linetypes = dict(zip(datos["indice"], datos["linetype"], strict=True))
+    assert linetypes == {"cat": "solid", "INPC": "dashed"}
+
+
+# --------------------------------------------------------------------------- _breaks_y (variaciones)
+
+
+def test_breaks_y_variacion_incluye_minimo_maximo_y_cero() -> None:
+    datos = pd.DataFrame({"variacion_pp": [-2.0, 3.0]})
+    breaks = pp._breaks_y(datos, "variacion_pp", pp._VALOR_BASE_VARIACION)
+    assert breaks[0] == -2.0
+    assert breaks[-1] == 3.0
+    assert 0.0 in breaks
+
+
+def test_breaks_y_variacion_no_agrega_cero_fuera_de_rango() -> None:
+    datos = pd.DataFrame({"variacion_pp": [5.0, 10.0]})
+    breaks = pp._breaks_y(datos, "variacion_pp", pp._VALOR_BASE_VARIACION)
+    assert 0.0 not in breaks
+    assert breaks[0] == 5.0
+    assert breaks[-1] == 10.0

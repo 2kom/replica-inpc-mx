@@ -82,10 +82,14 @@ def variacion_periodica(resultado: ResultadoIndice, frecuencia: Frecuencia) -> R
 
     Raises:
         InvarianteViolado: Si `frecuencia` no aplica a la periodicidad del
-            resultado, si ningún periodo resulta computable, si algún
-            `indice_replicado` (en `t` o en la base) no es finito, si la base
-            es exactamente 0, o si la `variacion_pp` resultante no es finita
-            (overflow: extremos finitos que producen un cociente infinito).
+            resultado, si ningún periodo resulta computable, si en alguna
+            fila computable (con dato en `t` y en la base) el
+            `indice_replicado` no es finito, si la base es exactamente 0, o
+            si la `variacion_pp` resultante no es finita (overflow: extremos
+            finitos que producen un cociente infinito). Una fila NO
+            computable (`t` o base sin dato) puede conservar un valor no
+            finito en `.reporte` sin disparar esta validación — no afecta
+            `variacion_pp`, que ya la excluye por no ser computable.
     """
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)
@@ -115,10 +119,14 @@ def variacion_acumulada_anual(resultado: ResultadoIndice) -> ResultadoVariacion:
     """Variación de cada periodo contra diciembre del año anterior.
 
     Raises:
-        InvarianteViolado: Si ningún periodo resulta computable, si algún
-            `indice_replicado` (en `t` o en la base) no es finito, si la base
-            es exactamente 0, o si la `variacion_pp` resultante no es finita
-            (overflow: extremos finitos que producen un cociente infinito).
+        InvarianteViolado: Si ningún periodo resulta computable, si en
+            alguna fila computable (con dato en `t` y en la base) el
+            `indice_replicado` no es finito, si la base es exactamente 0, o
+            si la `variacion_pp` resultante no es finita (overflow: extremos
+            finitos que producen un cociente infinito). Una fila NO
+            computable (`t` o base sin dato) puede conservar un valor no
+            finito en `.reporte` sin disparar esta validación — no afecta
+            `variacion_pp`, que ya la excluye por no ser computable.
     """
     largo = resultado.resultado.largo
     mensual = es_mensual(largo)

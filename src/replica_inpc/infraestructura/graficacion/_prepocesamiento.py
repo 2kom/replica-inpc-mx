@@ -5,11 +5,14 @@ from mizani.breaks import breaks_extended
 
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
+from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 _MAX_ETIQUETAS_EJE_X = 20
 _N_ETIQUETAS_EJE_Y = 10
 _VALOR_BASE = 100.0
+_VALOR_BASE_VARIACION = 0.0
+_ETIQUETA_Y_VARIACION = "Variación (pp)"
 _COLOR_INPC = "black"
 _LINETYPE_PRINCIPAL = "solid"
 _LINETYPE_COMPARACION = "dashed"
@@ -36,23 +39,27 @@ def _titulo(datos: pd.DataFrame) -> str:
     return " + ".join(tipos)
 
 
-def _aplanar_resultado_indice(
-    indice: ResultadoIndice, comparacion: ResultadoIndice | None = None
+def _aplanar_resultado(
+    resultado: ResultadoIndice | ResultadoVariacion,
+    comparacion: ResultadoIndice | ResultadoVariacion | None = None,
 ) -> pd.DataFrame:
     """Aplana `.resultado.largo` a un DataFrame único, una fila por `(periodo, indice)`.
 
-    `empalmar()` ya unifica el nombre de `indice` cross-versión (vía
-    `RENOMBRES_INDICES` en `dominio/conversion.py`), así que un mismo `indice`
-    (ej. `"INPC"`, o una categoría de clasificación) ya es continuo en el
-    tiempo pese a traer distinto `version` por tramo — no hace falta fusionar
-    nada más. Agrega `periodo_ts` (timestamp del `periodo`) para el eje X.
+    Sirve igual para `ResultadoIndice` y `ResultadoVariacion` — el aplanado no
+    toca la columna de valor (`indice_replicado`/`variacion_pp`), solo la
+    estructura común del índice. `empalmar()` ya unifica el nombre de `indice`
+    cross-versión (vía `RENOMBRES_INDICES` en `dominio/conversion.py`), así
+    que un mismo `indice` (ej. `"INPC"`, o una categoría de clasificación) ya
+    es continuo en el tiempo pese a traer distinto `version` por tramo — no
+    hace falta fusionar nada más. Agrega `periodo_ts` (timestamp del
+    `periodo`) para el eje X.
 
     `comparacion`, si viene, se concatena marcando `linetype="dashed"`
-    (`indice` queda `linetype="solid"`) — se distingue visualmente aunque
+    (`resultado` queda `linetype="solid"`) — se distingue visualmente aunque
     comparta color (ej. INPC pasado como `comparacion` de una clasificación:
     se ve punteado incluso siendo el mismo negro que tendría solo).
     """
-    resultados = [(indice, _LINETYPE_PRINCIPAL)]
+    resultados = [(resultado, _LINETYPE_PRINCIPAL)]
     if comparacion is not None:
         resultados.append((comparacion, _LINETYPE_COMPARACION))
 
@@ -163,30 +170,28 @@ def _breaks_y_etiquetas_x(datos: pd.DataFrame) -> tuple[list[pd.Timestamp], list
     return list(combinado["periodo_ts"]), [str(p) for p in combinado["periodo"]]
 
 
-def _breaks_y_etiqueta_y(
-    datos: pd.DataFrame, resultado: ResultadoIndice
-) -> tuple[list[float], str]:
-    """Breaks del eje Y + su etiqueta — análogo a `_breaks_y_etiquetas_x` para el eje X.
+def _breaks_y(datos: pd.DataFrame, columna_valor: str, valor_base: float) -> list[float]:
+    """Breaks del eje Y: automáticos + forzados, mínimo y máximo reales siempre son extremos.
 
-    Breaks: automáticos + forzados, mínimo y máximo siempre son el primer y
-    último break; ningún break automático ni la base (100) puede quedar por
-    fuera de `[mínimo, máximo]`. Etiqueta: `"Indice"`, o `"Indice
-    (periodo_referencia = 100)"` si el resultado fue rebasado.
+    Comparte el algoritmo entre índices (`indice_replicado`, base 100) y
+    variaciones (`variacion_pp`, base 0): ningún break automático ni la base
+    puede quedar fuera de `[mínimo, máximo]` de los datos; la base solo se
+    fuerza si cae dentro del rango.
     """
-    minimo = float(datos["indice_replicado"].min())
-    maximo = float(datos["indice_replicado"].max())
+    minimo = float(datos[columna_valor].min())
+    maximo = float(datos[columna_valor].max())
     extendidos = breaks_extended(n=_N_ETIQUETAS_EJE_Y)((minimo, maximo))
     intermedios = {b for b in extendidos.tolist() if minimo < b < maximo}
-    if minimo < _VALOR_BASE < maximo:
-        intermedios.add(_VALOR_BASE)
-    breaks = sorted({minimo, maximo, *intermedios})
+    if minimo < valor_base < maximo:
+        intermedios.add(valor_base)
+    return sorted({minimo, maximo, *intermedios})
 
-    if resultado.periodo_referencia is None:
-        etiqueta = "Indice"
-    else:
-        etiqueta = f"Indice ({resultado.periodo_referencia} = 100)"
 
-    return breaks, etiqueta
+def _etiqueta_y_indice(resultado: ResultadoIndice | ResultadoVariacion) -> str:
+    """Etiqueta del eje Y para índices: `"Indice"`, o `"Indice (periodo_referencia = 100)"` si fue rebasado."""
+    if isinstance(resultado, ResultadoIndice) and resultado.periodo_referencia is not None:
+        return f"Indice ({resultado.periodo_referencia} = 100)"
+    return "Indice"
 
 
 def _colores_y_etiquetas(series: list[str]) -> tuple[dict[str, str], dict[str, str]]:
@@ -227,11 +232,18 @@ def _primero_y_ultimo_para_anotar(
 ) -> tuple[pd.Series, pd.Series] | None:
     """Primer y último punto a anotar con su valor, o `None` si no aplica.
 
-    Solo con 1 sola serie (el mismo caso donde no hay leyenda) — con varias
-    series, aunque `INPC` esté presente, no se anota nada: con N líneas
+    Solo con un único grupo visual `(indice, linetype)` — el mismo caso donde
+    no hay leyenda. `resultado` y `comparacion` pueden compartir `indice`
+    (ej. el mismo INPC en dos tramos, uno sólido y otro punteado): son 2
+    grupos visuales aunque `series` (que agrupa solo por `indice`) reporte 1
+    — anotar ahí mezclaría el primer punto de un grupo con el último del
+    otro. Con varias series (>1 `indice`), tampoco se anota: con N líneas
     cruzadas el numerito compite con la leyenda por espacio y no aporta.
     """
     if len(series) != 1:
+        return None
+    grupos = datos[["indice", "linetype"]].drop_duplicates()
+    if len(grupos) != 1:
         return None
     ordenado = datos.sort_values("periodo_ts")
     return ordenado.iloc[0], ordenado.iloc[-1]

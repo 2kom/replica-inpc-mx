@@ -17,6 +17,7 @@ _SIMBOLOS_CLAVE = [
     "validar_variacion",
     "validar_incidencia",
     "calcular_historia",
+    "graficar",
     "set_token",
     "limpiar_cache",
     "INDICES_VALIDABLES",

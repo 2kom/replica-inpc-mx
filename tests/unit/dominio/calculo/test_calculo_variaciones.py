@@ -401,6 +401,76 @@ def test_desde_incluir_parciales_ajusta_periodo_hasta() -> None:
     assert r.df.loc[(_Q2, "B"), "variacion_pp"] == pytest.approx(5.0)  # type: ignore[arg-type]
 
 
+def test_desde_reporte_usa_periodos_efectivos_no_los_solicitados() -> None:
+    # "B" cae por ambos lados (falta en _Q1/_Q4 -> desde_real=_Q2, hasta_real=_Q3).
+    # version/cobertura llevan un valor centinela en los periodos NOMINALES
+    # (_Q1/_Q4, version=2010) distinto de los reales (_Q2=2013, _Q3=2018) para
+    # que, si _construir_fila_reporte alguna vez vuelve a leer el periodo
+    # pedido en vez del resuelto, el assert lo note. 2010/2013/2018 son
+    # VersionCanasta válidas (no un centinela fuera de rango como 9999).
+    filas = [
+        {
+            "periodo": _Q1,
+            "indice": "B",
+            "version": 2010,
+            "tipo": "INPC",
+            "indice_replicado": float("nan"),
+            "estado_calculo": "sin_datos",
+        },
+        {
+            "periodo": _Q2,
+            "indice": "B",
+            "version": 2013,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+        },
+        {
+            "periodo": _Q3,
+            "indice": "B",
+            "version": 2018,
+            "tipo": "INPC",
+            "indice_replicado": 120.0,
+            "estado_calculo": "ok",
+        },
+        {
+            "periodo": _Q4,
+            "indice": "B",
+            "version": 2010,
+            "tipo": "INPC",
+            "indice_replicado": float("nan"),
+            "estado_calculo": "sin_datos",
+        },
+    ]
+    df = pd.DataFrame(filas).set_index(["periodo", "indice"])
+    reporte_fuente = pd.DataFrame(
+        {"cobertura_genericos_pct": [999.0, 40.0, 80.0, 999.0]},
+        index=pd.MultiIndex.from_tuples(
+            [(_Q1, "B"), (_Q2, "B"), (_Q3, "B"), (_Q4, "B")], names=["periodo", "indice"]
+        ),
+    )
+    manifiesto = [
+        ManifestCalculo(2010, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
+        ManifestCalculo(2013, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
+        ManifestCalculo(2018, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
+    ]
+    indice = ResultadoIndice(df, manifiesto, reporte_fuente, pd.DataFrame())
+
+    r = variacion_desde(indice, _Q1, _Q4, incluir_parciales=True)
+
+    assert r.indices_parciales.loc["B", "periodo_desde_real"] == _Q2  # type: ignore[union-attr]
+    assert r.indices_parciales.loc["B", "periodo_hasta_real"] == _Q3  # type: ignore[union-attr]
+
+    fila_reporte: pd.Series = r.reporte.loc[(_Q3, "B")]  # type: ignore[assignment]
+    assert fila_reporte["periodo_lag"] == _Q2
+    assert fila_reporte["indice_t"] == pytest.approx(120.0)
+    assert fila_reporte["indice_lag"] == pytest.approx(100.0)
+    assert fila_reporte["version_t"] == 2018
+    assert fila_reporte["version_lag"] == 2013
+    assert fila_reporte["cobertura_pct_t"] == pytest.approx(80.0)
+    assert fila_reporte["cobertura_pct_lag"] == pytest.approx(40.0)
+
+
 def test_desde_ningun_indice_computable_falla() -> None:
     indice = _indice({"A": [(_Q1, None), (_Q2, None)]})
     with pytest.raises(InvarianteViolado):
