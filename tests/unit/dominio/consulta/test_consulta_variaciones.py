@@ -46,7 +46,10 @@ def _rv(
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        versiones=[2018], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018],
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     return ResultadoVariacion(df, manifiesto, pd.DataFrame(), pd.DataFrame())
@@ -80,7 +83,7 @@ def test_en_no_muta_resultado() -> None:
     r = _rv_multi()
     df = inflacion_en(r, _M2)
     df.loc["INPC", "variacion_pp"] = 999.0
-    assert r.df.loc[(_M2, "INPC"), "variacion_pp"] == pytest.approx(3.0)
+    assert r.df.loc[(_M2, "INPC"), "variacion_pp"] == pytest.approx(3.0)  # type: ignore[index]
 
 
 # -- inflacion_acumulada -------------------------------------------------------
@@ -131,9 +134,7 @@ def test_promedio_tcac_formula_congelada() -> None:
     # Dos variaciones de 10 pp; factor = 1.1 * 1.1 = 1.21; ppy=12, n=2.
     # tcac = (1.21 ** 6 - 1) * 100 = 213.8428376721
     r = _rv({"INPC": [(_M1, 10.0), (_M2, 10.0)]})
-    assert inflacion_promedio(r, indice="INPC", metodo="tcac") == pytest.approx(
-        213.8428376721
-    )
+    assert inflacion_promedio(r, indice="INPC", metodo="tcac") == pytest.approx(213.8428376721)
 
 
 def test_promedio_metodo_invalido_falla() -> None:

@@ -46,7 +46,10 @@ def _ri(
             )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        versiones=[2018, 2018], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018, 2018],
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     return ResultadoIncidencia(df, manifiesto, pd.DataFrame(), pd.DataFrame())
@@ -80,7 +83,7 @@ def test_en_no_muta_resultado() -> None:
     r = _ri_multi()
     df = incidencia_en(r, _M2)
     df.loc["subyacente", "incidencia_pp"] = 999.0
-    assert r.df.loc[(_M2, "subyacente"), "incidencia_pp"] == pytest.approx(3.0)
+    assert r.df.loc[(_M2, "subyacente"), "incidencia_pp"] == pytest.approx(3.0)  # type: ignore[index]
 
 
 # -- incidencia_acumulada ------------------------------------------------------

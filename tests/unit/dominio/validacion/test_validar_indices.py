@@ -72,7 +72,7 @@ _INEGI = {"INPC": {_P1: 100.0, _P2: 100.5, _P3: 100.5, _P4: None, _P5: 100.0}}
 
 
 def _validacion() -> ValidacionIndice:
-    return validar_indices(_ri(_FILAS), _Fuente(_INEGI))
+    return validar_indices(_ri(_FILAS), _Fuente(_INEGI))  # type: ignore[arg-type]
 
 
 # -- estado_validacion por rama ------------------------------------------------
@@ -91,13 +91,13 @@ def _validacion() -> ValidacionIndice:
 )
 def test_estado_validacion_por_rama(periodo: PeriodoQuincenal, esperado: str) -> None:
     largo = _validacion().resultado.largo
-    assert largo.loc[(periodo, "INPC"), "estado_validacion"] == esperado
+    assert largo.loc[(periodo, "INPC"), "estado_validacion"] == esperado  # type: ignore[index]
 
 
 def test_sin_calculo_conserva_inegi_y_error_nan() -> None:
     largo = _validacion().resultado.largo
-    assert largo.loc[(_P5, "INPC"), "indice_inegi"] == pytest.approx(100.0)
-    assert pd.isna(largo.loc[(_P5, "INPC"), "error_absoluto"])
+    assert largo.loc[(_P5, "INPC"), "indice_inegi"] == pytest.approx(100.0)  # type: ignore[index]
+    assert pd.isna(largo.loc[(_P5, "INPC"), "error_absoluto"])  # type: ignore[index]
 
 
 def test_resumen_conteos_y_global() -> None:
@@ -126,9 +126,9 @@ def test_diagnostico_solo_no_ok() -> None:
 
 def test_tolerancia_personalizada() -> None:
     # Con tolerancia amplia, la diferencia de 0.5 cae dentro de rango.
-    v = validar_indices(_ri(_FILAS), _Fuente(_INEGI), tolerancia=1.0)
+    v = validar_indices(_ri(_FILAS), _Fuente(_INEGI), tolerancia=1.0)  # type: ignore[arg-type]
     largo = v.resultado.largo
-    assert largo.loc[(_P2, "INPC"), "estado_validacion"] == "ok"
+    assert largo.loc[(_P2, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
 
 
 # -- fail-fast -----------------------------------------------------------------
@@ -137,4 +137,4 @@ def test_tolerancia_personalizada() -> None:
 def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
     resultado = _ri([(_P1, 100.0, "ok")], tipo="COG", indice="bienes")
     with pytest.raises(InvarianteViolado):
-        validar_indices(resultado, _FuenteExplota())
+        validar_indices(resultado, _FuenteExplota())  # type: ignore[arg-type]

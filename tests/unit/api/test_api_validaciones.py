@@ -32,28 +32,28 @@ def _r_derivado(tipo: str, clase: str) -> SimpleNamespace:
 
 def test_validar_indice_multi_tipo_falla() -> None:
     with pytest.raises(ErrorConfiguracion, match="varios tipos"):
-        validaciones.validar_indice(_r_indice("INPC", "INFLACION COMPONENTE"))
+        validaciones.validar_indice(_r_indice("INPC", "INFLACION COMPONENTE"))  # type: ignore[arg-type]
 
 
 def test_validar_indice_tipo_no_comparable_falla() -> None:
     with pytest.raises(ErrorConfiguracion):
-        validaciones.validar_indice(_r_indice("DURABILIDAD"))
+        validaciones.validar_indice(_r_indice("DURABILIDAD"))  # type: ignore[arg-type]
 
 
 def test_validar_variacion_clase_no_comparable_falla_antes_que_token() -> None:
     # clase 'desde' no es comparable; el error debe ser por clase, no por token.
     with pytest.raises(ErrorConfiguracion, match="clase"):
-        validaciones.validar_variacion(_r_derivado("INPC", "desde"))
+        validaciones.validar_variacion(_r_derivado("INPC", "desde"))  # type: ignore[arg-type]
 
 
 def test_validar_incidencia_clase_no_comparable_falla() -> None:
     with pytest.raises(ErrorConfiguracion):
-        validaciones.validar_incidencia(_r_derivado("INPC", "acumulada_anual"))
+        validaciones.validar_incidencia(_r_derivado("INPC", "acumulada_anual"))  # type: ignore[arg-type]
 
 
 def test_validar_indice_sin_token_falla() -> None:
     with pytest.raises(ErrorConfiguracion, match="token"):
-        validaciones.validar_indice(_r_indice("INPC"))
+        validaciones.validar_indice(_r_indice("INPC"))  # type: ignore[arg-type]
 
 
 # -- delegación ----------------------------------------------------------------
@@ -66,7 +66,7 @@ def test_validar_indice_delega_con_fuente_y_tolerancia(mocker) -> None:
     dominio = mocker.patch.object(validaciones, "validar_indices", return_value="val")
 
     resultado = _r_indice("INPC")
-    salida = validaciones.validar_indice(resultado)
+    salida = validaciones.validar_indice(resultado)  # type: ignore[arg-type]
 
     assert salida == "val"
     fuente_cls.assert_called_once_with("tok", "INPC", timeout=10)
@@ -80,7 +80,7 @@ def test_validar_variacion_delega_con_tolerancia_derivados(mocker) -> None:
     dominio = mocker.patch.object(validaciones, "validar_variaciones", return_value="val")
 
     resultado = _r_derivado("INPC", "periodica_mensual")
-    salida = validaciones.validar_variacion(resultado)
+    salida = validaciones.validar_variacion(resultado)  # type: ignore[arg-type]
 
     assert salida == "val"
     assert dominio.call_args[0][2] == 0.05

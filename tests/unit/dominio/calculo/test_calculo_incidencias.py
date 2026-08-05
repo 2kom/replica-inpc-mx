@@ -1153,7 +1153,7 @@ def _cross_2seg_mutado(
     }
     for base, mut in ((inpc_base, inpc_filas), (clas_base, clas_filas)):
         for clave, (vis, j) in (mut or {}).items():
-            base[clave] = (vis, j, base[clave][2])
+            base[clave] = (vis, j, base[clave][2])  # type: ignore[index]
     inpc = _res_multi(
         [(p, i, v, vis, j, "ok") for (p, i), (vis, j, v) in inpc_base.items()],
         tipo="INPC",
@@ -1304,7 +1304,7 @@ def _historia_mensual(tipo: str) -> ResultadoIndice:
         for v in (2010, 2013, 2018, 2024)
     }
     ser = {
-        v: rep.cargar_serie(str(_DATA_INPUTS / f"series{s}_horizontal_metadata.CSV"), v)
+        v: rep.cargar_serie(str(_DATA_INPUTS / f"series{s}_horizontal_metadata.CSV"), v)  # type: ignore[arg-type]
         for v, s in ((2010, 2010), (2013, 2010), (2018, 2018), (2024, 2024))
     }
     r10 = rep.calcular_indice(can[2010], ser[2010], tipo)

@@ -7,6 +7,7 @@ import pytest
 
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
+from replica_inpc.dominio.modelos.validacion import ValidacionIncidencia
 from replica_inpc.dominio.periodos import PeriodoMensual
 from replica_inpc.dominio.tipos import ManifestDerivado
 from replica_inpc.dominio.validacion.incidencias import validar_incidencias
@@ -16,6 +17,7 @@ _P2 = PeriodoMensual(2024, 2)
 _P3 = PeriodoMensual(2024, 3)
 _P4 = PeriodoMensual(2024, 4)
 _P5 = PeriodoMensual(2024, 5)
+
 
 # -- helpers -------------------------------------------------------------------
 
@@ -42,7 +44,10 @@ def _ri(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        versiones=[2018, 2018], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018, 2018],
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     reporte = pd.DataFrame(
@@ -75,8 +80,8 @@ _FILAS = [
 _INEGI = {"subyacente": {_P1: 1.0, _P2: 2.0, _P3: 2.0, _P4: None}}
 
 
-def _validacion() -> object:
-    return validar_incidencias(_ri(_FILAS), _Fuente(_INEGI))
+def _validacion() -> ValidacionIncidencia:
+    return validar_incidencias(_ri(_FILAS), _Fuente(_INEGI))  # type: ignore[arg-type]
 
 
 # -- estado_validacion por rama ------------------------------------------------
@@ -94,7 +99,7 @@ def _validacion() -> object:
 )
 def test_estado_validacion_por_rama(periodo: PeriodoMensual, esperado: str) -> None:
     largo = _validacion().resultado.largo
-    assert largo.loc[(periodo, "subyacente"), "estado_validacion"] == esperado
+    assert largo.loc[(periodo, "subyacente"), "estado_validacion"] == esperado  # type: ignore[index]
 
 
 def test_resumen_conteos_y_global() -> None:
@@ -139,14 +144,15 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018, 2018], tipo="INFLACION COMPONENTE",
-        clase="periodica_mensual", descripcion="", fecha=datetime(2024, 1, 1),
+        versiones=[2018, 2018],
+        tipo="INFLACION COMPONENTE",
+        clase="periodica_mensual",
+        descripcion="",
+        fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())
-    v = validar_incidencias(
-        resultado, _Fuente({"subyacente": {_P1: 1.0, _P2: 5.0}})
-    )
-    assert v.reporte.loc[(_P2, "subyacente"), "estado_validacion"] == "sin_calculo"
+    v = validar_incidencias(resultado, _Fuente({"subyacente": {_P1: 1.0, _P2: 5.0}}))  # type: ignore[arg-type]
+    assert v.reporte.loc[(_P2, "subyacente"), "estado_validacion"] == "sin_calculo"  # type: ignore[index]
     assert not v.reporte["estado_validacion"].isna().any()
     assert (_P2, "subyacente") not in v.resultado.largo.index
 
@@ -157,10 +163,10 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
 def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
     resultado = _ri([(_P1, 1.0, "ok")], tipo="COG", indice="bienes")
     with pytest.raises(InvarianteViolado):
-        validar_incidencias(resultado, _FuenteExplota())
+        validar_incidencias(resultado, _FuenteExplota())  # type: ignore[arg-type]
 
 
 def test_clase_no_mapeable_falla_sin_tocar_fuente() -> None:
     resultado = _ri([(_P1, 1.0, "ok")], clase="periodica_quincenal")
     with pytest.raises(ErrorConfiguracion):
-        validar_incidencias(resultado, _FuenteExplota())
+        validar_incidencias(resultado, _FuenteExplota())  # type: ignore[arg-type]

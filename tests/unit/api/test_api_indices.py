@@ -15,7 +15,7 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 def test_calcular_indice_encadenada_sin_referencia_falla(version: int) -> None:
     canasta = SimpleNamespace(version=version)
     with pytest.raises(InvarianteViolado):
-        indices.calcular_indice(canasta, object(), "inpc", referencia=None)
+        indices.calcular_indice(canasta, object(), "inpc", referencia=None)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("version", [2010, 2018])
@@ -25,7 +25,7 @@ def test_calcular_indice_base_sin_referencia_delega(version: int, mocker) -> Non
     calcular = para_canasta.return_value.calcular
     calcular.return_value = "resultado"
 
-    salida = indices.calcular_indice(canasta, "serie", "inpc")
+    salida = indices.calcular_indice(canasta, "serie", "inpc")  # type: ignore[arg-type]
 
     assert salida == "resultado"
     para_canasta.assert_called_once_with(canasta, None)
@@ -40,7 +40,7 @@ def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:
     refs = mocker.patch.object(indices, "_referencias_normalizadas", return_value={"INPC": 100.0})
     para_canasta = mocker.patch.object(indices, "para_canasta")
 
-    indices.calcular_indice(canasta, "serie", "inpc", referencia=referencia)
+    indices.calcular_indice(canasta, "serie", "inpc", referencia=referencia)  # type: ignore[arg-type]
 
     refs.assert_called_once_with(referencia, "INPC", 2018, 2024)
     para_canasta.assert_called_once_with(canasta, {"INPC": 100.0})
@@ -52,7 +52,7 @@ def test_calcular_indice_encadenada_con_referencia_normaliza(mocker) -> None:
 def test_rebasar_parsea_periodo_case_insensible(mocker) -> None:
     _rebasar = mocker.patch.object(indices, "_rebasar", return_value="rebased")
 
-    salida = indices.rebasar("resultado", "2q jul 2018")
+    salida = indices.rebasar("resultado", "2q jul 2018")  # type: ignore[arg-type]
 
     assert salida == "rebased"
     _rebasar.assert_called_once_with("resultado", PeriodoQuincenal(2018, 7, 2), 100.0)
@@ -63,7 +63,7 @@ def test_rebasar_reenvia_valor_referencia_custom(mocker) -> None:
     # detectaría que se dejara de reenviar un valor_referencia distinto.
     _rebasar = mocker.patch.object(indices, "_rebasar", return_value="rebased")
 
-    salida = indices.rebasar("resultado", "2q jul 2018", 200.0)
+    salida = indices.rebasar("resultado", "2q jul 2018", 200.0)  # type: ignore[arg-type]
 
     assert salida == "rebased"
     _rebasar.assert_called_once_with("resultado", PeriodoQuincenal(2018, 7, 2), 200.0)
@@ -71,12 +71,12 @@ def test_rebasar_reenvia_valor_referencia_custom(mocker) -> None:
 
 def test_empalmar_delega(mocker) -> None:
     _empalmar = mocker.patch.object(indices, "_empalmar", return_value="empalmado")
-    salida = indices.empalmar(["a", "b"], forzar=True, version_nombres=2024)
+    salida = indices.empalmar(["a", "b"], forzar=True, version_nombres=2024)  # type: ignore[arg-type]
     assert salida == "empalmado"
     _empalmar.assert_called_once_with(["a", "b"], forzar=True, version_nombres=2024)
 
 
 def test_a_mensual_delega(mocker) -> None:
     _a_mensual = mocker.patch.object(indices, "_a_mensual", return_value="mensual")
-    assert indices.a_mensual("quincenal") == "mensual"
+    assert indices.a_mensual("quincenal") == "mensual"  # type: ignore[arg-type]
     _a_mensual.assert_called_once_with("quincenal")

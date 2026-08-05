@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
+from replica_inpc.dominio.modelos.validacion import ValidacionVariacion
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual
 from replica_inpc.dominio.tipos import ManifestDerivado
@@ -42,7 +43,10 @@ def _rv(
         )
     df = pd.DataFrame(rows).set_index(["periodo", "indice"])
     manifiesto = ManifestDerivado(
-        versiones=[2018], tipo=tipo, clase=clase, descripcion="",
+        versiones=[2018],
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     reporte = pd.DataFrame(
@@ -75,8 +79,8 @@ _FILAS = [
 _INEGI = {"INPC": {_P1: 1.0, _P2: 2.0, _P3: 2.0, _P4: None}}
 
 
-def _validacion() -> object:
-    return validar_variaciones(_rv(_FILAS), _Fuente(_INEGI))
+def _validacion() -> ValidacionVariacion:
+    return validar_variaciones(_rv(_FILAS), _Fuente(_INEGI))  # type: ignore[arg-type]
 
 
 # -- estado_validacion por rama ------------------------------------------------
@@ -94,7 +98,7 @@ def _validacion() -> object:
 )
 def test_estado_validacion_por_rama(periodo: PeriodoMensual, esperado: str) -> None:
     largo = _validacion().resultado.largo
-    assert largo.loc[(periodo, "INPC"), "estado_validacion"] == esperado
+    assert largo.loc[(periodo, "INPC"), "estado_validacion"] == esperado  # type: ignore[index]
 
 
 def test_resumen_conteos_y_global() -> None:
@@ -140,12 +144,15 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ),
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018], tipo="INPC", clase="periodica_mensual", descripcion="",
+        versiones=[2018],
+        tipo="INPC",
+        clase="periodica_mensual",
+        descripcion="",
         fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoVariacion(df, manifiesto, reporte, pd.DataFrame())
-    v = validar_variaciones(resultado, _Fuente({"INPC": {_P1: 1.0, _P2: 5.0}}))
-    assert v.reporte.loc[(_P2, "INPC"), "estado_validacion"] == "sin_calculo"
+    v = validar_variaciones(resultado, _Fuente({"INPC": {_P1: 1.0, _P2: 5.0}}))  # type: ignore[arg-type]
+    assert v.reporte.loc[(_P2, "INPC"), "estado_validacion"] == "sin_calculo"  # type: ignore[index]
     assert not v.reporte["estado_validacion"].isna().any()
     assert (_P2, "INPC") not in v.resultado.largo.index
 
@@ -156,10 +163,10 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
 def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
     resultado = _rv([(_P1, 1.0, "ok")], tipo="COG", indice="bienes")
     with pytest.raises(InvarianteViolado):
-        validar_variaciones(resultado, _FuenteExplota())
+        validar_variaciones(resultado, _FuenteExplota())  # type: ignore[arg-type]
 
 
 def test_clase_no_mapeable_falla_sin_tocar_fuente() -> None:
     resultado = _rv([(_P1, 1.0, "ok")], clase="periodica_bimestral")
     with pytest.raises(ErrorConfiguracion):
-        validar_variaciones(resultado, _FuenteExplota())
+        validar_variaciones(resultado, _FuenteExplota())  # type: ignore[arg-type]
