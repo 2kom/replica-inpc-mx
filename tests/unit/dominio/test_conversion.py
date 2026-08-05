@@ -558,6 +558,46 @@ def test_rebasar_indice_sin_referencia_emite_warning_y_no_rebase() -> None:
     assert rb.df.at[(_r3, "COG"), "indice_replicado"] == pytest.approx(55.0)
 
 
+def test_rebasar_frontera_clasificacion_cada_categoria_recibe_su_factor() -> None:
+    # Frontera de clasificación con DOS categorías pobladas, ambas con dato en el periodo
+    # de referencia y con factores de rebase DISTINTOS. Cada `I_K_visible(e)` debe
+    # reescalarse por su propio k_K, no por uno común (ver docs/diseño.md §11.29).
+    frontera_in = pd.DataFrame(
+        {
+            "version_old": [2018, 2018],
+            "version_new": [2024, 2024],
+            "indice_incidencia_old": [60.0, 30.0],
+            "indice_replicado_old": [120.0, 80.0],
+        },
+        index=pd.MultiIndex.from_arrays(
+            [[_r3, _r3], ["Alimentos", "Servicios"]], names=["periodo", "indice"]
+        ),
+    )
+    r = _resultado(
+        [
+            (_r1, "Alimentos", 140.0, "ok", None),
+            (_r2, "Alimentos", 150.0, "ok", None),  # k = 100/150
+            (_r3, "Alimentos", 160.0, "ok", None),
+            (_r1, "Servicios", 190.0, "ok", None),
+            (_r2, "Servicios", 200.0, "ok", None),  # k = 100/200 (distinto)
+            (_r3, "Servicios", 210.0, "ok", None),
+        ],
+        tipo="COG",
+        frontera=frontera_in,
+    )
+    rb = rebasar(r, _r2)
+    assert rb._frontera is not None
+    assert rb._frontera.at[(_r3, "Alimentos"), "indice_replicado_old"] == pytest.approx(
+        120.0 * (100.0 / 150.0)
+    )
+    assert rb._frontera.at[(_r3, "Servicios"), "indice_replicado_old"] == pytest.approx(
+        80.0 * (100.0 / 200.0)
+    )
+    # `indice_incidencia_old` es de-encadenado: invariante al rebase.
+    assert rb._frontera.at[(_r3, "Alimentos"), "indice_incidencia_old"] == pytest.approx(60.0)
+    assert rb._frontera.at[(_r3, "Servicios"), "indice_incidencia_old"] == pytest.approx(30.0)
+
+
 def test_rebasar_frontera_indice_sin_referencia_queda_intacta() -> None:
     # "COG" no tiene dato en periodo_referencia (huérfano) pero SÍ tiene ancla de
     # junta válida en _frontera — no debe pisarse con NaN (ver hallazgo de
@@ -881,10 +921,11 @@ def test_a_mensual_crea_frontera_en_junta_real() -> None:
     assert fila_frontera["version_new"] == 2024
 
 
-def test_a_mensual_frontera_clasificacion_replicado_old_es_nan() -> None:
-    # Clasificación (tipo != INPC): indice_replicado_old queda NaN por diseño (no
-    # se guarda INPC_visible en la frontera de clasificación, ver docs/diseño.md
-    # §11.31); indice_incidencia_old SÍ se conserva, a diferencia de INPC.
+def test_a_mensual_frontera_clasificacion_guarda_visible_por_categoria() -> None:
+    # Clasificación (tipo != INPC): indice_replicado_old guarda I_K_visible(e) de la
+    # CATEGORÍA — no INPC_visible(e), que solo vive en la frontera del INPC (ver
+    # docs/diseño.md §11.29). El motor de incidencias lo necesita para derivar el ancla
+    # del lado nuevo de la junta sin suponer que vale 100.
     junta = RANGOS_CANASTAS[2024][0]
     q_antes = PeriodoQuincenal(junta.año, junta.mes, 1)
     q_despues = PeriodoQuincenal(junta.año, junta.mes + 1, 1)
@@ -926,7 +967,7 @@ def test_a_mensual_frontera_clasificacion_replicado_old_es_nan() -> None:
     rm = a_mensual(r)
     assert rm._frontera is not None
     fila_frontera = rm._frontera.loc[cast(Any, (junta, "Alimentos"))]
-    assert pd.isna(fila_frontera["indice_replicado_old"])
+    assert fila_frontera["indice_replicado_old"] == pytest.approx(100.5)
     assert fila_frontera["indice_incidencia_old"] == pytest.approx(41.0)
 
 

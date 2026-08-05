@@ -13,7 +13,7 @@ from replica_inpc.dominio.correspondencia_canastas import (
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import RANGOS_CANASTAS, TIPO_INPC, VersionCanasta
+from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 
@@ -30,11 +30,15 @@ def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
 
     Por cada junta `e` presente y que separe dos versiones presentes, guarda los valores
     del tramo viejo en `e` (que el empalme le asigna al tramo anterior). Devuelve `None`
-    si no hay junta activa (resultado de un solo tramo o sin enlace). Para el INPC guarda
-    `indice_replicado_old` (= INPC_visible(e)); para clasificación lo deja NaN — no se
-    guarda INPC_visible en la frontera de clasificación (ver docs/diseño §11.31).
+    si no hay junta activa (resultado de un solo tramo o sin enlace).
+
+    `indice_replicado_old` es el visible del tramo viejo en `e`, siempre por índice: para
+    el INPC es `INPC_visible(e)`; para clasificación es `I_K_visible(e)` de cada categoría.
+    Lo que la frontera de clasificación **no** guarda es `INPC_visible(e)` — ese vive solo
+    en la del INPC, porque `rebasar(clasificacion)` no conoce `k_INPC` (ver
+    docs/diseño §11.29). El motor de incidencias necesita `I_K_visible(e)` para derivar el
+    ancla del lado nuevo de la junta sin suponer que vale 100.
     """
-    es_inpc = str(df["tipo"].iloc[0]) == TIPO_INPC
     tiene_inc = "indice_incidencia" in df.columns
     periodos = set(df.index.get_level_values("periodo"))
     versiones = {int(v) for v in df["version"].unique()}
@@ -55,9 +59,7 @@ def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
                     "version_old": int(ver),
                     "version_new": int(v_new),
                     "indice_incidencia_old": inc,
-                    "indice_replicado_old": (
-                        float(rep) if es_inpc and pd.notna(rep) else float("nan")
-                    ),
+                    "indice_replicado_old": float(rep) if pd.notna(rep) else float("nan"),
                 }
             )
     if not filas:
@@ -339,12 +341,12 @@ def rebasar(
             stacklevel=2,
         )
 
-    # Reescalar la frontera: el campo visible (`indice_replicado_old` = INPC_visible(e))
-    # se multiplica por el mismo factor por índice, solo para índices con factor
-    # calculado — los huérfanos quedan intactos (mismo criterio que `indice_replicado`,
-    # nunca se pisan con NaN). `indice_incidencia_old` queda intacto (es de-encadenado,
-    # invariante al rebase). En la frontera de clasificación `indice_replicado_old` es
-    # NaN, así que no se toca nada visible ahí.
+    # Reescalar la frontera: el campo visible (`indice_replicado_old`) se multiplica por el
+    # mismo factor por índice, solo para índices con factor calculado — los huérfanos quedan
+    # intactos (mismo criterio que `indice_replicado`, nunca se pisan con NaN).
+    # `indice_incidencia_old` queda intacto (es de-encadenado, invariante al rebase). El
+    # reescalado por índice aplica igual al INPC y a cada categoría: en la frontera de
+    # clasificación cada `I_K_visible(e)` recibe su propio `k_K`.
     frontera_out = resultado._frontera
     if frontera_out is not None:
         frontera_out = frontera_out.copy()
