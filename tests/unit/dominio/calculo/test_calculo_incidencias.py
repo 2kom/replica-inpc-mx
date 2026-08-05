@@ -1223,3 +1223,52 @@ def test_cross_ancla_faltante_no_lanza_cae_a_visible() -> None:
     assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_sin_frontera"
     assert pd.notna(res.resultado.largo.at[(ago, "A"), "incidencia_pp"])
 
+
+# -- Guardias de Fase 1 en _construir_resultado ---------------------------------
+#
+# Los tres casos de la regla 3 NO comparten salida esperada: el dato faltante deja la
+# fila no computable sin excepción; el cero en el divisor y el no finito lanzan; y el
+# overflow lo atrapa la guardia del resultado, que corre después de la sobrescritura de
+# Fase 2A (un `inf` provisional de Fase 1 que la fórmula exacta sustituye no debe
+# rechazarse).
+
+
+def _inpc_f1(dic: float) -> ResultadoIndice:
+    return _indice({"INPC": [(_DIC18, dic), (_ENE, 102.0)]}, tipo="INPC", id_corrida="ci")
+
+
+def _clas_f1(a_ene: float | None) -> ResultadoIndice:
+    return _indice(
+        {"A": [(_DIC18, 100.0), (_ENE, a_ene)], "B": [(_DIC18, 100.0), (_ENE, 90.0)]},
+        tipo="INFLACION COMPONENTE",
+        id_corrida="cc",
+    )
+
+
+def test_fase1_operando_faltante_no_lanza_deja_fila_no_computable() -> None:
+    # 'A' sin dato en ENE: fila no computable, sin excepción. 'B' sigue válida — si
+    # desaparecieran todas, el cálculo lanzaría "sin genéricos computables" y el test
+    # no demostraría la semántica de ausencia.
+    res = incidencia_periodica(_inpc_f1(100.0), _clas_f1(None), _canastas(), "mensual")
+    largo = res.resultado.largo
+    assert (_ENE, "A") not in largo.index
+    assert cast(float, largo.at[(_ENE, "B"), "incidencia_pp"]) == pytest.approx(
+        40 * (90.0 - 100.0) / 100.0
+    )
+    assert res.reporte.at[(_ENE, "A"), "estado_calculo"] == "sin_datos"
+
+
+@pytest.mark.parametrize(
+    ("caso", "dic_inpc", "a_ene", "patron"),
+    [
+        ("divisor cero", 0.0, 110.0, "INPC base = 0"),
+        ("operando no finito", 100.0, float("inf"), "no finito"),
+        ("overflow del resultado", 100.0, 1e308, "overflow"),
+    ],
+)
+def test_fase1_dato_invalido_lanza(
+    caso: str, dic_inpc: float, a_ene: float, patron: str
+) -> None:
+    _ = caso
+    with pytest.raises(InvarianteViolado, match=patron):
+        incidencia_periodica(_inpc_f1(dic_inpc), _clas_f1(a_ene), _canastas(), "mensual")

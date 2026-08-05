@@ -694,10 +694,47 @@ def _construir_resultado(
                 inc_vals[pos] = valor
         incidencia_pp = pd.Series(inc_vals, index=df_emitir.index)
 
+    # Guardia de los operandos de Fase 1, restringida a las filas cuyo valor final SÍ sale
+    # de Fase 1. Una fila `cross_segmentado` puede traer un operando visible provisional
+    # inválido que la fórmula exacta ya sustituyó — rechazarla ahí sería un falso positivo.
+    # Mismo contrato que `variaciones.py`: un operando ausente deja la fila no computable
+    # (sin excepción); finitud se exige a todos y `!= 0` solo al divisor.
+    usa_fase1 = pd.Series(metodo != "cross_segmentado", index=df_emitir.index)
+    computable_fase1 = (
+        usa_fase1
+        & valores_t.notna()
+        & base_clas.notna()
+        & pond_serie.notna()
+        & inpc_base_serie.notna()
+    )
+    invalido = computable_fase1 & (
+        ~np.isfinite(valores_t.astype(float))
+        | ~np.isfinite(base_clas.astype(float))
+        | ~np.isfinite(pond_serie.astype(float))
+        | ~np.isfinite(inpc_base_serie.astype(float))
+        | (inpc_base_serie == 0)
+    )
+    if invalido.any():
+        raise InvarianteViolado(
+            f"incidencias: operando no finito o INPC base = 0 (divisor) en "
+            f"{int(invalido.sum())} fila(s) computable(s); "
+            f"ejemplo {df_emitir.index[invalido][0]}."
+        )
+
     estado_clas_base = pd.Series(
         df_lookup["estado_calculo"].reindex(base_idx).to_numpy(), index=df_emitir.index
     )
     computable = incidencia_pp.notna()
+    # Guardia del resultado: sobre TODAS las filas computables y DESPUÉS de la
+    # sobrescritura de Fase 2A. Cierra el overflow que pasa el gate de entrada (`1e308`
+    # por un ponderador desborda al multiplicar) y que `notna()` no atrapa.
+    resultado_invalido = computable & ~np.isfinite(incidencia_pp.astype(float))
+    if resultado_invalido.any():
+        raise InvarianteViolado(
+            f"incidencias: incidencia_pp no finita (overflow) en "
+            f"{int(resultado_invalido.sum())} fila(s) computable(s); "
+            f"ejemplo {df_emitir.index[resultado_invalido][0]}."
+        )
     derivado = pd.Series(
         [
             "parcial" if "parcial" in (et, eb, ie) else "ok"
