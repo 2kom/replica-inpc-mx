@@ -15,11 +15,13 @@ del otro.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, TypeAlias, cast
 
 import pandas as pd
 import pytest
 
+import replica_inpc as rep
 from replica_inpc.dominio.calculo.incidencias import (
     _es_content_exact,
     _segmentos_entre,
@@ -172,16 +174,16 @@ def _res_inc(
     """ResultadoIndice con indice_replicado e indice_incidencia separados (1 versión)."""
     rows = []
     for indice in data_rep:
-        for (periodo, rep), (_, inc) in zip(data_rep[indice], data_inc[indice]):
+        for (periodo, replicado), (_, inc) in zip(data_rep[indice], data_inc[indice]):
             rows.append(
                 {
                     "periodo": periodo,
                     "indice": indice,
                     "version": version,
                     "tipo": tipo,
-                    "indice_replicado": float("nan") if rep is None else float(rep),
+                    "indice_replicado": float("nan") if replicado is None else float(replicado),
                     "indice_incidencia": float("nan") if inc is None else float(inc),
-                    "estado_calculo": "ok" if rep is not None else "sin_datos",
+                    "estado_calculo": "ok" if replicado is not None else "sin_datos",
                     "motivo_error": None,
                 }
             )
@@ -1266,9 +1268,111 @@ def test_fase1_operando_faltante_no_lanza_deja_fila_no_computable() -> None:
         ("overflow del resultado", 100.0, 1e308, "overflow"),
     ],
 )
-def test_fase1_dato_invalido_lanza(
-    caso: str, dic_inpc: float, a_ene: float, patron: str
-) -> None:
+def test_fase1_dato_invalido_lanza(caso: str, dic_inpc: float, a_ene: float, patron: str) -> None:
     _ = caso
     with pytest.raises(InvarianteViolado, match=patron):
         incidencia_periodica(_inpc_f1(dic_inpc), _clas_f1(a_ene), _canastas(), "mensual")
+
+
+# -- End-to-end contra dato real y contra la publicación oficial ----------------
+
+_DATA_INPUTS = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
+
+# Incidencia ANUAL publicada por INEGI para marzo de 2014, en puntos porcentuales.
+# Comunicado de prensa del 9 de abril de 2014, cuadro "INPC, SUBYACENTE Y NO SUBYACENTE",
+# columna "Incidencia anual 1/":
+# https://www.inegi.org.mx/contenidos/saladeprensa/boletines/2014/inpc_2q/inpc_2q2014_04.pdf
+#
+# Marzo de 2014 contra marzo de 2013 CRUZA la junta de canasta de la segunda quincena de
+# marzo de 2013, así que valida el camino cross-canasta de T1 — y valida el reparto entre
+# categorías, no solo que el total cierre. Es la única referencia externa que existe para
+# ese caso: INEGI dejó de publicar la incidencia anual en los 12 meses posteriores a un
+# cambio de canasta a partir de 2018.
+_OFICIAL_MAR_2014_COMPONENTE = {"subyacente": 2.204, "no subyacente": 1.554}
+_OFICIAL_MAR_2014_SUBCOMPONENTE = {
+    "mercancias": 1.002,
+    "servicios": 1.202,
+    "agropecuarios": 0.134,
+    "energeticos y tarifas autorizadas por el gobierno": 1.420,
+}
+
+
+def _historia_mensual(tipo: str) -> ResultadoIndice:
+    """Cadena completa 2010-2024, mensual. Rebasa 2010-2013 antes de empalmar con 2018."""
+    can = {
+        v: rep.cargar_canasta(str(_DATA_INPUTS / "pdf" / f"ponderadores_{v}.csv"), v)
+        for v in (2010, 2013, 2018, 2024)
+    }
+    ser = {
+        v: rep.cargar_serie(str(_DATA_INPUTS / f"series{s}_horizontal_metadata.CSV"), v)
+        for v, s in ((2010, 2010), (2013, 2010), (2018, 2018), (2024, 2024))
+    }
+    r10 = rep.calcular_indice(can[2010], ser[2010], tipo)
+    r13 = rep.calcular_indice(can[2013], ser[2013], tipo, r10)
+    r18 = rep.calcular_indice(can[2018], ser[2018], tipo)
+    r24 = rep.calcular_indice(can[2024], ser[2024], tipo, r18)
+    # `rebasar` de dominio espera un Periodo; el parseo de "2Q Jul 2018" vive en la capa api.
+    viejo = rebasar(empalmar([r10, r13]), PeriodoQuincenal(2018, 7, 2))
+    return a_mensual(empalmar([viejo, empalmar([r18, r24])]))
+
+
+def _canastas_reales() -> dict[int, CanastaCanonica]:
+    return {
+        v: rep.cargar_canasta(str(_DATA_INPUTS / "pdf" / f"ponderadores_{v}.csv"), v)
+        for v in (2010, 2013, 2018, 2024)
+    }
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize(
+    ("tipo", "oficial"),
+    [
+        ("inflacion componente", _OFICIAL_MAR_2014_COMPONENTE),
+        ("inflacion subcomponente", _OFICIAL_MAR_2014_SUBCOMPONENTE),
+    ],
+)
+def test_incidencia_anual_mar_2014_contra_publicacion_oficial(
+    tipo: str, oficial: dict[str, float]
+) -> None:
+    # Referencia EXTERNA → tolerancia del proyecto (0.009 pp), no el régimen interno.
+    inpc_m = _historia_mensual("inpc")
+    clas_m = _historia_mensual(tipo)
+    inc = incidencia_periodica(inpc_m, clas_m, _canastas_reales(), "anual")
+    largo = inc.resultado.largo
+    mar_2014 = PeriodoMensual(2014, 3)
+    for categoria, esperado in oficial.items():
+        obtenido = cast(float, largo.at[(mar_2014, categoria), "incidencia_pp"])
+        assert abs(obtenido - esperado) <= 0.009, (
+            f"{categoria}: replicado {obtenido:.6f} vs oficial {esperado} "
+            f"(error {abs(obtenido - esperado):.6f} pp)"
+        )
+    assert inc.reporte.at[(mar_2014, next(iter(oficial))), "metodo_incidencia"] == (
+        "cross_segmentado"
+    )
+
+
+@pytest.mark.requires_data
+@pytest.mark.parametrize("tipo", ["inflacion componente", "inflacion subcomponente"])
+def test_incidencia_anual_es_aditiva_en_toda_la_historia(tipo: str) -> None:
+    # Aditividad = consistencia aritmética interna → régimen estricto, no 0.009.
+    # Cubre las 3 juntas de canasta: los 36 periodos anuales que las cruzan salen
+    # `cross_segmentado`, ninguno cae al visible.
+    inpc_m = _historia_mensual("inpc")
+    clas_m = _historia_mensual(tipo)
+    inc = incidencia_periodica(inpc_m, clas_m, _canastas_reales(), "anual")
+    var = variacion_periodica(inpc_m, "anual")
+    largo, vdf = inc.resultado.largo, var.resultado.largo
+    categorias = sorted(set(largo.index.get_level_values("indice")))
+
+    periodos_cross = set()
+    for periodo in sorted(set(largo.index.get_level_values("periodo"))):
+        suma = sum(cast(float, largo.at[(periodo, c), "incidencia_pp"]) for c in categorias)
+        esperado = cast(float, vdf.at[(periodo, "INPC"), "variacion_pp"])
+        assert abs(suma - esperado) <= 1e-12, f"{periodo}: residuo {abs(suma - esperado):.3e}"
+        if inc.reporte.at[(periodo, categorias[0]), "metodo_incidencia"] == "cross_segmentado":
+            periodos_cross.add(periodo)
+
+    # 12 periodos por junta x 3 juntas. `metodo_incidencia` vive por (periodo, categoría),
+    # así que el conteo se hace sobre periodos únicos, no sobre filas del reporte.
+    assert len(periodos_cross) == 36
+    assert "cross_visible" not in set(inc.reporte["metodo_incidencia"])

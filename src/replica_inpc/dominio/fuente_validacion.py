@@ -64,6 +64,7 @@ class FuenteValidacion(Protocol):
     ) -> dict[str, dict[PeriodoMensual, float | None]]:
         """Series de incidencia publicadas por INEGI.
 
-        Solo mensuales — INEGI no publica incidencias quincenales.
+        Solo mensuales: la fuente BIE no expone incidencias quincenales. INEGI sí las
+        publica, pero en sus comunicados, no como serie del BIE.
         """
         ...

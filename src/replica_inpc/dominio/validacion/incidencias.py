@@ -33,7 +33,8 @@ def _tipo_incidencia(clase: str) -> str:
     if clase not in _MAPA_TIPO_INCIDENCIA:
         raise ErrorConfiguracion(
             f"clase_incidencia '{clase}' no es comparable contra INEGI; "
-            f"INEGI solo publica incidencias periódicas mensuales."
+            f"la fuente BIE y el adaptador actual solo soportan incidencias "
+            f"periódicas mensuales."
         )
     return _MAPA_TIPO_INCIDENCIA[clase]
 

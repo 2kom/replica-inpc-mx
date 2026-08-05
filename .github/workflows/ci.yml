@@ -40,7 +40,7 @@ jobs:
         run: mypy src/ --ignore-missing-imports
 
       - name: Tests
-        run: pytest -m "not requires_data"
+        run: pytest -m "not requires_data and not requires_api"
 
   all-green:
     if: always()

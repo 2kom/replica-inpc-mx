@@ -82,7 +82,9 @@ def consultar_incidencia(
 ) -> pd.DataFrame:
     """Devuelve el histórico de incidencias publicadas por INEGI para `tipo`.
 
-    INEGI solo publica incidencias mensuales de tipo `"periodica"`.
+    La fuente BIE y el adaptador actual solo soportan incidencias mensuales de
+    tipo `"periodica"`. INEGI sí publica incidencias quincenales y anuales, pero
+    en sus comunicados, no en el BIE.
     Ver: docs/diseño.md §6.8.
     """
     tipo = tipo.upper()

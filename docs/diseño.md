@@ -1610,7 +1610,7 @@ validar_incidencias(
 ) -> ValidacionIncidencia
 ```
 
-Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable; INEGI únicamente publica incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
+Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable; la fuente BIE y el adaptador actual solo soportan incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
 
 ---
 
@@ -2493,7 +2493,7 @@ def validar_incidencia(resultado: ResultadoIncidencia) -> ValidacionIncidencia:
 | API INEGI no responde / HTTP error | `FuenteNoDisponible` |
 | respuesta INEGI con formato inesperado | `RespuestaInvalida` |
 
-INEGI únicamente publica incidencias periódicas mensuales; cualquier otra clase no tiene contraparte comparable.
+La fuente BIE y el adaptador actual solo soportan incidencias periódicas mensuales; cualquier otra clase no tiene contraparte comparable por esa vía.
 
 Tolerancia aplicada: `config.tolerancia_derivados` (default `0.009` pp).
 
@@ -2671,7 +2671,7 @@ def consultar_incidencia(
 | --- | --- | --- |
 | `tipo` | `str` | se normaliza con `tipo.upper()`; `"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"` |
 
-INEGI solo publica incidencias mensuales y de tipo `"periodica"` — no hay parámetros adicionales.
+El BIE solo expone incidencias mensuales y de tipo `"periodica"` — no hay parámetros adicionales.
 
 Devuelve DataFrame indexado por `PeriodoMensual`, columnas = nombres según `tipo` (`"INPC"`, `"subyacente"`, etc.). Rango completo desde el primer hasta el último periodo publicado; gaps internos visibles como `NaN`.
 
@@ -2848,7 +2848,7 @@ Series de variación publicadas por INEGI. Frecuencias soportadas: quincenal y m
 
 **obtener_incidencias**
 
-Series de incidencia publicadas por INEGI. Solo mensual — INEGI no publica incidencias quincenales. `tipo_incidencia="periodica"` es el único tipo publicado.
+Series de incidencia publicadas por INEGI en el BIE. Solo mensual: **el BIE no expone incidencias quincenales** — el árbol bajo *Quincenal* no tiene nodo *Incidencias* y el sondeo de la familia de indicadores (909276-909299) solo devuelve las 7 mensuales conocidas. INEGI **sí** publica incidencia quincenal y anual, pero en sus comunicados, no como serie del BIE. `tipo_incidencia="periodica"` es el único tipo disponible por esta vía.
 
 | Condición | Lanza |
 | --- | --- |

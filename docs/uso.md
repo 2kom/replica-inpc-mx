@@ -356,7 +356,7 @@ val_ind.df          # DataFrame con diferencias por (periodo, índice)
 vars_m   = rep.variacion_periodica(inpc, frecuencia="mensual")
 val_var  = rep.validar_variacion(vars_m)
 
-# Validar incidencias (INEGI solo publica periódica mensual)
+# Validar incidencias (el BIE solo expone periódica mensual)
 inc_m    = rep.incidencia_periodica(inpc, comp, canastas, frecuencia="mensual")
 val_inc  = rep.validar_incidencia(inc_m)
 ```
