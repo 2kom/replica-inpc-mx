@@ -1,10 +1,16 @@
-"""Contrato básico de incidencia_periodica/_acumulada_anual/_desde, y Fase 1+2A:
-indice_incidencia interno + selección por fila + segmentación cross-canasta exacta.
+"""Contrato de incidencia_periodica/_acumulada_anual/_desde: indice_incidencia interno,
+selección de escala por fila, y segmentación cross-canasta exacta.
 
-Fase 1: los calculadores pueblan indice_incidencia (= i_tramo, antes de factor_h);
-a_mensual lo promedia; rebasar lo deja intacto; empalmar lo preserva; las incidencias
-lo usan within-canasta (exacto, rebase-invariante) y usan el visible en cross-canasta
-(detectable por version_t != version_lag en .reporte, sin columna dedicada).
+Los calculadores pueblan indice_incidencia (= i_tramo, antes de factor_h); a_mensual lo
+promedia; rebasar lo deja intacto; empalmar lo preserva. Las incidencias lo usan
+within-canasta (exacto, rebase-invariante) y, cruzando canasta, descomponen por segmentos
+derivando el ancla del lado nuevo de cada junta por continuidad del visible — exacto para
+las 3 juntas. Los tipos no content-exact caen al visible (cross_visible).
+
+Varios fixtures dan a cada categoría su PROPIO factor de encadenamiento, distinto del
+factor del INPC. No es cosmético: con factores uniformes no hay no-aditividad que
+corregir, el visible coincide con el segmentado y el test deja de distinguir un método
+del otro.
 """
 
 from __future__ import annotations
@@ -204,13 +210,19 @@ def _res_multi(
             "indice_replicado": rep,
             "indice_incidencia": inc,
             "estado_calculo": est,
+            "motivo_error": None,  # `a_mensual` la exige al reconstruir el df mensual
         }
         for p, i, v, rep, inc, est in rows
     ]
     df = pd.DataFrame(filas).set_index(["periodo", "indice"])
     versiones = {v for _, _, v, _, _, _ in rows}
     manifiesto = [ManifestCalculo(v, tipo, "LaspeyresDirecto") for v in versiones]  # type: ignore[arg-type]
-    return ResultadoIndice(df, manifiesto, pd.DataFrame(), pd.DataFrame())
+    # `a_mensual` reconstruye el reporte a partir de este, así que necesita el MultiIndex.
+    reporte = pd.DataFrame(
+        {"version": df["version"].to_numpy(), "estado_calculo": df["estado_calculo"].to_numpy()},
+        index=df.index,
+    )
+    return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
 
 def _canasta_t2() -> CanastaCanonica:
@@ -303,12 +315,23 @@ def _inpc_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndi
 
 
 def _clas_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
-    """Componente A/B consistente con `_inpc_cross_2seg` (w_A=60, w_B=40)."""
+    """Componente A/B consistente con `_inpc_cross_2seg` (w_A=60, w_B=40).
+
+    Cada categoría lleva su PROPIO factor de encadenamiento, como en un T2 real
+    (`factor_h_K = referencia_empalme_K / 100`, ver `laspeyres_encadenado.py`):
+    `factor_A = 120/100 = 1.2`, `factor_B = 80/100 = 0.8`. Usar el factor del INPC
+    (`104/100 = 1.04`) para ambas volvería el fixture degenerado — con `s_K = s_INPC` no
+    hay no-aditividad que corregir y el visible coincidiría con el segmentado, así que el
+    test dejaría de distinguir un método del otro.
+
+    J es Laspeyres-consistente con el INPC en los tres periodos:
+    `(60·110 + 40·90)/100 = 102`, `(60·120 + 40·80)/100 = 104`, `(60·105 + 40·95)/100 = 101`.
+    """
     filas = [
         (b, "A", 2018, 110.0, 110.0, "ok"),
         (b, "B", 2018, 90.0, 90.0, "ok"),
-        (t, "A", 2024, 109.2, 105.0, "ok"),  # 105 * 1.04
-        (t, "B", 2024, 98.8, 95.0, "ok"),  # 95 * 1.04
+        (t, "A", 2024, 126.0, 105.0, "ok"),  # 105 * 1.2
+        (t, "B", 2024, 76.0, 95.0, "ok"),  # 95 * 0.8
     ]
     if e is not None:
         filas[2:2] = [(e, "A", 2018, 120.0, 120.0, "ok"), (e, "B", 2018, 80.0, 80.0, "ok")]
@@ -775,8 +798,8 @@ def test_cross_segmentado_mensual_con_frontera() -> None:
         _clas_cross_2seg(jun, None, ago),
         _fr(
             [
-                (_E24, "A", 2018, 2024, 120.0, float("nan")),
-                (_E24, "B", 2018, 2024, 80.0, float("nan")),
+                (_E24, "A", 2018, 2024, 120.0, 120.0),
+                (_E24, "B", 2018, 2024, 80.0, 80.0),
             ]
         ),
     )
@@ -799,9 +822,9 @@ def test_cross_mensual_sin_frontera_emite_visible() -> None:
     res = incidencia_desde(inpc, clas, canastas, desde=jun, hasta=ago)
     largo = res.resultado.largo
     assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_sin_frontera"
-    # valor visible (no segmentado): 60*(109.2-110)/102, NO 912/102
+    # valor visible (no segmentado): 60*(126-110)/102, NO 912/102
     assert cast(float, largo.at[(ago, "A"), "incidencia_pp"]) == pytest.approx(
-        60 * (109.2 - 110) / 102
+        60 * (126 - 110) / 102
     )
 
 
@@ -814,8 +837,8 @@ def test_rebase_mensual_preserva_cross_segmentado() -> None:
         _clas_cross_2seg(jun, None, ago),
         _fr(
             [
-                (_E24, "A", 2018, 2024, 120.0, float("nan")),
-                (_E24, "B", 2018, 2024, 80.0, float("nan")),
+                (_E24, "A", 2018, 2024, 120.0, 120.0),
+                (_E24, "B", 2018, 2024, 80.0, 80.0),
             ]
         ),
     )
@@ -832,9 +855,27 @@ def test_rebase_mensual_preserva_cross_segmentado() -> None:
     assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_segmentado"
 
 
-def test_cross_tres_segmentos_aditivo() -> None:
-    # Rango 2013 → 2024 cruza 2 juntas (2QJul2018, 2QJul2024): 3 segmentos, Σ_m S_m.
-    # El tramo 2013 es el PRIMER segmento (lado viejo, J de dato) → exacto, NO cross_t1_diferido.
+def test_cross_tres_segmentos_factores_distintos_por_categoria() -> None:
+    """Rango 2013 → 2024 cruza 2 juntas (2QJul2018, 2QJul2024): 3 segmentos.
+
+    Cada categoría lleva su PROPIO factor de encadenamiento en cada tramo, distinto del
+    factor del INPC — es lo que hace que el visible no sea aditivo y que la segmentación
+    sobre `J` sea necesaria. Con factores uniformes el test no distinguiría un método
+    del otro.
+
+                        INPC        A           B        w: A=60, B=40
+      b        (2013)   102/102     110/110     90/90     (visible = J)
+      e1 junta (viejo)  104/104     120/120     80/80
+      e1       (2018)   J_new = 100 en las 3   (serie 2018 base 2QJul2018 = 100)
+      f^(2018)          1.04        1.2         0.8       ← distintos
+      e2 junta (viejo)  110.24/106  156/130     56/70
+      e2       (2024)   J_new = 100 en las 3   (T2 ancla i_tramo en 100)
+      f^(2024)          1.1024      1.56        0.56      ← distintos
+      t        (2024)   111.3424/101 163.8/105  53.2/95
+
+    J es Laspeyres-consistente en cada tramo: (60·110+40·90)/100 = 102,
+    (60·120+40·80)/100 = 104, (60·130+40·70)/100 = 106, (60·105+40·95)/100 = 101.
+    """
     b = PeriodoQuincenal(2018, 1, 2)  # 2013
     e1 = PeriodoQuincenal(2018, 7, 2)  # junta 2013→2018
     e2 = PeriodoQuincenal(2024, 7, 2)  # junta 2018→2024
@@ -843,8 +884,8 @@ def test_cross_tres_segmentos_aditivo() -> None:
         [
             (b, "INPC", 2013, 102.0, 102.0, "ok"),
             (e1, "INPC", 2013, 104.0, 104.0, "ok"),
-            (e2, "INPC", 2018, 108.16, 104.0, "ok"),  # vis = 104 * 1.04
-            (t, "INPC", 2024, 109.2416, 101.0, "ok"),  # vis = 101 * 1.0816
+            (e2, "INPC", 2018, 110.24, 106.0, "ok"),  # f = 104/100 = 1.04
+            (t, "INPC", 2024, 111.3424, 101.0, "ok"),  # f = 110.24/100 = 1.1024
         ],
         tipo="INPC",
         id_corrida="ci",
@@ -855,10 +896,10 @@ def test_cross_tres_segmentos_aditivo() -> None:
             (b, "B", 2013, 90.0, 90.0, "ok"),
             (e1, "A", 2013, 120.0, 120.0, "ok"),
             (e1, "B", 2013, 80.0, 80.0, "ok"),
-            (e2, "A", 2018, 124.8, 120.0, "ok"),  # 120 * 1.04
-            (e2, "B", 2018, 83.2, 80.0, "ok"),
-            (t, "A", 2024, 113.568, 105.0, "ok"),  # 105 * 1.0816
-            (t, "B", 2024, 102.752, 95.0, "ok"),
+            (e2, "A", 2018, 156.0, 130.0, "ok"),  # f_A = 120/100 = 1.2
+            (e2, "B", 2018, 56.0, 70.0, "ok"),  # f_B = 80/100 = 0.8
+            (t, "A", 2024, 163.8, 105.0, "ok"),  # f_A = 156/100 = 1.56
+            (t, "B", 2024, 53.2, 95.0, "ok"),  # f_B = 56/100 = 0.56
         ],
         tipo="INFLACION COMPONENTE",
         id_corrida="cc",
@@ -866,51 +907,116 @@ def test_cross_tres_segmentos_aditivo() -> None:
     canastas = {2013: _canasta_comp(2013), 2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
     res = incidencia_desde(inpc, clas, canastas, desde=b, hasta=t)
     largo = res.resultado.largo
-    suma = cast(float, largo.at[(t, "A"), "incidencia_pp"]) + cast(
-        float, largo.at[(t, "B"), "incidencia_pp"]
-    )
-    var = (109.2416 / 102 - 1) * 100
-    assert suma == pytest.approx(var, abs=1e-9)
-    # 2013 es el primer segmento (lado viejo, J de dato) → exacto, no aprox.
+    inc_a = cast(float, largo.at[(t, "A"), "incidencia_pp"])
+    inc_b = cast(float, largo.at[(t, "B"), "incidencia_pp"])
+    # A = [1·60·(120−110) + 1.04·60·(130−100) + 1.1024·60·(105−100)] / 102
+    assert inc_a == pytest.approx((600 + 1.04 * 1800 + 1.1024 * 300) / 102)
+    # B = [1·40·(80−90) + 1.04·40·(70−100) + 1.1024·40·(95−100)] / 102
+    assert inc_b == pytest.approx((-400 - 1.04 * 1200 - 1.1024 * 200) / 102)
+    assert inc_a + inc_b == pytest.approx((111.3424 / 102 - 1) * 100, abs=1e-12)
     assert res.reporte.at[(t, "A"), "metodo_incidencia"] == "cross_segmentado"
 
 
-def test_cross_t1_diferido_cruza_2010_2013() -> None:
-    # Rango 2010 → 2013 cruza la junta 2Q Mar 2013: el tramo 2013 (T1) es el LADO NUEVO,
-    # pero su i_tramo NO ancla en 100 (el contrato J(e)=100 es solo de directo/T2). La
-    # segmentación no aplica → cae al visible (Fase 1) marcado cross_t1_diferido. Exacto → 2B.
-    b = PeriodoQuincenal(2013, 1, 2)  # 2010, pre-junta
-    e = PeriodoQuincenal(2013, 3, 2)  # junta 2010→2013 (la posee 2010)
-    t = PeriodoQuincenal(2013, 4, 1)  # 2013, post-junta
-    inpc = _res_multi(
-        [
-            (b, "INPC", 2010, 102.0, 102.0, "ok"),
-            (e, "INPC", 2010, 104.0, 104.0, "ok"),
-            (t, "INPC", 2013, 105.04, 101.0, "ok"),
-        ],
-        tipo="INPC",
-        id_corrida="ci",
-    )
-    clas = _res_multi(
-        [
-            (b, "A", 2010, 110.0, 110.0, "ok"),
-            (b, "B", 2010, 90.0, 90.0, "ok"),
-            (e, "A", 2010, 120.0, 120.0, "ok"),
-            (e, "B", 2010, 80.0, 80.0, "ok"),
-            (t, "A", 2013, 109.2, 105.0, "ok"),
-            (t, "B", 2013, 98.8, 95.0, "ok"),
-        ],
-        tipo="INFLACION COMPONENTE",
-        id_corrida="cc",
-    )
+# -- T1 (junta 2010→2013): el lado nuevo NO ancla en 100 -----------------------
+#
+# Escenario con TRES factores de encadenamiento distintos, uno por serie — sin eso el
+# fixture es degenerado: si `s_K == s_INPC` no hay no-aditividad que corregir, el visible
+# coincide con el segmentado y el test no distingue un método del otro.
+#
+#                       INPC        A         B
+#   b, visible = J      102        110        90      (tramo 2010, directo)
+#   junta, visible      104        120        80      (lado viejo, lo posee 2010)
+#   junta, J lado nuevo 108        120        90      (tramo 2013, T1: NO es 100)
+#   t, J                109.08     125        85.2
+#   t, visible          105.04     125        75.7333…
+#   factor_h            104/108     1        80/90
+#
+# Laspeyres consistente en los 4 renglones de J con w_A=60, w_B=40:
+#   (60·110+40·90)/100 = 102   (60·120+40·80)/100 = 104
+#   (60·120+40·90)/100 = 108   (60·125+40·85.2)/100 = 109.08
+_T1_B = PeriodoQuincenal(2013, 1, 2)  # 2010, pre-junta
+_T1_E = PeriodoQuincenal(2013, 3, 2)  # junta 2010→2013 (la posee 2010)
+_T1_T = PeriodoQuincenal(2013, 4, 1)  # 2013, post-junta
+_T1_VIS_B = 85.2 * 80 / 90  # visible de B en t = 75.7333…
+
+# Valores derivados a mano (ver derivación en el docstring del test):
+#   A = 600/102 + (26/27)·60·5/102      = 24000/2754
+#   B = -400/102 + (26/27)·40·(-4.8)/102 = -15792/2754
+_T1_INC_A = 24000 / 2754
+_T1_INC_B = -15792 / 2754
+
+
+def _t1_inpc(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
+    filas = [(b, "INPC", 2010, 102.0, 102.0, "ok"), (t, "INPC", 2013, 105.04, 109.08, "ok")]
+    if e is not None:
+        filas.insert(1, (e, "INPC", 2010, 104.0, 104.0, "ok"))
+    return _res_multi(filas, tipo="INPC", id_corrida="ci")
+
+
+def _t1_clas(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndice:
+    filas = [
+        (b, "A", 2010, 110.0, 110.0, "ok"),
+        (b, "B", 2010, 90.0, 90.0, "ok"),
+        (t, "A", 2013, 125.0, 125.0, "ok"),
+        (t, "B", 2013, _T1_VIS_B, 85.2, "ok"),
+    ]
+    if e is not None:
+        filas[2:2] = [(e, "A", 2010, 120.0, 120.0, "ok"), (e, "B", 2010, 80.0, 80.0, "ok")]
+    return _res_multi(filas, tipo="INFLACION COMPONENTE", id_corrida="cc")
+
+
+def test_cross_t1_quincenal_es_exacto() -> None:
+    """Junta 2010→2013 (T1): el lado nuevo ancla en 108, no en 100.
+
+    El ancla se deriva del visible, continuo en el enlace: `J_K(e)_new = I_K_vis(e)/f_K`
+    → A: `120/1 = 120`; B: `80/(80/90) = 90`. Ambos coinciden con la columna "J lado
+    nuevo" de arriba, que es justo lo que el contrato `=100` daba mal.
+
+    Segmento 1 (2010, `f_INPC = 104/104 = 1`):
+        A: 1·60·(120−110)/102 = 600/102     B: 1·40·(80−90)/102 = −400/102
+    Segmento 2 (2013, `f_INPC = 105.04/109.08 = 26/27`):
+        A: (26/27)·60·(125−120)/102          B: (26/27)·40·(85.2−90)/102
+    """
+    inpc = _t1_inpc(_T1_B, _T1_E, _T1_T)
+    clas = _t1_clas(_T1_B, _T1_E, _T1_T)
     canastas = {2010: _canasta_comp(2010), 2013: _canasta_comp(2013)}
-    res = incidencia_desde(inpc, clas, canastas, desde=b, hasta=t)
+    res = incidencia_desde(inpc, clas, canastas, desde=_T1_B, hasta=_T1_T)
     largo = res.resultado.largo
-    assert res.reporte.at[(t, "A"), "metodo_incidencia"] == "cross_t1_diferido"
-    # emite el VISIBLE (Fase 1), NO el segmentado: 60*(109.2-110)/102 con ponderador base 2010.
-    assert cast(float, largo.at[(t, "A"), "incidencia_pp"]) == pytest.approx(
-        60 * (109.2 - 110) / 102
-    )
+    inc_a = cast(float, largo.at[(_T1_T, "A"), "incidencia_pp"])
+    inc_b = cast(float, largo.at[(_T1_T, "B"), "incidencia_pp"])
+    # Los valores van ANTES del marcador a propósito: restaurar el corto-circuito o los
+    # literales 100.0 debe romper una aserción numérica, no solo un nombre de método.
+    assert inc_a == pytest.approx(_T1_INC_A)
+    assert inc_b == pytest.approx(_T1_INC_B)
+    # Aditividad: Σ incidencias == variación del INPC visible. Régimen interno → 1e-12.
+    assert inc_a + inc_b == pytest.approx((105.04 / 102 - 1) * 100, abs=1e-12)
+    assert res.reporte.at[(_T1_T, "A"), "metodo_incidencia"] == "cross_segmentado"
+
+
+def test_cross_t1_mensual_frontera_de_a_mensual_es_exacto() -> None:
+    """Mismo escenario T1, mensual, con `_frontera` construida por `a_mensual()` real.
+
+    No se inyecta la frontera a mano: si se inyectara, restaurar el gate `es_inpc` de
+    `conversion._construir_frontera` no rompería ningún número y el test no protegería
+    nada. Al construirla de verdad, `I_K_visible(e)` viene del camino de producción.
+    """
+    inpc_m = a_mensual(_t1_inpc(_T1_B, _T1_E, _T1_T))
+    clas_m = a_mensual(_t1_clas(_T1_B, _T1_E, _T1_T))
+    assert clas_m._frontera is not None
+    # El insumo del ancla: I_K_visible(e) por categoría (lo que el gate `es_inpc` tiraba).
+    assert clas_m._frontera.at[(_T1_E, "A"), "indice_replicado_old"] == pytest.approx(120.0)
+    assert clas_m._frontera.at[(_T1_E, "B"), "indice_replicado_old"] == pytest.approx(80.0)
+
+    b_m, t_m = PeriodoMensual(2013, 1), PeriodoMensual(2013, 4)
+    canastas = {2010: _canasta_comp(2010), 2013: _canasta_comp(2013)}
+    res = incidencia_desde(inpc_m, clas_m, canastas, desde=b_m, hasta=t_m)
+    largo = res.resultado.largo
+    inc_a = cast(float, largo.at[(t_m, "A"), "incidencia_pp"])
+    inc_b = cast(float, largo.at[(t_m, "B"), "incidencia_pp"])
+    assert inc_a == pytest.approx(_T1_INC_A)
+    assert inc_b == pytest.approx(_T1_INC_B)
+    assert inc_a + inc_b == pytest.approx((105.04 / 102 - 1) * 100, abs=1e-12)
+    assert res.reporte.at[(t_m, "A"), "metodo_incidencia"] == "cross_segmentado"
 
 
 def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
@@ -926,8 +1032,9 @@ def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
             (_B_Q, "fuera", 2018, 90.0, 90.0, "ok"),
             (_E24, "dentro", 2018, 120.0, 120.0, "ok"),
             (_E24, "fuera", 2018, 80.0, 80.0, "ok"),
-            (_T_Q, "dentro", 2024, 109.2, 105.0, "ok"),
-            (_T_Q, "fuera", 2024, 98.8, 95.0, "ok"),
+            # factor_h propio por categoría (120/100, 80/100), no el del INPC (104/100)
+            (_T_Q, "dentro", 2024, 126.0, 105.0, "ok"),
+            (_T_Q, "fuera", 2024, 76.0, 95.0, "ok"),
         ],
         tipo="CANASTA BASICA",
         id_corrida="cc",
@@ -1013,3 +1120,106 @@ def test_metodo_incidencia_no_en_largo_si_en_reporte() -> None:
     assert "metodo_incidencia" not in res.resultado.largo.columns
     assert "metodo_incidencia" in res.reporte.columns
     assert res.reporte.at[(_ENE, "A"), "metodo_incidencia"] == "within"
+
+
+# -- Guardias de las divisiones del cross (regla 3 de data/reglas_codigo/calculo.md) ----
+#
+# Cada divisor de `_incidencia_cross_encadenada` viene de dato agregado real, así que
+# necesita guardia. Los tres casos por divisor: dato faltante (fila no computable, sin
+# excepción), cero, y no finito. La salida esperada NO es la misma en los tres: solo
+# cero e infinito lanzan; el faltante cae a `cross_sin_frontera` con el visible.
+
+
+def _cross_2seg_mutado(
+    *,
+    inpc_filas: dict[tuple[Periodo, str], tuple[float, float]] | None = None,
+    clas_filas: dict[tuple[Periodo, str], tuple[float, float]] | None = None,
+) -> tuple[ResultadoIndice, ResultadoIndice]:
+    """`_inpc_cross_2seg`/`_clas_cross_2seg` quincenal con celdas `(visible, J)` mutadas."""
+    inpc_base = {
+        (_B_Q, "INPC"): (102.0, 102.0, 2018),
+        (_E24, "INPC"): (104.0, 104.0, 2018),
+        (_T_Q, "INPC"): (105.04, 101.0, 2024),
+    }
+    clas_base = {
+        (_B_Q, "A"): (110.0, 110.0, 2018),
+        (_B_Q, "B"): (90.0, 90.0, 2018),
+        (_E24, "A"): (120.0, 120.0, 2018),
+        (_E24, "B"): (80.0, 80.0, 2018),
+        (_T_Q, "A"): (126.0, 105.0, 2024),
+        (_T_Q, "B"): (76.0, 95.0, 2024),
+    }
+    for base, mut in ((inpc_base, inpc_filas), (clas_base, clas_filas)):
+        for clave, (vis, j) in (mut or {}).items():
+            base[clave] = (vis, j, base[clave][2])
+    inpc = _res_multi(
+        [(p, i, v, vis, j, "ok") for (p, i), (vis, j, v) in inpc_base.items()],
+        tipo="INPC",
+        id_corrida="ci",
+    )
+    clas = _res_multi(
+        [(p, i, v, vis, j, "ok") for (p, i), (vis, j, v) in clas_base.items()],
+        tipo="INFLACION COMPONENTE",
+        id_corrida="cc",
+    )
+    return inpc, clas
+
+
+@pytest.mark.parametrize(
+    ("divisor", "celda", "valor"),
+    [
+        # (visible, J) — se anula el J del periodo `fin` de cada segmento, que es el
+        # denominador de f^(m); y el visible de `b`, denominador de la contribución.
+        ("J_INPC(fin_m)", ("inpc", _T_Q, "INPC"), (105.04, 0.0)),
+        ("J_K(fin_m)", ("clas", _T_Q, "A"), (126.0, 0.0)),
+        ("f_K^(m)", ("clas", _T_Q, "A"), (0.0, 105.0)),  # f_K = 0/105 = 0
+        ("INPC_visible(b)", ("inpc", _B_Q, "INPC"), (0.0, 102.0)),
+    ],
+)
+def test_cross_divisor_cero_lanza(
+    divisor: str, celda: tuple[str, Periodo, str], valor: tuple[float, float]
+) -> None:
+    destino, periodo, indice = celda
+    mut = {(periodo, indice): valor}
+    inpc, clas = _cross_2seg_mutado(
+        inpc_filas=mut if destino == "inpc" else None,
+        clas_filas=mut if destino == "clas" else None,
+    )
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    with pytest.raises(InvarianteViolado, match="incidencias:"):
+        incidencia_desde(inpc, clas, canastas, desde=_B_Q, hasta=_T_Q)
+
+
+@pytest.mark.parametrize(
+    ("celda", "valor"),
+    [
+        (("inpc", _T_Q, "INPC"), (105.04, float("inf"))),
+        (("clas", _T_Q, "A"), (float("inf"), 105.0)),
+        (("inpc", _B_Q, "INPC"), (float("-inf"), 102.0)),
+    ],
+)
+def test_cross_operando_no_finito_lanza(
+    celda: tuple[str, Periodo, str], valor: tuple[float, float]
+) -> None:
+    destino, periodo, indice = celda
+    mut = {(periodo, indice): valor}
+    inpc, clas = _cross_2seg_mutado(
+        inpc_filas=mut if destino == "inpc" else None,
+        clas_filas=mut if destino == "clas" else None,
+    )
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    with pytest.raises(InvarianteViolado, match="no finito"):
+        incidencia_desde(inpc, clas, canastas, desde=_B_Q, hasta=_T_Q)
+
+
+def test_cross_ancla_faltante_no_lanza_cae_a_visible() -> None:
+    # Tercer caso de la regla 3: dato FALTANTE. No es invalidez — el rango no puede
+    # segmentarse, así que cae al visible marcado `cross_sin_frontera`, sin excepción.
+    jun, ago = PeriodoMensual(2024, 6), PeriodoMensual(2024, 8)
+    inpc = _inpc_cross_2seg(jun, None, ago)  # mensual sin _frontera → falta el ancla
+    clas = _clas_cross_2seg(jun, None, ago)
+    canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
+    res = incidencia_desde(inpc, clas, canastas, desde=jun, hasta=ago)
+    assert res.reporte.at[(ago, "A"), "metodo_incidencia"] == "cross_sin_frontera"
+    assert pd.notna(res.resultado.largo.at[(ago, "A"), "incidencia_pp"])
+

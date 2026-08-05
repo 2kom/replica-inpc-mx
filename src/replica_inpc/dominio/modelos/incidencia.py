@@ -32,8 +32,8 @@ class ResultadoIncidencia(Resultado):
         manifiesto: Proveniencia de la corrida (tipo, clase, descripción, fecha).
         df_reporte: DataFrame paralelo a `df_resultado` (mismo MultiIndex) con
             columnas de cobertura/calidad por fila, incluye `metodo_incidencia`
-            (`{within, cross_segmentado, cross_t1_diferido, cross_visible,
-            cross_sin_frontera}`) para todas las filas.
+            (`{within, cross_segmentado, cross_visible, cross_sin_frontera}`)
+            para todas las filas.
         df_diagnostico: DataFrame plano de faltantes, esquema `DiagnosticoFaltantes`.
         indices_parciales: Solo cuando `clase_incidencia == "desde"` — índices
             intermedios usados en el cálculo acumulado; `None` en el resto de clases.

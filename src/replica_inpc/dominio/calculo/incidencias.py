@@ -13,8 +13,10 @@ Corrige la escala de los índices antes de descomponer:
 - `indice_incidencia` (= i_tramo de-encadenado, columna interna de `ResultadoIndice`)
   se usa within-canasta (`version_t == version_base`): exacto e invariante al rebase.
 - Cross-canasta (`version_t != version_base`): para tipos content-exact (`_es_content_exact`)
-  se descompone exacto por segmentos (Fase 2A, `_incidencia_cross_encadenada`); para tipos
-  finos no content-exact cae al `indice_replicado` visible (`cross_visible`, sin garantía).
+  se descompone exacto por segmentos (`_incidencia_cross_encadenada`), derivando el ancla
+  del lado nuevo de cada junta por continuidad del visible — exacto para las 3 juntas, T1
+  incluida; para tipos finos no content-exact cae al `indice_replicado` visible
+  (`cross_visible`, sin garantía).
   El método por fila se marca en `metodo_incidencia` — en `.reporte`/`.diagnostico`, NO en
   `.resultado.largo` (`Vista.largo` devuelve el `_df_resultado` entero). El cruce es además
   detectable por `version_t != version_lag`.
@@ -22,6 +24,7 @@ Corrige la escala de los índices antes de descomponer:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import cast
 
@@ -236,6 +239,57 @@ def _segmentos_entre(
     return segs
 
 
+def _lector_ancla(
+    df: pd.DataFrame,
+    frontera: pd.DataFrame | None,
+    indice: str,
+    columna: str,
+    mensual: bool,
+) -> Callable[[Periodo, bool], float | None]:
+    """Devuelve `leer(periodo, es_junta_del_lado_viejo) -> valor` para un índice y columna.
+
+    En mensual la quincena de enlace no existe en `df` — el promedio mensual la absorbió —
+    así que el lado viejo de la junta se lee de `frontera`, en `<columna>_old`. En
+    quincenal la fila de la junta sí está en `df` (el empalme se la asigna al tramo
+    anterior) y ambos caminos coinciden. Devuelve `None` si falta la fila o el valor.
+    """
+    columna_old = f"{columna}_old"
+
+    def leer(periodo: Periodo, junta_lado_viejo: bool) -> float | None:
+        fuente, col = df, columna
+        if junta_lado_viejo and mensual:
+            if frontera is None:
+                return None
+            fuente, col = frontera, columna_old
+        try:
+            valor = float(fuente.at[(periodo, indice), col])  # type: ignore[arg-type]
+        except KeyError:
+            return None
+        return None if pd.isna(valor) else valor
+
+    return leer
+
+
+def _verificar_operandos(
+    valores: Mapping[str, float], divisores: frozenset[str], contexto: str
+) -> None:
+    """Exige finitud a todos los operandos y `!= 0` solo a los divisores.
+
+    Mismo contrato que `variaciones.py`: un operando **ausente** no llega acá — el llamador
+    lo trata antes como fila no computable. Esta guardia es para dato **presente pero
+    inválido** (`±inf`, o cero en un denominador), que sin ella se propagaría como
+    `inf`/`nan` hasta la salida pública con `estado_calculo = "ok"`.
+
+    Raises:
+        InvarianteViolado: Si algún operando es no finito, o si un divisor vale cero.
+    """
+    for nombre, valor in valores.items():
+        if not np.isfinite(valor):
+            raise InvarianteViolado(f"incidencias: {nombre} no finito ({valor}) en {contexto}.")
+        if nombre in divisores and valor == 0:
+            raise InvarianteViolado(f"incidencias: {nombre} = 0 (divisor) en {contexto}.")
+
+
 def _incidencia_cross_encadenada(
     t: Periodo,
     indice: str,
@@ -251,74 +305,92 @@ def _incidencia_cross_encadenada(
 ) -> tuple[float | None, str]:
     """Incidencia cross-canasta exacta por encadenamiento de segmentos.
 
-    `contribucion = Σ_m S_m · w_K·(J_K(fin_m) − J_K(inicio_m))/J_INPC(inicio_m)`, con
-    `J = indice_incidencia` (de-encadenado) por segmento y `S_m =
-    INPC_visible(inicio_m)/INPC_visible(b)`. El lado nuevo en cada junta vale 100 por
-    contrato (válido para directo 2018 y T2 2024). Devuelve `(valor, estado)`; con
-    `valor=None` el llamador conserva el valor visible de Fase 1, en dos casos:
-    `cross_sin_frontera` (falta un ancla mensual) y `cross_t1_diferido` (la junta entra a
-    un tramo T1/2013 cuyo i_tramo no ancla en 100 → exacto diferido a Fase 2B).
+    ```text
+    f_INPC^(m) = INPC_visible(fin_m) / J_INPC(fin_m)
+    f_K^(m)    = I_K_visible(fin_m)  / J_K(fin_m)
+    J_K(inicio_m) = I_K_visible(junta) / f_K^(m)   si el segmento empieza en junta
+                  = J_K(b)                         en el primer segmento
+    contribucion = Σ_m f_INPC^(m) · w_K · (J_K(fin_m) − J_K(inicio_m)) / INPC_visible(b)
+    ```
+
+    `J = indice_incidencia` (de-encadenado) en la escala interna de cada segmento. Los
+    factores `f^(m)` se leen de un periodo **real** de la versión `m` — `fin_m`, que es `t`
+    en el último segmento y la junta que cierra el segmento en los demás (esa fila
+    pertenece al tramo viejo, o sea a la versión `m`). El ancla del lado nuevo de la junta
+    **no se supone igual a 100**: se deriva por continuidad del visible, que el
+    encadenamiento preserva. Eso hace exactas por igual las juntas T1 (2013, cuyo
+    `i_tramo` no ancla en 100), directo (2018) y T2 (2024).
+
+    Es una reagrupación algebraica de la forma con `S_m = INPC_visible(inicio_m)/
+    INPC_visible(b)`: `S_m / J_INPC(inicio_m)` equivale a `f_INPC^(m) / INPC_visible(b)`.
+    Con esta forma desaparece la división por `J_INPC(inicio_m)`.
+
+    Returns:
+        `(valor, estado)`. Con `valor=None` el llamador conserva el visible de Fase 1;
+        único caso: `cross_sin_frontera` (falta un ancla, típicamente la de enlace mensual).
+
+    Raises:
+        InvarianteViolado: Si la fila cross no produce ≥2 segmentos, o si algún operando
+            presente es no finito o un divisor vale cero.
+
+    Ver: docs/diseño.md §11.29
     """
     segs = _segmentos_entre(ver_b, ver_t, b, t)
     if len(segs) < 2:
         raise InvarianteViolado(
             f"_incidencia_cross_encadenada: fila cross ({t}, {indice}) sin junta."
         )
+    contexto = f"({t}, {indice})"
 
-    def _jk(p: Periodo, junta_vieja: bool) -> float | None:
-        if junta_vieja and mensual:
-            if clas_frontera is None:
-                return None
-            try:
-                return float(clas_frontera.at[(p, indice), "indice_incidencia_old"])  # type: ignore[arg-type]
-            except KeyError:
-                return None
-        try:
-            return float(df_clas.at[(p, indice), "indice_incidencia"])  # type: ignore[arg-type]
-        except KeyError:
-            return None
+    jk = _lector_ancla(df_clas, clas_frontera, indice, "indice_incidencia", mensual)
+    vis_k = _lector_ancla(df_clas, clas_frontera, indice, "indice_replicado", mensual)
+    j_inpc = _lector_ancla(df_inpc, inpc_frontera, "INPC", "indice_incidencia", mensual)
+    vis_inpc = _lector_ancla(df_inpc, inpc_frontera, "INPC", "indice_replicado", mensual)
 
-    def _inpc_visible(p: Periodo, junta: bool) -> float | None:
-        if junta and mensual:
-            if inpc_frontera is None:
-                return None
-            try:
-                return float(inpc_frontera.at[(p, "INPC"), "indice_replicado_old"])  # type: ignore[arg-type]
-            except KeyError:
-                return None
-        try:
-            return float(df_inpc.at[(p, "INPC"), "indice_replicado"])  # type: ignore[arg-type]
-        except KeyError:
-            return None
-
-    inpc_vis_b = _inpc_visible(b, False)
-    try:
-        j_inpc_b: float | None = float(df_inpc.at[(b, "INPC"), "indice_incidencia"])  # type: ignore[arg-type]
-    except KeyError:
-        j_inpc_b = None
-    if inpc_vis_b is None or j_inpc_b is None or pd.isna(inpc_vis_b) or pd.isna(j_inpc_b):
+    inpc_vis_b = vis_inpc(b, False)
+    if inpc_vis_b is None:
         return None, "cross_sin_frontera"
-
-    # T1 (2013) como LADO NUEVO de una junta (entrada por 2Q Mar 2013): su i_tramo NO ancla
-    # en 100 — continúa el nivel 2010 (~108.8) — así que el contrato J(e)_new=100 no aplica y
-    # la segmentación daría un error grande (~8.8 pp). El ancla T1 exacto está diferido a
-    # Fase 2B; aquí se cae al visible (sin garantía) marcando el motivo.
-    if any(int(ver_m) == 2013 and ini_nueva for ver_m, _, _, ini_nueva, _ in segs):
-        return None, "cross_t1_diferido"
+    _verificar_operandos({"INPC_visible(b)": inpc_vis_b}, frozenset({"INPC_visible(b)"}), contexto)
 
     total = 0.0
     for ver_m, inicio, fin, inicio_junta_nueva, fin_junta_vieja in segs:
         pond = pond_por_version.get(int(ver_m))
         w_k = float(pond.get(indice, float("nan"))) if pond is not None else float("nan")
-        jk_inicio = 100.0 if inicio_junta_nueva else _jk(inicio, False)
-        jk_fin = _jk(fin, fin_junta_vieja)
-        j_inpc_inicio = 100.0 if inicio_junta_nueva else j_inpc_b
-        inpc_vis_inicio = inpc_vis_b if not inicio_junta_nueva else _inpc_visible(inicio, True)
-        valores = (w_k, jk_inicio, jk_fin, j_inpc_inicio, inpc_vis_inicio)
-        if any(x is None or pd.isna(x) for x in valores):
+        jk_fin = jk(fin, fin_junta_vieja)
+        vis_k_fin = vis_k(fin, fin_junta_vieja)
+        j_inpc_fin = j_inpc(fin, fin_junta_vieja)
+        vis_inpc_fin = vis_inpc(fin, fin_junta_vieja)
+        # El lado nuevo de la junta no sobrevive al empalme (la fila la posee el tramo
+        # anterior), así que su J se deriva del visible, continuo en el enlace.
+        ancla_inicio = vis_k(inicio, True) if inicio_junta_nueva else jk(inicio, False)
+
+        crudos = (w_k, jk_fin, vis_k_fin, j_inpc_fin, vis_inpc_fin, ancla_inicio)
+        if any(x is None or pd.isna(x) for x in crudos):
             return None, "cross_sin_frontera"
-        s_m = inpc_vis_inicio / inpc_vis_b  # type: ignore[operator]
-        total += s_m * w_k * (jk_fin - jk_inicio) / j_inpc_inicio  # type: ignore[operator]
+        _verificar_operandos(
+            {
+                "w_K": w_k,
+                "J_K(fin_m)": cast(float, jk_fin),
+                "I_K_visible(fin_m)": cast(float, vis_k_fin),
+                "J_INPC(fin_m)": cast(float, j_inpc_fin),
+                "INPC_visible(fin_m)": cast(float, vis_inpc_fin),
+                "ancla_inicio": cast(float, ancla_inicio),
+            },
+            frozenset({"J_K(fin_m)", "J_INPC(fin_m)"}),
+            contexto,
+        )
+
+        f_inpc = cast(float, vis_inpc_fin) / cast(float, j_inpc_fin)
+        f_k = cast(float, vis_k_fin) / cast(float, jk_fin)
+        _verificar_operandos(
+            {"f_K^(m)": f_k, "f_INPC^(m)": f_inpc}, frozenset({"f_K^(m)"}), contexto
+        )
+
+        jk_inicio = cast(float, ancla_inicio) / f_k if inicio_junta_nueva else ancla_inicio
+        contribucion = f_inpc * w_k * (cast(float, jk_fin) - cast(float, jk_inicio)) / inpc_vis_b
+        _verificar_operandos({"contribucion_m": contribucion}, frozenset(), contexto)
+        total += contribucion
+    _verificar_operandos({"total cross": total}, frozenset(), contexto)
     return total, "cross_segmentado"
 
 
