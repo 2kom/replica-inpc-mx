@@ -5,7 +5,7 @@ Los calculadores pueblan indice_incidencia (= i_tramo, antes de factor_h); a_men
 promedia; rebasar lo deja intacto; empalmar lo preserva. Las incidencias lo usan
 within-canasta (exacto, rebase-invariante) y, cruzando canasta, descomponen por segmentos
 derivando el ancla del lado nuevo de cada junta por continuidad del visible — exacto para
-las 3 juntas. Los tipos no content-exact caen al visible (cross_visible).
+las 3 juntas. Los tipos sin clasificación estable caen al visible (cross_visible).
 
 Varios fixtures dan a cada categoría su PROPIO factor de encadenamiento, distinto del
 factor del INPC. No es cosmético: con factores uniformes no hay no-aditividad que
@@ -23,8 +23,8 @@ import pytest
 
 import replica_inpc as rep
 from replica_inpc.dominio.calculo.incidencias import (
-    _es_content_exact,
-    _segmentos_entre,
+    _es_clasificacion_estable,
+    _partir_en_segmentos,
     incidencia_acumulada_anual,
     incidencia_desde,
     incidencia_periodica,
@@ -341,7 +341,7 @@ def _clas_cross_2seg(b: Periodo, e: Periodo | None, t: Periodo) -> ResultadoIndi
 
 
 def _canasta_cb(version: int) -> CanastaCanonica:
-    """Canasta 'canasta basica' content-exact (mismas categorías ambas versiones)."""
+    """Canasta 'canasta basica' con clasificación estable (mismas categorías ambas versiones)."""
     df = pd.DataFrame(
         {
             "ponderador": ["60.0", "40.0"],
@@ -1021,12 +1021,12 @@ def test_cross_t1_mensual_frontera_de_a_mensual_es_exacto() -> None:
     assert res.reporte.at[(t_m, "A"), "metodo_incidencia"] == "cross_segmentado"
 
 
-def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
-    # Alcance ampliado (decisión usuario, opción B): cualquier tipo content-exact obtiene
-    # segmentación exacta, no solo componente/subcomponente. 'canasta basica' es content-exact
-    # con los CSV reales → cross_segmentado. (Sin indicador BIE; exactitud algebraica.)
+def test_cross_segmentado_tipo_clasificacion_estable_no_componente() -> None:
+    # Alcance ampliado (decisión usuario, opción B): cualquier tipo con clasificación estable
+    # obtiene segmentación exacta, no solo componente/subcomponente. 'canasta basica' es
+    # estable con los CSV reales → cross_segmentado. (Sin indicador BIE; exactitud algebraica.)
     canastas = {2018: _canasta_cb(2018), 2024: _canasta_cb(2024)}
-    assert _es_content_exact("CANASTA BASICA", canastas) is True
+    assert _es_clasificacion_estable("CANASTA BASICA", canastas) is True
     inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
     clas = _res_multi(
         [
@@ -1050,8 +1050,8 @@ def test_cross_segmentado_tipo_content_exact_no_componente() -> None:
     assert res.reporte.at[(_T_Q, "dentro"), "metodo_incidencia"] == "cross_segmentado"
 
 
-def test_cross_visible_no_content_exact() -> None:
-    # tipo no content-exact (un genérico cruza de categoría) → cross_visible (Fase 1).
+def test_cross_visible_sin_clasificacion_estable() -> None:
+    # tipo sin clasificación estable (un genérico cruza de categoría) → cross_visible (Fase 1).
     can2018 = CanastaCanonica(
         pd.DataFrame(
             {
@@ -1070,11 +1070,11 @@ def test_cross_visible_no_content_exact() -> None:
                 "encadenamiento": [None, None],
                 "SCIAN RAMA": ["Y", "X"],
             },
-            index=["g1", "g2"],  # g1 cruza X→Y: NO content-exact
+            index=["g1", "g2"],  # g1 cruza X→Y: clasificación NO estable
         ),
         2024,
     )
-    assert _es_content_exact("SCIAN RAMA", {2018: can2018, 2024: can2024}) is False
+    assert _es_clasificacion_estable("SCIAN RAMA", {2018: can2018, 2024: can2024}) is False
     inpc = _inpc_cross_2seg(_B_Q, _E24, _T_Q)
     clas = _res_multi(
         [
@@ -1089,32 +1089,34 @@ def test_cross_visible_no_content_exact() -> None:
     assert res.reporte.at[(_T_Q, "X"), "metodo_incidencia"] == "cross_visible"
 
 
-def test_es_content_exact_componente_true() -> None:
+def test_es_clasificacion_estable_componente_true() -> None:
     canastas = {2018: _canasta_comp(2018), 2024: _canasta_comp(2024)}
-    assert _es_content_exact("INFLACION COMPONENTE", canastas) is True
+    assert _es_clasificacion_estable("INFLACION COMPONENTE", canastas) is True
 
 
-def test_es_content_exact_categoria_distinta_false() -> None:
-    # conjunto de categorías distinto entre versiones → no content-exact.
+def test_es_clasificacion_estable_categoria_distinta_false() -> None:
+    # conjunto de categorías distinto entre versiones → clasificación NO estable.
     can2018 = _canasta_comp(2018)  # {A, B}
     can2024 = _canasta_solo_a(2024)  # {A}
-    assert _es_content_exact("INFLACION COMPONENTE", {2018: can2018, 2024: can2024}) is False
+    assert (
+        _es_clasificacion_estable("INFLACION COMPONENTE", {2018: can2018, 2024: can2024}) is False
+    )
 
 
-def test_segmentos_entre_dos_y_tres_segmentos() -> None:
-    dos = _segmentos_entre(2018, 2024, _B_Q, _T_Q)
+def test_partir_en_segmentos_dos_y_tres_segmentos() -> None:
+    dos = _partir_en_segmentos(2018, 2024, _B_Q, _T_Q)
     assert [s[0] for s in dos] == [2018, 2024]
     assert dos[0][2] == PeriodoQuincenal(2024, 7, 2)  # fin seg1 = junta
     assert dos[1][3] is True  # inicio seg2 es junta nueva
-    tres = _segmentos_entre(2013, 2024, _B_Q, _T_Q)
+    tres = _partir_en_segmentos(2013, 2024, _B_Q, _T_Q)
     assert [s[0] for s in tres] == [2013, 2018, 2024]
 
 
-def test_segmentos_entre_sin_cruce_lanza() -> None:
+def test_partir_en_segmentos_sin_cruce_lanza() -> None:
     with pytest.raises(InvarianteViolado):
-        _segmentos_entre(2024, 2024, _B_Q, _T_Q)
+        _partir_en_segmentos(2024, 2024, _B_Q, _T_Q)
     with pytest.raises(InvarianteViolado):
-        _segmentos_entre(2024, 2018, _T_Q, _B_Q)
+        _partir_en_segmentos(2024, 2018, _T_Q, _B_Q)
 
 
 def test_metodo_incidencia_no_en_largo_si_en_reporte() -> None:
@@ -1126,7 +1128,7 @@ def test_metodo_incidencia_no_en_largo_si_en_reporte() -> None:
 
 # -- Guardias de las divisiones del cross (regla 3 de data/reglas_codigo/calculo.md) ----
 #
-# Cada divisor de `_incidencia_cross_encadenada` viene de dato agregado real, así que
+# Cada divisor de `_calcular_incidencia_cross_encadenada` viene de dato agregado real, así que
 # necesita guardia. Los tres casos por divisor: dato faltante (fila no computable, sin
 # excepción), cero, y no finito. La salida esperada NO es la misma en los tres: solo
 # cero e infinito lanzan; el faltante cae a `cross_sin_frontera` con el visible.

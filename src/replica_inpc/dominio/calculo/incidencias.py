@@ -12,11 +12,12 @@ Corrige la escala de los índices antes de descomponer:
 - Fix 1: los ponderadores son los de la canasta del periodo base.
 - `indice_incidencia` (= i_tramo de-encadenado, columna interna de `ResultadoIndice`)
   se usa within-canasta (`version_t == version_base`): exacto e invariante al rebase.
-- Cross-canasta (`version_t != version_base`): para tipos content-exact (`_es_content_exact`)
-  se descompone exacto por segmentos (`_incidencia_cross_encadenada`), derivando el ancla
-  del lado nuevo de cada junta por continuidad del visible — exacto para las 3 juntas, T1
-  incluida; para tipos finos no content-exact cae al `indice_replicado` visible
-  (`cross_visible`, sin garantía).
+- Cross-canasta (`version_t != version_base`): para tipos de clasificación estable
+  (`_es_clasificacion_estable`) se descompone exacto por segmentos
+  (`_calcular_incidencia_cross_encadenada`), derivando el ancla del lado nuevo de cada
+  junta por continuidad del visible — exacto para las 3 juntas, T1 incluida; para tipos
+  finos sin clasificación estable cae al `indice_replicado` visible (`cross_visible`,
+  sin garantía).
   El método por fila se marca en `metodo_incidencia` — en `.reporte`/`.diagnostico`, NO en
   `.resultado.largo` (`Vista.largo` devuelve el `_df_resultado` entero). El cruce es además
   detectable por `version_t != version_lag`.
@@ -57,6 +58,7 @@ from replica_inpc.dominio.tipos import (
     RANGOS_CANASTAS,
     TIPO_INPC,
     ManifestDerivado,
+    MetodoIncidencia,
     VersionCanasta,
 )
 
@@ -126,7 +128,7 @@ def _validar_entradas(
         )
 
 
-def _lag_y_mensual(df_clas: pd.DataFrame, frecuencia: Frecuencia) -> tuple[int, bool]:
+def _obtener_lag_y_mensual(df_clas: pd.DataFrame, frecuencia: Frecuencia) -> tuple[int, bool]:
     """Valida `frecuencia` y devuelve `(lag, mensual)`."""
     mensual = es_mensual(df_clas)
     lag_map = LAG_MENSUAL if mensual else LAG_QUINCENAL
@@ -139,7 +141,7 @@ def _lag_y_mensual(df_clas: pd.DataFrame, frecuencia: Frecuencia) -> tuple[int, 
     return lag_map[frecuencia], mensual
 
 
-def _mapa_generico(version_origen: int, version_canonica: int) -> dict[str, str]:
+def _construir_mapa_generico(version_origen: int, version_canonica: int) -> dict[str, str]:
     """Compone `RENOMBRES_GENERICOS` de `version_origen` a `version_canonica`.
 
     Análogo a `_construir_mapa_renombre` pero sobre genéricos (sin `tipo`).
@@ -166,13 +168,13 @@ def _mapa_generico(version_origen: int, version_canonica: int) -> dict[str, str]
     return mapa
 
 
-def _es_content_exact(tipo: str, canastas: dict[int, CanastaCanonica]) -> bool:
-    """`True` si `tipo` es content-exact entre las versiones de `canastas`.
+def _es_clasificacion_estable(tipo: str, canastas: dict[int, CanastaCanonica]) -> bool:
+    """`True` si `tipo` tiene clasificación estable entre las versiones de `canastas`.
 
-    Content-exact = (a) el conjunto de categorías es idéntico entre versiones tras
-    alinear nombres con `RENOMBRES_INDICES`, y (b) ningún genérico cambia de categoría
-    tras alinear con `RENOMBRES_GENERICOS`. Solo lee; ante cualquier duda devuelve
-    `False` (cae a `cross_visible`, sin regresión).
+    Clasificación estable = (a) el conjunto de categorías es idéntico entre versiones
+    tras alinear nombres con `RENOMBRES_INDICES`, y (b) ningún genérico cambia de
+    categoría tras alinear con `RENOMBRES_GENERICOS`. Solo lee; ante cualquier duda
+    devuelve `False` (cae a `cross_visible`, sin regresión).
     """
     versiones = sorted(canastas)
     if len(versiones) < 2:
@@ -186,7 +188,7 @@ def _es_content_exact(tipo: str, canastas: dict[int, CanastaCanonica]) -> bool:
             return False
         serie = df[tipo].dropna()
         mapa_cat = _construir_mapa_renombre(tipo, int(v), vc)
-        mapa_gen = _mapa_generico(int(v), vc)
+        mapa_gen = _construir_mapa_generico(int(v), vc)
         d: dict[str, str] = {}
         for gen_nat, cat_nat in serie.items():
             gen_c = mapa_gen.get(str(gen_nat), str(gen_nat))
@@ -204,7 +206,7 @@ def _es_content_exact(tipo: str, canastas: dict[int, CanastaCanonica]) -> bool:
     return True
 
 
-def _segmentos_entre(
+def _partir_en_segmentos(
     ver_b: int, ver_t: int, b: Periodo, t: Periodo
 ) -> list[tuple[int, Periodo, Periodo, bool, bool]]:
     """Parte `[b, t]` en segmentos por las juntas de canasta que atraviesa.
@@ -221,25 +223,25 @@ def _segmentos_entre(
         j = orden.index(int(ver_t))
     except ValueError as exc:
         raise InvarianteViolado(
-            f"_segmentos_entre: versión desconocida (ver_b={ver_b}, ver_t={ver_t})."
+            f"_partir_en_segmentos: versión desconocida (ver_b={ver_b}, ver_t={ver_t})."
         ) from exc
     if i >= j:
         raise InvarianteViolado(
-            f"_segmentos_entre: fila cross sin cruce hacia adelante "
+            f"_partir_en_segmentos: fila cross sin cruce hacia adelante "
             f"(ver_b={ver_b}, ver_t={ver_t}); no hay junta entre ellas."
         )
     juntas = [RANGOS_CANASTAS[orden[k]][0] for k in range(i + 1, j + 1)]  # type: ignore[index]
     total = j - i + 1
-    segs: list[tuple[int, Periodo, Periodo, bool, bool]] = []
+    segmentos: list[tuple[int, Periodo, Periodo, bool, bool]] = []
     for m in range(1, total + 1):
         ver_m = orden[i + m - 1]
         inicio: Periodo = b if m == 1 else juntas[m - 2]
         fin: Periodo = t if m == total else juntas[m - 1]
-        segs.append((ver_m, inicio, fin, m > 1, m < total))
-    return segs
+        segmentos.append((ver_m, inicio, fin, m > 1, m < total))
+    return segmentos
 
 
-def _lector_ancla(
+def _construir_lector_ancla(
     df: pd.DataFrame,
     frontera: pd.DataFrame | None,
     indice: str,
@@ -290,7 +292,7 @@ def _verificar_operandos(
             raise InvarianteViolado(f"incidencias: {nombre} = 0 (divisor) en {contexto}.")
 
 
-def _incidencia_cross_encadenada(
+def _calcular_incidencia_cross_encadenada(
     t: Periodo,
     indice: str,
     b: Periodo,
@@ -302,7 +304,7 @@ def _incidencia_cross_encadenada(
     inpc_frontera: pd.DataFrame | None,
     clas_frontera: pd.DataFrame | None,
     pond_por_version: dict[int, pd.Series],
-) -> tuple[float | None, str]:
+) -> tuple[float | None, MetodoIncidencia]:
     """Incidencia cross-canasta exacta por encadenamiento de segmentos.
 
     ```text
@@ -333,61 +335,65 @@ def _incidencia_cross_encadenada(
         InvarianteViolado: Si la fila cross no produce ≥2 segmentos, o si algún operando
             presente es no finito o un divisor vale cero.
 
-    Ver: docs/diseño.md §11.29
+    Ver: docs/diseño.md §11.29, data/glosario.md (símbolos `J_K`/`J_INPC`/`f_K^(m)`/
+        `f_INPC^(m)`/ancla, sección "Notación matemática").
     """
-    segs = _segmentos_entre(ver_b, ver_t, b, t)
-    if len(segs) < 2:
+    segmentos = _partir_en_segmentos(ver_b, ver_t, b, t)
+    if len(segmentos) < 2:
         raise InvarianteViolado(
-            f"_incidencia_cross_encadenada: fila cross ({t}, {indice}) sin junta."
+            f"_calcular_incidencia_cross_encadenada: fila cross ({t}, {indice}) sin junta."
         )
     contexto = f"({t}, {indice})"
 
-    jk = _lector_ancla(df_clas, clas_frontera, indice, "indice_incidencia", mensual)
-    vis_k = _lector_ancla(df_clas, clas_frontera, indice, "indice_replicado", mensual)
-    j_inpc = _lector_ancla(df_inpc, inpc_frontera, "INPC", "indice_incidencia", mensual)
-    vis_inpc = _lector_ancla(df_inpc, inpc_frontera, "INPC", "indice_replicado", mensual)
+    j_k = _construir_lector_ancla(df_clas, clas_frontera, indice, "indice_incidencia", mensual)
+    i_k_visible = _construir_lector_ancla(
+        df_clas, clas_frontera, indice, "indice_replicado", mensual
+    )
+    j_inpc = _construir_lector_ancla(df_inpc, inpc_frontera, "INPC", "indice_incidencia", mensual)
+    inpc_visible = _construir_lector_ancla(
+        df_inpc, inpc_frontera, "INPC", "indice_replicado", mensual
+    )
 
-    inpc_vis_b = vis_inpc(b, False)
+    inpc_vis_b = inpc_visible(b, False)
     if inpc_vis_b is None:
         return None, "cross_sin_frontera"
     _verificar_operandos({"INPC_visible(b)": inpc_vis_b}, frozenset({"INPC_visible(b)"}), contexto)
 
     total = 0.0
-    for ver_m, inicio, fin, inicio_junta_nueva, fin_junta_vieja in segs:
-        pond = pond_por_version.get(int(ver_m))
-        w_k = float(pond.get(indice, float("nan"))) if pond is not None else float("nan")
-        jk_fin = jk(fin, fin_junta_vieja)
-        vis_k_fin = vis_k(fin, fin_junta_vieja)
+    for ver_m, inicio, fin, inicio_junta_nueva, fin_junta_vieja in segmentos:
+        w_k = _ponderador(pond_por_version, int(ver_m), indice)
+        j_k_fin = j_k(fin, fin_junta_vieja)
+        i_k_visible_fin = i_k_visible(fin, fin_junta_vieja)
         j_inpc_fin = j_inpc(fin, fin_junta_vieja)
-        vis_inpc_fin = vis_inpc(fin, fin_junta_vieja)
+        inpc_visible_fin = inpc_visible(fin, fin_junta_vieja)
         # El lado nuevo de la junta no sobrevive al empalme (la fila la posee el tramo
         # anterior), así que su J se deriva del visible, continuo en el enlace.
-        ancla_inicio = vis_k(inicio, True) if inicio_junta_nueva else jk(inicio, False)
+        ancla_inicio = i_k_visible(inicio, True) if inicio_junta_nueva else j_k(inicio, False)
 
-        crudos = (w_k, jk_fin, vis_k_fin, j_inpc_fin, vis_inpc_fin, ancla_inicio)
+        crudos = (w_k, j_k_fin, i_k_visible_fin, j_inpc_fin, inpc_visible_fin, ancla_inicio)
         if any(x is None or pd.isna(x) for x in crudos):
             return None, "cross_sin_frontera"
         _verificar_operandos(
             {
                 "w_K": w_k,
-                "J_K(fin_m)": cast(float, jk_fin),
-                "I_K_visible(fin_m)": cast(float, vis_k_fin),
+                "J_K(fin_m)": cast(float, j_k_fin),
+                "I_K_visible(fin_m)": cast(float, i_k_visible_fin),
                 "J_INPC(fin_m)": cast(float, j_inpc_fin),
-                "INPC_visible(fin_m)": cast(float, vis_inpc_fin),
+                "INPC_visible(fin_m)": cast(float, inpc_visible_fin),
                 "ancla_inicio": cast(float, ancla_inicio),
             },
             frozenset({"J_K(fin_m)", "J_INPC(fin_m)"}),
             contexto,
         )
 
-        f_inpc = cast(float, vis_inpc_fin) / cast(float, j_inpc_fin)
-        f_k = cast(float, vis_k_fin) / cast(float, jk_fin)
+        f_inpc = cast(float, inpc_visible_fin) / cast(float, j_inpc_fin)
+        f_k = cast(float, i_k_visible_fin) / cast(float, j_k_fin)
         _verificar_operandos(
             {"f_K^(m)": f_k, "f_INPC^(m)": f_inpc}, frozenset({"f_K^(m)"}), contexto
         )
 
-        jk_inicio = cast(float, ancla_inicio) / f_k if inicio_junta_nueva else ancla_inicio
-        contribucion = f_inpc * w_k * (cast(float, jk_fin) - cast(float, jk_inicio)) / inpc_vis_b
+        j_k_inicio = cast(float, ancla_inicio) / f_k if inicio_junta_nueva else ancla_inicio
+        contribucion = f_inpc * w_k * (cast(float, j_k_fin) - cast(float, j_k_inicio)) / inpc_vis_b
         _verificar_operandos({"contribucion_m": contribucion}, frozenset(), contexto)
         total += contribucion
     _verificar_operandos({"total cross": total}, frozenset(), contexto)
@@ -405,7 +411,7 @@ def incidencia_periodica(
     df_inpc = inpc._completo
     df_clas = clasificacion._completo
     _validar_entradas(df_inpc, df_clas, canastas)
-    lag, mensual = _lag_y_mensual(df_clas, frecuencia)
+    lag, mensual = _obtener_lag_y_mensual(df_clas, frecuencia)
     restar = restar_meses if mensual else restar_quincenas
 
     periodos = df_clas.index.get_level_values("periodo")
@@ -413,7 +419,6 @@ def incidencia_periodica(
     return _construir_resultado(
         df_clas,
         df_clas,
-        df_inpc,
         canastas,
         base_periodos,
         f"periodica_{frecuencia}",
@@ -444,7 +449,6 @@ def incidencia_acumulada_anual(
     return _construir_resultado(
         df_clas,
         df_clas,
-        df_inpc,
         canastas,
         base_periodos,
         "acumulada_anual",
@@ -522,7 +526,6 @@ def incidencia_desde(
     return _construir_resultado(
         df_emitir,
         df_lookup,
-        df_inpc,
         canastas,
         base_periodos,
         "desde",
@@ -534,10 +537,30 @@ def incidencia_desde(
     )
 
 
+def _columna_incidencia(df: pd.DataFrame) -> str:
+    """Nombre de la columna de escala de-encadenada, con fallback al visible.
+
+    `indice_incidencia` no existe en resultados construidos sin pasar por un
+    `CalculadorBase` (ej. dobles de test que arman `ResultadoIndice` a mano); ahí se
+    usa `indice_replicado` directo, sin escala within/cross que corregir.
+    """
+    return "indice_incidencia" if "indice_incidencia" in df.columns else "indice_replicado"
+
+
+def _ponderador(pond_por_version: dict[int, pd.Series], version: int, categoria: str) -> float:
+    """Ponderador de `categoria` en la canasta de `version`; `NaN` si falta cualquiera.
+
+    `NaN` (nunca `KeyError`) es el contrato: una versión o categoría ausente hace la fila
+    no computable — `_obtener_motivo_faltante` la explica en el reporte — no es un fallo
+    de programación.
+    """
+    pond = pond_por_version.get(version)
+    return float(pond.get(categoria, float("nan"))) if pond is not None else float("nan")
+
+
 def _construir_resultado(
     df_emitir: pd.DataFrame,
     df_lookup: pd.DataFrame,
-    df_inpc: pd.DataFrame,
     canastas: dict[int, CanastaCanonica],
     base_periodos: list[Periodo],
     clase: str,
@@ -556,6 +579,10 @@ def _construir_resultado(
     Con `excluir_parciales`, las filas con estado derivado `parcial` se
     descartan de `df_out` (siguen visibles en `reporte`).
     """
+    # `inpc._completo` no llega como parámetro aparte: sería redundante, ya se pasa
+    # `inpc` completo y los 3 llamadores lo derivan igual antes de llamar (lo necesitan
+    # ahí mismo para `_validar_entradas`, previo a esta función).
+    df_inpc = inpc._completo
     tipo_clas = str(df_emitir["tipo"].iloc[0])
     versiones_inpc: list[VersionCanasta] = [m.version for m in inpc.manifiesto]
     versiones_clas: list[VersionCanasta] = [m.version for m in clasificacion.manifiesto]
@@ -609,15 +636,9 @@ def _construir_resultado(
     # Selección de la escala por fila. Within-canasta usa indice_incidencia (= i_tramo
     # de-encadenado, invariante al rebase); cross-canasta usa indice_replicado visible
     # (continuo) porque i_tramo es discontinuo en la junta.
-    col_inc = (
-        "indice_incidencia" if "indice_incidencia" in df_emitir.columns else "indice_replicado"
-    )
-    col_inc_lk = (
-        "indice_incidencia" if "indice_incidencia" in df_lookup.columns else "indice_replicado"
-    )
-    col_inc_inpc = (
-        "indice_incidencia" if "indice_incidencia" in df_inpc.columns else "indice_replicado"
-    )
+    col_inc = _columna_incidencia(df_emitir)
+    col_inc_lk = _columna_incidencia(df_lookup)
+    col_inc_inpc = _columna_incidencia(df_inpc)
 
     valores_t = pd.Series(
         np.where(cross, df_emitir["indice_replicado"].to_numpy(), df_emitir[col_inc].to_numpy()),
@@ -630,17 +651,14 @@ def _construir_resultado(
     # Fix 1: ponderadores de la canasta del periodo base.
     pond_serie = pd.Series(
         [
-            float(pond_por_version[ver_base].get(c, float("nan")))
+            _ponderador(pond_por_version, ver_base, c)
             for ver_base, c in zip(ver_base_per_row, indices_clas)
         ],
         index=df_emitir.index,
         dtype=float,
     )
     pond_t_serie = pd.Series(
-        [
-            float(pond_por_version[ver_p].get(c, float("nan")))
-            for ver_p, c in zip(ver_p_per_row, indices_clas)
-        ],
+        [_ponderador(pond_por_version, ver_p, c) for ver_p, c in zip(ver_p_per_row, indices_clas)],
         index=df_emitir.index,
         dtype=float,
     )
@@ -667,16 +685,17 @@ def _construir_resultado(
     # inc_i = w_base_i * (J_t - J_base) / J_INPC_base   (J por selección por fila)
     incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
 
-    # Segunda pasada (Fase 2A): para filas cross de tipos content-exact, sobreescribir el
-    # valor visible (sin garantía) por la incidencia exacta encadenada por segmentos. Las
-    # within quedan "within"; las cross no content-exact quedan "cross_visible".
+    # Segunda pasada (Fase 2A): para filas cross de tipos con clasificación estable,
+    # sobreescribir el valor visible (sin garantía) por la incidencia exacta encadenada
+    # por segmentos. Las within quedan "within"; las cross sin clasificación estable
+    # quedan "cross_visible".
     mensual_flag = es_mensual(df_emitir)
     metodo = np.where(cross, "cross_visible", "within").astype(object)
-    if cross.any() and _es_content_exact(tipo_clas, canastas):
+    if cross.any() and _es_clasificacion_estable(tipo_clas, canastas):
         inc_vals = incidencia_pp.to_numpy(dtype=float).copy()
         for pos in np.flatnonzero(cross):
             per_t, ind_k = df_emitir.index[pos]
-            valor, estado = _incidencia_cross_encadenada(
+            valor, estado = _calcular_incidencia_cross_encadenada(
                 per_t,
                 str(ind_k),
                 base_periodos[pos],
@@ -791,7 +810,9 @@ def _construir_resultado(
     return ResultadoIncidencia(df_out, manifiesto, reporte_df, diagnostico_df, indices_parciales)
 
 
-def _motivo_faltante(valor_t: float, base_clas: float, inpc_base: float, pond: float) -> str:
+def _obtener_motivo_faltante(
+    valor_t: float, base_clas: float, inpc_base: float, pond: float
+) -> str:
     if pd.isna(valor_t):
         return "sin valor de clasificación en t"
     if pd.isna(base_clas):
@@ -845,7 +866,7 @@ def _construir_reporte_diagnostico(
             motivos.append(float("nan"))
         else:
             estados_rep.append("sin_datos")
-            motivos.append(_motivo_faltante(vt, vb, ib, pl))
+            motivos.append(_obtener_motivo_faltante(vt, vb, ib, pl))
 
     reporte_df = pd.DataFrame(
         {
