@@ -28,7 +28,7 @@ class ResultadoIndice(Resultado):
             `valor_base` (default 100). `None` = resultado en escala natural
             del cálculo; lo setea `rebasar()`.
         frontera: Anclas de junta de canasta para reconstrucción cross-canasta
-            mensual (Fase 2A). `None` en quincenal y en resultados directos sin
+            mensual. `None` en quincenal y en resultados directos sin
             junta; lo crea `a_mensual`.
 
     Raises:
@@ -95,7 +95,7 @@ class ResultadoIndice(Resultado):
         self._df_reporte = df_reporte
         self._df_diagnostico = df_diagnostico
         self._periodo_referencia = periodo_referencia
-        # Anclas de junta de canasta para reconstrucción cross-canasta mensual (Fase 2A).
+        # Anclas de junta de canasta para reconstrucción cross-canasta mensual.
         # `None` en quincenal y en resultados directos sin junta. Lo crea `a_mensual`.
         # Esquema: MultiIndex (periodo, indice); columnas
         # [version_old, version_new, indice_incidencia_old, indice_replicado_old].

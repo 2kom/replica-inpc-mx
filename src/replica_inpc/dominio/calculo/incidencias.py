@@ -9,7 +9,7 @@ resultado de clasificación (`COG`, `CCIF DIVISION`, etc.):
 
 Corrige la escala de los índices antes de descomponer:
 
-- Fix 1: los ponderadores son los de la canasta del periodo base.
+- Los ponderadores son los de la canasta del periodo base, no del periodo `t`.
 - `indice_incidencia` (= i_tramo de-encadenado, columna interna de `ResultadoIndice`)
   se usa within-canasta (`version_t == version_base`): exacto e invariante al rebase.
 - Cross-canasta (`version_t != version_base`): para tipos de clasificación estable
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime
-from typing import cast
+from typing import NamedTuple, cast
 
 import numpy as np
 import pandas as pd
@@ -63,6 +63,7 @@ from replica_inpc.dominio.tipos import (
 )
 
 Periodo = PeriodoQuincenal | PeriodoMensual
+LectorAncla = Callable[[Periodo, bool], float | None]
 
 _COLS_REPORTE = [
     "estado_calculo",
@@ -247,7 +248,7 @@ def _construir_lector_ancla(
     indice: str,
     columna: str,
     mensual: bool,
-) -> Callable[[Periodo, bool], float | None]:
+) -> LectorAncla:
     """Devuelve `leer(periodo, es_junta_del_lado_viejo) -> valor` para un índice y columna.
 
     En mensual la quincena de enlace no existe en `df` — el promedio mensual la absorbió —
@@ -292,6 +293,58 @@ def _verificar_operandos(
             raise InvarianteViolado(f"incidencias: {nombre} = 0 (divisor) en {contexto}.")
 
 
+def _contribucion_segmento(
+    segmento: tuple[int, Periodo, Periodo, bool, bool],
+    indice: str,
+    pond_por_version: dict[int, pd.Series],
+    j_k: LectorAncla,
+    i_k_visible: LectorAncla,
+    j_inpc: LectorAncla,
+    inpc_visible: LectorAncla,
+    inpc_vis_b: float,
+    contexto: str,
+) -> float | None:
+    """Contribución de un segmento a la incidencia cross-canasta encadenada.
+
+    `None` si falta un ancla del segmento (el llamador lo traduce a `cross_sin_frontera`).
+    Fórmula completa y símbolos en el docstring de `_calcular_incidencia_cross_encadenada`.
+    """
+    ver_m, inicio, fin, inicio_junta_nueva, fin_junta_vieja = segmento
+    w_k = _ponderador(pond_por_version, int(ver_m), indice)
+    j_k_fin = j_k(fin, fin_junta_vieja)
+    i_k_visible_fin = i_k_visible(fin, fin_junta_vieja)
+    j_inpc_fin = j_inpc(fin, fin_junta_vieja)
+    inpc_visible_fin = inpc_visible(fin, fin_junta_vieja)
+    # El lado nuevo de la junta no sobrevive al empalme (la fila la posee el tramo
+    # anterior), así que su J se deriva del visible, continuo en el enlace.
+    ancla_inicio = i_k_visible(inicio, True) if inicio_junta_nueva else j_k(inicio, False)
+
+    crudos = (w_k, j_k_fin, i_k_visible_fin, j_inpc_fin, inpc_visible_fin, ancla_inicio)
+    if any(x is None or pd.isna(x) for x in crudos):
+        return None
+    _verificar_operandos(
+        {
+            "w_K": w_k,
+            "J_K(fin_m)": cast(float, j_k_fin),
+            "I_K_visible(fin_m)": cast(float, i_k_visible_fin),
+            "J_INPC(fin_m)": cast(float, j_inpc_fin),
+            "INPC_visible(fin_m)": cast(float, inpc_visible_fin),
+            "ancla_inicio": cast(float, ancla_inicio),
+        },
+        frozenset({"J_K(fin_m)", "J_INPC(fin_m)"}),
+        contexto,
+    )
+
+    f_inpc = cast(float, inpc_visible_fin) / cast(float, j_inpc_fin)
+    f_k = cast(float, i_k_visible_fin) / cast(float, j_k_fin)
+    _verificar_operandos({"f_K^(m)": f_k, "f_INPC^(m)": f_inpc}, frozenset({"f_K^(m)"}), contexto)
+
+    j_k_inicio = cast(float, ancla_inicio) / f_k if inicio_junta_nueva else ancla_inicio
+    contribucion = f_inpc * w_k * (cast(float, j_k_fin) - cast(float, j_k_inicio)) / inpc_vis_b
+    _verificar_operandos({"contribucion_m": contribucion}, frozenset(), contexto)
+    return contribucion
+
+
 def _calcular_incidencia_cross_encadenada(
     t: Periodo,
     indice: str,
@@ -327,9 +380,12 @@ def _calcular_incidencia_cross_encadenada(
     INPC_visible(b)`: `S_m / J_INPC(inicio_m)` equivale a `f_INPC^(m) / INPC_visible(b)`.
     Con esta forma desaparece la división por `J_INPC(inicio_m)`.
 
+    Cada segmento se calcula en `_contribucion_segmento`.
+
     Returns:
-        `(valor, estado)`. Con `valor=None` el llamador conserva el visible de Fase 1;
-        único caso: `cross_sin_frontera` (falta un ancla, típicamente la de enlace mensual).
+        `(valor, estado)`. Con `valor=None` el llamador conserva el valor visible ya
+        calculado; único caso: `cross_sin_frontera` (falta un ancla, típicamente la de
+        enlace mensual).
 
     Raises:
         InvarianteViolado: Si la fila cross no produce ≥2 segmentos, o si algún operando
@@ -360,41 +416,20 @@ def _calcular_incidencia_cross_encadenada(
     _verificar_operandos({"INPC_visible(b)": inpc_vis_b}, frozenset({"INPC_visible(b)"}), contexto)
 
     total = 0.0
-    for ver_m, inicio, fin, inicio_junta_nueva, fin_junta_vieja in segmentos:
-        w_k = _ponderador(pond_por_version, int(ver_m), indice)
-        j_k_fin = j_k(fin, fin_junta_vieja)
-        i_k_visible_fin = i_k_visible(fin, fin_junta_vieja)
-        j_inpc_fin = j_inpc(fin, fin_junta_vieja)
-        inpc_visible_fin = inpc_visible(fin, fin_junta_vieja)
-        # El lado nuevo de la junta no sobrevive al empalme (la fila la posee el tramo
-        # anterior), así que su J se deriva del visible, continuo en el enlace.
-        ancla_inicio = i_k_visible(inicio, True) if inicio_junta_nueva else j_k(inicio, False)
-
-        crudos = (w_k, j_k_fin, i_k_visible_fin, j_inpc_fin, inpc_visible_fin, ancla_inicio)
-        if any(x is None or pd.isna(x) for x in crudos):
-            return None, "cross_sin_frontera"
-        _verificar_operandos(
-            {
-                "w_K": w_k,
-                "J_K(fin_m)": cast(float, j_k_fin),
-                "I_K_visible(fin_m)": cast(float, i_k_visible_fin),
-                "J_INPC(fin_m)": cast(float, j_inpc_fin),
-                "INPC_visible(fin_m)": cast(float, inpc_visible_fin),
-                "ancla_inicio": cast(float, ancla_inicio),
-            },
-            frozenset({"J_K(fin_m)", "J_INPC(fin_m)"}),
+    for segmento in segmentos:
+        contribucion = _contribucion_segmento(
+            segmento,
+            indice,
+            pond_por_version,
+            j_k,
+            i_k_visible,
+            j_inpc,
+            inpc_visible,
+            inpc_vis_b,
             contexto,
         )
-
-        f_inpc = cast(float, inpc_visible_fin) / cast(float, j_inpc_fin)
-        f_k = cast(float, i_k_visible_fin) / cast(float, j_k_fin)
-        _verificar_operandos(
-            {"f_K^(m)": f_k, "f_INPC^(m)": f_inpc}, frozenset({"f_K^(m)"}), contexto
-        )
-
-        j_k_inicio = cast(float, ancla_inicio) / f_k if inicio_junta_nueva else ancla_inicio
-        contribucion = f_inpc * w_k * (cast(float, j_k_fin) - cast(float, j_k_inicio)) / inpc_vis_b
-        _verificar_operandos({"contribucion_m": contribucion}, frozenset(), contexto)
+        if contribucion is None:
+            return None, "cross_sin_frontera"
         total += contribucion
     _verificar_operandos({"total cross": total}, frozenset(), contexto)
     return total, "cross_segmentado"
@@ -558,46 +593,23 @@ def _ponderador(pond_por_version: dict[int, pd.Series], version: int, categoria:
     return float(pond.get(categoria, float("nan"))) if pond is not None else float("nan")
 
 
-def _construir_resultado(
-    df_emitir: pd.DataFrame,
-    df_lookup: pd.DataFrame,
-    canastas: dict[int, CanastaCanonica],
-    base_periodos: list[Periodo],
-    clase: str,
-    descripcion: str,
-    inpc: ResultadoIndice,
-    clasificacion: ResultadoIndice,
-    indices_parciales: pd.DataFrame | None,
-    excluir_parciales: bool = False,
-) -> ResultadoIncidencia:
-    """Núcleo del cálculo de incidencias (Fix 1 + selección por fila de la escala).
+def _construir_ponderadores_por_version(
+    tipo_clas: str, canastas: dict[int, CanastaCanonica], clasificacion: ResultadoIndice
+) -> dict[int, pd.Series]:
+    """Ponderador de cada categoría por versión de canasta, renombrado al vocabulario canónico.
 
-    `df_emitir` aporta las filas `(periodo, indice)` de salida; `df_lookup`
-    aporta los valores de los periodos base. `base_periodos` da, por cada fila
-    de `df_emitir` y en el mismo orden, el periodo base correspondiente.
+    El resultado de clasificación ya viene normalizado al vocabulario canónico `vc` que usó
+    empalmar. Los ponderadores se indexan con el nombre NATIVO de cada canasta, así que se
+    renombran a `vc`. Sin esto, una categoría renombrada entre versiones (ej. "comunicaciones"
+    2018 → "informacion y comunicacion" 2024) no se encontraría al buscar el ponderador base
+    cross-canasta y la fila caería como "sin ponderador".
 
-    Con `excluir_parciales`, las filas con estado derivado `parcial` se
-    descartan de `df_out` (siguen visibles en `reporte`).
+    `vc` NO se infiere como max(version) — eso falla con empalmar(version_nombres custom). Se
+    infiere como la versión `v` cuyos nombres de índice (filas versión `v`) están todos en los
+    nombres nativos de canasta[v]: la canónica cumple por identidad, y una versión con
+    categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Si varias
+    cumplen, no hay renombres entre ellas y el mapa queda vacío, así que da igual (max).
     """
-    # `inpc._completo` no llega como parámetro aparte: sería redundante, ya se pasa
-    # `inpc` completo y los 3 llamadores lo derivan igual antes de llamar (lo necesitan
-    # ahí mismo para `_validar_entradas`, previo a esta función).
-    df_inpc = inpc._completo
-    tipo_clas = str(df_emitir["tipo"].iloc[0])
-    versiones_inpc: list[VersionCanasta] = [m.version for m in inpc.manifiesto]
-    versiones_clas: list[VersionCanasta] = [m.version for m in clasificacion.manifiesto]
-
-    # El resultado de clasificación ya viene normalizado al vocabulario canónico `vc` que usó
-    # empalmar. Los ponderadores se indexan con el nombre NATIVO de cada canasta, así que se
-    # renombran a `vc`. Sin esto, una categoría renombrada entre versiones (ej. "comunicaciones"
-    # 2018 → "informacion y comunicacion" 2024) no se encontraría al buscar el ponderador base
-    # cross-canasta y la fila caería como "sin ponderador".
-    #
-    # `vc` NO se infiere como max(version) — eso falla con empalmar(version_nombres custom). Se
-    # infiere como la versión `v` cuyos nombres de índice (filas versión `v`) están todos en los
-    # nombres nativos de canasta[v]: la canónica cumple por identidad, y una versión con
-    # categorías renombradas no cumple (sus nombres ya están en otro vocabulario). Si varias
-    # cumplen, no hay renombres entre ellas y el mapa queda vacío, así que da igual (max).
     completo_clas = clasificacion._completo
     nombres_por_version = {
         cast(int, v): set(sub.index.get_level_values("indice"))
@@ -618,24 +630,30 @@ def _construir_resultado(
         }
         ponds = ponds.rename(index=renombres).groupby(level=0).sum()
         pond_por_version[v] = ponds
-    indices_clas = df_emitir.index.get_level_values("indice")
-    base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
+    return pond_por_version
 
-    # Versión POR FILA (periodo, indice), nunca por periodo: en una frontera de canasta
-    # coexisten índices de versiones distintas, y groupby("periodo").first() los clasificaría
-    # mal — etiqueta equivocada y, peor, el ponderador base se buscaría en la canasta
-    # equivocada (una alta within-canasta caería como "sin ponderador"). ver_base hace
-    # fallback a ver_t cuando el periodo base no existe en el lookup.
-    ver_t_row = df_emitir["version"].to_numpy()
-    ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
-    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
-    ver_base_arr = np.where(pd.notna(ver_b_row), ver_b_row, ver_t_row)
-    ver_p_per_row = [int(v) for v in ver_t_row]
-    ver_base_per_row = [int(v) for v in ver_base_arr]
 
-    # Selección de la escala por fila. Within-canasta usa indice_incidencia (= i_tramo
-    # de-encadenado, invariante al rebase); cross-canasta usa indice_replicado visible
-    # (continuo) porque i_tramo es discontinuo en la junta.
+class _EscalaPorFila(NamedTuple):
+    """Salida de `_seleccionar_escala_por_fila`: 4 series alineadas a `df_emitir.index`."""
+
+    valores_t: pd.Series
+    base_clas: pd.Series
+    inpc_base_serie: pd.Series
+    inpc_estado_base: pd.Series
+
+
+def _seleccionar_escala_por_fila(
+    df_emitir: pd.DataFrame,
+    df_lookup: pd.DataFrame,
+    df_inpc: pd.DataFrame,
+    cross: np.ndarray,
+    base_idx: pd.MultiIndex,
+    base_periodos: list[Periodo],
+) -> _EscalaPorFila:
+    """Selecciona la escala por fila: `indice_incidencia` (within) o `indice_replicado`
+    (cross, continuo — `indice_incidencia` es discontinuo en la junta). Aplica igual a la
+    clasificación y al INPC del periodo base. Ver `docs/diseño.md §11.29`.
+    """
     col_inc = _columna_incidencia(df_emitir)
     col_inc_lk = _columna_incidencia(df_lookup)
     col_inc_inpc = _columna_incidencia(df_inpc)
@@ -647,21 +665,6 @@ def _construir_resultado(
     base_rep = df_lookup["indice_replicado"].reindex(base_idx).to_numpy()
     base_inc = df_lookup[col_inc_lk].reindex(base_idx).to_numpy()
     base_clas = pd.Series(np.where(cross, base_rep, base_inc), index=df_emitir.index)
-
-    # Fix 1: ponderadores de la canasta del periodo base.
-    pond_serie = pd.Series(
-        [
-            _ponderador(pond_por_version, ver_base, c)
-            for ver_base, c in zip(ver_base_per_row, indices_clas)
-        ],
-        index=df_emitir.index,
-        dtype=float,
-    )
-    pond_t_serie = pd.Series(
-        [_ponderador(pond_por_version, ver_p, c) for ver_p, c in zip(ver_p_per_row, indices_clas)],
-        index=df_emitir.index,
-        dtype=float,
-    )
 
     inpc_rep_cache: dict[Periodo, float] = {}
     inpc_inc_cache: dict[Periodo, float] = {}
@@ -681,52 +684,79 @@ def _construir_resultado(
     inpc_estado_base = pd.Series(
         [inpc_estado_cache[bp] for bp in base_periodos], index=df_emitir.index
     )
+    return _EscalaPorFila(valores_t, base_clas, inpc_base_serie, inpc_estado_base)
 
-    # inc_i = w_base_i * (J_t - J_base) / J_INPC_base   (J por selección por fila)
-    incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
 
-    # Segunda pasada (Fase 2A): para filas cross de tipos con clasificación estable,
-    # sobreescribir el valor visible (sin garantía) por la incidencia exacta encadenada
-    # por segmentos. Las within quedan "within"; las cross sin clasificación estable
-    # quedan "cross_visible".
+def _aplicar_segmentacion_cross(
+    df_emitir: pd.DataFrame,
+    canastas: dict[int, CanastaCanonica],
+    tipo_clas: str,
+    cross: np.ndarray,
+    incidencia_pp: pd.Series,
+    base_periodos: list[Periodo],
+    ver_p_per_row: list[int],
+    ver_base_per_row: list[int],
+    df_inpc: pd.DataFrame,
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    pond_por_version: dict[int, pd.Series],
+) -> tuple[pd.Series, np.ndarray]:
+    """Sobreescribe filas cross de tipos con clasificación estable por la incidencia
+    exacta segmentada (`_calcular_incidencia_cross_encadenada`). Las filas within quedan
+    `within`; las cross sin clasificación estable quedan `cross_visible` (el valor visible
+    ya calculado, sin garantía). Devuelve `(incidencia_pp, metodo_incidencia)`.
+    """
     mensual_flag = es_mensual(df_emitir)
     metodo = np.where(cross, "cross_visible", "within").astype(object)
-    if cross.any() and _es_clasificacion_estable(tipo_clas, canastas):
-        inc_vals = incidencia_pp.to_numpy(dtype=float).copy()
-        for pos in np.flatnonzero(cross):
-            per_t, ind_k = df_emitir.index[pos]
-            valor, estado = _calcular_incidencia_cross_encadenada(
-                per_t,
-                str(ind_k),
-                base_periodos[pos],
-                ver_p_per_row[pos],
-                ver_base_per_row[pos],
-                mensual_flag,
-                df_inpc,
-                clasificacion._completo,
-                inpc._frontera,
-                clasificacion._frontera,
-                pond_por_version,
-            )
-            metodo[pos] = estado
-            if valor is not None:
-                inc_vals[pos] = valor
-        incidencia_pp = pd.Series(inc_vals, index=df_emitir.index)
+    if not (cross.any() and _es_clasificacion_estable(tipo_clas, canastas)):
+        return incidencia_pp, metodo
 
-    # Guardia de los operandos de Fase 1, restringida a las filas cuyo valor final SÍ sale
-    # de Fase 1. Una fila `cross_segmentado` puede traer un operando visible provisional
-    # inválido que la fórmula exacta ya sustituyó — rechazarla ahí sería un falso positivo.
-    # Mismo contrato que `variaciones.py`: un operando ausente deja la fila no computable
-    # (sin excepción); finitud se exige a todos y `!= 0` solo al divisor.
-    usa_fase1 = pd.Series(metodo != "cross_segmentado", index=df_emitir.index)
-    computable_fase1 = (
-        usa_fase1
+    inc_vals = incidencia_pp.to_numpy(dtype=float).copy()
+    for pos in np.flatnonzero(cross):
+        per_t, ind_k = df_emitir.index[pos]
+        valor, estado = _calcular_incidencia_cross_encadenada(
+            per_t,
+            str(ind_k),
+            base_periodos[pos],
+            ver_p_per_row[pos],
+            ver_base_per_row[pos],
+            mensual_flag,
+            df_inpc,
+            clasificacion._completo,
+            inpc._frontera,
+            clasificacion._frontera,
+            pond_por_version,
+        )
+        metodo[pos] = estado
+        if valor is not None:
+            inc_vals[pos] = valor
+    return pd.Series(inc_vals, index=df_emitir.index), metodo
+
+
+def _verificar_operandos_base(
+    metodo: np.ndarray,
+    valores_t: pd.Series,
+    base_clas: pd.Series,
+    pond_serie: pd.Series,
+    inpc_base_serie: pd.Series,
+    df_emitir: pd.DataFrame,
+) -> None:
+    """Guardia de finitud/divisor de la fórmula base, restringida a las filas cuyo valor
+    final SÍ sale de ella (`metodo != "cross_segmentado"`). Una fila `cross_segmentado`
+    puede traer un operando visible provisional inválido que la fórmula exacta ya
+    sustituyó — rechazarla acá sería un falso positivo. Mismo contrato que
+    `variaciones.py`: un operando ausente deja la fila no computable (sin excepción);
+    finitud se exige a todos y `!= 0` solo al divisor.
+    """
+    usa_formula_base = pd.Series(metodo != "cross_segmentado", index=df_emitir.index)
+    computable_base = (
+        usa_formula_base
         & valores_t.notna()
         & base_clas.notna()
         & pond_serie.notna()
         & inpc_base_serie.notna()
     )
-    invalido = computable_fase1 & (
+    invalido = computable_base & (
         ~np.isfinite(valores_t.astype(float))
         | ~np.isfinite(base_clas.astype(float))
         | ~np.isfinite(pond_serie.astype(float))
@@ -740,13 +770,15 @@ def _construir_resultado(
             f"ejemplo {df_emitir.index[invalido][0]}."
         )
 
-    estado_clas_base = pd.Series(
-        df_lookup["estado_calculo"].reindex(base_idx).to_numpy(), index=df_emitir.index
-    )
-    computable = incidencia_pp.notna()
-    # Guardia del resultado: sobre TODAS las filas computables y DESPUÉS de la
-    # sobrescritura de Fase 2A. Cierra el overflow que pasa el gate de entrada (`1e308`
-    # por un ponderador desborda al multiplicar) y que `notna()` no atrapa.
+
+def _verificar_resultado_finito(
+    incidencia_pp: pd.Series, computable: pd.Series, df_emitir: pd.DataFrame
+) -> None:
+    """Guardia del resultado, sobre TODAS las filas computables y DESPUÉS de la
+    sobrescritura por segmentación exacta. Cierra el overflow que pasa el gate de
+    entrada (`1e308` por un ponderador desborda al multiplicar) y que `notna()` no
+    atrapa.
+    """
     resultado_invalido = computable & ~np.isfinite(incidencia_pp.astype(float))
     if resultado_invalido.any():
         raise InvarianteViolado(
@@ -754,6 +786,98 @@ def _construir_resultado(
             f"{int(resultado_invalido.sum())} fila(s) computable(s); "
             f"ejemplo {df_emitir.index[resultado_invalido][0]}."
         )
+
+
+def _construir_resultado(
+    df_emitir: pd.DataFrame,
+    df_lookup: pd.DataFrame,
+    canastas: dict[int, CanastaCanonica],
+    base_periodos: list[Periodo],
+    clase: str,
+    descripcion: str,
+    inpc: ResultadoIndice,
+    clasificacion: ResultadoIndice,
+    indices_parciales: pd.DataFrame | None,
+    excluir_parciales: bool = False,
+) -> ResultadoIncidencia:
+    """Núcleo del cálculo de incidencias: ponderador del periodo base + selección por fila de la escala.
+
+    `df_emitir` aporta las filas `(periodo, indice)` de salida; `df_lookup`
+    aporta los valores de los periodos base. `base_periodos` da, por cada fila
+    de `df_emitir` y en el mismo orden, el periodo base correspondiente.
+
+    Con `excluir_parciales`, las filas con estado derivado `parcial` se
+    descartan de `df_out` (siguen visibles en `reporte`).
+    """
+    # `inpc._completo` no llega como parámetro aparte: sería redundante, ya se pasa
+    # `inpc` completo y los 3 llamadores lo derivan igual antes de llamar (lo necesitan
+    # ahí mismo para `_validar_entradas`, previo a esta función).
+    df_inpc = inpc._completo
+    tipo_clas = str(df_emitir["tipo"].iloc[0])
+    versiones_inpc: list[VersionCanasta] = [m.version for m in inpc.manifiesto]
+    versiones_clas: list[VersionCanasta] = [m.version for m in clasificacion.manifiesto]
+
+    pond_por_version = _construir_ponderadores_por_version(tipo_clas, canastas, clasificacion)
+    indices_clas = df_emitir.index.get_level_values("indice")
+    base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
+
+    # Versión POR FILA (periodo, indice), nunca por periodo: en una frontera de canasta
+    # coexisten índices de versiones distintas, y groupby("periodo").first() los clasificaría
+    # mal — etiqueta equivocada y, peor, el ponderador base se buscaría en la canasta
+    # equivocada (una alta within-canasta caería como "sin ponderador"). ver_base hace
+    # fallback a ver_t cuando el periodo base no existe en el lookup.
+    ver_t_row = df_emitir["version"].to_numpy()
+    ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
+    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
+    ver_base_arr = np.where(pd.notna(ver_b_row), ver_b_row, ver_t_row)
+    ver_p_per_row = [int(v) for v in ver_t_row]
+    ver_base_per_row = [int(v) for v in ver_base_arr]
+
+    valores_t, base_clas, inpc_base_serie, inpc_estado_base = _seleccionar_escala_por_fila(
+        df_emitir, df_lookup, df_inpc, cross, base_idx, base_periodos
+    )
+
+    # Ponderadores de la canasta del periodo base, no del periodo t.
+    pond_serie = pd.Series(
+        [
+            _ponderador(pond_por_version, ver_base, c)
+            for ver_base, c in zip(ver_base_per_row, indices_clas)
+        ],
+        index=df_emitir.index,
+        dtype=float,
+    )
+    pond_t_serie = pd.Series(
+        [_ponderador(pond_por_version, ver_p, c) for ver_p, c in zip(ver_p_per_row, indices_clas)],
+        index=df_emitir.index,
+        dtype=float,
+    )
+
+    # inc_i = w_base_i * (J_t - J_base) / J_INPC_base   (J por selección por fila)
+    incidencia_pp = (valores_t - base_clas) * pond_serie / inpc_base_serie
+
+    # Sobreescribe las filas cross exactas por segmentos, cuando la clasificación es estable.
+    incidencia_pp, metodo = _aplicar_segmentacion_cross(
+        df_emitir,
+        canastas,
+        tipo_clas,
+        cross,
+        incidencia_pp,
+        base_periodos,
+        ver_p_per_row,
+        ver_base_per_row,
+        df_inpc,
+        inpc,
+        clasificacion,
+        pond_por_version,
+    )
+
+    _verificar_operandos_base(metodo, valores_t, base_clas, pond_serie, inpc_base_serie, df_emitir)
+
+    estado_clas_base = pd.Series(
+        df_lookup["estado_calculo"].reindex(base_idx).to_numpy(), index=df_emitir.index
+    )
+    computable = incidencia_pp.notna()
+    _verificar_resultado_finito(incidencia_pp, computable, df_emitir)
     derivado = pd.Series(
         [
             "parcial" if "parcial" in (et, eb, ie) else "ok"

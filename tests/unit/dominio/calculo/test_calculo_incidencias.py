@@ -757,7 +757,7 @@ def test_periodica_verifica_periodo_referencia() -> None:
         incidencia_periodica(inpc, clas, {2018: _canasta_comp()}, "mensual")
 
 
-# -- Fase 2A: incidencia cross-canasta exacta por segmentos ---------------------
+# -- Incidencia cross-canasta exacta por segmentos -------------------------------
 
 
 def test_cross_segmentado_quincenal_es_aditivo() -> None:
@@ -1051,7 +1051,7 @@ def test_cross_segmentado_tipo_clasificacion_estable_no_componente() -> None:
 
 
 def test_cross_visible_sin_clasificacion_estable() -> None:
-    # tipo sin clasificación estable (un genérico cruza de categoría) → cross_visible (Fase 1).
+    # tipo sin clasificación estable (un genérico cruza de categoría) → cae al valor visible.
     can2018 = CanastaCanonica(
         pd.DataFrame(
             {
@@ -1228,13 +1228,13 @@ def test_cross_ancla_faltante_no_lanza_cae_a_visible() -> None:
     assert pd.notna(res.resultado.largo.at[(ago, "A"), "incidencia_pp"])
 
 
-# -- Guardias de Fase 1 en _construir_resultado ---------------------------------
+# -- Guardias de la fórmula base en _construir_resultado ------------------------
 #
 # Los tres casos de la regla 3 NO comparten salida esperada: el dato faltante deja la
 # fila no computable sin excepción; el cero en el divisor y el no finito lanzan; y el
-# overflow lo atrapa la guardia del resultado, que corre después de la sobrescritura de
-# Fase 2A (un `inf` provisional de Fase 1 que la fórmula exacta sustituye no debe
-# rechazarse).
+# overflow lo atrapa la guardia del resultado, que corre después de la sobrescritura
+# por segmentación exacta (un `inf` provisional de la fórmula base que la fórmula
+# exacta sustituye no debe rechazarse).
 
 
 def _inpc_f1(dic: float) -> ResultadoIndice:

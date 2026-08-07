@@ -26,7 +26,7 @@ _JUNTAS_FRONTERA: list[tuple[PeriodoQuincenal, VersionCanasta, VersionCanasta]] 
 
 
 def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
-    """Extrae anclas de junta de un df quincenal empalmado (Fase 2A).
+    """Extrae anclas de junta de un df quincenal empalmado.
 
     Por cada junta `e` presente y que separe dos versiones presentes, guarda los valores
     del tramo viejo en `e` (que el empalme le asigna al tramo anterior). Devuelve `None`

@@ -11,7 +11,7 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 VersionCanasta = Literal[2010, 2013, 2018, 2024]
 
 # Método usado por fila para calcular una incidencia (`calculo/incidencias.py`):
-# within-canasta exacto; cross-canasta exacto por segmentos (Fase 2B); cross-canasta
+# within-canasta exacto; cross-canasta exacto por segmentos; cross-canasta
 # sin garantía (índice visible); cross-canasta sin ancla suficiente para segmentar.
 MetodoIncidencia = Literal["within", "cross_segmentado", "cross_visible", "cross_sin_frontera"]
 
