@@ -11,16 +11,25 @@ Corrige la escala de los índices antes de descomponer:
 
 - Los ponderadores son los de la canasta del periodo base, no del periodo `t`.
 - `indice_incidencia` (= i_tramo de-encadenado, columna interna de `ResultadoIndice`)
-  se usa within-canasta (`version_t == version_base`): exacto e invariante al rebase.
-- Cross-canasta (`version_t != version_base`): para tipos de clasificación estable
-  (`_es_clasificacion_estable`) se descompone exacto por segmentos
-  (`_calcular_incidencia_cross_encadenada`), derivando el ancla del lado nuevo de cada
-  junta por continuidad del visible — exacto para las 3 juntas, T1 incluida; para tipos
-  finos sin clasificación estable cae al `indice_replicado` visible (`cross_visible`,
-  sin garantía).
+  se usa within-canasta: exacto e invariante al rebase.
+- Tres casos por fila, no dos (`_construir_resultado`):
+  - **within** — ni clasificación ni INPC cruzan versión: `indice_incidencia` directo,
+    exacto.
+  - **cross_clas** (`version_t != version_lag`, clasificación cruza versión) — para tipos
+    con clasificación estable (`_es_clasificacion_estable`) se descompone exacto por
+    segmentos (`_calcular_incidencia_cross_encadenada`), derivando el ancla del lado nuevo
+    de cada junta por continuidad del visible — exacto para las 3 juntas, T1 incluida; para
+    tipos finos sin clasificación estable cae al `indice_replicado` visible
+    (`cross_visible`, sin garantía).
+  - **discordancia exclusiva del INPC** (`_detectar_discordancia_inpc`: clasificación NO
+    cruza versión, pero el INPC sí en `t` o en `base` — típico en la fila de la junta) —
+    siempre `cross_visible`, sin intentar segmentar: no hay tramo de CLASIFICACIÓN que
+    partir, aunque el tipo sea de clasificación estable (`INFLACION COMPONENTE` incluido).
   El método por fila se marca en `metodo_incidencia` — en `.reporte`/`.diagnostico`, NO en
-  `.resultado.largo` (`Vista.largo` devuelve el `_df_resultado` entero). El cruce es además
-  detectable por `version_t != version_lag`.
+  `.resultado.largo` (`Vista.largo` devuelve el `_df_resultado` entero). `version_t !=
+  version_lag` detecta solo el caso cross_clas; la discordancia exclusiva del INPC no
+  cambia `version_t`/`version_lag` (son de clasificación) — solo se ve en
+  `metodo_incidencia` != `within`.
 """
 
 from __future__ import annotations
@@ -120,12 +129,25 @@ def _validar_entradas(
             f"El tipo de clasificación '{tipo_clas}' no es válido. "
             f"Tipos soportados: {sorted(COLUMNAS_CLASIFICACION)}"
         )
+    if es_mensual(df_inpc) != es_mensual(df_clas):
+        raise ErrorConfiguracion(
+            "'inpc' y 'clasificacion' deben tener la misma periodicidad; "
+            f"inpc {'mensual' if es_mensual(df_inpc) else 'quincenal'}, "
+            f"clasificacion {'mensual' if es_mensual(df_clas) else 'quincenal'}."
+        )
     clas_vers = {int(v) for v in df_clas["version"].unique()}
     faltantes = clas_vers - set(canastas.keys())
     if faltantes:
         raise ErrorConfiguracion(
             f"Falta canasta para versión(es) {sorted(faltantes)}. "
             "Proporciona una canasta por cada versión presente en el resultado."
+        )
+    incorrectas = {v for v, c in canastas.items() if c.version != v}
+    if incorrectas:
+        raise ErrorConfiguracion(
+            f"La(s) canasta(s) en la(s) clave(s) {sorted(incorrectas)} no coincide(n) con "
+            "su propia versión (CanastaCanonica.version). La clave del dict debe ser la "
+            "misma versión que la canasta contiene."
         )
 
 
@@ -593,6 +615,32 @@ def _ponderador(pond_por_version: dict[int, pd.Series], version: int, categoria:
     return float(pond.get(categoria, float("nan"))) if pond is not None else float("nan")
 
 
+def _detectar_discordancia_inpc(
+    df_inpc: pd.DataFrame,
+    periodos_t: pd.Index,
+    base_periodos: list[Periodo],
+    ver_t_row: np.ndarray,
+    ver_base_arr: np.ndarray,
+) -> np.ndarray:
+    """`True` donde la versión del INPC (en `t` o en `base`) no coincide con la versión
+    de clasificación en esa misma fila.
+
+    Caso real: en la quincena/mes de la junta, el INPC queda etiquetado con la versión
+    VIEJA (por convención de empalme, esa fila es del tramo anterior), pero una categoría
+    NUEVA sin predecesor en la canasta vieja no tiene esa opción — se etiqueta con la
+    versión NUEVA en esa misma fila. Sin esta guardia, esa fila se marca `within` (porque
+    clasificación sola coincide consigo misma) mezclando `J_K` en escala nueva con
+    `J_INPC` en escala vieja. `NaN` en el INPC (periodo fuera de su cobertura) no cuenta
+    como discordancia — eso ya lo atrapa la falta de dato aguas abajo.
+    """
+    inpc_ver_por_periodo = df_inpc.xs("INPC", level="indice")["version"]
+    inpc_ver_t = inpc_ver_por_periodo.reindex(periodos_t).to_numpy()
+    inpc_ver_b = inpc_ver_por_periodo.reindex(base_periodos).to_numpy()
+    return (pd.notna(inpc_ver_t) & (inpc_ver_t != ver_t_row)) | (
+        pd.notna(inpc_ver_b) & (inpc_ver_b != ver_base_arr)
+    )
+
+
 def _construir_ponderadores_por_version(
     tipo_clas: str, canastas: dict[int, CanastaCanonica], clasificacion: ResultadoIndice
 ) -> dict[int, pd.Series]:
@@ -692,6 +740,7 @@ def _aplicar_segmentacion_cross(
     canastas: dict[int, CanastaCanonica],
     tipo_clas: str,
     cross: np.ndarray,
+    cross_clas: np.ndarray,
     incidencia_pp: pd.Series,
     base_periodos: list[Periodo],
     ver_p_per_row: list[int],
@@ -704,15 +753,22 @@ def _aplicar_segmentacion_cross(
     """Sobreescribe filas cross de tipos con clasificación estable por la incidencia
     exacta segmentada (`_calcular_incidencia_cross_encadenada`). Las filas within quedan
     `within`; las cross sin clasificación estable quedan `cross_visible` (el valor visible
-    ya calculado, sin garantía). Devuelve `(incidencia_pp, metodo_incidencia)`.
+    ya calculado, sin garantía).
+
+    `cross` (más amplio, incluye discordancia de versión del INPC — ver
+    `_detectar_discordancia_inpc`) decide el marcador inicial y la escala; `cross_clas`
+    (solo clasificación) decide en qué filas SÍ hay un segmento de clasificación que
+    construir — una fila cross únicamente por discordancia del INPC no tiene tramo de
+    clasificación que partir y se queda en `cross_visible` directo. Devuelve
+    `(incidencia_pp, metodo_incidencia)`.
     """
     mensual_flag = es_mensual(df_emitir)
     metodo = np.where(cross, "cross_visible", "within").astype(object)
-    if not (cross.any() and _es_clasificacion_estable(tipo_clas, canastas)):
+    if not (cross_clas.any() and _es_clasificacion_estable(tipo_clas, canastas)):
         return incidencia_pp, metodo
 
     inc_vals = incidencia_pp.to_numpy(dtype=float).copy()
-    for pos in np.flatnonzero(cross):
+    for pos in np.flatnonzero(cross_clas):
         per_t, ind_k = df_emitir.index[pos]
         valor, estado = _calcular_incidencia_cross_encadenada(
             per_t,
@@ -817,7 +873,19 @@ def _construir_resultado(
     versiones_inpc: list[VersionCanasta] = [m.version for m in inpc.manifiesto]
     versiones_clas: list[VersionCanasta] = [m.version for m in clasificacion.manifiesto]
 
-    pond_por_version = _construir_ponderadores_por_version(tipo_clas, canastas, clasificacion)
+    # Canastas relevantes para ESTA clasificación: solo las versiones que de verdad
+    # aparecen en su historia. `canastas` (el dict que recibe la función pública) suele
+    # traer una entrada por cada versión del resultado COMPLETO (INPC incluido, que
+    # puede abarcar más historia que una clasificación nueva a mitad de camino, ej.
+    # DURABILIDAD/CANASTA CONSUMO MINIMO) — una canasta extra e irrelevante ahí cambiaría
+    # el veredicto de `_es_clasificacion_estable` (ve categorías vacías de una versión
+    # que esta clasificación nunca usó) y ensuciaría `pond_por_version` sin necesidad.
+    clas_vers_presentes = {int(v) for v in clasificacion._completo["version"].unique()}
+    canastas_relevantes = {v: c for v, c in canastas.items() if v in clas_vers_presentes}
+
+    pond_por_version = _construir_ponderadores_por_version(
+        tipo_clas, canastas_relevantes, clasificacion
+    )
     indices_clas = df_emitir.index.get_level_values("indice")
     base_idx = pd.MultiIndex.from_arrays([base_periodos, indices_clas], names=["periodo", "indice"])
 
@@ -828,10 +896,24 @@ def _construir_resultado(
     # fallback a ver_t cuando el periodo base no existe en el lookup.
     ver_t_row = df_emitir["version"].to_numpy()
     ver_b_row = df_lookup["version"].reindex(base_idx).to_numpy()
-    cross = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
+    cross_clas = pd.notna(ver_b_row) & (ver_t_row != ver_b_row)
     ver_base_arr = np.where(pd.notna(ver_b_row), ver_b_row, ver_t_row)
     ver_p_per_row = [int(v) for v in ver_t_row]
     ver_base_per_row = [int(v) for v in ver_base_arr]
+
+    # La versión del INPC puede discrepar de la de clasificación justo en la fila de la
+    # junta (`_detectar_discordancia_inpc`); eso también es cruce para la SELECCIÓN DE
+    # ESCALA aunque no haya segmento de clasificación que partir — por eso `cross` (usado
+    # para escala) es más amplio que `cross_clas` (usado para decidir dónde intentar la
+    # segmentación exacta).
+    discordancia_inpc = _detectar_discordancia_inpc(
+        df_inpc,
+        df_emitir.index.get_level_values("periodo"),
+        base_periodos,
+        ver_t_row,
+        ver_base_arr,
+    )
+    cross = cross_clas | discordancia_inpc
 
     valores_t, base_clas, inpc_base_serie, inpc_estado_base = _seleccionar_escala_por_fila(
         df_emitir, df_lookup, df_inpc, cross, base_idx, base_periodos
@@ -858,9 +940,10 @@ def _construir_resultado(
     # Sobreescribe las filas cross exactas por segmentos, cuando la clasificación es estable.
     incidencia_pp, metodo = _aplicar_segmentacion_cross(
         df_emitir,
-        canastas,
+        canastas_relevantes,
         tipo_clas,
         cross,
+        cross_clas,
         incidencia_pp,
         base_periodos,
         ver_p_per_row,
