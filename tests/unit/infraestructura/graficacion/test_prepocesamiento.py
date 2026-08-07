@@ -9,7 +9,7 @@ import pytest
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 from replica_inpc.infraestructura.graficacion import _prepocesamiento as pp
 
@@ -308,6 +308,75 @@ def test_primero_ultimo_devuelve_extremos_con_una_sola_serie() -> None:
     primero, ultimo = resultado
     assert primero["indice_replicado"] == 100.0
     assert ultimo["indice_replicado"] == 110.0
+
+
+# --------------------------------------------------------------------------- _datos_para_puntos
+
+
+def _quincenas(n: int) -> list[PeriodoQuincenal]:
+    todas = [PeriodoQuincenal(2018 + i // 24, (i % 24) // 2 + 1, i % 2 + 1) for i in range(n)]
+    return todas
+
+
+def _meses(n: int) -> list[PeriodoMensual]:
+    return [PeriodoMensual(2018 + i // 12, i % 12 + 1) for i in range(n)]
+
+
+def _datos_serie(periodos: list[Any], indice: str = "INPC") -> pd.DataFrame:
+    r = _resultado([(p, indice, 100.0 + i, "ok") for i, p in enumerate(periodos)])
+    return pp._aplanar_resultado(r)
+
+
+def test_puntos_en_todas_las_filas_con_un_ano_quincenal() -> None:
+    datos = _datos_serie(_quincenas(pp._MAX_PERIODOS_CON_PUNTOS_QUINCENAL))
+    resultado = pp._datos_para_puntos(datos)
+    assert resultado is not None
+    assert len(resultado) == len(datos)
+
+
+def test_sin_puntos_pasando_un_ano_quincenal() -> None:
+    datos = _datos_serie(_quincenas(pp._MAX_PERIODOS_CON_PUNTOS_QUINCENAL + 1))
+    assert pp._datos_para_puntos(datos) is None
+
+
+def test_puntos_en_todas_las_filas_con_un_ano_mensual() -> None:
+    # El tope mensual (12) es distinto del quincenal (24): 13 periodos
+    # mensuales ya pasan el año, 13 quincenales no.
+    datos = _datos_serie(_meses(pp._MAX_PERIODOS_CON_PUNTOS_MENSUAL))
+    resultado = pp._datos_para_puntos(datos)
+    assert resultado is not None
+    assert len(resultado) == len(datos)
+
+
+def test_sin_puntos_pasando_un_ano_mensual() -> None:
+    datos = _datos_serie(_meses(pp._MAX_PERIODOS_CON_PUNTOS_MENSUAL + 1))
+    assert pp._datos_para_puntos(datos) is None
+
+
+def test_puntos_solo_en_la_categoria_de_una_sola_aparicion() -> None:
+    # Tramo largo (sin puntos por regla de rango), pero una categoría existe
+    # en un único periodo: geom_line no la dibuja, el punto es lo único que
+    # la hace visible.
+    periodos = _quincenas(48)
+    largas = [(p, "INPC", 100.0, "ok") for p in periodos]
+    r = _resultado([*largas, (periodos[10], "rara", 95.0, "ok")], tipo="CCIF DIVISION")
+    datos = pp._aplanar_resultado(r)
+    resultado = pp._datos_para_puntos(datos)
+    assert resultado is not None
+    assert resultado["indice"].tolist() == ["rara"]
+
+
+def test_puntos_agrupan_por_indice_y_linetype_no_solo_indice() -> None:
+    # Mismo `indice` en resultado (solid) y comparacion (dashed): la serie
+    # punteada tiene 1 sola observación y debe llevar punto, aunque el
+    # `indice` en total tenga muchas filas.
+    periodos = _quincenas(48)
+    principal = _resultado([(p, "INPC", 100.0, "ok") for p in periodos])
+    comparacion = _resultado([(periodos[0], "INPC", 200.0, "ok")])
+    datos = pp._aplanar_resultado(principal, comparacion)
+    resultado = pp._datos_para_puntos(datos)
+    assert resultado is not None
+    assert resultado["linetype"].tolist() == ["dashed"]
 
 
 # --------------------------------------------------------------------------- helpers variaciones

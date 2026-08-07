@@ -39,6 +39,7 @@ from replica_inpc.infraestructura.graficacion._prepocesamiento import (
     _breaks_y,
     _breaks_y_etiquetas_x,
     _colores_y_etiquetas,
+    _datos_para_puntos,
     _etiqueta_y_indice,
     _ordenar_series_dibujo,
     _particionar_series,
@@ -84,16 +85,15 @@ def _construir_grafica_linea(
         grafica = grafica + geom_hline(
             yintercept=valor_base, linetype="dashed", color="grey", size=0.3
         )
-    grafica = (
-        grafica
-        + geom_line(size=0.5)
-        # Grupos de un solo punto (ej. variacion_desde: una fila por índice)
-        # no dibujan nada con geom_line solo — plotnine emite un warning y
-        # el punto queda invisible. geom_point cubre ese caso sin afectar
-        # series con más de un punto (la línea ya las conecta).
-        + geom_point(size=1.5)
-        + scale_linetype_identity(guide=None)
-    )
+    grafica = grafica + geom_line(size=0.5) + scale_linetype_identity(guide=None)
+    # Los puntos no van siempre: en un tramo largo, uno por periodo satura la
+    # línea. `_datos_para_puntos` decide qué filas los llevan — todas si el
+    # tramo cabe en un año, o solo las series de una única observación (ej.
+    # variacion_desde, o una categoría que aparece en un solo periodo), que
+    # `geom_line` deja invisibles.
+    datos_puntos = _datos_para_puntos(datos)
+    if datos_puntos is not None:
+        grafica = grafica + geom_point(data=datos_puntos, size=0.5)
 
     primero_ultimo = _primero_y_ultimo_para_anotar(datos, series)
     if primero_ultimo is not None:

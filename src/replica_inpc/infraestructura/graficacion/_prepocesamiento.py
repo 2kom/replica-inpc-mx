@@ -31,6 +31,10 @@ _PALETA_OTROS_TIPOS = (
 # color distinguible que asignar, toca partir en varias imágenes.
 _MAX_SERIES_POR_IMAGEN = len(_PALETA_OTROS_TIPOS)
 _MAX_CARACTERES_LEYENDA = 34
+# Un año de periodos según periodicidad: hasta acá los puntos caben sobre la
+# línea sin saturarla, y marcan cada observación real (útil en tramos cortos).
+_MAX_PERIODOS_CON_PUNTOS_QUINCENAL = 25
+_MAX_PERIODOS_CON_PUNTOS_MENSUAL = 13
 
 
 def _titulo(datos: pd.DataFrame) -> str:
@@ -225,6 +229,42 @@ def _colores_y_etiquetas(series: list[str]) -> tuple[dict[str, str], dict[str, s
         else:
             etiquetas[serie] = serie
     return colores, etiquetas
+
+
+def _datos_para_puntos(datos: pd.DataFrame) -> pd.DataFrame | None:
+    """Filas que llevan `geom_point`, o `None` si ninguna lo lleva.
+
+    Dos casos, en ese orden:
+
+    1. **Tramo corto** — hasta un año de periodos distintos
+       (`_MAX_PERIODOS_CON_PUNTOS_MENSUAL`/`_QUINCENAL` según la periodicidad
+       de los datos): todas las filas. Con pocas observaciones los puntos
+       marcan cada dato real sin competir con la línea.
+    2. **Tramo largo** — solo los grupos visuales `(indice, linetype)` con una
+       única observación. `geom_line` no dibuja nada con un solo punto por
+       grupo (emite `PlotnineWarning` y la categoría queda invisible), así que
+       el punto es lo único que la hace visible. El resto de series ya se ven
+       por su línea, y en un tramo largo un punto por periodo satura el panel.
+
+    El conteo es de periodos DISTINTOS, no de span de calendario: 24 quincenas
+    con huecos cuentan como un año aunque abarquen más tiempo real.
+
+    Agrupa por `(indice, linetype)` y no solo por `indice` por la misma razón
+    que `_primero_y_ultimo_para_anotar`: `resultado` y `comparacion` pueden
+    compartir `indice` (ej. el mismo INPC en dos tramos) y son grupos visuales
+    distintos.
+    """
+    periodos = datos["periodo"]
+    tope = (
+        _MAX_PERIODOS_CON_PUNTOS_MENSUAL
+        if isinstance(periodos.iloc[0], PeriodoMensual)
+        else _MAX_PERIODOS_CON_PUNTOS_QUINCENAL
+    )
+    if periodos.nunique() <= tope:
+        return datos
+
+    solitarias = datos.groupby(["indice", "linetype"], observed=True).filter(lambda g: len(g) == 1)
+    return solitarias if not solitarias.empty else None
 
 
 def _primero_y_ultimo_para_anotar(

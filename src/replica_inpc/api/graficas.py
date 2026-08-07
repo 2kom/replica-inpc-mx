@@ -35,6 +35,12 @@ def graficar(
     `resultado` es un `ResultadoVariacion`, el eje Y muestra `variacion_pp`
     con base en 0 en vez del índice con base 100.
 
+    Los puntos sobre la línea aparecen solo en dos casos: cuando el tramo
+    graficado cabe en un año (24 periodos quincenales o 12 mensuales), donde
+    marcan cada observación real sin saturar; y, en cualquier tramo, sobre las
+    categorías que aparecen en un único periodo — sin punto quedarían
+    invisibles, porque una línea necesita al menos dos observaciones.
+
     Args:
         resultado: Resultado principal a graficar — `ResultadoIndice` o
             `ResultadoVariacion`.

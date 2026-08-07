@@ -2216,10 +2216,10 @@ def inflacion_minima(
 variaciones = rep.variacion_periodica(indice, frecuencia="mensual")
 
 en      = rep.inflacion_en(variaciones, periodo="Dic 2024")
-acum    = rep.inflacion_acumulada(variaciones, "Ene 2015", "Dic 2024", indice="inpc")
-prom    = rep.inflacion_promedio(variaciones, "Ene 2015", "Dic 2024", indice="inpc")
+acum    = rep.inflacion_acumulada(variaciones, "Ene 2015", "Dic 2024", indice="INPC")
+prom    = rep.inflacion_promedio(variaciones, "Ene 2015", "Dic 2024", indice="INPC")
 p, i, v = rep.inflacion_maxima(variaciones)
-p, i, v = rep.inflacion_maxima(variaciones, indice="Alimentos")
+p, i, v = rep.inflacion_maxima(variaciones, indice="alimentos bebidas y tabaco")
 ```
 
 ---
@@ -2424,10 +2424,10 @@ def menor_incidencia(
 
 ```python
 en      = rep.incidencia_en(inc_mensual, periodo="Dic 2024")
-acum    = rep.incidencia_acumulada(inc_mensual, "Ene 2024", "Dic 2024", indice="Alimentos")
-prom    = rep.incidencia_promedio(inc_mensual, "Ene 2024", "Dic 2024", indice="Alimentos")
+acum    = rep.incidencia_acumulada(inc_mensual, "Ene 2024", "Dic 2024", indice="alimentos bebidas y tabaco")
+prom    = rep.incidencia_promedio(inc_mensual, "Ene 2024", "Dic 2024", indice="alimentos bebidas y tabaco")
 p, i, v = rep.mayor_incidencia(inc_mensual)
-p, i, v = rep.mayor_incidencia(inc_mensual, indice="Alimentos")
+p, i, v = rep.mayor_incidencia(inc_mensual, indice="alimentos bebidas y tabaco")
 ```
 
 ---

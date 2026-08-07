@@ -74,11 +74,43 @@ def test_construir_grafica_agrupa_por_indice_no_tipo() -> None:
     assert grafica.mapping["color"] == "indice"
 
 
-def test_construir_grafica_incluye_geom_point() -> None:
+def test_construir_grafica_incluye_geom_point_en_tramo_corto() -> None:
     r = _resultado([(_P1, "INPC", 90.0, "ok"), (_P2, "INPC", 110.0, "ok")])
     datos = graficador._aplanar_resultado(r)
     grafica = graficador._construir_grafica_linea(datos, r)
     assert "geom_point" in _geoms(grafica)
+
+
+def _quincenas(n: int) -> list[PeriodoQuincenal]:
+    return [PeriodoQuincenal(2018 + i // 24, (i % 24) // 2 + 1, i % 2 + 1) for i in range(n)]
+
+
+def test_construir_grafica_sin_geom_point_en_tramo_largo() -> None:
+    # Pasando el año, un punto por periodo satura la línea: la capa no se
+    # agrega en absoluto (no basta con que quede vacía).
+    r = _resultado([(p, "INPC", 100.0 + i, "ok") for i, p in enumerate(_quincenas(48))])
+    datos = graficador._aplanar_resultado(r)
+    grafica = graficador._construir_grafica_linea(datos, r)
+    assert "geom_point" not in _geoms(grafica)
+
+
+def test_construir_grafica_renderiza_punto_de_serie_solitaria_en_tramo_largo() -> None:
+    # Tramo largo: sin puntos generales, pero la categoría que aparece en un
+    # único periodo sí lo lleva -- geom_line no dibuja nada con un solo punto
+    # por grupo, así que sin esto la categoría quedaría invisible.
+    periodos = _quincenas(48)
+    filas = [(p, "INPC", 100.0 + i, "ok") for i, p in enumerate(periodos)]
+    r = _resultado([*filas, (periodos[10], "rara", 95.0, "ok")], tipo="CCIF DIVISION")
+    datos = graficador._aplanar_resultado(r)
+    grafica = graficador._construir_grafica_linea(datos, r)
+    assert "geom_point" in _geoms(grafica)
+    figura = grafica.draw()
+    try:
+        assert len(figura.axes[0].collections) > 0, "el punto de la serie solitaria no se dibujó"
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
 
 
 def test_construir_grafica_renderiza_puntos_con_un_solo_dato_por_serie() -> None:
