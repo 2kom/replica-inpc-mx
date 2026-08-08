@@ -147,16 +147,30 @@ def _recortar_tramo(
     if desde is not None and hasta is not None and hasta < desde:  # type: ignore[operator]
         raise InvarianteViolado(f"'desde' ({desde}) no puede ser posterior a 'hasta' ({hasta}).")
 
+    filtrado = datos[_mascara_tramo(datos, desde, hasta)]
+    if filtrado.empty:
+        raise InvarianteViolado(f"Sin datos en el rango [{desde}, {hasta}].")
+    return filtrado
+
+
+def _mascara_tramo(
+    datos: pd.DataFrame,
+    desde: PeriodoQuincenal | PeriodoMensual | None,
+    hasta: PeriodoQuincenal | PeriodoMensual | None,
+) -> pd.Series:
+    """Filas de `datos` dentro de `[desde, hasta]`. `None` en un lado = sin límite ahí.
+
+    Separada de `_recortar_tramo` para poder preguntar si un DataFrame tiene
+    algo en el tramo SIN que la respuesta negativa sea una excepción: la línea
+    de referencia de un apilado puede quedar fuera del tramo pedido y eso no
+    impide dibujar las barras.
+    """
     mascara = pd.Series(True, index=datos.index)
     if desde is not None:
         mascara &= datos["periodo"] >= desde
     if hasta is not None:
         mascara &= datos["periodo"] <= hasta
-
-    filtrado = datos[mascara]
-    if filtrado.empty:
-        raise InvarianteViolado(f"Sin datos en el rango [{desde}, {hasta}].")
-    return filtrado
+    return mascara
 
 
 def _particionar_series(
@@ -223,11 +237,16 @@ def _categorias_a_detallar(
     Nunca se detallan menos de `capacidad` categorías: si todas caben en una
     imagen no tiene sentido mandar ninguna al resto solo porque el acumulado ya
     llegó al objetivo.
+
+    Con magnitud total cero (todo el tramo en cero, o un solo periodo base) no
+    hay nada que ordenar ni que cubrir: se detalla una sola imagen. Devolverlas
+    todas repartiría cientos de categorías planas en decenas de imágenes
+    idénticas y vacías.
     """
     magnitudes = _magnitud_por_categoria(datos, columna_valor)
     total = float(magnitudes.sum())
     if total <= 0:
-        return list(magnitudes.index)
+        return list(magnitudes.index[:capacidad])
     acumulada = magnitudes.cumsum() / total
     cuantas = int((acumulada < cobertura).sum()) + 1
     cuantas = max(cuantas, min(len(magnitudes), capacidad))
@@ -520,8 +539,10 @@ def _datos_para_puntos(datos: pd.DataFrame) -> pd.DataFrame | None:
        el punto es lo único que la hace visible. El resto de series ya se ven
        por su línea, y en un tramo largo un punto por periodo satura el panel.
 
-    El conteo es de periodos DISTINTOS, no de span de calendario: 24 quincenas
-    con huecos cuentan como un año aunque abarquen más tiempo real.
+    El conteo es de periodos DISTINTOS, no de span de calendario: 25 quincenas
+    con huecos cuentan como un año aunque abarquen más tiempo real. El tope es
+    25 y 13, no 24 y 12, porque un tramo de un año va de extremo a extremo
+    (`Ene 2024` a `Ene 2025` son 13 meses, no 12).
 
     Agrupa por `(indice, linetype)` y no solo por `indice` por la misma razón
     que `_primero_y_ultimo_para_anotar`: `resultado` y `comparacion` pueden
@@ -537,8 +558,21 @@ def _datos_para_puntos(datos: pd.DataFrame) -> pd.DataFrame | None:
     if periodos.nunique() <= tope:
         return datos
 
-    solitarias = datos.groupby(["indice", "linetype"], observed=True).filter(lambda g: len(g) == 1)
+    solitarias = _grupos_por_tamano(datos, solitarios=True)
     return solitarias if not solitarias.empty else None
+
+
+def _grupos_por_tamano(datos: pd.DataFrame, *, solitarios: bool) -> pd.DataFrame:
+    """Filas de los grupos visuales `(indice, linetype)` con una sola observación, o del resto.
+
+    `geom_line` no dibuja nada con un solo punto por grupo: emite
+    `PlotnineWarning` y la serie queda invisible. Las dos mitades se usan
+    juntas — los solitarios van a `geom_point` (única forma de verlos) y el
+    resto a `geom_line` (así la capa lineal no recibe grupos que no puede
+    dibujar, que es lo que provoca el warning).
+    """
+    tamanos = datos.groupby(["indice", "linetype"], observed=True)["periodo"].transform("size")
+    return datos[tamanos == 1] if solitarios else datos[tamanos > 1]
 
 
 def _primero_y_ultimo_para_anotar(

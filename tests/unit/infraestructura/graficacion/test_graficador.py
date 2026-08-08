@@ -274,7 +274,8 @@ def _resultado_variacion(
     )
     reporte = df[[]].copy()
     diag = pd.DataFrame(columns=["periodo", "indice", "estado_calculo", "motivo_error"])
-    return ResultadoVariacion(df, _manifiesto_variacion(tipo, clase), reporte, diag)
+    parciales = pd.DataFrame() if clase == "desde" else None
+    return ResultadoVariacion(df, _manifiesto_variacion(tipo, clase), reporte, diag, parciales)
 
 
 def _n_categorias_variacion(n: int) -> list[tuple[Any, str, float, str]]:
@@ -460,7 +461,9 @@ def _resultado_incidencia(
         descripcion="",
         fecha=datetime(2024, 1, 1),
     )
-    return ResultadoIncidencia(df, manifiesto, df[[]].copy(), pd.DataFrame())
+    # `indices_parciales is not None` <=> clase == "desde" es invariante del modelo.
+    parciales = pd.DataFrame() if clase == "desde" else None
+    return ResultadoIncidencia(df, manifiesto, df[[]].copy(), pd.DataFrame(), parciales)
 
 
 _M1 = PeriodoMensual(2024, 1)
@@ -819,3 +822,106 @@ def test_graficar_incidencia_recorta_antes_de_repartir(mocker: Any) -> None:
     construir = mocker.patch.object(graficador, "_construir_grafica_barras")
     graficador._graficar_incidencia(ri, None, _M2, None)
     assert set(construir.call_args[0][0]["periodo"]) == {_M2}
+
+
+# --------------------------------------------------------------------------- regresiones de evaluación
+
+
+def _incidencia_desde() -> tuple[Any, Any]:
+    """Forma de `incidencia_desde` + `variacion_desde`: un solo periodo, una fila por indice."""
+    inc = _resultado_incidencia(
+        [(_M1, "cat_a", 1.0, "ok"), (_M1, "cat_b", 2.0, "ok")], clase="desde"
+    )
+    var = _resultado_variacion([(_M1, "INPC", 3.0, "ok")], clase="desde")
+    return graficador._aplanar_resultado(inc), graficador._aplanar_resultado(var)
+
+
+def test_construir_barras_dibuja_la_referencia_de_un_solo_periodo() -> None:
+    # `variacion_desde` produce una fila por indice: geom_line no traza nada
+    # con un solo punto por grupo, asi que sin geom_point la linea de
+    # referencia -- lo unico que le da sentido a la grafica -- desaparece.
+    from matplotlib.collections import PathCollection
+
+    datos, linea = _incidencia_desde()
+    figura = graficador._construir_grafica_barras(datos, linea).draw()
+    try:
+        puntos = [c for c in figura.axes[0].collections if isinstance(c, PathCollection)]
+        # `get_offsets` esta tipado como union laxa; en tiempo de ejecucion es
+        # un array (N, 2) de coordenadas.
+        alturas = [float(y) for c in puntos for y in np.asarray(c.get_offsets())[:, 1]]
+        assert pytest.approx(3.0) in alturas
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+def test_construir_barras_referencia_solitaria_no_emite_warning() -> None:
+    import warnings
+
+    datos, linea = _incidencia_desde()
+    with warnings.catch_warnings(record=True) as capturados:
+        warnings.simplefilter("always")
+        figura = graficador._construir_grafica_barras(datos, linea).draw()
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+    assert not [w for w in capturados if "only one observation" in str(w.message)]
+
+
+def test_construir_grafica_linea_no_emite_warning_con_series_solitarias() -> None:
+    # La capa lineal no debe recibir grupos que no puede dibujar: emiten
+    # PlotnineWarning y con `-W error` reventarian la suite.
+    import warnings
+
+    r = _resultado([(_P1, "A", 90.0, "ok"), (_P1, "B", 110.0, "ok")], tipo="CCIF DIVISION")
+    datos = graficador._aplanar_resultado(r)
+    with warnings.catch_warnings(record=True) as capturados:
+        warnings.simplefilter("always")
+        figura = graficador._construir_grafica_linea(datos, r).draw()
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+    assert not [w for w in capturados if "only one observation" in str(w.message)]
+
+
+def test_graficar_incidencia_comparacion_que_no_es_inpc_no_lanza(mocker: Any, capsys: Any) -> None:
+    # Las barras descomponen la variacion DEL INPC: la de otra clasificacion
+    # dibujaria una linea que no cierra con ellas, y esa distancia se leeria
+    # como defecto de aditividad.
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")], clase="periodica_anual")
+    rv = _resultado_variacion([(_M1, "cat_a", 1.0, "ok")], tipo="COG", clase="periodica_anual")
+    graficador.graficar(ri, comparacion=rv)
+    assert "INPC" in capsys.readouterr().out
+    construir.assert_not_called()
+
+
+def test_graficar_incidencia_comparacion_fuera_del_tramo_dibuja_sin_linea(
+    mocker: Any, capsys: Any
+) -> None:
+    # Barras y linea se recortan por separado: la comparacion puede quedarse
+    # sin filas en el tramo. Eso no cancela la grafica -- el objeto es valido,
+    # solo no alcanza al tramo, y las barras siguen siendo graficables.
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok"), (_M2, "cat_a", 2.0, "ok")])
+    rv = _resultado_variacion([(_M1, "INPC", 1.0, "ok")], clase="periodica_anual")
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, rv, _M2, None)
+
+    assert "Aviso" in capsys.readouterr().out
+    construir.assert_called_once()
+    assert construir.call_args[0][1] is None  # sin linea
+    assert set(construir.call_args[0][0]["periodo"]) == {_M2}  # con barras
+
+
+def test_graficar_incidencia_comparacion_parcial_en_el_tramo_si_dibuja_linea(mocker: Any) -> None:
+    # Solapamiento parcial: la linea se dibuja con lo que alcanza. Solo la
+    # interseccion VACIA activa el aviso.
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok"), (_M2, "cat_a", 2.0, "ok")])
+    rv = _resultado_variacion([(_M1, "INPC", 1.0, "ok")], clase="periodica_anual")
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, rv, _M1, None)
+
+    linea = construir.call_args[0][1]
+    assert linea is not None
+    assert set(linea["periodo"]) == {_M1}

@@ -8,10 +8,12 @@ import pytest
 
 from replica_inpc.api import graficas
 from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoDisponible
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
+from replica_inpc.infraestructura.graficacion import graficador
 
 # --------------------------------------------------------------------------- helpers
 
@@ -176,19 +178,26 @@ def _resultado_mensual() -> ResultadoIndice:
     return _resultado([PeriodoMensual(2018, 1), PeriodoMensual(2018, 2)])
 
 
-@pytest.mark.parametrize("parametro", ["desde", "hasta"])
-def test_graficar_periodo_quincenal_contra_resultado_mensual_falla(mocker, parametro) -> None:
+@pytest.mark.parametrize("es_desde", [True, False])
+def test_graficar_periodo_quincenal_contra_resultado_mensual_falla(mocker, es_desde: bool) -> None:
     fn = mocker.patch.object(graficas, "_graficar")
+    quincenal = "1Q Ene 2018"
     with pytest.raises(InvarianteViolado, match="quincenal.*mensual"):
-        graficas.graficar(_resultado_mensual(), **{parametro: "1Q Ene 2018"})
+        if es_desde:
+            graficas.graficar(_resultado_mensual(), desde=quincenal)
+        else:
+            graficas.graficar(_resultado_mensual(), hasta=quincenal)
     fn.assert_not_called()
 
 
-@pytest.mark.parametrize("parametro", ["desde", "hasta"])
-def test_graficar_periodo_mensual_contra_resultado_quincenal_falla(mocker, parametro) -> None:
+@pytest.mark.parametrize("es_desde", [True, False])
+def test_graficar_periodo_mensual_contra_resultado_quincenal_falla(mocker, es_desde: bool) -> None:
     fn = mocker.patch.object(graficas, "_graficar")
     with pytest.raises(InvarianteViolado, match="mensual.*quincenal"):
-        graficas.graficar(_resultado([_P1, _P2]), **{parametro: "Ene 2018"})
+        if es_desde:
+            graficas.graficar(_resultado([_P1, _P2]), desde="Ene 2018")
+        else:
+            graficas.graficar(_resultado([_P1, _P2]), hasta="Ene 2018")
     fn.assert_not_called()
 
 
@@ -210,3 +219,126 @@ def test_graficar_periodicidad_coincidente_delega(mocker) -> None:
     fn = mocker.patch.object(graficas, "_graficar")
     graficas.graficar(_resultado_mensual(), desde="Ene 2018", hasta="Feb 2018")
     fn.assert_called_once()
+
+
+# --------------------------------------------------------------------------- incidencias
+
+
+def _resultado_incidencia(
+    periodos: list[Any], tipo: str = "COG", clase: str = "periodica_anual"
+) -> ResultadoIncidencia:
+    filas = [
+        {
+            "periodo": p,
+            "indice": "cat",
+            "tipo": tipo,
+            "clase_incidencia": clase,
+            "incidencia_pp": 0.5,
+            "estado_calculo": "ok",
+        }
+        for p in periodos
+    ]
+    df = pd.DataFrame(filas)
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    manifiesto = ManifestDerivado(
+        versiones=[2018],  # type: ignore[list-item]
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
+        fecha=datetime(2024, 1, 1),
+    )
+    return ResultadoIncidencia(df, manifiesto, df[[]].copy(), pd.DataFrame())
+
+
+_MES1, _MES2, _MES3 = PeriodoMensual(2024, 1), PeriodoMensual(2024, 2), PeriodoMensual(2024, 3)
+
+
+def test_graficar_incidencia_delega(mocker) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    graficas.graficar(_resultado_incidencia([_MES1, _MES2]))
+    fn.assert_called_once()
+
+
+def test_graficar_incidencia_desde_solo_en_la_comparacion_lanza(mocker) -> None:
+    # Un limite que solo cubre la linea de referencia deja las barras vacias:
+    # una grafica de incidencias sin barras no es una grafica de incidencias.
+    # Antes pasaba la validacion y reventaba mas abajo, en el recorte, con un
+    # InvarianteViolado que hablaba del rango y no del parametro.
+    fn = mocker.patch.object(graficas, "_graficar")
+    incidencia = _resultado_incidencia([_MES1, _MES2])
+    comparacion = _resultado_variacion([_MES1, _MES2, _MES3], clase="periodica_anual")
+    with pytest.raises(PeriodoNoDisponible):
+        graficas.graficar(incidencia, comparacion, desde="Mar 2024")
+    fn.assert_not_called()
+
+
+def test_graficar_incidencia_desde_presente_en_la_incidencia_delega(mocker) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    incidencia = _resultado_incidencia([_MES1, _MES2])
+    comparacion = _resultado_variacion([_MES1, _MES2, _MES3], clase="periodica_anual")
+    graficas.graficar(incidencia, comparacion, desde="Feb 2024")
+    fn.assert_called_once()
+
+
+def test_graficar_indice_desde_solo_en_la_comparacion_sigue_delegando(mocker) -> None:
+    # En lineas ambos resultados se concatenan en un solo panel, asi que un
+    # limite presente solo en la comparacion sigue recortando algo real.
+    fn = mocker.patch.object(graficas, "_graficar")
+    graficas.graficar(_resultado([_P1]), _resultado([_P1, _P2]), desde="2Q Ene 2018")
+    fn.assert_called_once()
+
+
+def test_graficar_incidencia_periodo_quincenal_contra_incidencia_mensual_falla(mocker) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    with pytest.raises(InvarianteViolado):
+        graficas.graficar(_resultado_incidencia([_MES1, _MES2]), desde="1Q Ene 2024")
+    fn.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("es_desde", "limite", "periodos_comparacion"),
+    [(True, "Mar 2024", [_MES1]), (False, "Ene 2024", [_MES3])],
+    ids=["desde", "hasta"],
+)
+def test_graficar_incidencia_limite_deja_la_comparacion_vacia_no_lanza(
+    mocker, es_desde: bool, limite: str, periodos_comparacion: list[Any]
+) -> None:
+    # El limite existe en la incidencia (que es lo que la API valida) pero deja
+    # la comparacion sin filas. Antes pasaba la validacion y reventaba abajo,
+    # en el recorte, con un InvarianteViolado sobre el rango.
+    #
+    # Se mockea `_construir_grafica_barras` y NO `_graficar`: con el mock
+    # arriba, `_graficar_incidencia` -- que es donde vive el arreglo -- nunca
+    # corre, y el test pasaria igual contra la implementacion rota.
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    incidencia = _resultado_incidencia([_MES1, _MES2, _MES3])
+    comparacion = _resultado_variacion(periodos_comparacion, clase="periodica_anual")
+
+    if es_desde:
+        graficas.graficar(incidencia, comparacion, desde=limite)
+    else:
+        graficas.graficar(incidencia, comparacion, hasta=limite)
+
+    construir.assert_called_once()
+    assert construir.call_args[0][1] is None  # barras dibujadas, sin linea
+
+
+@pytest.mark.parametrize("es_desde", [True, False], ids=["desde", "hasta"])
+def test_graficar_incidencia_limite_con_comparacion_en_rango_dibuja_linea(
+    mocker, es_desde: bool
+) -> None:
+    # Contraparte del anterior: si la comparacion si alcanza el tramo, la linea
+    # se dibuja. Sin este caso, un fix que dejara SIEMPRE la linea en None
+    # pasaria el test de arriba.
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    incidencia = _resultado_incidencia([_MES1, _MES2, _MES3])
+    comparacion = _resultado_variacion([_MES1, _MES2, _MES3], clase="periodica_anual")
+
+    if es_desde:
+        graficas.graficar(incidencia, comparacion, desde="Mar 2024")
+    else:
+        graficas.graficar(incidencia, comparacion, hasta="Ene 2024")
+
+    assert construir.call_args[0][1] is not None

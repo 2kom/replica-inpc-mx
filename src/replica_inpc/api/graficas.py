@@ -15,8 +15,21 @@ def _periodos_disponibles(
     resultado: ResultadoIndice | ResultadoVariacion | ResultadoIncidencia,
     comparacion: ResultadoIndice | ResultadoVariacion | None,
 ) -> set[PeriodoQuincenal | PeriodoMensual]:
+    """Periodos que pueden usarse como `desde`/`hasta`.
+
+    En líneas cuenta la unión: `resultado` y `comparacion` se concatenan en un
+    solo DataFrame y se dibujan en el mismo panel, así que un límite que solo
+    exista en la comparación sigue recortando algo real.
+
+    En incidencias NO: las barras y la línea se recortan por separado, y un
+    límite que solo exista en la línea deja las barras vacías — una gráfica de
+    incidencias sin barras no es una gráfica de incidencias. Ahí solo cuentan
+    los periodos del resultado principal, y el error sale de acá con un
+    mensaje sobre el parámetro en vez de un `InvarianteViolado` genérico desde
+    el recorte.
+    """
     periodos = set(resultado.resultado.largo.index.get_level_values("periodo"))
-    if comparacion is not None:
+    if comparacion is not None and not isinstance(resultado, ResultadoIncidencia):
         periodos |= set(comparacion.resultado.largo.index.get_level_values("periodo"))
     return periodos
 
@@ -51,40 +64,53 @@ def graficar(
     gris claro se detalla en otra imagen; el oscuro no se detalla en ninguna,
     porque su tamaño lo haría invisible contra un eje fijado por el total (en
     `SCIAN RAMA` la categoría más chica vale `0.0007` pp contra un eje que
-    llega a `8.7`). Los grises no aparecen en la leyenda: el título dice
-    cuántas categorías se detallan de cuántas hay. Para forzar el detalle de
-    una categoría chica, no hay parámetro — se ve en la gráfica de líneas, que
-    particiona con un eje propio por imagen.
+    llega a `8.7`). Ambos grises aparecen en la leyenda con su nombre, y al pie
+    va el alcance de la imagen: cuántas categorías detalla de cuántas hay, a la
+    izquierda, y cuál de cuántas imágenes es, a la derecha. Para forzar el
+    detalle de una categoría chica no hay parámetro — se ve en la gráfica de
+    líneas, que particiona con un eje propio por imagen.
 
     Los puntos sobre la línea aparecen solo en dos casos: cuando el tramo
-    graficado cabe en un año (24 periodos quincenales o 12 mensuales), donde
-    marcan cada observación real sin saturar; y, en cualquier tramo, sobre las
-    categorías que aparecen en un único periodo — sin punto quedarían
-    invisibles, porque una línea necesita al menos dos observaciones.
+    graficado cabe en un año (25 periodos quincenales o 13 mensuales, contando
+    ambos extremos), donde marcan cada observación real sin saturar; y, en
+    cualquier tramo, sobre las series que aparecen en un único periodo — sin
+    punto quedarían invisibles, porque una línea necesita al menos dos
+    observaciones.
 
     Args:
-        resultado: Resultado principal a graficar — `ResultadoIndice` o
-            `ResultadoVariacion`.
-        comparacion: Un segundo resultado opcional, del MISMO tipo que
-            `resultado` (`ResultadoIndice` con `ResultadoIndice`, nunca
-            mezclado con `ResultadoVariacion`) y con la MISMA periodicidad
-            (quincenal o mensual). Si ambos son `ResultadoVariacion`,
-            además deben compartir `clase_variacion` (ej. no se puede
-            comparar una variación mensual contra una trimestral). Si algo
-            de esto no se cumple, no se levanta excepción: se imprime un
-            mensaje de error y no se dibuja nada. Cuando es válido, se
-            superpone en el mismo panel (ej. INPC junto a una
-            clasificación) con línea PUNTEADA para distinguirse de
-            `resultado` (línea sólida) aunque comparta color —
-            típicamente así se usa para INPC, que además siempre se dibuja
-            por encima de las demás líneas, sea cual sea el parámetro por
-            el que entre.
+        resultado: Resultado principal a graficar — `ResultadoIndice`,
+            `ResultadoVariacion` o `ResultadoIncidencia`.
+        comparacion: Un segundo resultado opcional, con la MISMA periodicidad
+            que `resultado` (quincenal o mensual). Si algo de lo que sigue no
+            se cumple, no se levanta excepción: se imprime un mensaje de error
+            y no se dibuja nada.
+
+            Para un `ResultadoIndice` o un `ResultadoVariacion` debe ser del
+            MISMO tipo que `resultado`, y si ambos son `ResultadoVariacion`
+            además deben compartir `clase_variacion` (ej. no se puede comparar
+            una variación mensual contra una trimestral). Se superpone en el
+            mismo panel (ej. INPC junto a una clasificación) con línea PUNTEADA
+            para distinguirse de `resultado` (línea sólida) aunque comparta
+            color — típicamente así se usa para INPC, que además siempre se
+            dibuja por encima de las demás líneas, sea cual sea el parámetro
+            por el que entre.
+
+            Para un `ResultadoIncidencia` es el único caso donde el tipo NO
+            coincide: se espera el `ResultadoVariacion` **del INPC** (`tipo`
+            debe ser `"INPC"`, y la clase la misma que la incidencia), que es
+            justo lo que las barras descomponen. Se dibuja como línea negra
+            sobre ellas. Si con `desde`/`hasta` la comparación se queda sin
+            datos en el tramo, la gráfica NO se cancela: se avisa y se dibujan
+            las barras solas.
         desde: Periodo inicial del tramo a mostrar (ej. `"1Q Ene 2018"`,
             `"Ene 2018"` si es mensual) — recorta el eje X. Tiene que ser de
             la MISMA periodicidad que `resultado` y existir de verdad en los
-            datos de `resultado` o `comparacion`; no basta con que el texto
-            tenga formato válido. `None` = desde el primer periodo
-            disponible.
+            datos; no basta con que el texto tenga formato válido. Para
+            índices y variaciones basta con que exista en `resultado` o en
+            `comparacion`; para una incidencia tiene que existir en la
+            incidencia misma, porque un límite que solo cubra la línea de
+            referencia dejaría la gráfica sin barras. `None` = desde el
+            primer periodo disponible.
         hasta: Igual que `desde`, pero el límite final del tramo. `None` =
             hasta el último periodo disponible.
 

@@ -534,6 +534,16 @@ def test_detallar_todas_si_hay_menos_que_la_capacidad() -> None:
     assert len(pp._categorias_a_detallar(datos, "incidencia_pp", capacidad=8)) == 3
 
 
+def test_detallar_con_magnitud_cero_no_pasa_de_una_imagen() -> None:
+    # Todo en cero (tramo plano, o un unico periodo base): no hay nada que
+    # ordenar ni que cubrir. Devolver todas repartiria las categorias en
+    # decenas de imagenes identicas y vacias.
+    datos = _datos_apilado([0.0] * 20)
+    detalladas = pp._categorias_a_detallar(datos, "incidencia_pp", capacidad=8)
+    assert len(detalladas) == 8
+    assert len(pp._particionar_apilado(datos, "incidencia_pp", capacidad=8)) == 1
+
+
 def test_filas_resto_separa_los_dos_signos() -> None:
     datos = _datos_apilado([2.0, 1.0])
     resto = pp._filas_resto(datos, "incidencia_pp", ["cat00", "cat01"], "__x__")
@@ -671,30 +681,40 @@ def _datos_serie(periodos: list[Any], indice: str = "INPC") -> pd.DataFrame:
     return pp._aplanar_resultado(r)
 
 
-def test_puntos_en_todas_las_filas_con_un_ano_quincenal() -> None:
-    datos = _datos_serie(_quincenas(pp._MAX_PERIODOS_CON_PUNTOS_QUINCENAL))
+# Los topes van con LITERALES a proposito: usar las constantes como oraculo
+# haria que el test siguiera pasando si alguien las cambia, que es justo lo que
+# dejo pasar la discrepancia con lo que documentaba la API (24/12 contra 25/13).
+# Un año va de extremo a extremo: `Ene 2024` a `Ene 2025` son 13 meses.
+
+
+@pytest.mark.parametrize("cuantos", [24, 25])
+def test_puntos_en_todas_las_filas_hasta_25_quincenas(cuantos: int) -> None:
+    datos = _datos_serie(_quincenas(cuantos))
     resultado = pp._datos_para_puntos(datos)
     assert resultado is not None
     assert len(resultado) == len(datos)
 
 
-def test_sin_puntos_pasando_un_ano_quincenal() -> None:
-    datos = _datos_serie(_quincenas(pp._MAX_PERIODOS_CON_PUNTOS_QUINCENAL + 1))
-    assert pp._datos_para_puntos(datos) is None
+def test_sin_puntos_con_26_quincenas() -> None:
+    assert pp._datos_para_puntos(_datos_serie(_quincenas(26))) is None
 
 
-def test_puntos_en_todas_las_filas_con_un_ano_mensual() -> None:
-    # El tope mensual (12) es distinto del quincenal (24): 13 periodos
-    # mensuales ya pasan el año, 13 quincenales no.
-    datos = _datos_serie(_meses(pp._MAX_PERIODOS_CON_PUNTOS_MENSUAL))
+@pytest.mark.parametrize("cuantos", [12, 13])
+def test_puntos_en_todas_las_filas_hasta_13_meses(cuantos: int) -> None:
+    datos = _datos_serie(_meses(cuantos))
     resultado = pp._datos_para_puntos(datos)
     assert resultado is not None
     assert len(resultado) == len(datos)
 
 
-def test_sin_puntos_pasando_un_ano_mensual() -> None:
-    datos = _datos_serie(_meses(pp._MAX_PERIODOS_CON_PUNTOS_MENSUAL + 1))
-    assert pp._datos_para_puntos(datos) is None
+def test_sin_puntos_con_14_meses() -> None:
+    assert pp._datos_para_puntos(_datos_serie(_meses(14))) is None
+
+
+def test_el_tope_mensual_es_menor_que_el_quincenal() -> None:
+    # 14 periodos pasan el año en mensual pero no en quincenal.
+    assert pp._datos_para_puntos(_datos_serie(_meses(14))) is None
+    assert pp._datos_para_puntos(_datos_serie(_quincenas(14))) is not None
 
 
 def test_puntos_solo_en_la_categoria_de_una_sola_aparicion() -> None:

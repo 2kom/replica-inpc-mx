@@ -36,6 +36,7 @@ from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.tipos import TIPO_INPC
 from replica_inpc.infraestructura.graficacion._prepocesamiento import (
     _COLOR_INPC,
     _COLUMNA_INCIDENCIA,
@@ -56,6 +57,8 @@ from replica_inpc.infraestructura.graficacion._prepocesamiento import (
     _datos_para_puntos,
     _etiqueta_y_indice,
     _extremos_apilado,
+    _grupos_por_tamano,
+    _mascara_tramo,
     _ordenar_series_dibujo,
     _particionar_apilado,
     _particionar_series,
@@ -105,7 +108,14 @@ def _construir_grafica_linea(
         grafica = grafica + geom_hline(
             yintercept=valor_base, linetype="dashed", color="grey", size=0.3
         )
-    grafica = grafica + geom_line(size=0.5) + scale_linetype_identity(guide=None)
+    # La capa lineal recibe solo los grupos que puede dibujar: con una única
+    # observación no traza nada y además emite `PlotnineWarning`, así que
+    # pasarle esos grupos solo produce ruido.
+    grafica = (
+        grafica
+        + geom_line(data=_grupos_por_tamano(datos, solitarios=False), size=0.5)
+        + scale_linetype_identity(guide=None)
+    )
     # Los puntos no van siempre: en un tramo largo, uno por periodo satura la
     # línea. `_datos_para_puntos` decide qué filas los llevan — todas si el
     # tramo cabe en un año, o solo las series de una única observación (ej.
@@ -231,15 +241,22 @@ def _construir_grafica_barras(
     )
     if linea is not None:
         series_linea = list(pd.unique(linea["indice"]))
+        mapeo_linea = aes(x="periodo_ts", y=_COLUMNA_VARIACION, color="indice")
         grafica = (
             grafica
             + geom_line(
-                mapping=aes(x="periodo_ts", y=_COLUMNA_VARIACION, color="indice"),
-                data=linea,
+                mapping=mapeo_linea,
+                data=_grupos_por_tamano(linea, solitarios=False),
                 size=0.3,
             )
             + scale_color_manual(values={s: _COLOR_INPC for s in series_linea})
         )
+        # La referencia de un solo periodo (`incidencia_desde` contra
+        # `variacion_desde`) es un punto: sin esto no se dibuja nada y la
+        # gráfica queda sin su línea, que es justo lo que le da sentido.
+        puntos_linea = _datos_para_puntos(linea)
+        if puntos_linea is not None:
+            grafica = grafica + geom_point(mapping=mapeo_linea, data=puntos_linea, size=1.0)
 
     return (
         grafica
@@ -290,11 +307,25 @@ def _graficar_incidencia(
 
     El tramo se recorta ANTES de repartir: qué categorías merecen detalle
     depende de lo que se va a mirar, no del histórico completo.
+
+    Barras y línea se recortan por separado, así que la comparación puede
+    quedarse sin ninguna fila en el tramo pedido. Eso NO cancela la gráfica: se
+    avisa y se dibujan las barras solas. Es distinto de una comparación
+    inválida por tipo, clase o periodicidad — ahí el objeto está equivocado y
+    no se dibuja nada; acá es el correcto y solo no alcanza al tramo, y las
+    barras siguen siendo perfectamente graficables.
     """
     datos = _recortar_tramo(_aplanar_resultado(resultado), desde, hasta)
     linea = None
     if comparacion is not None:
-        linea = _recortar_tramo(_aplanar_resultado(comparacion), desde, hasta)
+        aplanada = _aplanar_resultado(comparacion)
+        if _mascara_tramo(aplanada, desde, hasta).any():
+            linea = _recortar_tramo(aplanada, desde, hasta)
+        else:
+            print(
+                "Aviso, comparacion no tiene datos en el tramo pedido "
+                f"[{desde}, {hasta}]: se grafican las barras sin linea de referencia."
+            )
 
     categorias_totales = len(pd.unique(datos["indice"]))
     partes = _particionar_apilado(datos, _COLUMNA_INCIDENCIA)
@@ -421,6 +452,15 @@ def graficar(
                 print(
                     "Error, comparacion de una incidencia debe ser un ResultadoVariacion "
                     "(la variación del INPC que las incidencias descomponen)."
+                )
+                return
+            if comparacion.manifiesto.tipo != TIPO_INPC:
+                # Las barras descomponen la variación DEL INPC: superponer la de
+                # otra clasificación dibuja una línea que no tiene por qué cerrar
+                # con ellas, y esa distancia se leería como defecto de aditividad.
+                print(
+                    "Error, comparacion de una incidencia debe ser la variación del INPC; "
+                    f"recibió tipo='{comparacion.manifiesto.tipo}'."
                 )
                 return
             if es_mensual(resultado.resultado.largo) != es_mensual(comparacion.resultado.largo):
