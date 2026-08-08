@@ -182,6 +182,32 @@ def test_ordenar_series_dibujo_inpc_al_final() -> None:
     assert list(categorico.categories) == ["cat_b", "cat_a", "INPC"]
 
 
+def test_ordenar_series_dibujo_orden_explicito_reemplaza_el_de_aparicion() -> None:
+    valores = pd.Series(["c", "a", "b"])
+    resultado = pp._ordenar_series_dibujo(valores, ["b", "a", "c"])
+    assert list(resultado.categories) == ["b", "a", "c"]
+
+
+def test_ordenar_series_dibujo_orden_parcial_no_pierde_categorias() -> None:
+    # Una lista que no menciona todas las categorias no debe hacerlas
+    # desaparecer: las que faltan van al final, en orden de aparicion.
+    valores = pd.Series(["c", "a", "b"])
+    resultado = pp._ordenar_series_dibujo(valores, ["b"])
+    assert list(resultado.categories) == ["b", "c", "a"]
+
+
+def test_ordenar_series_dibujo_orden_ignora_categorias_ausentes() -> None:
+    valores = pd.Series(["a", "b"])
+    resultado = pp._ordenar_series_dibujo(valores, ["z", "b", "a"])
+    assert list(resultado.categories) == ["b", "a"]
+
+
+def test_ordenar_series_dibujo_orden_explicito_no_adelanta_inpc() -> None:
+    valores = pd.Series(["a", "INPC", "b"])
+    resultado = pp._ordenar_series_dibujo(valores, ["INPC", "b", "a"])
+    assert list(resultado.categories)[-1] == "INPC"
+
+
 def test_ordenar_series_dibujo_sin_inpc_mantiene_orden_aparicion() -> None:
     valores = pd.Series(["cat_b", "cat_a", "cat_b"])
     categorico = pp._ordenar_series_dibujo(valores)
@@ -308,6 +334,143 @@ def test_primero_ultimo_devuelve_extremos_con_una_sola_serie() -> None:
     primero, ultimo = resultado
     assert primero["indice_replicado"] == 100.0
     assert ultimo["indice_replicado"] == 110.0
+
+
+# --------------------------------------------------------------------------- _breaks_desde_extremos
+
+
+def test_breaks_extremos_siempre_incluye_minimo_y_maximo() -> None:
+    breaks = pp._breaks_desde_extremos(-1.21, 8.77, 0.0)
+    assert breaks[0] == -1.21
+    assert breaks[-1] == 8.77
+
+
+def test_breaks_extremos_descarta_automatico_pegado_al_minimo() -> None:
+    # Caso real: minimo -1.21 con un break automatico en -1.0 -- a esa
+    # distancia las dos etiquetas se dibujan encima una de la otra.
+    breaks = pp._breaks_desde_extremos(-1.21, 8.77, 0.0)
+    assert -1.0 not in breaks
+    assert -1.21 in breaks
+
+
+def test_breaks_extremos_descarta_automatico_pegado_al_maximo() -> None:
+    breaks = pp._breaks_desde_extremos(-0.826, 1.554, 0.0)
+    assert 1.5 not in breaks
+    assert 1.554 in breaks
+
+
+def test_breaks_extremos_conserva_base_lejos_de_los_extremos() -> None:
+    assert 0.0 in pp._breaks_desde_extremos(-1.21, 8.77, 0.0)
+
+
+def test_breaks_extremos_descarta_base_pegada_a_un_extremo() -> None:
+    # Base 0 contra un minimo de -0.001 sobre un rango de ~10: la marca de la
+    # base no es legible ahi, y el extremo forzado ya ocupa ese lugar.
+    breaks = pp._breaks_desde_extremos(-0.001, 10.0, 0.0)
+    assert 0.0 not in breaks
+
+
+def test_breaks_extremos_rango_cero_devuelve_un_solo_break() -> None:
+    assert pp._breaks_desde_extremos(5.0, 5.0, 0.0) == [5.0]
+
+
+def test_breaks_extremos_separacion_minima_respetada_entre_todos() -> None:
+    minimo, maximo = -1.21, 8.77
+    breaks = pp._breaks_desde_extremos(minimo, maximo, 0.0)
+    holgura = (maximo - minimo) * pp._SEPARACION_MINIMA_BREAKS
+    assert all(b >= minimo + holgura for b in breaks[1:-1])
+    assert all(b <= maximo - holgura for b in breaks[1:-1])
+
+
+# --------------------------------------------------------------------------- _breaks_y_etiquetas_x
+
+
+def test_breaks_x_reparte_parejo_hasta_el_ultimo_periodo() -> None:
+    # Antes, la grilla `::paso` arrancaba en 0 y el ultimo periodo se agregaba
+    # aparte: el salto final quedaba mucho mas corto que el resto (5 contra 9
+    # en un tramo mensual real) y las etiquetas se amontonaban a la derecha.
+    periodos = _meses(186)
+    datos = _datos_serie(periodos)
+    breaks, _ = pp._breaks_y_etiquetas_x(datos)
+    posicion = {p.to_timestamp(): i for i, p in enumerate(periodos)}
+    saltos = [posicion[b] - posicion[a] for a, b in zip(breaks, breaks[1:])]
+    assert max(saltos) - min(saltos) <= 1
+
+
+def test_breaks_x_pocos_periodos_devuelve_todos() -> None:
+    datos = _datos_serie(_meses(5))
+    breaks, etiquetas = pp._breaks_y_etiquetas_x(datos)
+    assert len(breaks) == 5
+    assert len(etiquetas) == 5
+
+
+def test_breaks_x_un_solo_periodo() -> None:
+    datos = _datos_serie(_meses(1))
+    breaks, etiquetas = pp._breaks_y_etiquetas_x(datos)
+    assert len(breaks) == 1 and len(etiquetas) == 1
+
+
+def test_breaks_x_no_pasa_del_maximo_de_etiquetas() -> None:
+    datos = _datos_serie(_quincenas(352))
+    breaks, _ = pp._breaks_y_etiquetas_x(datos)
+    assert len(breaks) <= pp._MAX_ETIQUETAS_EJE_X
+
+
+# --------------------------------------------------------------------------- _extremos_apilado
+
+
+def _barras(valores_por_periodo: dict[Any, list[float]]) -> pd.DataFrame:
+    filas = [
+        {"periodo": periodo, "indice": f"cat{i}", "incidencia_pp": valor}
+        for periodo, valores in valores_por_periodo.items()
+        for i, valor in enumerate(valores)
+    ]
+    return pd.DataFrame(filas)
+
+
+def test_extremos_apilado_suma_por_signo_no_valores_individuales() -> None:
+    # El mayor valor individual es 2.0, pero el apilado del periodo llega a 3.0.
+    barras = _barras({_P1: [2.0, 1.0, -1.5]})
+    piso, techo = pp._extremos_apilado(barras, "incidencia_pp", None, "variacion_pp")
+    assert (piso, techo) == (-1.5, 3.0)
+
+
+def test_extremos_apilado_toma_el_periodo_mas_extremo_de_cada_signo() -> None:
+    barras = _barras({_P1: [2.0, 1.0, -1.5], _P2: [-1.0, -2.0, 0.5]})
+    piso, techo = pp._extremos_apilado(barras, "incidencia_pp", None, "variacion_pp")
+    assert (piso, techo) == (-3.0, 3.0)
+
+
+def test_extremos_apilado_siempre_incluye_cero() -> None:
+    # Todo positivo: el piso sigue siendo 0 porque las barras nacen ahi.
+    barras = _barras({_P1: [2.0, 1.0]})
+    piso, techo = pp._extremos_apilado(barras, "incidencia_pp", None, "variacion_pp")
+    assert (piso, techo) == (0.0, 3.0)
+
+
+def test_extremos_apilado_extiende_el_rango_con_el_de_la_linea() -> None:
+    barras = _barras({_P1: [1.0]})
+    linea = pd.DataFrame({"periodo": [_P1, _P2], "variacion_pp": [5.0, -4.0]})
+    piso, techo = pp._extremos_apilado(barras, "incidencia_pp", linea, "variacion_pp")
+    assert (piso, techo) == (-4.0, 5.0)
+
+
+def test_extremos_apilado_linea_vacia_no_afecta() -> None:
+    barras = _barras({_P1: [1.0, 2.0]})
+    vacia = pd.DataFrame({"periodo": [], "variacion_pp": []})
+    piso, techo = pp._extremos_apilado(barras, "incidencia_pp", vacia, "variacion_pp")
+    assert (piso, techo) == (0.0, 3.0)
+
+
+# --------------------------------------------------------------------------- _ancho_barra
+
+
+def test_ancho_barra_mensual() -> None:
+    assert pp._ancho_barra(_datos_serie(_meses(3))) == pp._ANCHO_BARRA_DIAS_MENSUAL
+
+
+def test_ancho_barra_quincenal() -> None:
+    assert pp._ancho_barra(_datos_serie(_quincenas(3))) == pp._ANCHO_BARRA_DIAS_QUINCENAL
 
 
 # --------------------------------------------------------------------------- _datos_para_puntos

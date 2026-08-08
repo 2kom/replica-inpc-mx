@@ -7,10 +7,10 @@ import pandas as pd
 import pytest
 
 from replica_inpc.api import graficas
-from replica_inpc.dominio.errores import PeriodoNoDisponible
+from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoDisponible
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
-from replica_inpc.dominio.periodos import PeriodoQuincenal
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 # --------------------------------------------------------------------------- helpers
@@ -167,3 +167,46 @@ def test_periodos_disponibles_union_con_comparacion() -> None:
     r = _resultado([_P1])
     comparacion = _resultado([_P2], tipo="CCIF DIVISION")
     assert graficas._periodos_disponibles(r, comparacion) == {_P1, _P2}
+
+
+# --------------------------------------------------------------------------- periodicidad de desde/hasta
+
+
+def _resultado_mensual() -> ResultadoIndice:
+    return _resultado([PeriodoMensual(2018, 1), PeriodoMensual(2018, 2)])
+
+
+@pytest.mark.parametrize("parametro", ["desde", "hasta"])
+def test_graficar_periodo_quincenal_contra_resultado_mensual_falla(mocker, parametro) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    with pytest.raises(InvarianteViolado, match="quincenal.*mensual"):
+        graficas.graficar(_resultado_mensual(), **{parametro: "1Q Ene 2018"})
+    fn.assert_not_called()
+
+
+@pytest.mark.parametrize("parametro", ["desde", "hasta"])
+def test_graficar_periodo_mensual_contra_resultado_quincenal_falla(mocker, parametro) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    with pytest.raises(InvarianteViolado, match="mensual.*quincenal"):
+        graficas.graficar(_resultado([_P1, _P2]), **{parametro: "Ene 2018"})
+    fn.assert_not_called()
+
+
+def test_graficar_periodicidad_se_valida_antes_que_disponibilidad(mocker) -> None:
+    # Un periodo quincenal jamas puede estar en datos mensuales: reportar
+    # "no está presente" ocultaria el problema real, que es el tipo.
+    mocker.patch.object(graficas, "_graficar")
+    with pytest.raises(InvarianteViolado):
+        graficas.graficar(_resultado_mensual(), desde="1Q Ene 1990")
+
+
+def test_graficar_periodicidad_correcta_pero_ausente_sigue_lanzando_no_disponible(mocker) -> None:
+    mocker.patch.object(graficas, "_graficar")
+    with pytest.raises(PeriodoNoDisponible):
+        graficas.graficar(_resultado_mensual(), desde="Ene 1990")
+
+
+def test_graficar_periodicidad_coincidente_delega(mocker) -> None:
+    fn = mocker.patch.object(graficas, "_graficar")
+    graficas.graficar(_resultado_mensual(), desde="Ene 2018", hasta="Feb 2018")
+    fn.assert_called_once()

@@ -11,6 +11,9 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 _MAX_ETIQUETAS_EJE_X = 20
 _N_ETIQUETAS_EJE_Y = 10
+# Distancia mínima entre un break intermedio y un extremo forzado, como
+# fracción del rango del eje — por debajo de esto las etiquetas se enciman.
+_SEPARACION_MINIMA_BREAKS = 0.035
 _VALOR_BASE = 100.0
 _VALOR_BASE_VARIACION = 0.0
 _VALOR_BASE_INCIDENCIA = 0.0
@@ -178,34 +181,53 @@ def _ordenar_series_dibujo(valores: pd.Series, orden: list[str] | None = None) -
 
 
 def _breaks_y_etiquetas_x(datos: pd.DataFrame) -> tuple[list[pd.Timestamp], list[str]]:
-    """Elige un subconjunto de periodos reales para las marcas del eje X.
+    """Elige un subconjunto de periodos reales, repartido parejo, para las marcas del eje X.
 
     Usa `str(periodo)` (`"1Q Ene 2024"` o `"Ene 2024"`) de los periodos que
     ya están en los datos — no reconstruye un periodo a partir de una fecha
     arbitraria elegida por el algoritmo de breaks. El primer y último break
-    son siempre el primer y último periodo real de los datos.
+    son siempre el primer y último periodo real.
+
+    Las posiciones se reparten entre el primer y el último índice, así que
+    ambos extremos caen en la grilla POR CONSTRUCCIÓN y los saltos difieren a
+    lo sumo en un periodo. Una grilla de paso fijo desde el índice 0 (`::paso`)
+    con los extremos añadidos después no sirve: el último periodo casi nunca
+    cae en esa grilla, y forzarlo dejaba un salto final mucho más corto que
+    todos los demás — visible como etiquetas amontonadas contra el borde
+    derecho.
     """
     pares = datos[["periodo", "periodo_ts"]].drop_duplicates().sort_values("periodo_ts")
-    paso = max(1, len(pares) // _MAX_ETIQUETAS_EJE_X)
-    seleccion = pares.iloc[::paso]
-    extremos = pares.iloc[[0, -1]]
-    combinado = (
-        pd.concat([seleccion, extremos])
-        .drop_duplicates(subset="periodo_ts")
-        .sort_values("periodo_ts")
-    )
-    return list(combinado["periodo_ts"]), [str(p) for p in combinado["periodo"]]
+    n = len(pares)
+    cuantas = min(n, _MAX_ETIQUETAS_EJE_X)
+    if cuantas <= 1:
+        posiciones = [0]
+    else:
+        posiciones = sorted({round(i * (n - 1) / (cuantas - 1)) for i in range(cuantas)})
+    seleccion = pares.iloc[posiciones]
+    return list(seleccion["periodo_ts"]), [str(p) for p in seleccion["periodo"]]
 
 
 def _breaks_desde_extremos(minimo: float, maximo: float, valor_base: float) -> list[float]:
     """Breaks del eje Y entre dos extremos ya calculados; `minimo`/`maximo` siempre son breaks.
 
-    Ningún break automático ni la base puede quedar fuera de
-    `[minimo, maximo]`; la base solo se fuerza si cae dentro del rango.
+    Ningún break intermedio puede quedar fuera de `[minimo, maximo]` ni a
+    menos de `_SEPARACION_MINIMA_BREAKS` del rango respecto de un extremo: el
+    mínimo y el máximo reales se fuerzan siempre (para que el lector vea el
+    valor exacto de los extremos), y un break automático que caiga pegado a
+    uno de ellos se dibuja encima — `-1.210` y `-1.200` pisados, o `-0.826`
+    contra `-0.750`. Se descarta el automático, no el extremo forzado.
+
+    La base (0 para variaciones e incidencias, 100 para índices) pasa por el
+    mismo filtro: si cae pegada a un extremo, tampoco aporta una marca legible.
     """
+    rango = maximo - minimo
+    if rango <= 0:
+        return [minimo]
+    holgura = rango * _SEPARACION_MINIMA_BREAKS
+    piso, techo = minimo + holgura, maximo - holgura
     extendidos = breaks_extended(n=_N_ETIQUETAS_EJE_Y)((minimo, maximo))
-    intermedios = {b for b in extendidos.tolist() if minimo < b < maximo}
-    if minimo < valor_base < maximo:
+    intermedios = {b for b in extendidos.tolist() if piso < b < techo}
+    if piso < valor_base < techo:
         intermedios.add(valor_base)
     return sorted({minimo, maximo, *intermedios})
 

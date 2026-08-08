@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
+import numpy as np
 import pandas as pd
+import pytest
 
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -423,4 +426,223 @@ def test_graficar_variacion_comparacion_misma_clase_dibuja(mocker: Any) -> None:
     grafica_falsa = mocker.Mock()
     mocker.patch.object(graficador, "_construir_grafica_linea", return_value=grafica_falsa)
     graficador.graficar(rv, comparacion=comparacion)
+    grafica_falsa.draw.assert_called_once_with(show=True)
+
+
+# --------------------------------------------------------------------------- helpers incidencias
+
+
+def _resultado_incidencia(
+    filas: list[tuple[Any, str, float, str]],
+    tipo: str = "COG",
+    clase: str = "periodica_anual",
+) -> ResultadoIncidencia:
+    """filas = list of (periodo, indice, incidencia_pp, estado)."""
+    registros = [
+        {
+            "periodo": p,
+            "indice": i,
+            "tipo": tipo,
+            "clase_incidencia": clase,
+            "incidencia_pp": v,
+            "estado_calculo": e,
+        }
+        for p, i, v, e in filas
+    ]
+    df = pd.DataFrame(registros)
+    df.index = pd.MultiIndex.from_arrays(
+        [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
+    )
+    manifiesto = ManifestDerivado(
+        versiones=[2018],  # type: ignore[list-item]
+        tipo=tipo,
+        clase=clase,
+        descripcion="",
+        fecha=datetime(2024, 1, 1),
+    )
+    return ResultadoIncidencia(df, manifiesto, df[[]].copy(), pd.DataFrame())
+
+
+_M1 = PeriodoMensual(2024, 1)
+_M2 = PeriodoMensual(2024, 2)
+
+
+def _barras_y_linea() -> tuple[pd.DataFrame, pd.DataFrame]:
+    incidencia = _resultado_incidencia(
+        [
+            (_M1, "cat_a", 2.0, "ok"),
+            (_M1, "cat_b", -0.5, "ok"),
+            (_M2, "cat_a", 1.0, "ok"),
+            (_M2, "cat_b", 0.5, "ok"),
+        ]
+    )
+    variacion = _resultado_variacion(
+        [(_M1, "INPC", 1.5, "ok"), (_M2, "INPC", 1.5, "ok")], clase="periodica_anual"
+    )
+    return graficador._aplanar_resultado(incidencia), graficador._aplanar_resultado(variacion)
+
+
+# --------------------------------------------------------------------------- _construir_grafica_barras
+
+
+def test_construir_barras_usa_geom_col_y_linea_base() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos)
+    assert "geom_col" in _geoms(grafica)
+    assert "geom_hline" in _geoms(grafica)
+
+
+def test_construir_barras_sin_linea_no_agrega_geom_line() -> None:
+    datos, _ = _barras_y_linea()
+    assert "geom_line" not in _geoms(graficador._construir_grafica_barras(datos))
+
+
+def test_construir_barras_con_linea_agrega_geom_line() -> None:
+    datos, linea = _barras_y_linea()
+    assert "geom_line" in _geoms(graficador._construir_grafica_barras(datos, linea))
+
+
+def test_construir_barras_agrupa_relleno_por_indice() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos)
+    capa = next(c for c in grafica.layers if type(c.geom).__name__ == "geom_col")
+    assert capa.mapping["fill"] == "indice"
+
+
+def test_construir_barras_respeta_el_orden_de_apilado_pedido() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos, orden=["cat_b", "cat_a"])
+    capa = next(c for c in grafica.layers if type(c.geom).__name__ == "geom_col")
+    # `layer._data` esta tipado como union laxa (Callable/None/convertible);
+    # aca siempre es el DataFrame que se le paso a geom_col.
+    datos_capa = cast(pd.DataFrame, capa._data)
+    assert list(datos_capa["indice"].cat.categories) == ["cat_b", "cat_a"]
+
+
+def test_construir_barras_renderiza_segmentos_de_ambos_signos() -> None:
+    # Render real: geom_col produce una PolyCollection (no ax.patches, y no la
+    # primera coleccion del eje -- esa es la LineCollection de geom_hline), con
+    # un path por segmento. Periodo 1: +2.0 y -0.5, asi que el techo es 2.0 y
+    # el piso -0.5; el NETO de ese periodo es 1.5 y no corresponde a ningun
+    # borde dibujado.
+    datos, linea = _barras_y_linea()
+    figura = graficador._construir_grafica_barras(datos, linea).draw()
+    try:
+        from matplotlib.collections import PolyCollection
+
+        coleccion = next(c for c in figura.axes[0].collections if isinstance(c, PolyCollection))
+        # `Path.vertices` esta tipado como union de convertibles a array; en
+        # tiempo de ejecucion siempre es un ndarray (N, 2).
+        alturas = [np.asarray(p.vertices)[:, 1] for p in coleccion.get_paths()]
+        topes = [float(y.max()) for y in alturas]
+        pisos = [float(y.min()) for y in alturas]
+        assert max(topes) == pytest.approx(2.0)
+        assert min(pisos) == pytest.approx(-0.5)
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+def test_construir_barras_eje_y_cubre_el_apilado_no_el_valor_individual() -> None:
+    # Periodo 2: 1.0 + 0.5 apilados = 1.5, ninguno de los dos valores llega
+    # ahi por si solo. Con el rango calculado sobre la columna, un apilado que
+    # supere al mayor valor individual quedaria fuera del panel.
+    datos, _ = _barras_y_linea()
+    datos = datos[datos["periodo"] == _M2]
+    figura = graficador._construir_grafica_barras(datos).draw()
+    try:
+        piso, techo = figura.axes[0].get_ylim()
+        assert techo >= 1.5
+        assert piso <= 0.0
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+# --------------------------------------------------------------------------- _graficar_incidencia
+
+
+def test_graficar_incidencia_una_sola_imagen(mocker: Any) -> None:
+    # Sin particionado: cada particion mostraria una suma parcial y la linea de
+    # referencia no cerraria con ninguna.
+    ri = _resultado_incidencia([(_M1, f"cat{i:02d}", float(i), "ok") for i in range(12)])
+    grafica_falsa = mocker.Mock()
+    construir = mocker.patch.object(
+        graficador, "_construir_grafica_barras", return_value=grafica_falsa
+    )
+    graficador._graficar_incidencia(ri, None, None, None)
+    construir.assert_called_once()
+    grafica_falsa.draw.assert_called_once_with(show=True)
+
+
+def test_graficar_incidencia_recorta_barras_y_linea(mocker: Any) -> None:
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok"), (_M2, "cat_a", 2.0, "ok")])
+    rv = _resultado_variacion(
+        [(_M1, "INPC", 1.0, "ok"), (_M2, "INPC", 2.0, "ok")], clase="periodica_anual"
+    )
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, rv, _M2, None)
+    datos, linea = construir.call_args[0]
+    assert set(datos["periodo"]) == {_M2}
+    assert set(linea["periodo"]) == {_M2}
+
+
+def test_graficar_incidencia_sin_comparacion_pasa_none(mocker: Any) -> None:
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")])
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, None, None, None)
+    assert construir.call_args[0][1] is None
+
+
+# --------------------------------------------------------------------------- graficar() con incidencias
+
+
+def test_graficar_despacha_incidencia_a_barras(mocker: Any) -> None:
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")])
+    grafica_falsa = mocker.Mock()
+    mocker.patch.object(graficador, "_construir_grafica_barras", return_value=grafica_falsa)
+    graficador.graficar(ri)
+    grafica_falsa.draw.assert_called_once_with(show=True)
+
+
+def test_graficar_incidencia_comparacion_de_otra_incidencia_no_lanza(
+    mocker: Any, capsys: Any
+) -> None:
+    # Superponer dos incidencias no dice nada: las barras SON la descomposicion
+    # de la linea, asi que la comparacion tiene que ser un ResultadoVariacion.
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")])
+    graficador.graficar(ri, comparacion=_resultado_incidencia([(_M1, "cat_b", 1.0, "ok")]))  # type: ignore[arg-type]
+    assert "Error" in capsys.readouterr().out
+    construir.assert_not_called()
+
+
+def test_graficar_incidencia_comparacion_periodicidad_distinta_no_lanza(
+    mocker: Any, capsys: Any
+) -> None:
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")])
+    rv = _resultado_variacion([(_P1, "INPC", 1.0, "ok")], clase="periodica_anual")
+    graficador.graficar(ri, comparacion=rv)
+    assert "Error" in capsys.readouterr().out
+    construir.assert_not_called()
+
+
+def test_graficar_incidencia_comparacion_de_otra_clase_no_lanza(mocker: Any, capsys: Any) -> None:
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")], clase="periodica_anual")
+    rv = _resultado_variacion([(_M1, "INPC", 1.0, "ok")], clase="periodica_mensual")
+    graficador.graficar(ri, comparacion=rv)
+    assert "Error" in capsys.readouterr().out
+    construir.assert_not_called()
+
+
+def test_graficar_incidencia_comparacion_valida_dibuja(mocker: Any) -> None:
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok")], clase="periodica_anual")
+    rv = _resultado_variacion([(_M1, "INPC", 1.0, "ok")], clase="periodica_anual")
+    grafica_falsa = mocker.Mock()
+    mocker.patch.object(graficador, "_construir_grafica_barras", return_value=grafica_falsa)
+    graficador.graficar(ri, comparacion=rv)
     grafica_falsa.draw.assert_called_once_with(show=True)
