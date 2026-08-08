@@ -4,6 +4,7 @@ import pandas as pd
 from mizani.breaks import breaks_extended
 
 from replica_inpc.dominio.errores import InvarianteViolado
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -12,7 +13,15 @@ _MAX_ETIQUETAS_EJE_X = 20
 _N_ETIQUETAS_EJE_Y = 10
 _VALOR_BASE = 100.0
 _VALOR_BASE_VARIACION = 0.0
+_VALOR_BASE_INCIDENCIA = 0.0
 _ETIQUETA_Y_VARIACION = "Variación (pp)"
+_ETIQUETA_Y_INCIDENCIA = "Incidencia (pp)"
+_COLUMNA_VARIACION = "variacion_pp"
+_COLUMNA_INCIDENCIA = "incidencia_pp"
+# Ancho de barra en días sobre el eje datetime: algo menos que la distancia
+# entre periodos consecutivos, para que quede separación visible entre barras.
+_ANCHO_BARRA_DIAS_MENSUAL = 26
+_ANCHO_BARRA_DIAS_QUINCENAL = 13
 _COLOR_INPC = "black"
 _LINETYPE_PRINCIPAL = "solid"
 _LINETYPE_COMPARACION = "dashed"
@@ -44,14 +53,16 @@ def _titulo(datos: pd.DataFrame) -> str:
 
 
 def _aplanar_resultado(
-    resultado: ResultadoIndice | ResultadoVariacion,
+    resultado: ResultadoIndice | ResultadoVariacion | ResultadoIncidencia,
     comparacion: ResultadoIndice | ResultadoVariacion | None = None,
 ) -> pd.DataFrame:
     """Aplana `.resultado.largo` a un DataFrame único, una fila por `(periodo, indice)`.
 
-    Sirve igual para `ResultadoIndice` y `ResultadoVariacion` — el aplanado no
-    toca la columna de valor (`indice_replicado`/`variacion_pp`), solo la
-    estructura común del índice. `empalmar()` ya unifica el nombre de `indice`
+    Sirve igual para los tres tipos de resultado — el aplanado no toca la
+    columna de valor (`indice_replicado`/`variacion_pp`/`incidencia_pp`), solo
+    la estructura común del índice. En incidencias `comparacion` va aparte (la
+    línea de referencia se aplana con su propia llamada) porque concatenar
+    mezclaría dos columnas de valor distintas en un solo DataFrame. `empalmar()` ya unifica el nombre de `indice`
     cross-versión (vía `RENOMBRES_INDICES` en `dominio/conversion.py`), así
     que un mismo `indice` (ej. `"INPC"`, o una categoría de clasificación) ya
     es continuo en el tiempo pese a traer distinto `version` por tramo — no
@@ -137,7 +148,7 @@ def _particionar_series(
     return particiones
 
 
-def _ordenar_series_dibujo(valores: pd.Series) -> pd.Categorical:
+def _ordenar_series_dibujo(valores: pd.Series, orden: list[str] | None = None) -> pd.Categorical:
     """Categórico ordenado con `INPC` al final — se dibuja último, queda por encima del resto.
 
     `geom_line` agrupa y dibuja según el orden categórico de `indice`, no el
@@ -147,11 +158,23 @@ def _ordenar_series_dibujo(valores: pd.Series) -> pd.Categorical:
     sea cual sea el parámetro por el que haya entrado. Se aplica DESPUÉS de
     particionar (`_particionar_series`) para que las categorías del
     resultado reflejen solo lo presente en cada imagen, no el total original.
+
+    En barras apiladas el mismo orden decide qué categoría queda abajo del
+    apilado, no cuál se dibuja encima. `orden`, si viene, reemplaza el orden
+    de aparición por uno explícito — los valores que no estén en `orden` se
+    agregan al final respetando su aparición, así una lista parcial nunca
+    hace desaparecer categorías.
     """
-    orden = [v for v in pd.unique(valores) if v != "INPC"]
+    presentes = list(pd.unique(valores))
+    if orden is None:
+        secuencia = [v for v in presentes if v != "INPC"]
+    else:
+        pedidos = [v for v in orden if v in set(presentes) and v != "INPC"]
+        resto = [v for v in presentes if v not in set(pedidos) and v != "INPC"]
+        secuencia = pedidos + resto
     if "INPC" in set(valores):
-        orden.append("INPC")
-    return pd.Categorical(valores, categories=orden, ordered=True)
+        secuencia.append("INPC")
+    return pd.Categorical(valores, categories=secuencia, ordered=True)
 
 
 def _breaks_y_etiquetas_x(datos: pd.DataFrame) -> tuple[list[pd.Timestamp], list[str]]:
@@ -174,21 +197,71 @@ def _breaks_y_etiquetas_x(datos: pd.DataFrame) -> tuple[list[pd.Timestamp], list
     return list(combinado["periodo_ts"]), [str(p) for p in combinado["periodo"]]
 
 
-def _breaks_y(datos: pd.DataFrame, columna_valor: str, valor_base: float) -> list[float]:
-    """Breaks del eje Y: automáticos + forzados, mínimo y máximo reales siempre son extremos.
+def _breaks_desde_extremos(minimo: float, maximo: float, valor_base: float) -> list[float]:
+    """Breaks del eje Y entre dos extremos ya calculados; `minimo`/`maximo` siempre son breaks.
 
-    Comparte el algoritmo entre índices (`indice_replicado`, base 100) y
-    variaciones (`variacion_pp`, base 0): ningún break automático ni la base
-    puede quedar fuera de `[mínimo, máximo]` de los datos; la base solo se
-    fuerza si cae dentro del rango.
+    Ningún break automático ni la base puede quedar fuera de
+    `[minimo, maximo]`; la base solo se fuerza si cae dentro del rango.
     """
-    minimo = float(datos[columna_valor].min())
-    maximo = float(datos[columna_valor].max())
     extendidos = breaks_extended(n=_N_ETIQUETAS_EJE_Y)((minimo, maximo))
     intermedios = {b for b in extendidos.tolist() if minimo < b < maximo}
     if minimo < valor_base < maximo:
         intermedios.add(valor_base)
     return sorted({minimo, maximo, *intermedios})
+
+
+def _breaks_y(datos: pd.DataFrame, columna_valor: str, valor_base: float) -> list[float]:
+    """Breaks del eje Y para gráficas de línea: extremos = mínimo y máximo de la columna.
+
+    Comparte el algoritmo entre índices (`indice_replicado`, base 100) y
+    variaciones (`variacion_pp`, base 0). No sirve para barras apiladas: ahí
+    el extremo visible es la suma de los segmentos, no un valor individual
+    (ver `_extremos_apilado`).
+    """
+    return _breaks_desde_extremos(
+        float(datos[columna_valor].min()), float(datos[columna_valor].max()), valor_base
+    )
+
+
+def _extremos_apilado(
+    barras: pd.DataFrame, columna_valor: str, linea: pd.DataFrame | None, columna_linea: str
+) -> tuple[float, float]:
+    """Piso y techo visibles de un apilado con valores de ambos signos.
+
+    En una barra apilada los positivos crecen hacia arriba desde 0 y los
+    negativos hacia abajo desde 0 (verificado contra el render real de
+    `geom_col`), así que el extremo visible de cada periodo es la SUMA de sus
+    positivos y la SUMA de sus negativos — nunca un valor individual, y
+    tampoco el neto. Ejemplo real (`INFLACION AGRUPACION`, incidencia anual):
+    la categoría más grande vale `2.98` pp pero el apilado llega a `8.70`;
+    tomar el máximo de la columna dejaría dos tercios de la gráfica fuera del
+    panel. El neto tampoco sirve: con una categoría negativa el neto queda
+    por debajo del techo y las barras se cortarían por arriba.
+
+    `0.0` siempre entra en el rango porque las barras nacen ahí. Cuando hay
+    `linea` (la referencia superpuesta), su propio rango también cuenta: puede
+    salirse del que cubren las barras.
+    """
+    positivos = barras[barras[columna_valor] > 0].groupby("periodo")[columna_valor].sum()
+    negativos = barras[barras[columna_valor] < 0].groupby("periodo")[columna_valor].sum()
+    techos = [0.0, float(positivos.max()) if not positivos.empty else 0.0]
+    pisos = [0.0, float(negativos.min()) if not negativos.empty else 0.0]
+    if linea is not None and not linea.empty:
+        techos.append(float(linea[columna_linea].max()))
+        pisos.append(float(linea[columna_linea].min()))
+    return min(pisos), max(techos)
+
+
+def _ancho_barra(datos: pd.DataFrame) -> int:
+    """Ancho de barra en días para el eje datetime, según la periodicidad de `datos`.
+
+    `geom_col` sobre un eje datetime mide el ancho en unidades del eje (días),
+    no en fracción del espacio disponible: sin esto las barras salen con un
+    ancho arbitrario que no se corresponde con la distancia entre periodos.
+    """
+    if isinstance(datos["periodo"].iloc[0], PeriodoMensual):
+        return _ANCHO_BARRA_DIAS_MENSUAL
+    return _ANCHO_BARRA_DIAS_QUINCENAL
 
 
 def _etiqueta_y_indice(resultado: ResultadoIndice | ResultadoVariacion) -> str:

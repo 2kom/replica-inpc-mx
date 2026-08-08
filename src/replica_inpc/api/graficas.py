@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from replica_inpc.dominio.errores import PeriodoNoDisponible
+from replica_inpc.dominio.calculo._temporal import es_mensual
+from replica_inpc.dominio.errores import InvarianteViolado, PeriodoNoDisponible
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal, periodo_desde_str
@@ -10,7 +12,7 @@ from replica_inpc.infraestructura.graficacion.graficador import graficar as _gra
 
 
 def _periodos_disponibles(
-    resultado: ResultadoIndice | ResultadoVariacion,
+    resultado: ResultadoIndice | ResultadoVariacion | ResultadoIncidencia,
     comparacion: ResultadoIndice | ResultadoVariacion | None,
 ) -> set[PeriodoQuincenal | PeriodoMensual]:
     periodos = set(resultado.resultado.largo.index.get_level_values("periodo"))
@@ -20,12 +22,12 @@ def _periodos_disponibles(
 
 
 def graficar(
-    resultado: ResultadoIndice | ResultadoVariacion,
+    resultado: ResultadoIndice | ResultadoVariacion | ResultadoIncidencia,
     comparacion: ResultadoIndice | ResultadoVariacion | None = None,
     desde: str | None = None,
     hasta: str | None = None,
 ) -> None:
-    """Grafica `resultado` (índice o variación); no devuelve nada, muestra la(s) imagen(es) directo.
+    """Grafica `resultado` (índice, variación o incidencia); no devuelve nada, muestra la(s) imagen(es) directo.
 
     Cada `indice` distinto que trae `resultado` (ej. cada categoría de una
     clasificación como CCIF o SCIAN) se dibuja como su propia línea de
@@ -34,6 +36,14 @@ def graficar(
     máximo 8 líneas coloreadas, e INPC repetido completo en todas. Si
     `resultado` es un `ResultadoVariacion`, el eje Y muestra `variacion_pp`
     con base en 0 en vez del índice con base 100.
+
+    Un `ResultadoIncidencia` se dibuja distinto: barras apiladas por periodo,
+    un segmento de color por categoría, positivas hacia arriba desde 0 y
+    negativas hacia abajo. Siempre en una sola imagen — por eso hoy solo son
+    graficables las clasificaciones de hasta 8 categorías. Pasando como
+    `comparacion` la variación del INPC de la misma clase, esta se superpone
+    como línea negra: marca el NETO de cada periodo, que coincide con el techo
+    de la barra solo cuando todas las categorías son positivas.
 
     Los puntos sobre la línea aparecen solo en dos casos: cuando el tramo
     graficado cabe en un año (24 periodos quincenales o 12 mensuales), donde
@@ -59,21 +69,38 @@ def graficar(
             por encima de las demás líneas, sea cual sea el parámetro por
             el que entre.
         desde: Periodo inicial del tramo a mostrar (ej. `"1Q Ene 2018"`,
-            `"Ene 2018"` si es mensual) — recorta el eje X. Tiene que ser
-            un periodo que exista de verdad en los datos de `resultado` o
-            `comparacion`, no basta con que el texto tenga formato válido.
-            `None` = desde el primer periodo disponible.
+            `"Ene 2018"` si es mensual) — recorta el eje X. Tiene que ser de
+            la MISMA periodicidad que `resultado` y existir de verdad en los
+            datos de `resultado` o `comparacion`; no basta con que el texto
+            tenga formato válido. `None` = desde el primer periodo
+            disponible.
         hasta: Igual que `desde`, pero el límite final del tramo. `None` =
             hasta el último periodo disponible.
 
     Raises:
-        PeriodoNoDisponible: `desde` o `hasta` no están presentes en los
-            datos a graficar.
+        InvarianteViolado: `desde` o `hasta` son de otra periodicidad que
+            `resultado` (ej. `"1Q Ene 2018"` contra un resultado mensual).
+        PeriodoNoDisponible: `desde` o `hasta` son de la periodicidad
+            correcta pero no están presentes en los datos a graficar.
     """
     periodo_desde = periodo_desde_str(desde) if desde is not None else None
     periodo_hasta = periodo_desde_str(hasta) if hasta is not None else None
 
     if periodo_desde is not None or periodo_hasta is not None:
+        # La periodicidad se valida antes que la disponibilidad para no reportar
+        # "no está presente" cuando el problema real es que un periodo quincenal
+        # jamás podría estar en datos mensuales (ni al revés).
+        mensual = es_mensual(resultado.resultado.largo)
+        esperado = "mensual" if mensual else "quincenal"
+        for periodo, nombre in ((periodo_desde, "desde"), (periodo_hasta, "hasta")):
+            if periodo is not None and isinstance(periodo, PeriodoMensual) != mensual:
+                recibido = "mensual" if isinstance(periodo, PeriodoMensual) else "quincenal"
+                ejemplo = "Ene 2018" if mensual else "1Q Ene 2018"
+                raise InvarianteViolado(
+                    f"'{nombre}' ({periodo}) es {recibido}, pero resultado es {esperado}. "
+                    f"Usa un periodo {esperado} (ej. '{ejemplo}')."
+                )
+
         disponibles = _periodos_disponibles(resultado, comparacion)
         for periodo, nombre in ((periodo_desde, "desde"), (periodo_hasta, "hasta")):
             if periodo is not None and periodo not in disponibles:

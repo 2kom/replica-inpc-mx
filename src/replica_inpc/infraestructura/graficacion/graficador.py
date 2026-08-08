@@ -1,4 +1,4 @@
-"""Graficación de `ResultadoIndice`/`ResultadoVariacion` sobre plotnine.
+"""Graficación de `ResultadoIndice`/`ResultadoVariacion`/`ResultadoIncidencia` sobre plotnine.
 
 Sin `Protocol` en `aplicacion/puertos/`: a diferencia de
 `LectorCanasta`/`FuenteValidacion`, ningún componente de `dominio/` o
@@ -14,12 +14,14 @@ from plotnine import (
     annotate,
     element_blank,
     element_text,
+    geom_col,
     geom_hline,
     geom_line,
     geom_point,
     ggplot,
     labs,
     scale_color_manual,
+    scale_fill_manual,
     scale_linetype_identity,
     scale_x_datetime,
     scale_y_continuous,
@@ -28,19 +30,28 @@ from plotnine import (
 )
 
 from replica_inpc.dominio.calculo._temporal import es_mensual
+from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.infraestructura.graficacion._prepocesamiento import (
+    _COLOR_INPC,
+    _COLUMNA_INCIDENCIA,
+    _COLUMNA_VARIACION,
+    _ETIQUETA_Y_INCIDENCIA,
     _ETIQUETA_Y_VARIACION,
     _VALOR_BASE,
+    _VALOR_BASE_INCIDENCIA,
     _VALOR_BASE_VARIACION,
+    _ancho_barra,
     _aplanar_resultado,
+    _breaks_desde_extremos,
     _breaks_y,
     _breaks_y_etiquetas_x,
     _colores_y_etiquetas,
     _datos_para_puntos,
     _etiqueta_y_indice,
+    _extremos_apilado,
     _ordenar_series_dibujo,
     _particionar_series,
     _primero_y_ultimo_para_anotar,
@@ -152,6 +163,103 @@ def _construir_grafica_linea(
     )
 
 
+def _construir_grafica_barras(
+    datos: pd.DataFrame,
+    linea: pd.DataFrame | None = None,
+    *,
+    orden: list[str] | None = None,
+) -> ggplot:
+    """Arma el `ggplot` de barras apiladas por periodo, con una línea de referencia opcional.
+
+    `datos` trae una fila por `(periodo, indice)` con `incidencia_pp`; cada
+    categoría es un segmento de la barra de su periodo. `linea`, si viene, es
+    otro DataFrame ya aplanado (`variacion_pp`) que se superpone como línea
+    negra — típicamente la variación del INPC de la que las incidencias son
+    descomposición.
+
+    No reusa `_construir_grafica_linea` porque casi nada coincide: el eje Y se
+    calcula sobre el apilado y no sobre la columna (`_extremos_apilado`), las
+    barras necesitan ancho explícito en días, y hay dos escalas de leyenda
+    (relleno para las categorías, color para la línea) en vez de una.
+
+    La línea marca el NETO del periodo, que solo coincide con el techo de la
+    barra cuando todas las categorías son positivas — con una negativa, el
+    neto queda por debajo del tope dibujado.
+    """
+    datos = datos.copy()
+    datos["indice"] = _ordenar_series_dibujo(datos["indice"], orden)
+    series = list(pd.unique(datos["indice"]))
+    colores, etiquetas_leyenda = _colores_y_etiquetas(series)
+
+    piso, techo = _extremos_apilado(datos, _COLUMNA_INCIDENCIA, linea, _COLUMNA_VARIACION)
+    breaks_y = _breaks_desde_extremos(piso, techo, _VALOR_BASE_INCIDENCIA)
+    breaks_x, etiquetas_x = _breaks_y_etiquetas_x(datos)
+
+    grafica = (
+        ggplot()
+        + geom_hline(yintercept=_VALOR_BASE_INCIDENCIA, color="grey", size=0.3)
+        + geom_col(
+            mapping=aes(x="periodo_ts", y=_COLUMNA_INCIDENCIA, fill="indice"),
+            data=datos,
+            width=_ancho_barra(datos),
+        )
+        + scale_fill_manual(values=colores, labels=etiquetas_leyenda)
+    )
+    if linea is not None:
+        series_linea = list(pd.unique(linea["indice"]))
+        grafica = (
+            grafica
+            + geom_line(
+                mapping=aes(x="periodo_ts", y=_COLUMNA_VARIACION, color="indice"),
+                data=linea,
+                size=0.3,
+            )
+            + scale_color_manual(values={s: _COLOR_INPC for s in series_linea})
+        )
+
+    return (
+        grafica
+        + scale_x_datetime(breaks=breaks_x, labels=etiquetas_x, expand=(0.01, 0.01))  # type: ignore[arg-type]
+        + scale_y_continuous(breaks=breaks_y, expand=(0.01, 0.01))  # type: ignore[arg-type]
+        + labs(title=_titulo(datos), x="Periodo", y=_ETIQUETA_Y_INCIDENCIA)
+        + theme_bw()
+        + theme(
+            axis_title=element_text(size=8),
+            axis_text_x=element_text(rotation=30, ha="right", size=6),
+            axis_text_y=element_text(size=6),
+            legend_position="bottom",
+            legend_box="horizontal",
+            legend_title=element_blank(),
+            legend_text=element_text(size=6),
+            legend_key_size=8,
+            legend_box_spacing=0.01,
+            plot_margin=0.005,
+            figure_size=(8, 4),
+            dpi=300,
+        )
+    )
+
+
+def _graficar_incidencia(
+    resultado: ResultadoIncidencia,
+    comparacion: ResultadoVariacion | None,
+    desde: PeriodoQuincenal | PeriodoMensual | None,
+    hasta: PeriodoQuincenal | PeriodoMensual | None,
+) -> None:
+    """Arma y dibuja las barras apiladas de `resultado`, con `comparacion` como línea si viene.
+
+    Una sola imagen: el particionado de `_graficar_indice` no aplica acá
+    porque cada partición mostraría una suma parcial y la línea de referencia
+    no cerraría con ninguna. Por eso hoy solo son graficables las
+    clasificaciones de hasta `_MAX_SERIES_POR_IMAGEN` categorías.
+    """
+    datos = _recortar_tramo(_aplanar_resultado(resultado), desde, hasta)
+    linea = None
+    if comparacion is not None:
+        linea = _recortar_tramo(_aplanar_resultado(comparacion), desde, hasta)
+    _construir_grafica_barras(datos, linea).draw(show=True)
+
+
 def _graficar_indice(
     resultado: ResultadoIndice,
     comparacion: ResultadoIndice | None,
@@ -194,30 +302,34 @@ def _graficar_variacion(
 
 
 def graficar(
-    resultado: ResultadoIndice | ResultadoVariacion,
+    resultado: ResultadoIndice | ResultadoVariacion | ResultadoIncidencia,
     comparacion: ResultadoIndice | ResultadoVariacion | None = None,
     desde: PeriodoQuincenal | PeriodoMensual | None = None,
     hasta: PeriodoQuincenal | PeriodoMensual | None = None,
 ) -> None:
-    """Grafica un `ResultadoIndice` o `ResultadoVariacion`, en una o varias imágenes; no devuelve nada.
+    """Grafica un `ResultadoIndice`, `ResultadoVariacion` o `ResultadoIncidencia`; no devuelve nada.
 
     Detecta el tipo de `resultado` y dispara el pipeline correspondiente —
-    índice (base 100, eje Y "Indice") o variación (base 0, eje Y "Variación
-    (pp)") — mismo punto de entrada para ambos, sin elegir función según el
-    tipo del resultado.
+    línea para índice (base 100, eje Y "Indice") y variación (base 0, eje Y
+    "Variación (pp)"), barras apiladas para incidencia (base 0, eje Y
+    "Incidencia (pp)") — mismo punto de entrada para los tres, sin elegir
+    función según el tipo del resultado.
 
     Args:
-        resultado: Resultado principal a graficar — `ResultadoIndice` o
-            `ResultadoVariacion`.
-        comparacion: Un segundo resultado opcional, del MISMO tipo que
-            `resultado` y con la MISMA periodicidad (quincenal o mensual —
-            mezclarlas rompe la comparación de periodos aguas abajo, además
-            de no tener sentido superponer dos resoluciones temporales
-            distintas), para superponer en la misma gráfica (ej. INPC en
-            negro + una clasificación). Si ambos son `ResultadoVariacion`,
-            además deben compartir `clase_variacion` (ej. no se puede
-            comparar una variación mensual contra una trimestral — los
-            periodos representados no son comparables).
+        resultado: Resultado principal a graficar — `ResultadoIndice`,
+            `ResultadoVariacion` o `ResultadoIncidencia`.
+        comparacion: Un segundo resultado opcional, con la MISMA periodicidad
+            que `resultado` (quincenal o mensual — mezclarlas rompe la
+            comparación de periodos aguas abajo, además de no tener sentido
+            superponer dos resoluciones temporales distintas). Para índices y
+            variaciones debe ser del MISMO tipo que `resultado` y se superpone
+            como línea punteada (ej. INPC en negro + una clasificación); si
+            ambos son `ResultadoVariacion`, además deben compartir
+            `clase_variacion`. Para una incidencia es el único caso donde el
+            tipo NO coincide: se espera un `ResultadoVariacion` — la variación
+            del INPC de la que esas incidencias son descomposición — que se
+            dibuja como línea negra sobre las barras, y debe compartir la
+            clase con la incidencia.
         desde: Periodo inicial del tramo a graficar. `None` = desde el
             primer periodo disponible.
         hasta: Periodo final del tramo a graficar. `None` = hasta el
@@ -255,5 +367,29 @@ def graficar(
                 )
                 return
         _graficar_variacion(resultado, comparacion, desde, hasta)
+    elif isinstance(resultado, ResultadoIncidencia):
+        if comparacion is not None:
+            # Único caso donde comparacion NO es del mismo tipo que resultado: las
+            # barras son la descomposición y la línea es el agregado del que salen,
+            # así que superponer dos incidencias no diría nada.
+            if not isinstance(comparacion, ResultadoVariacion):
+                print(
+                    "Error, comparacion de una incidencia debe ser un ResultadoVariacion "
+                    "(la variación del INPC que las incidencias descomponen)."
+                )
+                return
+            if es_mensual(resultado.resultado.largo) != es_mensual(comparacion.resultado.largo):
+                print(
+                    "Error, comparacion debe tener la misma periodicidad (quincenal/mensual) "
+                    "que resultado."
+                )
+                return
+            if comparacion.manifiesto.clase != resultado.manifiesto.clase:
+                print(
+                    "Error, comparacion debe tener la misma clase (frecuencia) que resultado "
+                    f"('{resultado.manifiesto.clase}' != '{comparacion.manifiesto.clase}')."
+                )
+                return
+        _graficar_incidencia(resultado, comparacion, desde, hasta)
     else:
-        print("Error, se esperaba un ResultadoIndice o ResultadoVariacion.")
+        print("Error, se esperaba un ResultadoIndice, ResultadoVariacion o ResultadoIncidencia.")
