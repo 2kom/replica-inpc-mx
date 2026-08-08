@@ -556,8 +556,12 @@ def incidencia_desde(
     filas_parciales: list[dict[str, object]] = []
     for generico in genericos:
         validos = [p for p in rango if pd.notna(valores.get((p, generico)))]
-        desde_real = resolver_extremo(desde_e, validos, incluir_parciales, primero=True)
-        hasta_real = resolver_extremo(hasta_e, validos, incluir_parciales, primero=False)
+        desde_real = resolver_extremo(
+            desde_e, validos, incluir_parciales=incluir_parciales, primero=True
+        )
+        hasta_real = resolver_extremo(
+            hasta_e, validos, incluir_parciales=incluir_parciales, primero=False
+        )
         if desde_real is None or hasta_real is None:
             # No computable: se emite en los extremos exactos (valor NaN).
             tuplas_emitir.append((hasta_e, generico))

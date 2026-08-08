@@ -364,9 +364,11 @@ def variacion_desde(
 
     for indice in indices:
         periodos_validos = [p for p in rango if pd.notna(valores_replicados.get((p, indice)))]
-        desde_real = resolver_extremo(desde, periodos_validos, incluir_parciales, primero=True)
+        desde_real = resolver_extremo(
+            desde, periodos_validos, incluir_parciales=incluir_parciales, primero=True
+        )
         hasta_real = resolver_extremo(
-            hasta_efectivo, periodos_validos, incluir_parciales, primero=False
+            hasta_efectivo, periodos_validos, incluir_parciales=incluir_parciales, primero=False
         )
 
         if desde_real is None or hasta_real is None:
