@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,6 +14,15 @@ from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 from replica_inpc.infraestructura.graficacion import graficador
+
+# Backend sin GUI: este es el único módulo de test que llama a `.draw()`, y
+# plotnine construye la figura con `plt.figure()`, que instancia un manager del
+# backend activo. Matplotlib lo elige por detección — en un runner de Windows
+# encuentra tkinter y se va a TkAgg, que revienta con `TclError: Can't find a
+# usable init.tcl` si el Tcl del entorno está incompleto (le pasó al CI). En
+# Linux headless el default ya es Agg, así que el fallo no aparece en local.
+# Si algún día otro módulo renderiza, necesita esta misma línea.
+matplotlib.use("Agg")
 
 # --------------------------------------------------------------------------- helpers
 
