@@ -202,6 +202,28 @@ def test_ordenar_series_dibujo_orden_ignora_categorias_ausentes() -> None:
     assert list(resultado.categories) == ["b", "a"]
 
 
+def test_ordenar_series_dibujo_pone_los_restos_en_el_extremo() -> None:
+    # En un apilado la primera categoria queda mas lejos del cero: los restos
+    # van primero para que las detalladas conserven base fija en 0.
+    valores = pd.Series(["a", pp._RESTO_DIFERIDO, "b", pp._RESTO_COLA])
+    categorias = list(pp._ordenar_series_dibujo(valores).categories)
+    assert categorias[:2] == [pp._RESTO_COLA, pp._RESTO_DIFERIDO]
+
+
+def test_ordenar_series_dibujo_orden_explicito_no_adelanta_los_restos() -> None:
+    valores = pd.Series(["a", pp._RESTO_DIFERIDO, "b"])
+    categorias = list(pp._ordenar_series_dibujo(valores, ["b", pp._RESTO_DIFERIDO, "a"]).categories)
+    assert categorias == [pp._RESTO_DIFERIDO, "b", "a"]
+
+
+def test_colores_restos_no_consumen_turno_de_paleta() -> None:
+    colores, _ = pp._colores_y_etiquetas([pp._RESTO_COLA, "a", pp._RESTO_DIFERIDO, "b"])
+    assert colores[pp._RESTO_COLA] == pp._COLOR_RESTO_COLA
+    assert colores[pp._RESTO_DIFERIDO] == pp._COLOR_RESTO_DIFERIDO
+    assert colores["a"] == pp._PALETA_OTROS_TIPOS[0]
+    assert colores["b"] == pp._PALETA_OTROS_TIPOS[1]
+
+
 def test_ordenar_series_dibujo_orden_explicito_no_adelanta_inpc() -> None:
     valores = pd.Series(["a", "INPC", "b"])
     resultado = pp._ordenar_series_dibujo(valores, ["INPC", "b", "a"])
@@ -460,6 +482,165 @@ def test_extremos_apilado_linea_vacia_no_afecta() -> None:
     vacia = pd.DataFrame({"periodo": [], "variacion_pp": []})
     piso, techo = pp._extremos_apilado(barras, "incidencia_pp", vacia, "variacion_pp")
     assert (piso, techo) == (0.0, 3.0)
+
+
+# --------------------------------------------------------------------------- particionado de apilados
+
+
+def _datos_apilado(magnitudes: list[float], periodos: list[Any] | None = None) -> pd.DataFrame:
+    """Un DataFrame aplanado con una categoria por magnitud, alternando signo por periodo."""
+    periodos = periodos or _meses(3)
+    filas = [
+        {
+            "periodo": p,
+            "periodo_ts": pd.Timestamp(p.to_timestamp()),
+            "indice": f"cat{i:02d}",
+            "incidencia_pp": magnitud * (1 if (i + j) % 3 else -1),
+            "tipo": "CCIF CLASE",
+            "linetype": "solid",
+        }
+        for i, magnitud in enumerate(magnitudes)
+        for j, p in enumerate(periodos)
+    ]
+    return pd.DataFrame(filas)
+
+
+def test_magnitud_ordena_descendente_por_valor_absoluto() -> None:
+    # cat00 alterna +3/-3 y cat01 es constante 1: el promedio con signo de
+    # cat00 casi se cancela, el de |x| no. Ordenar por el primero la haria
+    # parecer irrelevante.
+    datos = _datos_apilado([3.0, 1.0])
+    magnitudes = pp._magnitud_por_categoria(datos, "incidencia_pp")
+    assert list(magnitudes.index) == ["cat00", "cat01"]
+    assert magnitudes.iloc[0] == pytest.approx(3.0)
+
+
+def test_detallar_corta_al_alcanzar_la_cobertura() -> None:
+    # Dos categorias grandes concentran el 90%: con objetivo 0.75 basta con
+    # ellas, pero el piso de capacidad obliga a detallar al menos 8.
+    datos = _datos_apilado([45.0, 45.0] + [1.0] * 8)
+    detalladas = pp._categorias_a_detallar(datos, "incidencia_pp", cobertura=0.75, capacidad=2)
+    assert detalladas == ["cat00", "cat01"]
+
+
+def test_detallar_nunca_baja_del_piso_de_capacidad() -> None:
+    datos = _datos_apilado([45.0, 45.0] + [1.0] * 8)
+    detalladas = pp._categorias_a_detallar(datos, "incidencia_pp", cobertura=0.75, capacidad=8)
+    assert len(detalladas) == 8
+
+
+def test_detallar_todas_si_hay_menos_que_la_capacidad() -> None:
+    datos = _datos_apilado([3.0, 2.0, 1.0])
+    assert len(pp._categorias_a_detallar(datos, "incidencia_pp", capacidad=8)) == 3
+
+
+def test_filas_resto_separa_los_dos_signos() -> None:
+    datos = _datos_apilado([2.0, 1.0])
+    resto = pp._filas_resto(datos, "incidencia_pp", ["cat00", "cat01"], "__x__")
+    por_periodo = resto.groupby("periodo")["incidencia_pp"].apply(list)
+    # En cada periodo con valores de ambos signos hay dos filas, no una neta.
+    assert any(len(v) == 2 and min(v) < 0 < max(v) for v in por_periodo)
+
+
+def test_filas_resto_suma_exacto_lo_agregado() -> None:
+    datos = _datos_apilado([2.0, 1.0, 0.5])
+    categorias = ["cat00", "cat01", "cat02"]
+    resto = pp._filas_resto(datos, "incidencia_pp", categorias, "__x__")
+    esperado = datos.groupby("periodo")["incidencia_pp"].sum()
+    obtenido = resto.groupby("periodo")["incidencia_pp"].sum()
+    pd.testing.assert_series_equal(obtenido, esperado, check_names=False)
+
+
+def test_filas_resto_sin_categorias_devuelve_vacio() -> None:
+    datos = _datos_apilado([2.0])
+    assert pp._filas_resto(datos, "incidencia_pp", [], "__x__").empty
+
+
+def test_particionar_apilado_una_sola_imagen_bajo_capacidad() -> None:
+    datos = _datos_apilado([5.0, 4.0, 3.0])
+    partes = pp._particionar_apilado(datos, "incidencia_pp", capacidad=8)
+    assert len(partes) == 1
+    assert not any(str(i).startswith("__resto") for i in partes[0]["indice"])
+
+
+def test_particionar_apilado_cada_imagen_suma_el_total() -> None:
+    # La propiedad que justifica los agregados: particionar no puede cambiar
+    # cuanto vale la barra de cada periodo.
+    datos = _datos_apilado([10.0, 8.0, 6.0, 4.0, 2.0, 1.0, 0.5, 0.25])
+    total = datos.groupby("periodo")["incidencia_pp"].sum()
+    for parte in pp._particionar_apilado(datos, "incidencia_pp", cobertura=0.99, capacidad=3):
+        neto = parte.groupby("periodo")["incidencia_pp"].sum()
+        pd.testing.assert_series_equal(neto, total, check_names=False)
+
+
+def test_particionar_apilado_reparte_parejo() -> None:
+    datos = _datos_apilado([10.0] * 8)
+    partes = pp._particionar_apilado(datos, "incidencia_pp", cobertura=0.99, capacidad=3)
+    detalladas = [
+        len([i for i in set(p["indice"]) if not str(i).startswith("__resto")]) for p in partes
+    ]
+    assert sorted(detalladas) == [2, 3, 3]
+
+
+def test_particionar_apilado_distingue_diferido_de_cola() -> None:
+    # 3 categorias grandes cubren la cobertura y se reparten en 2 imagenes;
+    # las 5 chicas nunca se detallan y son la cola, igual en ambas.
+    datos = _datos_apilado([30.0, 30.0, 30.0] + [0.2] * 5)
+    partes = pp._particionar_apilado(datos, "incidencia_pp", cobertura=0.90, capacidad=2)
+    assert len(partes) == 2
+    for parte in partes:
+        assert pp._RESTO_DIFERIDO in set(parte["indice"])
+        assert pp._RESTO_COLA in set(parte["indice"])
+    colas = [
+        parte[parte["indice"] == pp._RESTO_COLA].groupby("periodo")["incidencia_pp"].sum()
+        for parte in partes
+    ]
+    pd.testing.assert_series_equal(colas[0], colas[1])
+
+
+def test_particionar_apilado_sin_cola_no_agrega_ese_resto() -> None:
+    datos = _datos_apilado([10.0, 8.0, 6.0, 4.0])
+    partes = pp._particionar_apilado(datos, "incidencia_pp", cobertura=0.99, capacidad=2)
+    assert all(pp._RESTO_COLA not in set(p["indice"]) for p in partes)
+
+
+# --------------------------------------------------------------------------- _pie_apilado
+
+
+def test_pie_apilado_sin_resto_ni_particion_no_aclara_nada() -> None:
+    datos = _datos_apilado([3.0, 2.0])
+    assert pp._pie_apilado(datos, 1, 1, 2) == (None, None)
+
+
+def test_pie_apilado_izquierda_reporta_la_cobertura() -> None:
+    datos = _datos_apilado([3.0, 2.0])
+    cobertura, numeracion = pp._pie_apilado(datos, 1, 1, 50)
+    assert cobertura is not None and "2 de 50" in cobertura
+    assert numeracion is None  # una sola imagen: numerarla no aporta
+
+
+def test_pie_apilado_derecha_numera_solo_con_varias_imagenes() -> None:
+    datos = _datos_apilado([3.0, 2.0])
+    _, numeracion = pp._pie_apilado(datos, 2, 4, 50)
+    assert numeracion == "Imagen 2 de 4"
+
+
+def test_pie_apilado_particionado_sin_cola_solo_numera() -> None:
+    # Todas las categorias se detallan entre las imagenes: no hay cobertura
+    # que aclarar, pero si hay que decir cual imagen es.
+    datos = _datos_apilado([3.0, 2.0])
+    cobertura, numeracion = pp._pie_apilado(datos, 1, 3, 2)
+    assert cobertura is None
+    assert numeracion == "Imagen 1 de 3"
+
+
+def test_etiquetas_de_leyenda_de_los_restos_son_legibles() -> None:
+    # El valor de `indice` de un agregado es un marcador interno; lo que se ve
+    # en la leyenda tiene que ser texto para una persona.
+    _, etiquetas = pp._colores_y_etiquetas([pp._RESTO_DIFERIDO, pp._RESTO_COLA])
+    assert etiquetas[pp._RESTO_DIFERIDO] == pp._ETIQUETAS_RESTO[pp._RESTO_DIFERIDO]
+    assert etiquetas[pp._RESTO_COLA] == pp._ETIQUETAS_RESTO[pp._RESTO_COLA]
+    assert not any(e.startswith("__") for e in etiquetas.values())
 
 
 # --------------------------------------------------------------------------- _ancho_barra

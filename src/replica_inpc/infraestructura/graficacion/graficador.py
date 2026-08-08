@@ -19,6 +19,8 @@ from plotnine import (
     geom_line,
     geom_point,
     ggplot,
+    guide_legend,
+    guides,
     labs,
     scale_color_manual,
     scale_fill_manual,
@@ -40,6 +42,8 @@ from replica_inpc.infraestructura.graficacion._prepocesamiento import (
     _COLUMNA_VARIACION,
     _ETIQUETA_Y_INCIDENCIA,
     _ETIQUETA_Y_VARIACION,
+    _MAX_COLUMNAS_LEYENDA,
+    _RESTOS,
     _VALOR_BASE,
     _VALOR_BASE_INCIDENCIA,
     _VALOR_BASE_VARIACION,
@@ -53,11 +57,16 @@ from replica_inpc.infraestructura.graficacion._prepocesamiento import (
     _etiqueta_y_indice,
     _extremos_apilado,
     _ordenar_series_dibujo,
+    _particionar_apilado,
     _particionar_series,
+    _pie_apilado,
     _primero_y_ultimo_para_anotar,
     _recortar_tramo,
     _titulo,
 )
+
+# Pies de imagen, en gris tenue para que no compitan con el contenido.
+_GRIS_PIE = "#666666"
 
 
 def _construir_grafica_linea(
@@ -168,6 +177,8 @@ def _construir_grafica_barras(
     linea: pd.DataFrame | None = None,
     *,
     orden: list[str] | None = None,
+    pie_izquierda: str | None = None,
+    pie_derecha: str | None = None,
 ) -> ggplot:
     """Arma el `ggplot` de barras apiladas por periodo, con una línea de referencia opcional.
 
@@ -185,11 +196,24 @@ def _construir_grafica_barras(
     La línea marca el NETO del periodo, que solo coincide con el techo de la
     barra cuando todas las categorías son positivas — con una negativa, el
     neto queda por debajo del tope dibujado.
+
+    Los dos pies dicen el alcance de la imagen sin ensuciar el título, que se
+    mantiene igual en todas las imágenes de la misma serie. Usan los dos textos
+    de figura que ofrece plotnine: `caption` (anclado abajo a la derecha) y
+    `tag`, al que se le fija posición abajo a la izquierda — agregarlos a mano
+    sobre la figura no es opción, porque `draw(show=False)` la cierra al salir
+    y ya no se puede mostrar.
+
+    El orden de la leyenda no es el del apilado: los agregados de resto se
+    apilan en el extremo (primeros en el orden categórico) pero se listan al
+    final, después de las categorías reales.
     """
     datos = datos.copy()
     datos["indice"] = _ordenar_series_dibujo(datos["indice"], orden)
     series = list(pd.unique(datos["indice"]))
     colores, etiquetas_leyenda = _colores_y_etiquetas(series)
+    orden_leyenda = [s for s in series if s not in set(_RESTOS)]
+    orden_leyenda += [s for s in _RESTOS if s in set(series)]
 
     piso, techo = _extremos_apilado(datos, _COLUMNA_INCIDENCIA, linea, _COLUMNA_VARIACION)
     breaks_y = _breaks_desde_extremos(piso, techo, _VALOR_BASE_INCIDENCIA)
@@ -203,7 +227,7 @@ def _construir_grafica_barras(
             data=datos,
             width=_ancho_barra(datos),
         )
-        + scale_fill_manual(values=colores, labels=etiquetas_leyenda)
+        + scale_fill_manual(values=colores, labels=etiquetas_leyenda, breaks=orden_leyenda)
     )
     if linea is not None:
         series_linea = list(pd.unique(linea["indice"]))
@@ -221,12 +245,23 @@ def _construir_grafica_barras(
         grafica
         + scale_x_datetime(breaks=breaks_x, labels=etiquetas_x, expand=(0.01, 0.01))  # type: ignore[arg-type]
         + scale_y_continuous(breaks=breaks_y, expand=(0.01, 0.01))  # type: ignore[arg-type]
-        + labs(title=_titulo(datos), x="Periodo", y=_ETIQUETA_Y_INCIDENCIA)
+        + labs(
+            title=_titulo(datos),
+            x="Periodo",
+            y=_ETIQUETA_Y_INCIDENCIA,
+            caption=pie_derecha,
+            tag=pie_izquierda,
+        )
+        + guides(fill=guide_legend(ncol=_MAX_COLUMNAS_LEYENDA))
         + theme_bw()
         + theme(
             axis_title=element_text(size=8),
             axis_text_x=element_text(rotation=30, ha="right", size=6),
             axis_text_y=element_text(size=6),
+            plot_caption=element_text(size=6, ha="right", color=_GRIS_PIE),
+            plot_tag=element_text(size=6, ha="left", color=_GRIS_PIE),
+            plot_tag_position="bottomleft",
+            plot_tag_location="plot",
             legend_position="bottom",
             legend_box="horizontal",
             legend_title=element_blank(),
@@ -248,16 +283,26 @@ def _graficar_incidencia(
 ) -> None:
     """Arma y dibuja las barras apiladas de `resultado`, con `comparacion` como línea si viene.
 
-    Una sola imagen: el particionado de `_graficar_indice` no aplica acá
-    porque cada partición mostraría una suma parcial y la línea de referencia
-    no cerraría con ninguna. Por eso hoy solo son graficables las
-    clasificaciones de hasta `_MAX_SERIES_POR_IMAGEN` categorías.
+    Se generan tantas imágenes como hagan falta para detallar las categorías
+    que cubren `_COBERTURA_OBJETIVO` de la magnitud total; en cada una, lo que
+    esa imagen no detalla va agregado en dos grises, así la barra sigue valiendo
+    el total del periodo y la línea cierra en todas (ver `_particionar_apilado`).
+
+    El tramo se recorta ANTES de repartir: qué categorías merecen detalle
+    depende de lo que se va a mirar, no del histórico completo.
     """
     datos = _recortar_tramo(_aplanar_resultado(resultado), desde, hasta)
     linea = None
     if comparacion is not None:
         linea = _recortar_tramo(_aplanar_resultado(comparacion), desde, hasta)
-    _construir_grafica_barras(datos, linea).draw(show=True)
+
+    categorias_totales = len(pd.unique(datos["indice"]))
+    partes = _particionar_apilado(datos, _COLUMNA_INCIDENCIA)
+    for i, parte in enumerate(partes, start=1):
+        cobertura, numeracion = _pie_apilado(parte, i, len(partes), categorias_totales)
+        _construir_grafica_barras(
+            parte, linea, pie_izquierda=cobertura, pie_derecha=numeracion
+        ).draw(show=True)
 
 
 def _graficar_indice(

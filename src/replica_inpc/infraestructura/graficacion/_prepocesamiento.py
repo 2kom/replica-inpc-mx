@@ -43,6 +43,25 @@ _PALETA_OTROS_TIPOS = (
 # color distinguible que asignar, toca partir en varias imágenes.
 _MAX_SERIES_POR_IMAGEN = len(_PALETA_OTROS_TIPOS)
 _MAX_CARACTERES_LEYENDA = 34
+# Columnas de la leyenda. plotnine elige 5 por su cuenta y con nombres de
+# clasificación (truncados a 34) eso da una leyenda de 825 px contra un panel
+# de 727: se desborda del ancho de la gráfica. Con 4 baja a 622 y cabe.
+_MAX_COLUMNAS_LEYENDA = 4
+# Fracción de la magnitud total que las categorías detalladas deben cubrir entre
+# todas las imágenes. Lo que no entra no se dibuja nunca en detalle.
+_COBERTURA_OBJETIVO = 0.80
+# Los dos agregados de un apilado particionado. El signo lo comunica la posición
+# (arriba/abajo del cero), así que el tono queda libre para lo que no se ve:
+# claro = se detalla en OTRA imagen, oscuro = no se detalla en ninguna.
+_RESTO_DIFERIDO = "__resto_diferido__"
+_RESTO_COLA = "__resto_cola__"
+_COLOR_RESTO_DIFERIDO = "#cccccc"
+_COLOR_RESTO_COLA = "#7a7a7a"
+_RESTOS = (_RESTO_DIFERIDO, _RESTO_COLA)
+_ETIQUETAS_RESTO = {
+    _RESTO_DIFERIDO: "resto (en otras imagenes)",
+    _RESTO_COLA: "resto (sin detallar)",
+}
 # Un año de periodos según periodicidad: hasta acá los puntos caben sobre la
 # línea sin saturarla, y marcan cada observación real (útil en tramos cortos).
 _MAX_PERIODOS_CON_PUNTOS_QUINCENAL = 25
@@ -53,6 +72,29 @@ def _titulo(datos: pd.DataFrame) -> str:
 
     tipos = list(pd.unique(datos["tipo"]))
     return " + ".join(tipos)
+
+
+def _pie_apilado(
+    datos: pd.DataFrame, imagen: int, de: int, categorias_totales: int
+) -> tuple[str | None, str | None]:
+    """Pies izquierdo y derecho de un apilado: `(cobertura, numeración)`.
+
+    Van al pie y no en el título porque son metadato de esta imagen concreta,
+    no el nombre de lo que se está viendo — el título se mantiene igual en
+    todas las imágenes de una misma serie, que es lo que permite reconocerlas
+    como la misma gráfica. Qué son los grises lo dice la leyenda.
+
+    Cualquiera de los dos puede ser `None`: sin resto no hay cobertura que
+    aclarar, y con una sola imagen no hay nada que numerar.
+    """
+    detalladas = len([c for c in pd.unique(datos["indice"]) if c not in set(_RESTOS)])
+    cobertura = (
+        None
+        if detalladas == categorias_totales
+        else f"{detalladas} de {categorias_totales} categorías detalladas"
+    )
+    numeracion = f"Imagen {imagen} de {de}" if de > 1 else None
+    return cobertura, numeracion
 
 
 def _aplanar_resultado(
@@ -151,6 +193,123 @@ def _particionar_series(
     return particiones
 
 
+def _magnitud_por_categoria(datos: pd.DataFrame, columna_valor: str) -> pd.Series:
+    """Categorías ordenadas por magnitud media descendente (`mean(|valor|)` sobre el tramo).
+
+    Es la medida de "cuánto mueve la aguja" una categoría: el promedio simple
+    del valor con signo se cancela entre periodos de subida y de bajada, y una
+    categoría que alterna fuerte se vería igual de irrelevante que una plana.
+    """
+    magnitudes = datos.groupby("indice", observed=True)[columna_valor].apply(
+        lambda valores: float(valores.abs().mean())
+    )
+    return magnitudes.sort_values(ascending=False)
+
+
+def _categorias_a_detallar(
+    datos: pd.DataFrame,
+    columna_valor: str,
+    cobertura: float = _COBERTURA_OBJETIVO,
+    capacidad: int = _MAX_SERIES_POR_IMAGEN,
+) -> list[str]:
+    """Categorías que sí se dibujan con su propio color, ordenadas de mayor a menor magnitud.
+
+    Se toman las más grandes hasta cubrir `cobertura` de la magnitud total. El
+    resto no se detalla en ninguna imagen: en una clasificación fina la cola es
+    tan chica que sus barras miden fracciones de píxel contra un eje fijado por
+    el total (en `SCIAN RAMA`, la última categoría vale `0.0007` pp contra un
+    eje que llega a `8.7`), así que más imágenes no la harían legible.
+
+    Nunca se detallan menos de `capacidad` categorías: si todas caben en una
+    imagen no tiene sentido mandar ninguna al resto solo porque el acumulado ya
+    llegó al objetivo.
+    """
+    magnitudes = _magnitud_por_categoria(datos, columna_valor)
+    total = float(magnitudes.sum())
+    if total <= 0:
+        return list(magnitudes.index)
+    acumulada = magnitudes.cumsum() / total
+    cuantas = int((acumulada < cobertura).sum()) + 1
+    cuantas = max(cuantas, min(len(magnitudes), capacidad))
+    return list(magnitudes.index[:cuantas])
+
+
+def _filas_resto(
+    datos: pd.DataFrame, columna_valor: str, categorias: list[str], etiqueta: str
+) -> pd.DataFrame:
+    """Agrega `categorias` en dos filas por periodo (suma de positivos, suma de negativos).
+
+    Un único segmento con la suma NETA se dibujaría de un solo lado del cero y
+    rompería la lectura de arriba/abajo del apilado; separarlo por signo la
+    conserva. La suma es exacta — las incidencias son aditivas — así que el
+    agregado no inventa nada, solo deja de detallar.
+    """
+    subconjunto = datos[datos["indice"].isin(categorias)]
+    if subconjunto.empty:
+        return datos.iloc[:0]
+
+    partes = []
+    for signo in (1, -1):
+        del_signo = subconjunto[subconjunto[columna_valor] * signo > 0]
+        if del_signo.empty:
+            continue
+        agregado = (
+            del_signo.groupby(["periodo", "periodo_ts"], observed=True)[columna_valor]
+            .sum()
+            .reset_index()
+        )
+        agregado["indice"] = etiqueta
+        agregado["tipo"] = datos["tipo"].iloc[0]
+        agregado["linetype"] = _LINETYPE_PRINCIPAL
+        partes.append(agregado)
+    return pd.concat(partes, ignore_index=True) if partes else datos.iloc[:0]
+
+
+def _particionar_apilado(
+    datos: pd.DataFrame,
+    columna_valor: str,
+    cobertura: float = _COBERTURA_OBJETIVO,
+    capacidad: int = _MAX_SERIES_POR_IMAGEN,
+) -> list[pd.DataFrame]:
+    """Parte un apilado en imágenes, agregando en cada una lo que esa imagen no detalla.
+
+    A diferencia de `_particionar_series` (líneas), cada partición lleva TODAS
+    las categorías: las suyas con color propio, y las demás sumadas en dos
+    agregados por signo. Sin eso cada imagen mostraría una suma parcial, la
+    barra dejaría de valer el total del periodo y la línea de referencia no
+    cerraría con ninguna.
+
+    Los agregados son dos, no uno, porque significan cosas distintas:
+    `_RESTO_DIFERIDO` se detalla en otra imagen (información diferida) y
+    `_RESTO_COLA` no se detalla en ninguna (información perdida). La cola es
+    idéntica en todas las imágenes; el diferido cambia con cada partición.
+    """
+    detalladas = _categorias_a_detallar(datos, columna_valor, cobertura, capacidad)
+    todas = list(pd.unique(datos["indice"]))
+    cola = [c for c in todas if c not in set(detalladas)]
+
+    n_particiones = math.ceil(len(detalladas) / capacidad)
+    base, sobrantes = divmod(len(detalladas), n_particiones)
+
+    particiones = []
+    inicio = 0
+    for i in range(n_particiones):
+        tamano = base + (1 if i < sobrantes else 0)
+        grupo = detalladas[inicio : inicio + tamano]
+        inicio += tamano
+        diferidas = [c for c in detalladas if c not in set(grupo)]
+        parte = pd.concat(
+            [
+                datos[datos["indice"].isin(grupo)],
+                _filas_resto(datos, columna_valor, diferidas, _RESTO_DIFERIDO),
+                _filas_resto(datos, columna_valor, cola, _RESTO_COLA),
+            ],
+            ignore_index=True,
+        )
+        particiones.append(parte)
+    return particiones
+
+
 def _ordenar_series_dibujo(valores: pd.Series, orden: list[str] | None = None) -> pd.Categorical:
     """Categórico ordenado con `INPC` al final — se dibuja último, queda por encima del resto.
 
@@ -167,14 +326,23 @@ def _ordenar_series_dibujo(valores: pd.Series, orden: list[str] | None = None) -
     de aparición por uno explícito — los valores que no estén en `orden` se
     agregan al final respetando su aparición, así una lista parcial nunca
     hace desaparecer categorías.
+
+    Los agregados de resto (`_RESTOS`) van al PRINCIPIO del orden, que en un
+    apilado es el extremo exterior (`geom_col` apila la primera categoría más
+    lejos del cero). Así las categorías detalladas quedan pegadas al cero, con
+    base fija, y su altura se compara entre periodos; al revés, el resto las
+    empuja arriba y abajo y esa comparación se pierde. `_RESTO_COLA` va antes
+    que `_RESTO_DIFERIDO` para que lo que nunca se detalla quede en el borde.
     """
     presentes = list(pd.unique(valores))
+    fijos = {"INPC", *_RESTOS}
     if orden is None:
-        secuencia = [v for v in presentes if v != "INPC"]
+        secuencia = [v for v in presentes if v not in fijos]
     else:
-        pedidos = [v for v in orden if v in set(presentes) and v != "INPC"]
-        resto = [v for v in presentes if v not in set(pedidos) and v != "INPC"]
+        pedidos = [v for v in orden if v in set(presentes) and v not in fijos]
+        resto = [v for v in presentes if v not in set(pedidos) and v not in fijos]
         secuencia = pedidos + resto
+    secuencia = [v for v in (_RESTO_COLA, _RESTO_DIFERIDO) if v in set(presentes)] + secuencia
     if "INPC" in set(valores):
         secuencia.append("INPC")
     return pd.Categorical(valores, categories=secuencia, ordered=True)
@@ -301,8 +469,13 @@ def _colores_y_etiquetas(series: list[str]) -> tuple[dict[str, str], dict[str, s
     `tipo`, que agrupa varias categorías bajo un solo valor y mezclaría sus
     líneas si se usara para color/agrupación.
 
-    Color: INPC siempre negro; el resto toma color de paleta en el orden en
-    que aparece. Etiqueta: nombre completo, o truncado a
+    Color: INPC siempre negro; los agregados de resto van en sus dos grises
+    fijos; el resto toma color de paleta en el orden en que aparece. Ni INPC
+    ni los agregados consumen turno de paleta — no son categorías, y gastar en
+    ellos uno de los 8 colores distinguibles dejaría fuera a una categoría real.
+    Los agregados además traen su propia etiqueta legible: su valor de `indice`
+    es un marcador interno que nunca debe llegar a la leyenda.
+    Etiqueta: nombre completo, o truncado a
     `_MAX_CARACTERES_LEYENDA` con `"..."` si no cabe — nombres largos de
     clasificación (SCIAN, CCIF, ej. "22 generacion transmision distribucion y
     comercializacion de energia electrica...") desbordaban el ancho de la
@@ -310,19 +483,25 @@ def _colores_y_etiquetas(series: list[str]) -> tuple[dict[str, str], dict[str, s
     agrupación — ambos dicts quedan keyed por el nombre completo, para
     `scale_color_manual(values=colores, labels=etiquetas)`.
     """
+    fijos = {
+        "INPC": _COLOR_INPC,
+        _RESTO_DIFERIDO: _COLOR_RESTO_DIFERIDO,
+        _RESTO_COLA: _COLOR_RESTO_COLA,
+    }
     colores: dict[str, str] = {}
     etiquetas: dict[str, str] = {}
     i = 0
     for serie in series:
-        if serie == "INPC":
-            colores[serie] = _COLOR_INPC
+        if serie in fijos:
+            colores[serie] = fijos[serie]
         else:
             colores[serie] = _PALETA_OTROS_TIPOS[i % len(_PALETA_OTROS_TIPOS)]
             i += 1
-        if len(serie) > _MAX_CARACTERES_LEYENDA:
-            etiquetas[serie] = serie[: _MAX_CARACTERES_LEYENDA - 3] + "..."
+        nombre = _ETIQUETAS_RESTO.get(serie, serie)
+        if len(nombre) > _MAX_CARACTERES_LEYENDA:
+            etiquetas[serie] = nombre[: _MAX_CARACTERES_LEYENDA - 3] + "..."
         else:
-            etiquetas[serie] = serie
+            etiquetas[serie] = nombre
     return colores, etiquetas
 
 

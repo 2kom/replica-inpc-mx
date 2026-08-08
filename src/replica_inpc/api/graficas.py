@@ -39,11 +39,22 @@ def graficar(
 
     Un `ResultadoIncidencia` se dibuja distinto: barras apiladas por periodo,
     un segmento de color por categoría, positivas hacia arriba desde 0 y
-    negativas hacia abajo. Siempre en una sola imagen — por eso hoy solo son
-    graficables las clasificaciones de hasta 8 categorías. Pasando como
-    `comparacion` la variación del INPC de la misma clase, esta se superpone
-    como línea negra: marca el NETO de cada periodo, que coincide con el techo
-    de la barra solo cuando todas las categorías son positivas.
+    negativas hacia abajo. Pasando como `comparacion` la variación del INPC de
+    la misma clase, esta se superpone como línea negra: marca el NETO de cada
+    periodo, que coincide con el techo de la barra solo cuando todas las
+    categorías son positivas.
+
+    Con muchas categorías se generan varias imágenes, las que hagan falta para
+    detallar las que concentran el 80% de la magnitud. En cada imagen, lo que
+    esa imagen no detalla se dibuja igual, agregado en dos grises — así la
+    barra sigue valiendo el total del periodo y la línea cierra en todas. El
+    gris claro se detalla en otra imagen; el oscuro no se detalla en ninguna,
+    porque su tamaño lo haría invisible contra un eje fijado por el total (en
+    `SCIAN RAMA` la categoría más chica vale `0.0007` pp contra un eje que
+    llega a `8.7`). Los grises no aparecen en la leyenda: el título dice
+    cuántas categorías se detallan de cuántas hay. Para forzar el detalle de
+    una categoría chica, no hay parámetro — se ve en la gráfica de líneas, que
+    particiona con un eje propio por imagen.
 
     Los puntos sobre la línea aparecen solo en dos casos: cuando el tramo
     graficado cabe en un año (24 periodos quincenales o 12 mensuales), donde

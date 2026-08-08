@@ -646,3 +646,176 @@ def test_graficar_incidencia_comparacion_valida_dibuja(mocker: Any) -> None:
     mocker.patch.object(graficador, "_construir_grafica_barras", return_value=grafica_falsa)
     graficador.graficar(ri, comparacion=rv)
     grafica_falsa.draw.assert_called_once_with(show=True)
+
+
+# --------------------------------------------------------------------------- apilado particionado
+
+
+def _incidencia_n_categorias(n: int, periodos: list[Any]) -> ResultadoIncidencia:
+    filas = [
+        (p, f"cat{i:02d}", float(n - i) * (1 if (i + j) % 3 else -1), "ok")
+        for i in range(n)
+        for j, p in enumerate(periodos)
+    ]
+    return _resultado_incidencia(filas, tipo="CCIF CLASE")
+
+
+def _datos_con_resto() -> pd.DataFrame:
+    from replica_inpc.infraestructura.graficacion._prepocesamiento import (
+        _RESTO_COLA,
+        _filas_resto,
+    )
+
+    datos, _ = _barras_y_linea()
+    return pd.concat(
+        [datos, _filas_resto(datos, "incidencia_pp", ["cat_b"], _RESTO_COLA)],
+        ignore_index=True,
+    )
+
+
+def test_construir_barras_lista_los_restos_al_final_de_la_leyenda() -> None:
+    # El apilado los pone en el extremo (primeros en el orden categorico),
+    # pero en la leyenda van despues de las categorias reales.
+    from replica_inpc.infraestructura.graficacion._prepocesamiento import _RESTO_COLA
+
+    grafica = graficador._construir_grafica_barras(_datos_con_resto())
+    escala = next(e for e in grafica.scales if "fill" in e.aesthetics)
+    assert list(escala.breaks)[-1] == _RESTO_COLA
+    assert "cat_a" in escala.breaks
+
+
+def test_construir_barras_sin_pie_no_pone_caption() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos)
+    assert getattr(grafica.labels, "caption", None) is None
+
+
+def test_construir_barras_pie_derecha_va_al_caption_no_al_titulo() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos, pie_derecha="Imagen 1 de 4")
+    assert grafica.labels.caption == "Imagen 1 de 4"
+    assert grafica.labels.title == "COG"
+
+
+def test_construir_barras_con_pie_renderiza() -> None:
+    # Render real: el estilo del caption solo se valida al dibujar, y un color
+    # invalido (`grey40`, que es sintaxis de R) revienta ahi y en ningun otro
+    # lado -- la construccion del ggplot pasa sin quejarse.
+    datos, _ = _barras_y_linea()
+    figura = graficador._construir_grafica_barras(datos, pie_derecha="pie de prueba").draw()
+    try:
+        textos = [t.get_text() for t in figura.texts]
+        assert "pie de prueba" in textos
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+def test_construir_barras_leyenda_cabe_en_el_ancho_del_panel() -> None:
+    # Con los nombres largos de una clasificacion fina, plotnine elige 5
+    # columnas por su cuenta y la leyenda sale mas ancha que la grafica.
+    from matplotlib.offsetbox import AnchoredOffsetbox
+
+    periodos = _quincenas(6)
+    largos = [f"{i}11{i} " + "nombre de categoria bastante largo" for i in range(8)]
+    filas = [(p, nombre, float(i + 1), "ok") for i, nombre in enumerate(largos) for p in periodos]
+    ri = _resultado_incidencia(filas, tipo="SCIAN RAMA")
+    datos = graficador._aplanar_resultado(ri)
+
+    figura = graficador._construir_grafica_barras(datos).draw()
+    try:
+        figura.canvas.draw()
+        leyenda = next(
+            h for h in figura.get_children() if isinstance(h, AnchoredOffsetbox)
+        ).get_window_extent()
+        panel = figura.axes[0].get_window_extent()
+        assert leyenda.width <= panel.width
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+def test_construir_barras_pie_izquierdo_va_al_tag() -> None:
+    datos, _ = _barras_y_linea()
+    grafica = graficador._construir_grafica_barras(datos, pie_izquierda="7 de 97 categorías")
+    assert grafica.labels.tag == "7 de 97 categorías"
+
+
+def test_construir_barras_renderiza_los_dos_pies_en_lados_opuestos() -> None:
+    # Render real: los dos textos tienen que existir en la figura y quedar uno
+    # a cada lado. Agregarlos a mano tras `draw(show=False)` no sirve — plotnine
+    # cierra la figura al salir del contexto y ya no se puede mostrar.
+    datos, _ = _barras_y_linea()
+    figura = graficador._construir_grafica_barras(
+        datos, pie_izquierda="7 de 97 categorías", pie_derecha="Imagen 1 de 4"
+    ).draw()
+    try:
+        figura.canvas.draw()
+        posiciones = {
+            t.get_text(): t.get_window_extent().x0
+            for t in figura.texts
+            if t.get_text() in {"7 de 97 categorías", "Imagen 1 de 4"}
+        }
+        assert set(posiciones) == {"7 de 97 categorías", "Imagen 1 de 4"}
+        assert posiciones["7 de 97 categorías"] < posiciones["Imagen 1 de 4"]
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figura)
+
+
+def test_graficar_incidencia_genera_varias_imagenes(mocker: Any) -> None:
+    ri = _incidencia_n_categorias(20, [_M1, _M2])
+    grafica_falsa = mocker.Mock()
+    mocker.patch.object(graficador, "_construir_grafica_barras", return_value=grafica_falsa)
+    graficador._graficar_incidencia(ri, None, None, None)
+    assert grafica_falsa.draw.call_count > 1
+    grafica_falsa.draw.assert_called_with(show=True)
+
+
+def test_graficar_incidencia_cada_imagen_conserva_el_total(mocker: Any) -> None:
+    ri = _incidencia_n_categorias(20, [_M1, _M2])
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, None, None, None)
+
+    esperado = (
+        ri.resultado.largo.reset_index().groupby("periodo")["incidencia_pp"].sum().sort_index()
+    )
+    for llamada in construir.call_args_list:
+        parte = llamada[0][0]
+        neto = parte.groupby("periodo")["incidencia_pp"].sum().sort_index()
+        pd.testing.assert_series_equal(neto, esperado, check_names=False)
+
+
+def test_graficar_incidencia_sin_resto_no_lleva_pie(mocker: Any) -> None:
+    # Con todas las categorias detalladas en una sola imagen no hay alcance
+    # que aclarar ni imagen que numerar: los dos pies sobran.
+    ri = _resultado_incidencia([(_M1, "cat_a", 1.0, "ok"), (_M1, "cat_b", 2.0, "ok")])
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, None, None, None)
+    assert construir.call_args[1]["pie_derecha"] is None
+    assert construir.call_args[1]["pie_izquierda"] is None
+
+
+def test_graficar_incidencia_reparte_los_pies_a_cada_lado(mocker: Any) -> None:
+    ri = _incidencia_n_categorias(20, [_M1, _M2])
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, None, None, None)
+
+    derechas = [llamada[1]["pie_derecha"] for llamada in construir.call_args_list]
+    izquierdas = [llamada[1]["pie_izquierda"] for llamada in construir.call_args_list]
+    assert all(p is not None and p.startswith("Imagen") for p in derechas)
+    assert derechas[0] != derechas[1]
+    assert all(p is not None and "categorías detalladas" in p for p in izquierdas)
+
+
+def test_graficar_incidencia_recorta_antes_de_repartir(mocker: Any) -> None:
+    # Que categorias merecen detalle depende del tramo que se va a mirar, no
+    # del historico completo.
+    filas = [(_M1, "cat_a", 100.0, "ok"), (_M2, "cat_a", 0.0, "ok"), (_M2, "cat_b", 5.0, "ok")]
+    ri = _resultado_incidencia(filas)
+    construir = mocker.patch.object(graficador, "_construir_grafica_barras")
+    graficador._graficar_incidencia(ri, None, _M2, None)
+    assert set(construir.call_args[0][0]["periodo"]) == {_M2}
