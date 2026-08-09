@@ -7,6 +7,7 @@ import requests  # type: ignore
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
     FuenteNoDisponible,
+    InvarianteViolado,
     RespuestaInvalida,
 )
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -205,6 +206,15 @@ def _rango_completo(historico: dict[_Periodo, float | None]) -> list[_Periodo]:
     ]
 
 
+def _exigir_periodos(periodos: list[_Periodo], metodo: str) -> None:
+    """Rechaza una lista de periodos vacía antes de tocar caché o red."""
+    if not periodos:
+        raise InvarianteViolado(
+            f"FuenteValidacionApi.{metodo}: 'periodos' no puede estar vacío; "
+            f"sin periodos no hay nada que consultar."
+        )
+
+
 class FuenteValidacionApi:
     """Adaptador que obtiene índices publicados por el INEGI vía su API.
 
@@ -230,8 +240,12 @@ class FuenteValidacionApi:
         usa el indicador correspondiente. Usa cache de clase — la primera llamada
         descarga el histórico completo; las siguientes lo reutilizan sin hacer
         requests adicionales.
+
+        Raises:
+            InvarianteViolado: Si `periodos` está vacío.
         """
-        es_mensual = periodos and isinstance(periodos[0], PeriodoMensual)
+        _exigir_periodos(periodos, "obtener_indices")
+        es_mensual = isinstance(periodos[0], PeriodoMensual)
         if es_mensual and self._tipo not in _INDICADORES_MENSUALES:
             raise ErrorConfiguracion(
                 f"tipo '{self._tipo}' no tiene indicador mensual INEGI disponible. "
@@ -260,8 +274,12 @@ class FuenteValidacionApi:
         Detecta automáticamente si los periodos son mensuales o quincenales y
         usa el mapa de indicadores correspondiente. Solo incluye en el resultado
         periodos >= min(historico) — ausencia de clave indica fuera_de_rango_inegi.
+
+        Raises:
+            InvarianteViolado: Si `periodos` está vacío.
         """
-        es_quincenal = bool(periodos) and isinstance(periodos[0], PeriodoQuincenal)
+        _exigir_periodos(periodos, "obtener_variaciones")
+        es_quincenal = isinstance(periodos[0], PeriodoQuincenal)
         mapa = _VARIACIONES_POR_TIPO_QUINCENAL if es_quincenal else _VARIACIONES_POR_TIPO_MENSUAL
         if tipo_variacion not in mapa:
             raise ErrorConfiguracion(
@@ -295,7 +313,11 @@ class FuenteValidacionApi:
 
         Solo soporta PeriodoMensual e incidencia interanual. Ausencia de clave
         en el resultado indica fuera_de_rango_inegi (no publicado por INEGI aún).
+
+        Raises:
+            InvarianteViolado: Si `periodos` está vacío.
         """
+        _exigir_periodos(periodos, "obtener_incidencias")  # type: ignore[arg-type]
         if tipo_incidencia not in _INCIDENCIAS_POR_TIPO:
             raise ErrorConfiguracion(
                 f"tipo_incidencia '{tipo_incidencia}' no válido. "

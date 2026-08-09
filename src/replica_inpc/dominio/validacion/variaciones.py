@@ -51,8 +51,7 @@ def validar_variaciones(
     """Compara las variaciones replicadas contra las publicadas por INEGI."""
     if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
         raise InvarianteViolado(
-            f"validar_variaciones: tipo '{resultado.manifiesto.tipo}' fuera de "
-            f"INDICES_VALIDABLES."
+            f"validar_variaciones: tipo '{resultado.manifiesto.tipo}' fuera de INDICES_VALIDABLES."
         )
     tipo_variacion = _tipo_variacion(resultado.manifiesto.clase)
 

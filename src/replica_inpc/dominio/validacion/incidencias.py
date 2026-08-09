@@ -46,8 +46,7 @@ def validar_incidencias(
     """Compara las incidencias replicadas contra las publicadas por INEGI."""
     if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
         raise InvarianteViolado(
-            f"validar_incidencias: tipo '{resultado.manifiesto.tipo}' fuera de "
-            f"INDICES_VALIDABLES."
+            f"validar_incidencias: tipo '{resultado.manifiesto.tipo}' fuera de INDICES_VALIDABLES."
         )
     tipo_incidencia = _tipo_incidencia(resultado.manifiesto.clase)
 

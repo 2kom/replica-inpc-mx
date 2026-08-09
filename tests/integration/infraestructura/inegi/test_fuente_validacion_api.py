@@ -6,6 +6,7 @@ import requests  # type: ignore
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
     FuenteNoDisponible,
+    InvarianteViolado,
     RespuestaInvalida,
 )
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
@@ -419,6 +420,38 @@ class TestObtenerVariacionesQuincenal:
             "agropecuarios",
             "energeticos y tarifas autorizadas por el gobierno",
         }
+
+
+class TestPeriodosVacios:
+    # El puerto promete InvarianteViolado con `periodos == []`. Antes los tres
+    # metodos gastaban un request y devolvian {'INPC': {}}: la guardia va antes
+    # de tocar cache o red, asi que call_count debe quedar en 0.
+    @pytest.mark.parametrize(
+        "metodo, extra",
+        [
+            ("obtener_indices", ()),
+            ("obtener_variaciones", ("periodica",)),
+            ("obtener_incidencias", ("periodica",)),
+        ],
+    )
+    def test_lista_vacia_lanza_invariante_sin_hacer_request(self, mocker, metodo, extra):
+        mock_get = mocker.patch("requests.get")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+
+        with pytest.raises(InvarianteViolado, match=metodo):
+            getattr(fuente, metodo)([], *extra)
+
+        assert mock_get.call_count == 0
+
+    def test_mensaje_nombra_el_parametro_vacio(self, mocker):
+        mocker.patch("requests.get")
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+
+        with pytest.raises(InvarianteViolado) as exc:
+            fuente.obtener_indices([])
+
+        assert "periodos" in str(exc.value)
+        assert "vacío" in str(exc.value)
 
 
 # --- helpers ---
