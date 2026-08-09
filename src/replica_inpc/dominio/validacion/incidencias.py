@@ -33,8 +33,7 @@ def _tipo_incidencia(clase: str) -> str:
     if clase not in _MAPA_TIPO_INCIDENCIA:
         raise ErrorConfiguracion(
             f"clase_incidencia '{clase}' no es comparable contra INEGI; "
-            f"la fuente BIE y el adaptador actual solo soportan incidencias "
-            f"periódicas mensuales."
+            f"solo publica incidencias periódicas mensuales."
         )
     return _MAPA_TIPO_INCIDENCIA[clase]
 
@@ -54,7 +53,7 @@ def validar_incidencias(
 
     largo = resultado.resultado.largo
     # El .reporte heredado incluye filas no computables ausentes del largo;
-    # se clasifica sobre el reporte completo (admite_sin_calculo=True).
+    # se clasifica sobre el reporte completo para poder marcarlas sin_calculo.
     reporte_base = resultado.reporte
     periodos = list(dict.fromkeys(reporte_base.index.get_level_values("periodo")))
     inegi = fuente.obtener_incidencias(periodos, tipo_incidencia)  # type: ignore[arg-type]

@@ -58,7 +58,7 @@ def validar_variaciones(
 
     largo = resultado.resultado.largo
     # El .reporte heredado incluye filas no computables ausentes del largo;
-    # se clasifica sobre el reporte completo (admite_sin_calculo=True).
+    # se clasifica sobre el reporte completo para poder marcarlas sin_calculo.
     reporte_base = resultado.reporte
     periodos = list(dict.fromkeys(reporte_base.index.get_level_values("periodo")))
     inegi = fuente.obtener_variaciones(periodos, tipo_variacion)  # type: ignore[arg-type]

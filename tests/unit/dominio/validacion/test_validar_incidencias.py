@@ -122,8 +122,14 @@ def test_diagnostico_solo_no_ok() -> None:
     }
 
 
-def test_reporte_fila_no_computable_es_sin_calculo() -> None:
-    # El .reporte derivado incluye filas no computables ausentes del largo.
+@pytest.mark.parametrize("estado_no_computable", ["sin_datos", "fallida"])
+def test_fila_no_computable_es_sin_calculo_y_no_entra_al_resumen(
+    estado_no_computable: str,
+) -> None:
+    # El .resumen de derivados se calcula sobre .resultado.largo, que solo tiene
+    # filas computables. La asimetría es deliberada (docs/diseño.md §5.9): el
+    # resumen de derivados NO lleva n_sin_calculo y su global nunca vale
+    # sin_calculo, aunque el .reporte sí marque esas filas.
     df = pd.DataFrame(
         [
             {
@@ -138,7 +144,7 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         ]
     ).set_index(["periodo", "indice"])
     reporte = pd.DataFrame(
-        {"estado_calculo": ["ok", "sin_datos"], "version_t": [2024, 2024]},
+        {"estado_calculo": ["ok", estado_no_computable], "version_t": [2024, 2024]},
         index=pd.MultiIndex.from_tuples(
             [(_P1, "subyacente"), (_P2, "subyacente")], names=["periodo", "indice"]
         ),
@@ -151,10 +157,15 @@ def test_reporte_fila_no_computable_es_sin_calculo() -> None:
         fecha=datetime(2024, 1, 1),
     )
     resultado = ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())
+
     v = validar_incidencias(resultado, _Fuente({"subyacente": {_P1: 1.0, _P2: 5.0}}))  # type: ignore[arg-type]
+
     assert v.reporte.loc[(_P2, "subyacente"), "estado_validacion"] == "sin_calculo"  # type: ignore[index]
     assert not v.reporte["estado_validacion"].isna().any()
     assert (_P2, "subyacente") not in v.resultado.largo.index
+    # Contrato del resumen: la fila sin_calculo no lo afecta de ninguna forma.
+    assert "n_sin_calculo" not in v.resumen.columns
+    assert v.resumen.iloc[0]["estado_validacion_global"] == "ok"
 
 
 # -- fail-fast -----------------------------------------------------------------

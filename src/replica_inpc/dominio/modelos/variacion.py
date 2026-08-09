@@ -30,8 +30,11 @@ class ResultadoVariacion(Resultado):
     Args:
         df_resultado: DataFrame con MultiIndex `(periodo, indice)` — ver Esquema abajo.
         manifiesto: Proveniencia de la corrida (tipo, clase, descripción, fecha).
-        df_reporte: DataFrame paralelo a `df_resultado` (mismo MultiIndex) con
-            columnas de cobertura/calidad por fila.
+        df_reporte: DataFrame con el mismo MultiIndex `(periodo, indice)` y columnas
+            de cobertura/calidad por fila. Es un **superconjunto** de
+            `df_resultado`: incluye las filas no computables que el largo omite —
+            por eso las validaciones de derivados extraen de acá los periodos a
+            consultar (ver `docs/diseño.md` §5.8).
         df_diagnostico: DataFrame plano de faltantes, esquema `DiagnosticoFaltantes`.
         indices_parciales: Solo cuando `clase_variacion == "desde"` — índices
             intermedios usados en el cálculo acumulado; `None` en el resto de clases.
