@@ -14,8 +14,13 @@ class FuenteValidacion(Protocol):
     El `tipo` (`"INPC"`, `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"`)
     se fija en el constructor del implementador, no en el método.
 
-    Implementado por `infraestructura/inegi/fuente_validacion_api.py`
-    (`FuenteValidacionApi`). Usado por `dominio/validacion/`.
+    Implementado por `FuenteValidacionApi`
+    (`infraestructura/inegi/fuente_validacion_api.py`), de forma estructural: el
+    adaptador no importa este Protocol. Lo consume el caso de uso
+    `ValidarResultado`, que resuelve el I/O y le pasa el mapa ya obtenido a
+    `dominio/validacion/` — el dominio no conoce este contrato.
+
+    Ver: docs/diseño.md §7.1, §11.9, §11.25
 
     Esquema de retorno compartido — `dict[str, dict[Periodo, float | None]]`:
 

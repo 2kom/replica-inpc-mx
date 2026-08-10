@@ -13,8 +13,8 @@ from collections.abc import Callable
 
 import pandas as pd
 
+from replica_inpc.aplicacion.puertos.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
-from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import (

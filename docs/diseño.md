@@ -89,7 +89,7 @@ El historial de cambios vive en git.
     - [11.22 `rebasar` — huérfanos con `UserWarning`](#1122-rebasar--huérfanos-con-userwarning)
     - [11.23 `bfill→ffill` y estado `"rellenado"`](#1123-bfillffill-y-estado-rellenado)
     - [11.24 Autoreload IPython — `type(self)._PROXY`](#1124-autoreload-ipython--typeself_proxy)
-    - [11.25 `FuenteValidacion` en `dominio/`, no en `aplicacion/`](#1125-fuentevalidacion-en-dominio-no-en-aplicacion)
+    - [11.25 `FuenteValidacion` en `aplicacion/puertos/`](#1125-fuentevalidacion-en-aplicacionpuertos)
     - [11.26 Re-export de errores y tipos en `replica_inpc/__init__.py`](#1126-re-export-de-errores-y-tipos-en-replica_inpc__init__py)
     - [11.27 `a_mensual` — filtrado de manifiestos huérfanos](#1127-a_mensual--filtrado-de-manifiestos-huérfanos)
     - [11.28 `ManifestCalculo.ruta_canasta` y `ruta_series` opcionales](#1128-manifestcalculoruta_canasta-y-ruta_series-opcionales)
@@ -130,11 +130,11 @@ graph TD
         A["indices · flujos · variaciones · incidencias · validaciones · insumos · config"]
     end
     subgraph APP["aplicacion/"]
-        B["calcular_historia"]
-        C["LectorCanasta · LectorSeries"]
+        B["calcular_historia · validar_resultado"]
+        C["LectorCanasta · LectorSeries · FuenteValidacion"]
     end
     subgraph DOM["dominio/"]
-        D["modelos · calculo · consulta · validacion · conversion · correspondencia · FuenteValidacion"]
+        D["modelos · calculo · consulta · validacion · conversion · correspondencia"]
     end
     subgraph INFRA["infraestructura/"]
         E["lector_canasta_csv · lector_series_csv · fuente_validacion_api"]
@@ -232,9 +232,11 @@ replica-inpc-mx/
 │       │   ├── __init__.py
 │       │   ├── casos_uso/
 │       │   │   ├── __init__.py
-│       │   │   └── calcular_historia.py
+│       │   │   ├── calcular_historia.py
+│       │   │   └── validar_resultado.py
 │       │   └── puertos/
 │       │       ├── __init__.py
+│       │       ├── fuente_validacion.py
 │       │       ├── lector_canasta.py
 │       │       └── lector_series.py
 │       ├── dominio/
@@ -257,7 +259,6 @@ replica-inpc-mx/
 │       │   ├── conversion.py
 │       │   ├── correspondencia_canastas.py
 │       │   ├── errores.py
-│       │   ├── fuente_validacion.py
 │       │   ├── modelos/
 │       │   │   ├── __init__.py
 │       │   │   ├── base.py
@@ -378,7 +379,6 @@ Dos jerarquías de contratos: `Resultado` (cálculo) y `Validacion` (comparació
 | `periodos.py` | `PeriodoQuincenal`, `PeriodoMensual`, `periodo_desde_str` |
 | `errores.py` | jerarquía de excepciones; `InvarianteViolado` |
 | `tipos.py` | `VersionCanasta`, `TIPO_INPC`, `COLUMNAS_CLASIFICACION`, `INDICES_VALIDABLES`, `RANGOS_CANASTAS`, `ManifestCalculo`, `ManifestDerivado` |
-| `fuente_validacion.py` | `FuenteValidacion` (Protocol) |
 | `correspondencia_canastas.py` | `RENOMBRES_GENERICOS`, `RENOMBRES_INDICES` |
 | `conversion.py` | `empalmar`, `rebasar`, `a_mensual` |
 | `modelos/base.py` | `Resultado` (ABC), `Validacion` (ABC), `Vista` |
@@ -1566,14 +1566,16 @@ El mismo archivo contiene tablas de cambios de cobertura entre versiones de cana
 
 ### 5.14 Validación — validacion/
 
-Tres funciones en `dominio/validacion/`. Privadas — llamadas solo desde `api/validaciones.py`. Comparan resultados replicados contra datos publicados por INEGI mediante `FuenteValidacion` ([5.5](#55-modelo-base)). La fuente es una dependencia inyectada; sin IO directo.
+Tres funciones en `dominio/validacion/`. Comparan resultados replicados contra datos publicados por INEGI. **No conocen el puerto ni hacen I/O**: reciben las series ya obtenidas, en el alias `SeriesInegi` de `validacion/_comun.py` (`Mapping[str, Mapping[Periodo, float | None]]`, genérico en el periodo). Quien decide qué periodos pedir y consulta la fuente es el caso de uso `ValidarResultado` ([7.2](#72-casos-de-uso)); `api/validaciones.py` solo le pasa la fábrica del adaptador.
+
+Cada comparador revalida tipo y clase aunque el caso de uso ya lo haya hecho: son reglas de negocio y deben proteger también a quien invoque la función directa.
 
 **validar_indices** (`validacion/indices.py`)
 
 ```python
 validar_indices(
     resultado: ResultadoIndice,
-    fuente: FuenteValidacion,
+    inegi: SeriesInegi[PeriodoT],
     tolerancia: float = 0.0009,
 ) -> ValidacionIndice
 ```
@@ -1587,12 +1589,14 @@ Solo admite tipos en `INDICES_VALIDABLES` ([5.2](#52-tipos-compartidos)). Lanza 
 ```python
 validar_variaciones(
     resultado: ResultadoVariacion,
-    fuente: FuenteValidacion,
+    inegi: SeriesInegi[PeriodoT],
     tolerancia_pp: float = 0.009,
 ) -> ValidacionVariacion
 ```
 
 Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo las clases siguientes son comparables contra INEGI:
+
+Traducidas por `resolver_tipo_variacion_inegi` (pública, la usan el comparador y el caso de uso):
 
 | `clase_variacion` | `tipo_variacion` en `FuenteValidacion` |
 | --- | --- |
@@ -1610,12 +1614,12 @@ Cualquier otra clase lanza `ErrorConfiguracion`.
 ```python
 validar_incidencias(
     resultado: ResultadoIncidencia,
-    fuente: FuenteValidacion,
+    inegi: SeriesInegi[PeriodoT],
     tolerancia_pp: float = 0.009,
 ) -> ValidacionIncidencia
 ```
 
-Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable; la fuente BIE y el adaptador actual solo soportan incidencias periódicas mensuales. Cualquier otra clase lanza `ErrorConfiguracion`.
+Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable: INEGI no publica otras. Cualquier otra clase lanza `ErrorConfiguracion`, vía `resolver_tipo_incidencia_inegi` (pública, la usan el comparador y el caso de uso).
 
 ---
 
@@ -1725,7 +1729,7 @@ Funciones públicas aceptan `str` en parámetros de periodo; nunca `Periodo*` en
 
 **Decisiones de diseño**
 
-**§D1 — Acoplamiento api/ → infraestructura/:** `api/` instancia directamente `LectorCanastaCsv`, `LectorSeriesCsv` y `FuenteValidacionApi` sin inyección de dependencias. Pragmático y suficiente para v2: solo existe una fuente de cada tipo. La migración a puertos + DI se difiere a cuando se agreguen fuentes alternativas (SQL, HTTP, etc.); entonces `config.py` inyectará el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se suma el adaptador nuevo.
+**§D1 — Acoplamiento api/ → infraestructura/:** `api/` instancia directamente `LectorCanastaCsv`, `LectorSeriesCsv` y `FuenteValidacionApi` sin inyección de dependencias. En validación el acoplamiento ya se redujo: `api/validaciones.py` pasa una **fábrica** del adaptador a `ValidarResultado`, que lo construye recién cuando necesita datos; el caso de uso solo conoce el puerto. Pragmático y suficiente para v2: solo existe una fuente de cada tipo. La migración a puertos + DI se difiere a cuando se agreguen fuentes alternativas (SQL, HTTP, etc.); entonces `config.py` inyectará el adaptador concreto al arrancar. Los modelos de dominio no cambian — solo se suma el adaptador nuevo.
 
 **§D2 — Token híbrido en config.py:** `get_token()` busca la env var `INEGI_TOKEN` primero y solo después el valor de `set_token`. El orden no es arbitrario: en CI y en CLI el token se fija por entorno sin escribir código, y ese contexto debe ganar sobre un `set_token` dejado por error en una celda de notebook. En un notebook interactivo, donde no hay env var, `set_token` sigue siendo el único mecanismo. Si ninguno está disponible, `get_token()` lanza `ErrorConfiguracion`.
 
@@ -2704,10 +2708,11 @@ Capa de contratos e intermediación. `aplicacion/` define los puertos (`Protocol
 | --- | --- |
 | `puertos/lector_canasta.py` | `LectorCanasta` — sin cambio vs v1 |
 | `puertos/lector_series.py` | `LectorSeries` — sin cambio vs v1 |
-| `dominio/fuente_validacion.py` | `FuenteValidacion` — agrega `obtener_variaciones` y `obtener_incidencias` |
+| `aplicacion/puertos/fuente_validacion.py` | `FuenteValidacion` — agrega `obtener_variaciones` y `obtener_incidencias` |
 | `casos_uso/calcular_historia.py` | `CalcularHistoria` — nuevo; reemplaza `EjecutarCorrida` |
+| `casos_uso/validar_resultado.py` | `ValidarResultado` — nuevo; resuelve el I/O que antes hacía `dominio/validacion/` |
 
-> `FuenteValidacion` vive en `dominio/`, no en `aplicacion/puertos/`. El dominio depende de ella directamente (`dominio/validacion/` la consume); moverla a `aplicacion/` crearía una dependencia dominio→aplicacion prohibida por la arquitectura hexagonal.
+> `FuenteValidacion` vive en `aplicacion/puertos/`, junto a `LectorCanasta` y `LectorSeries`. Vivió en `dominio/` mientras el propio comparador consumía el puerto; desde que el fetch subió al caso de uso, el dominio ya no lo conoce y la excepción dejó de tener sentido. Ver [11.25](#1125-fuentevalidacion-en-aplicacionpuertos).
 
 **Puertos eliminados vs v1**
 
@@ -2951,6 +2956,41 @@ Pasos en orden; el llamador no tiene acceso a resultados intermedios:
 | error de IO en carga | propaga errores de `LectorCanasta` / `LectorSeries` |
 
 Usado por `api/flujos.py` — `calcular_historia` instancia `CalcularHistoria(LectorCanastaCsv(), LectorSeriesCsv())` y llama `ejecutar`.
+
+---
+
+**ValidarResultado**
+
+Resuelve el I/O de la validación: decide qué periodos consultar, pide la serie a la fuente una sola vez y le entrega el mapa ya obtenido a `dominio/validacion/` ([5.14](#514-validación--validacion)).
+
+```python
+class ValidarResultado:
+    def __init__(self, crear_fuente: Callable[[str], FuenteValidacion]) -> None:
+```
+
+```python
+def validar_indice(self, resultado: ResultadoIndice, tolerancia: float = 0.0009) -> ValidacionIndice
+def validar_variacion(self, resultado: ResultadoVariacion, tolerancia_pp: float = 0.009) -> ValidacionVariacion
+def validar_incidencia(self, resultado: ResultadoIncidencia, tolerancia_pp: float = 0.009) -> ValidacionIncidencia
+```
+
+Recibe una **fábrica** del puerto, no una fuente ya construida. El adaptador exige el token del INEGI al construirse, así que crearlo antes de validar haría que un tipo o una clase inválidos fallaran por credencial ausente en vez de por su motivo real.
+
+Orden obligatorio en cada método, y el motivo de que sea ese:
+
+| Paso | Falla con |
+| --- | --- |
+| rechazar un `ResultadoIndice` con más de un tipo | `ErrorConfiguracion` |
+| tipo fuera de `INDICES_VALIDABLES` | `ErrorConfiguracion` |
+| clase que INEGI no publica (`resolver_tipo_*_inegi`) | `ErrorConfiguracion` |
+| extraer periodos — `.resultado.largo` para índices, `.reporte` para derivados | — |
+| `.reporte` vacío (solo derivados) | `InvarianteViolado` |
+| construir la fuente y consultar una vez | errores del adaptador |
+| delegar en el comparador de dominio | — |
+
+La guardia de reporte vacío comprueba `.empty` **antes** de `get_level_values`: los modelos aceptan un reporte vacío con `RangeIndex`, y ahí pedir el nivel `periodo` lanzaría un `KeyError` de pandas en vez de un error de dominio. En índices no existe esa guardia — `Resultado` ya prohíbe un `df` vacío ([5.5](#55-modelo-base)), así que el caso es inalcanzable y añadirla sería código muerto.
+
+Usado por `api/validaciones.py`, que le pasa una fábrica construida con `config` (token y timeout).
 
 **§D1 — Eliminación de puertos de persistencia**
 
@@ -3376,7 +3416,7 @@ Un CSV de canasta sintético por versión soportada.
 
 ### 10.3 Mock de la API del INEGI
 
-`FuenteValidacion` se mockea en todos los tests — nunca se llama a la API real. El patrón es una clase mínima que implementa los tres métodos del protocolo:
+Los comparadores de `dominio/validacion/` ya no reciben una fuente: sus tests les pasan el mapa literal. Donde sí se mockea `FuenteValidacion` es en los tests del caso de uso y del adaptador — nunca se llama a la API real. El patrón es una clase mínima que implementa los tres métodos del protocolo, y para probar el fail-fast, una **fábrica** que falla al ser invocada (una fuente que falla en el método solo probaría que no se llamó el método, ya construida la dependencia):
 
 ```python
 class _Fuente:
@@ -3539,9 +3579,15 @@ El orden de severidad (`_ORDEN_SEVERIDAD` en `modelos/indice.py`) se usa en `Res
 
 ### 11.9 Firma de `validacion/indices.py`
 
-**Decisión:** el dominio recibe el puerto `FuenteValidacion` directamente — `validar_indices(resultado: ResultadoIndice, fuente: FuenteValidacion) -> ValidacionIndice`. La función llama internamente `fuente.obtener_indices(periodos)` para obtener los datos oficiales.
+**Decisión:** el dominio recibe las series **ya obtenidas**, no el puerto — `validar_indices(resultado: ResultadoIndice, inegi: SeriesInegi[PeriodoT]) -> ValidacionIndice`. El caso de uso `ValidarResultado` decide qué periodos pedir, consulta la fuente una sola vez y le pasa el mapa al comparador.
 
-**Razón:** `FuenteValidacion` es un Protocol definido en `dominio/fuente_validacion.py` (ver §11.25). Recibirlo directamente evita que la capa de aplicación pre-fetche el dict y lo pase al dominio — el dominio sabe qué periodos necesita y los solicita él mismo. El dict de resultados ya obtenido tiene estructura `dict[str, dict[Periodo, float | None]]` — clave exterior = nombre del índice (ej. `"INPC"` para `inpc`). Esto unifica el acceso para índice único y para subíndices sin condicionales adicionales.
+**Razón:** `data/reglas_codigo/dominio.md` fija que el código de dominio nunca hace llamadas de red, y el flujo de cálculo ya lo cumple — `CalcularHistoria` lee los archivos y entrega objetos materializados. La validación era el único flujo donde el dominio orquestaba I/O: decidía cuántas consultas hacer y sobre qué periodos, dentro de una función de comparación.
+
+**Estructura del mapa:** `Mapping[str, Mapping[Periodo, float | None]]` — clave exterior = nombre del índice (ej. `"INPC"`), que unifica el acceso para índice único y para subíndices sin condicionales. Es `Mapping` y no `dict` porque el comparador solo lee, y **genérico en el periodo** (`SeriesInegi[PeriodoT]`, alias en `validacion/_comun.py`): la clave de `Mapping` es invariante, así que un alias fijado a `PeriodoQuincenal | PeriodoMensual` rechazaría el `dict[str, dict[PeriodoMensual, ...]]` que devuelve `obtener_incidencias`.
+
+**De dónde salen los periodos:** del `.resultado.largo` para índices y del `.reporte` para derivados. La asimetría es deliberada — el reporte de derivados es superconjunto del largo, con las filas no computables que se marcan `sin_calculo` (ver [5.14](#514-validación--validacion)). Antes vivía enterrada en el dominio; ahora es explícita en el caso de uso.
+
+**Decisión anterior:** el dominio recibía `fuente: FuenteValidacion` y llamaba `fuente.obtener_indices(periodos)` él mismo, con el argumento de que "el dominio sabe qué periodos necesita y los solicita él mismo". Saber qué periodos necesita no obliga a que sea él quien los pida: el caso de uso los deriva del mismo resultado.
 
 ---
 
@@ -3838,13 +3884,15 @@ Nueva solo en 2024: `seguros y servicios financieros` — sin equivalente en 201
 
 ---
 
-### 11.25 `FuenteValidacion` en `dominio/`, no en `aplicacion/`
+### 11.25 `FuenteValidacion` en `aplicacion/puertos/`
 
-**Decisión:** el Protocol `FuenteValidacion` vive en `dominio/fuente_validacion.py`, no en `aplicacion/puertos/`.
+**Decisión:** el Protocol `FuenteValidacion` vive en `aplicacion/puertos/fuente_validacion.py`, junto a `LectorCanasta` y `LectorSeries`.
 
-**Razón:** `dominio/validacion/indices.py` llama a `fuente.obtener_indices()` directamente (ver §11.9). Si `FuenteValidacion` viviera en `aplicacion/puertos/`, el módulo de dominio `dominio/validacion/indices.py` importaría de `aplicacion/`, violando la regla de dependencia de la arquitectura hexagonal — el dominio no debe conocer la capa de aplicación. Al moverlo a `dominio/fuente_validacion.py`, el dominio define su propio contrato (puerto de entrada) y la infraestructura lo implementa de forma estructural sin importar del dominio.
+**Razón:** es la ubicación de todos los puertos del proyecto, y quien lo consume es el caso de uso `ValidarResultado`, no el dominio.
 
-**Consecuencia:** `infraestructura/inegi/fuente_validacion_api.py` implementa el Protocol estructuralmente — no importa `FuenteValidacion` para declararlo como base. Solo debe exponer el método `obtener_indices` con la firma correcta.
+**Historia — por qué vivió en `dominio/`:** mientras `dominio/validacion/indices.py` llamaba a `fuente.obtener_indices()` él mismo, tener el Protocol en `aplicacion/` habría creado un import `dominio → aplicacion`, prohibido por la regla de dependencia. La solución de entonces fue que el dominio definiera su propio contrato. El argumento era válido, pero circular: solo se sostenía mientras el comparador fuera quien hacía el fetch. Al mover esa responsabilidad al caso de uso (§11.9), el dominio dejó de conocer el puerto y la excepción perdió su razón de ser.
+
+**Consecuencia:** `infraestructura/inegi/fuente_validacion_api.py` sigue implementando el Protocol de forma estructural — no lo importa para declararlo como base—, así que el movimiento no tocó infraestructura.
 
 ---
 
