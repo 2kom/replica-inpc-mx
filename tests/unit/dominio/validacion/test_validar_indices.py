@@ -46,19 +46,6 @@ def _ri(
     return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
 
-class _Fuente:
-    def __init__(self, datos: dict) -> None:
-        self._datos = datos
-
-    def obtener_indices(self, periodos: list) -> dict:
-        return self._datos
-
-
-class _FuenteExplota:
-    def obtener_indices(self, periodos: list) -> dict:
-        raise AssertionError("FuenteValidacion no debe llamarse")
-
-
 # Fixture con las seis ramas de estado_validacion.
 _FILAS = [
     (_P1, 100.0, "ok"),
@@ -72,7 +59,7 @@ _INEGI = {"INPC": {_P1: 100.0, _P2: 100.5, _P3: 100.5, _P4: None, _P5: 100.0}}
 
 
 def _validacion() -> ValidacionIndice:
-    return validar_indices(_ri(_FILAS), _Fuente(_INEGI))  # type: ignore[arg-type]
+    return validar_indices(_ri(_FILAS), _INEGI)
 
 
 # -- estado_validacion por rama ------------------------------------------------
@@ -126,7 +113,7 @@ def test_diagnostico_solo_no_ok() -> None:
 
 def test_tolerancia_personalizada() -> None:
     # Con tolerancia amplia, la diferencia de 0.5 cae dentro de rango.
-    v = validar_indices(_ri(_FILAS), _Fuente(_INEGI), tolerancia=1.0)  # type: ignore[arg-type]
+    v = validar_indices(_ri(_FILAS), _INEGI, tolerancia=1.0)
     largo = v.resultado.largo
     assert largo.loc[(_P2, "INPC"), "estado_validacion"] == "ok"  # type: ignore[index]
 
@@ -134,7 +121,8 @@ def test_tolerancia_personalizada() -> None:
 # -- fail-fast -----------------------------------------------------------------
 
 
-def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
+def test_tipo_no_comparable_falla() -> None:
+    # El comparador rechaza el tipo aunque el llamador ya lo haya validado.
     resultado = _ri([(_P1, 100.0, "ok")], tipo="COG", indice="bienes")
     with pytest.raises(InvarianteViolado):
-        validar_indices(resultado, _FuenteExplota())  # type: ignore[arg-type]
+        validar_indices(resultado, _INEGI)

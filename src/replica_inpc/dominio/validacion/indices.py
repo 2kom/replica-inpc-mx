@@ -8,11 +8,15 @@ import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
-from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import ValidacionIndice
 from replica_inpc.dominio.tipos import INDICES_VALIDABLES, VersionCanasta
-from replica_inpc.dominio.validacion._comun import contar, rollup_global
+from replica_inpc.dominio.validacion._comun import (
+    PeriodoT,
+    SeriesInegi,
+    contar,
+    rollup_global,
+)
 
 _COLS_DIAGNOSTICO = [
     "version",
@@ -29,10 +33,18 @@ _COLS_DIAGNOSTICO = [
 
 def validar_indices(
     resultado: ResultadoIndice,
-    fuente: FuenteValidacion,
+    inegi: SeriesInegi[PeriodoT],
     tolerancia: float = 0.0009,
 ) -> ValidacionIndice:
-    """Compara los índices replicados contra los publicados por INEGI."""
+    """Compara los índices replicados contra los publicados por INEGI.
+
+    Args:
+        resultado: Índices replicados a validar.
+        inegi: Series ya obtenidas de INEGI para los periodos de `resultado` —
+            quien orquesta el I/O las resuelve antes de llamar (ver
+            `aplicacion/casos_uso/validar_resultado.py`).
+        tolerancia: Diferencia absoluta máxima para considerar una fila `ok`.
+    """
     invalidos = {m.tipo for m in resultado.manifiesto} - INDICES_VALIDABLES
     if invalidos:
         raise InvarianteViolado(
@@ -40,8 +52,6 @@ def validar_indices(
         )
 
     largo = resultado.resultado.largo
-    periodos = list(dict.fromkeys(largo.index.get_level_values("periodo")))
-    inegi = fuente.obtener_indices(periodos)
 
     indices_lvl = largo.index.get_level_values("indice")
     periodos_lvl = largo.index.get_level_values("periodo")

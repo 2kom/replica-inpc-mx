@@ -6,11 +6,15 @@ import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
-from replica_inpc.dominio.fuente_validacion import FuenteValidacion
 from replica_inpc.dominio.modelos.validacion import ValidacionVariacion
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
 from replica_inpc.dominio.tipos import INDICES_VALIDABLES
-from replica_inpc.dominio.validacion._comun import contar, rollup_global
+from replica_inpc.dominio.validacion._comun import (
+    PeriodoT,
+    SeriesInegi,
+    contar,
+    rollup_global,
+)
 
 # clase_variacion → tipo_variacion del puerto FuenteValidacion.
 _MAPA_TIPO_VARIACION: dict[str, str] = {
@@ -34,7 +38,12 @@ _COLS_DIAGNOSTICO = [
 ]
 
 
-def _tipo_variacion(clase: str) -> str:
+def resolver_tipo_variacion_inegi(clase: str) -> str:
+    """Traduce `clase_variacion` al `tipo_variacion` que publica INEGI.
+
+    Raises:
+        ErrorConfiguracion: Si INEGI no publica esa clase de variación.
+    """
     if clase not in _MAPA_TIPO_VARIACION:
         raise ErrorConfiguracion(
             f"clase_variacion '{clase}' no es comparable contra INEGI; "
@@ -45,22 +54,31 @@ def _tipo_variacion(clase: str) -> str:
 
 def validar_variaciones(
     resultado: ResultadoVariacion,
-    fuente: FuenteValidacion,
+    inegi: SeriesInegi[PeriodoT],
     tolerancia_pp: float = 0.009,
 ) -> ValidacionVariacion:
-    """Compara las variaciones replicadas contra las publicadas por INEGI."""
+    """Compara las variaciones replicadas contra las publicadas por INEGI.
+
+    Args:
+        resultado: Variaciones replicadas a validar.
+        inegi: Series ya obtenidas de INEGI para los periodos de
+            `resultado.reporte` — quien orquesta el I/O las resuelve antes de
+            llamar (ver `aplicacion/casos_uso/validar_resultado.py`).
+        tolerancia_pp: Diferencia absoluta máxima, en pp, para considerar una
+            fila `ok`.
+    """
     if resultado.manifiesto.tipo not in INDICES_VALIDABLES:
         raise InvarianteViolado(
             f"validar_variaciones: tipo '{resultado.manifiesto.tipo}' fuera de INDICES_VALIDABLES."
         )
-    tipo_variacion = _tipo_variacion(resultado.manifiesto.clase)
+    # Rechaza la clase aunque el llamador ya la haya validado: protege al
+    # comparador cuando se lo invoca directo, sin pasar por el caso de uso.
+    resolver_tipo_variacion_inegi(resultado.manifiesto.clase)
 
     largo = resultado.resultado.largo
     # El .reporte heredado incluye filas no computables ausentes del largo;
     # se clasifica sobre el reporte completo para poder marcarlas sin_calculo.
     reporte_base = resultado.reporte
-    periodos = list(dict.fromkeys(reporte_base.index.get_level_values("periodo")))
-    inegi = fuente.obtener_variaciones(periodos, tipo_variacion)  # type: ignore[arg-type]
 
     var_pp = largo["variacion_pp"].reindex(reporte_base.index)
 

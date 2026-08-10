@@ -1,16 +1,37 @@
 """Lógica compartida por las tres funciones de validación interna.
 
 `validacion/indices.py`, `variaciones.py` e `incidencias.py` reutilizan el
-rollup global y los conteos del `.resumen`. La clasificación por fila NO se
-comparte: cada función la resuelve con su propio bloque vectorizado, y el
-ensamblado de las DataFrames de salida vive en cada una (los esquemas divergen).
+rollup global, los conteos del `.resumen` y el alias `SeriesInegi` de su
+entrada. La clasificación por fila NO se comparte: cada función la resuelve con
+su propio bloque vectorizado, y el ensamblado de las DataFrames de salida vive
+en cada una (los esquemas divergen).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import TypeAlias, TypeVar
 
 import pandas as pd
+
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+
+Periodo: TypeAlias = PeriodoQuincenal | PeriodoMensual
+
+PeriodoT = TypeVar("PeriodoT", bound=Periodo)
+
+#: Series publicadas por INEGI, ya resueltas por quien hizo el I/O. Clave
+#: exterior: nombre del índice; interior: el periodo consultado. Valor `None` =
+#: INEGI tiene el periodo en rango pero sin dato; periodo ausente del mapa
+#: interior = fuera del histórico publicado. Es `Mapping` y no `dict` porque los
+#: comparadores solo leen: el esquema completo vive en el docstring del puerto
+#: `FuenteValidacion`.
+#:
+#: Genérico en el periodo a propósito: la clave de `Mapping` es invariante, así
+#: que un alias fijado a la unión rechazaría el `dict[str, dict[PeriodoMensual,
+#: ...]]` que devuelve `obtener_incidencias`. Cada comparador se tipa como
+#: `SeriesInegi[PeriodoT]` y mypy resuelve el parámetro por llamada.
+SeriesInegi: TypeAlias = Mapping[str, Mapping[PeriodoT, float | None]]
 
 # Estados que cuentan como comparación realizada contra INEGI.
 _COMPARABLES = frozenset({"ok", "diferencia_detectada", "diferencia_por_parcial"})

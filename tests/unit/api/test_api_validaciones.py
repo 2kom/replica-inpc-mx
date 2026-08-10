@@ -19,68 +19,63 @@ def _sin_token(monkeypatch: pytest.MonkeyPatch):
     config._token = None
 
 
-def _r_indice(*tipos: str) -> SimpleNamespace:
-    return SimpleNamespace(manifiesto=[SimpleNamespace(tipo=t) for t in tipos])
+# La fachada ya no valida ni extrae periodos: eso vive en ValidarResultado. Acá
+# solo se prueba que construya la fabrica con `config` y delegue al metodo
+# correcto con la tolerancia correcta. El resultado puede ser cualquier objeto:
+# nunca se toca porque el caso de uso esta mockeado.
+_RESULTADO = SimpleNamespace()
 
 
-def _r_derivado(tipo: str, clase: str) -> SimpleNamespace:
-    return SimpleNamespace(manifiesto=SimpleNamespace(tipo=tipo, clase=clase))
+# -- la fabrica de la fuente ---------------------------------------------------
 
 
-# -- fail-fast antes de tocar token/fuente -------------------------------------
-
-
-def test_validar_indice_multi_tipo_falla() -> None:
-    with pytest.raises(ErrorConfiguracion, match="varios tipos"):
-        validaciones.validar_indice(_r_indice("INPC", "INFLACION COMPONENTE"))  # type: ignore[arg-type]
-
-
-def test_validar_indice_tipo_no_comparable_falla() -> None:
-    with pytest.raises(ErrorConfiguracion):
-        validaciones.validar_indice(_r_indice("DURABILIDAD"))  # type: ignore[arg-type]
-
-
-def test_validar_variacion_clase_no_comparable_falla_antes_que_token() -> None:
-    # clase 'desde' no es comparable; el error debe ser por clase, no por token.
-    with pytest.raises(ErrorConfiguracion, match="clase"):
-        validaciones.validar_variacion(_r_derivado("INPC", "desde"))  # type: ignore[arg-type]
-
-
-def test_validar_incidencia_clase_no_comparable_falla() -> None:
-    with pytest.raises(ErrorConfiguracion):
-        validaciones.validar_incidencia(_r_derivado("INPC", "acumulada_anual"))  # type: ignore[arg-type]
-
-
-def test_validar_indice_sin_token_falla() -> None:
+def test_crear_fuente_sin_token_falla() -> None:
     with pytest.raises(ErrorConfiguracion, match="token"):
-        validaciones.validar_indice(_r_indice("INPC"))  # type: ignore[arg-type]
+        validaciones._crear_fuente("INPC")
+
+
+def test_crear_fuente_usa_token_tipo_y_timeout_de_config(mocker) -> None:
+    config.set_token("tok")
+    config.timeout_api = 7
+    fuente_cls = mocker.patch.object(validaciones, "FuenteValidacionApi")
+
+    salida = validaciones._crear_fuente("INFLACION COMPONENTE")
+
+    fuente_cls.assert_called_once_with("tok", "INFLACION COMPONENTE", timeout=7)
+    assert salida is fuente_cls.return_value
+
+
+def test_el_caso_de_uso_recibe_la_fabrica_no_una_fuente(mocker) -> None:
+    # La fabrica debe llegar sin invocar: si api construyera la fuente antes,
+    # un tipo o clase invalidos fallarian por token en vez de por su motivo.
+    caso_cls = mocker.patch.object(validaciones, "ValidarResultado")
+    mocker.patch.object(validaciones, "FuenteValidacionApi")
+
+    validaciones.validar_indice(_RESULTADO)  # type: ignore[arg-type]
+
+    (fabrica,) = caso_cls.call_args[0]
+    assert fabrica is validaciones._crear_fuente
 
 
 # -- delegación ----------------------------------------------------------------
 
 
-def test_validar_indice_delega_con_fuente_y_tolerancia(mocker) -> None:
-    config.set_token("tok")
-    config.tolerancia_indice = 0.002
-    fuente_cls = mocker.patch.object(validaciones, "FuenteValidacionApi")
-    dominio = mocker.patch.object(validaciones, "validar_indices", return_value="val")
+@pytest.mark.parametrize(
+    "funcion, metodo, atributo_tolerancia, valor",
+    [
+        ("validar_indice", "validar_indice", "tolerancia_indice", 0.002),
+        ("validar_variacion", "validar_variacion", "tolerancia_derivados", 0.05),
+        ("validar_incidencia", "validar_incidencia", "tolerancia_derivados", 0.03),
+    ],
+)
+def test_delega_al_caso_de_uso_con_la_tolerancia_de_config(
+    mocker, funcion: str, metodo: str, atributo_tolerancia: str, valor: float
+) -> None:
+    setattr(config, atributo_tolerancia, valor)
+    caso = mocker.patch.object(validaciones, "ValidarResultado").return_value
+    getattr(caso, metodo).return_value = "val"
 
-    resultado = _r_indice("INPC")
-    salida = validaciones.validar_indice(resultado)  # type: ignore[arg-type]
-
-    assert salida == "val"
-    fuente_cls.assert_called_once_with("tok", "INPC", timeout=10)
-    dominio.assert_called_once_with(resultado, fuente_cls.return_value, 0.002)
-
-
-def test_validar_variacion_delega_con_tolerancia_derivados(mocker) -> None:
-    config.set_token("tok")
-    config.tolerancia_derivados = 0.05
-    mocker.patch.object(validaciones, "FuenteValidacionApi")
-    dominio = mocker.patch.object(validaciones, "validar_variaciones", return_value="val")
-
-    resultado = _r_derivado("INPC", "periodica_mensual")
-    salida = validaciones.validar_variacion(resultado)  # type: ignore[arg-type]
+    salida = getattr(validaciones, funcion)(_RESULTADO)
 
     assert salida == "val"
-    assert dominio.call_args[0][2] == 0.05
+    getattr(caso, metodo).assert_called_once_with(_RESULTADO, valor)

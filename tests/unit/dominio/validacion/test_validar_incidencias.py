@@ -57,19 +57,6 @@ def _ri(
     return ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())
 
 
-class _Fuente:
-    def __init__(self, datos: dict) -> None:
-        self._datos = datos
-
-    def obtener_incidencias(self, periodos: list, tipo_incidencia: str) -> dict:
-        return self._datos
-
-
-class _FuenteExplota:
-    def obtener_incidencias(self, periodos: list, tipo_incidencia: str) -> dict:
-        raise AssertionError("FuenteValidacion no debe llamarse")
-
-
 _FILAS = [
     (_P1, 1.0, "ok"),
     (_P2, 1.0, "ok"),
@@ -81,7 +68,7 @@ _INEGI = {"subyacente": {_P1: 1.0, _P2: 2.0, _P3: 2.0, _P4: None}}
 
 
 def _validacion() -> ValidacionIncidencia:
-    return validar_incidencias(_ri(_FILAS), _Fuente(_INEGI))  # type: ignore[arg-type]
+    return validar_incidencias(_ri(_FILAS), _INEGI)
 
 
 # -- estado_validacion por rama ------------------------------------------------
@@ -158,7 +145,7 @@ def test_fila_no_computable_es_sin_calculo_y_no_entra_al_resumen(
     )
     resultado = ResultadoIncidencia(df, manifiesto, reporte, pd.DataFrame())
 
-    v = validar_incidencias(resultado, _Fuente({"subyacente": {_P1: 1.0, _P2: 5.0}}))  # type: ignore[arg-type]
+    v = validar_incidencias(resultado, {"subyacente": {_P1: 1.0, _P2: 5.0}})
 
     assert v.reporte.loc[(_P2, "subyacente"), "estado_validacion"] == "sin_calculo"  # type: ignore[index]
     assert not v.reporte["estado_validacion"].isna().any()
@@ -171,13 +158,15 @@ def test_fila_no_computable_es_sin_calculo_y_no_entra_al_resumen(
 # -- fail-fast -----------------------------------------------------------------
 
 
-def test_tipo_no_comparable_falla_sin_tocar_fuente() -> None:
+def test_tipo_no_comparable_falla() -> None:
+    # El comparador rechaza el tipo aunque el llamador ya lo haya validado.
     resultado = _ri([(_P1, 1.0, "ok")], tipo="COG", indice="bienes")
     with pytest.raises(InvarianteViolado):
-        validar_incidencias(resultado, _FuenteExplota())  # type: ignore[arg-type]
+        validar_incidencias(resultado, _INEGI)
 
 
-def test_clase_no_mapeable_falla_sin_tocar_fuente() -> None:
+def test_clase_no_mapeable_falla() -> None:
+    # Idem para la clase: el rechazo sobrevive a invocar el comparador directo.
     resultado = _ri([(_P1, 1.0, "ok")], clase="periodica_quincenal")
     with pytest.raises(ErrorConfiguracion):
-        validar_incidencias(resultado, _FuenteExplota())  # type: ignore[arg-type]
+        validar_incidencias(resultado, _INEGI)
