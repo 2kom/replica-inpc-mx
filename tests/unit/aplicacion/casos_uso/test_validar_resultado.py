@@ -248,7 +248,7 @@ def test_derivados_piden_los_periodos_del_reporte_no_los_del_largo(
     fuente = _FuenteEspia(mapa)
     espia_comparador = mocker.patch.object(modulo, comparador, return_value="val")
 
-    salida = getattr(ValidarResultado(lambda tipo: fuente), metodo)(resultado)
+    salida = getattr(ValidarResultado(lambda _tipo: fuente), metodo)(resultado)
 
     assert salida == "val"
     # Una sola consulta, al método correcto, con la lista exacta y ordenada.
@@ -267,11 +267,101 @@ def test_indice_pide_los_periodos_del_largo(mocker) -> None:
     fuente = _FuenteEspia(mapa)
     espia_comparador = mocker.patch.object(modulo, "validar_indices", return_value="val")
 
-    salida = ValidarResultado(lambda tipo: fuente).validar_indice(resultado)
+    salida = ValidarResultado(lambda _tipo: fuente).validar_indice(resultado)
 
     assert salida == "val"
     assert fuente.llamadas == [("obtener_indices", [_Q1, _Q2], None)]
     assert espia_comparador.call_args[0][1] is mapa
+
+
+@pytest.mark.parametrize(
+    "clase, periodo, esperado",
+    [
+        # periodica_quincenal usa _Q1: la clase declara periodicidad y el caso de
+        # uso la exige, así que un periodo mensual acá ya no sería válido.
+        ("periodica_quincenal", _Q1, "periodica"),
+        ("periodica_mensual", _M1, "periodica"),
+        # Las anuales admiten ambas periodicidades mientras sean homogéneas:
+        # probarlas solo con _M1 dejaría pasar que se las atara a PeriodoMensual.
+        ("periodica_anual", _M1, "interanual"),
+        ("periodica_anual", _Q1, "interanual"),
+        ("acumulada_anual", _M1, "acumulada_anual"),
+        ("acumulada_anual", _Q1, "acumulada_anual"),
+    ],
+)
+def test_la_clase_llega_traducida_a_la_fuente(clase: str, periodo, esperado: str) -> None:
+    # Los tests del adaptador prueban los valores YA traducidos; sin este, una
+    # traducción equivocada en el resolutor pasaría inadvertida de punta a punta.
+    resultado = _r_variacion(clase=clase, periodos_largo=[periodo])
+    fuente = _FuenteEspia({"INPC": {periodo: 1.0}})
+
+    ValidarResultado(lambda _tipo: fuente).validar_variacion(resultado)
+
+    assert fuente.llamadas[0][2] == esperado
+
+
+# -- coherencia entre la clase y la periodicidad de sus periodos ---------------
+
+# El adaptador elige la serie oficial por `type(periodos[0])`. Un resultado
+# incoherente pero construible se compararía en silencio contra la serie
+# equivocada, y una lista mixta escapaba como TypeError de pandas.
+
+
+@pytest.mark.parametrize(
+    "clase, periodos",
+    [
+        ("periodica_quincenal", [_M1]),
+        ("periodica_mensual", [_Q1]),
+    ],
+)
+def test_variacion_con_periodos_que_contradicen_la_clase_falla(clase: str, periodos) -> None:
+    resultado = _r_variacion(clase=clase, periodos_largo=periodos)
+
+    with pytest.raises(InvarianteViolado, match="declara periodos"):
+        ValidarResultado(_crear_fuente_explota).validar_variacion(resultado)
+
+
+@pytest.mark.parametrize(
+    "constructor, metodo",
+    [(_r_variacion, "validar_variacion"), (_r_incidencia, "validar_incidencia")],
+)
+def test_periodos_de_periodicidad_mixta_fallan(constructor, metodo: str) -> None:
+    resultado = constructor(periodos_largo=[_M1, _Q1])
+
+    with pytest.raises(InvarianteViolado, match="misma periodicidad"):
+        getattr(ValidarResultado(_crear_fuente_explota), metodo)(resultado)
+
+
+def test_indice_con_periodos_mixtos_falla() -> None:
+    # Los índices no declaran clase, pero la homogeneidad se exige igual.
+    filas = [
+        {
+            "periodo": p,
+            "indice": "INPC",
+            "version": 2024,
+            "tipo": "INPC",
+            "indice_replicado": 100.0,
+            "estado_calculo": "ok",
+            "motivo_error": None,
+        }
+        for p in (_Q1, _M1)
+    ]
+    df = pd.DataFrame(filas).set_index(["periodo", "indice"])
+    reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
+    manifiesto = [ManifestCalculo(2024, "INPC", "LaspeyresDirecto")]  # type: ignore[arg-type]
+    resultado = ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
+
+    with pytest.raises(InvarianteViolado, match="misma periodicidad"):
+        ValidarResultado(_crear_fuente_explota).validar_indice(resultado)
+
+
+def test_incidencia_con_periodos_quincenales_falla_sin_construir_la_fuente() -> None:
+    # La clase periodica_mensual declara mensualidad: el rechazo llega por ahí,
+    # antes que la guardia del puerto.
+    resultado = _r_incidencia(clase="periodica_mensual", periodos_largo=[_Q1])
+
+    with pytest.raises(InvarianteViolado, match="declara periodos"):
+        ValidarResultado(_crear_fuente_explota).validar_incidencia(resultado)
 
 
 def test_la_fabrica_recibe_el_tipo_del_resultado() -> None:

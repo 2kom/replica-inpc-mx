@@ -10,6 +10,7 @@ Ver: docs/diseño.md §7, §11.9
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 import pandas as pd
 
@@ -23,8 +24,8 @@ from replica_inpc.dominio.modelos.validacion import (
     ValidacionVariacion,
 )
 from replica_inpc.dominio.modelos.variacion import ResultadoVariacion
+from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import INDICES_VALIDABLES
-from replica_inpc.dominio.validacion._comun import Periodo
 from replica_inpc.dominio.validacion.incidencias import (
     resolver_tipo_incidencia_inegi,
     validar_incidencias,
@@ -35,6 +36,7 @@ from replica_inpc.dominio.validacion.variaciones import (
     validar_variaciones,
 )
 
+_Periodo = PeriodoQuincenal | PeriodoMensual
 CrearFuente = Callable[[str], FuenteValidacion]
 
 
@@ -47,7 +49,7 @@ def _verificar_tipo(tipo: str) -> None:
         )
 
 
-def _periodos_del_reporte(reporte: pd.DataFrame, metodo: str) -> list[Periodo]:
+def _periodos_del_reporte(reporte: pd.DataFrame, metodo: str) -> list[_Periodo]:
     """Periodos únicos del `.reporte` de un derivado, en orden de aparición.
 
     La comprobación de `.empty` va antes de `get_level_values`: los modelos
@@ -60,6 +62,39 @@ def _periodos_del_reporte(reporte: pd.DataFrame, metodo: str) -> list[Periodo]:
             f"el reporte recibido está vacío."
         )
     return list(dict.fromkeys(reporte.index.get_level_values("periodo")))
+
+
+#: Periodicidad que cada clase derivada declara. `None` = admite ambas, pero
+#: homogéneas.
+_PERIODICIDAD_POR_CLASE: dict[str, type | None] = {
+    "periodica_quincenal": PeriodoQuincenal,
+    "periodica_mensual": PeriodoMensual,
+    "periodica_anual": None,
+    "acumulada_anual": None,
+}
+
+
+def _verificar_periodicidad(periodos: list[_Periodo], clase: str | None, metodo: str) -> None:
+    """Exige periodos homogéneos y coherentes con la clase declarada.
+
+    El adaptador elige la serie oficial —mensual o quincenal— por
+    `type(periodos[0])`. Sin esta guardia, un resultado incoherente pero
+    construible se compararía contra la serie equivocada en silencio, y una
+    lista mixta escaparía como `TypeError` de pandas en vez de como error de
+    dominio.
+    """
+    tipos = {type(p) for p in periodos}
+    if len(tipos) > 1:
+        raise InvarianteViolado(
+            f"{metodo}: los periodos deben ser todos de la misma periodicidad; "
+            f"se recibió una mezcla de {sorted(t.__name__ for t in tipos)}."
+        )
+    esperado = _PERIODICIDAD_POR_CLASE.get(clase) if clase is not None else None
+    if esperado is not None and not isinstance(periodos[0], esperado):
+        raise InvarianteViolado(
+            f"{metodo}: la clase '{clase}' declara periodos {esperado.__name__}, "
+            f"pero se recibieron {type(periodos[0]).__name__}."
+        )
 
 
 class ValidarResultado:
@@ -93,6 +128,7 @@ class ValidarResultado:
         # tienen el mismo MultiIndex, y `Resultado` ya prohíbe un largo vacío.
         largo = resultado.resultado.largo
         periodos = list(dict.fromkeys(largo.index.get_level_values("periodo")))
+        _verificar_periodicidad(periodos, None, "validar_indice")
 
         inegi = self._crear_fuente(tipo).obtener_indices(periodos)
         return validar_indices(resultado, inegi, tolerancia)
@@ -106,8 +142,9 @@ class ValidarResultado:
         tipo_variacion = resolver_tipo_variacion_inegi(resultado.manifiesto.clase)
 
         periodos = _periodos_del_reporte(resultado.reporte, "validar_variacion")
+        _verificar_periodicidad(periodos, resultado.manifiesto.clase, "validar_variacion")
 
-        inegi = self._crear_fuente(tipo).obtener_variaciones(periodos, tipo_variacion)  # type: ignore[arg-type]
+        inegi = self._crear_fuente(tipo).obtener_variaciones(periodos, tipo_variacion)
         return validar_variaciones(resultado, inegi, tolerancia_pp)
 
     def validar_incidencia(
@@ -119,6 +156,12 @@ class ValidarResultado:
         tipo_incidencia = resolver_tipo_incidencia_inegi(resultado.manifiesto.clase)
 
         periodos = _periodos_del_reporte(resultado.reporte, "validar_incidencia")
+        _verificar_periodicidad(periodos, resultado.manifiesto.clase, "validar_incidencia")
+        # El puerto solo acepta mensuales, y la guardia de arriba ya lo comprobó
+        # en runtime: la única clase de incidencia que INEGI publica es
+        # `periodica_mensual`, y `_PERIODICIDAD_POR_CLASE` la ata a PeriodoMensual.
+        # Si algún día se admite una clase quincenal, hay que revisar este cast.
+        mensuales = cast(list[PeriodoMensual], periodos)
 
-        inegi = self._crear_fuente(tipo).obtener_incidencias(periodos, tipo_incidencia)  # type: ignore[arg-type]
+        inegi = self._crear_fuente(tipo).obtener_incidencias(mensuales, tipo_incidencia)
         return validar_incidencias(resultado, inegi, tolerancia_pp)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal, TypeAlias
+
 import numpy as np
 import pandas as pd
 
@@ -16,8 +18,11 @@ from replica_inpc.dominio.validacion._comun import (
     rollup_global,
 )
 
+#: Valores que acepta `FuenteValidacion.obtener_variaciones`.
+TipoVariacionInegi: TypeAlias = Literal["periodica", "interanual", "acumulada_anual"]
+
 # clase_variacion → tipo_variacion del puerto FuenteValidacion.
-_MAPA_TIPO_VARIACION: dict[str, str] = {
+_MAPA_TIPO_VARIACION: dict[str, TipoVariacionInegi] = {
     "periodica_quincenal": "periodica",
     "periodica_mensual": "periodica",
     "periodica_anual": "interanual",
@@ -38,7 +43,7 @@ _COLS_DIAGNOSTICO = [
 ]
 
 
-def resolver_tipo_variacion_inegi(clase: str) -> str:
+def resolver_tipo_variacion_inegi(clase: str) -> TipoVariacionInegi:
     """Traduce `clase_variacion` al `tipo_variacion` que publica INEGI.
 
     Raises:

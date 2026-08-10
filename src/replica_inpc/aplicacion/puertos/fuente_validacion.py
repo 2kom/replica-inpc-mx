@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Protocol
 
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
+from replica_inpc.dominio.validacion.incidencias import TipoIncidenciaInegi
+from replica_inpc.dominio.validacion.variaciones import TipoVariacionInegi
 
 _Periodo = PeriodoQuincenal | PeriodoMensual
 
@@ -53,7 +55,7 @@ class FuenteValidacion(Protocol):
     def obtener_variaciones(
         self,
         periodos: list[_Periodo],
-        tipo_variacion: Literal["periodica", "interanual", "acumulada_anual"],
+        tipo_variacion: TipoVariacionInegi,
     ) -> dict[str, dict[_Periodo, float | None]]:
         """Series de variación publicadas por INEGI.
 
@@ -65,7 +67,7 @@ class FuenteValidacion(Protocol):
     def obtener_incidencias(
         self,
         periodos: list[PeriodoMensual],
-        tipo_incidencia: Literal["periodica"],
+        tipo_incidencia: TipoIncidenciaInegi,
     ) -> dict[str, dict[PeriodoMensual, float | None]]:
         """Series de incidencia publicadas por INEGI.
 

@@ -1596,7 +1596,7 @@ validar_variaciones(
 
 Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo las clases siguientes son comparables contra INEGI:
 
-Traducidas por `resolver_tipo_variacion_inegi` (pública, la usan el comparador y el caso de uso):
+Traducidas por `resolver_tipo_variacion_inegi` (pública, la usan el comparador y el caso de uso), que devuelve `TipoVariacionInegi = Literal["periodica", "interanual", "acumulada_anual"]` — el mismo alias que tipa el parámetro del puerto, para que la traducción no necesite un `cast` en la frontera:
 
 | `clase_variacion` | `tipo_variacion` en `FuenteValidacion` |
 | --- | --- |
@@ -1619,7 +1619,9 @@ validar_incidencias(
 ) -> ValidacionIncidencia
 ```
 
-Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable: INEGI no publica otras. Cualquier otra clase lanza `ErrorConfiguracion`, vía `resolver_tipo_incidencia_inegi` (pública, la usan el comparador y el caso de uso).
+Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_incidencia = "periodica_mensual"` es comparable: INEGI no publica otras. Cualquier otra clase lanza `ErrorConfiguracion`, vía `resolver_tipo_incidencia_inegi` (pública, la usan el comparador y el caso de uso), que devuelve `TipoIncidenciaInegi = Literal["periodica"]`.
+
+`aplicacion/puertos/fuente_validacion.py` importa ambos alias desde `dominio/validacion/` — es la dirección permitida (`aplicacion → dominio`) y evita que los `Literal` del puerto y los de las resolutoras diverjan.
 
 ---
 
@@ -2877,8 +2879,8 @@ Series de incidencia publicadas por INEGI en el BIE. Solo mensual: **el BIE no e
 | `"periodica_quincenal"` | `"periodica"` | `periodos` son `PeriodoQuincenal` |
 | `"periodica_mensual"` | `"periodica"` | `periodos` son `PeriodoMensual` |
 | `"periodica_bimestral"`, `"periodica_trimestral"`, `"periodica_cuatrimestral"`, `"periodica_semestral"` | — | INEGI no publica → `ErrorConfiguracion` |
-| `"periodica_anual"` | `"interanual"` | — |
-| `"acumulada_anual"` | `"acumulada_anual"` | — |
+| `"periodica_anual"` | `"interanual"` | `periodos` mensuales o quincenales, pero homogéneos |
+| `"acumulada_anual"` | `"acumulada_anual"` | `periodos` mensuales o quincenales, pero homogéneos |
 | `"desde"` | — | no comparable → `ErrorConfiguracion` |
 
 | `clase_incidencia` | `tipo_incidencia` | Notas |
@@ -2889,7 +2891,7 @@ Series de incidencia publicadas por INEGI en el BIE. Solo mensual: **el BIE no e
 **Invariantes del implementador**
 
 - cache de clase compartido entre instancias — primera llamada descarga histórico completo; siguientes reutilizan sin requests adicionales
-- detección de frecuencia por `type(periodos[0])`; lista vacía → comportamiento indefinido
+- detección de frecuencia por `type(periodos[0])`; lista vacía → `InvarianteViolado`, antes de tocar caché o red. Los periodos deben ser homogéneos: el implementador no lo comprueba, lo garantiza `ValidarResultado` ([7.2](#72-casos-de-uso))
 - `tipo` fijo en constructor; no cambia entre llamadas
 
 Implementado por `infraestructura/inegi/fuente_validacion_api.py` — `FuenteValidacionApi`.

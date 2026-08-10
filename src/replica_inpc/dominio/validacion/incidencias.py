@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal, TypeAlias
+
 import numpy as np
 import pandas as pd
 
@@ -16,8 +18,11 @@ from replica_inpc.dominio.validacion._comun import (
     rollup_global,
 )
 
+#: Valores que acepta `FuenteValidacion.obtener_incidencias`.
+TipoIncidenciaInegi: TypeAlias = Literal["periodica"]
+
 # clase_incidencia → tipo_incidencia del puerto FuenteValidacion.
-_MAPA_TIPO_INCIDENCIA: dict[str, str] = {"periodica_mensual": "periodica"}
+_MAPA_TIPO_INCIDENCIA: dict[str, TipoIncidenciaInegi] = {"periodica_mensual": "periodica"}
 
 _COLS_DIAGNOSTICO = [
     "tipo",
@@ -33,7 +38,7 @@ _COLS_DIAGNOSTICO = [
 ]
 
 
-def resolver_tipo_incidencia_inegi(clase: str) -> str:
+def resolver_tipo_incidencia_inegi(clase: str) -> TipoIncidenciaInegi:
     """Traduce `clase_incidencia` al `tipo_incidencia` que publica INEGI.
 
     Raises:
