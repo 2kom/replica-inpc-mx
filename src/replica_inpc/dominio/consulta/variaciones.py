@@ -55,9 +55,7 @@ def inflacion_promedio(
     raise InvarianteViolado(f"metodo '{metodo}' inválido; usa 'tcac' o 'simple'.")
 
 
-def _tcac(
-    df: pd.DataFrame, desde: Periodo | None, hasta: Periodo | None, indice: str
-) -> float:
+def _tcac(df: pd.DataFrame, desde: Periodo | None, hasta: Periodo | None, indice: str) -> float:
     """Tasa de crecimiento anual compuesta sobre las variaciones del rango.
 
     `factor = Π(1 + v/100)`; se anualiza suponiendo que cada fila representa

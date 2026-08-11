@@ -216,12 +216,22 @@ def _exigir_periodos(periodos: list[_Periodo], metodo: str) -> None:
 
 
 class FuenteValidacionApi:
-    """Adaptador que obtiene índices publicados por el INEGI vía su API.
+    """Implementa `FuenteValidacion` sobre la API del BIE del INEGI.
 
     Ver: docs/diseño.md §8.6
     """
 
     _cache: dict[str, dict[_Periodo, float | None]] = {}
+
+    @classmethod
+    def indicadores_en_cache(cls) -> int:
+        """Cuántos indicadores tiene descargados el cache de clase."""
+        return len(cls._cache)
+
+    @classmethod
+    def limpiar_cache(cls) -> None:
+        """Vacía el cache de clase; la siguiente consulta vuelve a descargar."""
+        cls._cache.clear()
 
     def __init__(self, token: str, tipo: str, timeout: int = 10) -> None:
         if tipo not in _INDICADORES_QUINCENALES:

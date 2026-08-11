@@ -21,6 +21,7 @@ from replica_inpc.dominio.tipos import ManifestCalculo, ManifestDerivado
 
 # ---------- Fixtures helpers ----------
 
+
 def _manif_calculo(tipo: str = "INPC", version: int = 2018) -> ManifestCalculo:
     return ManifestCalculo(
         version=version,  # type: ignore[arg-type]
@@ -44,9 +45,7 @@ def _manif_derivado(tipo: str = "INPC", clase: str = "periodica_mensual") -> Man
 
 def _df_indice(tipo: str = "INPC", version: int = 2018) -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
-    idx = pd.MultiIndex.from_tuples(
-        [(p, "INPC") for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     return pd.DataFrame(
         {
             "version": [version, version],
@@ -61,9 +60,7 @@ def _df_indice(tipo: str = "INPC", version: int = 2018) -> pd.DataFrame:
 
 def _df_variacion(tipo: str = "INPC") -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
-    idx = pd.MultiIndex.from_tuples(
-        [(p, "INPC") for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     return pd.DataFrame(
         {
             "tipo": [tipo, tipo],
@@ -78,9 +75,7 @@ def _df_variacion(tipo: str = "INPC") -> pd.DataFrame:
 
 def _df_incidencia(tipo: str = "INPC") -> pd.DataFrame:
     periodos = [PeriodoQuincenal(2024, m, 2) for m in (1, 2)]
-    idx = pd.MultiIndex.from_tuples(
-        [(p, "INPC") for p in periodos], names=["periodo", "indice"]
-    )
+    idx = pd.MultiIndex.from_tuples([(p, "INPC") for p in periodos], names=["periodo", "indice"])
     return pd.DataFrame(
         {
             "tipo": [tipo, tipo],
@@ -146,6 +141,7 @@ def _largo_incidencia_extendido() -> pd.DataFrame:
 
 # ---------- ValidacionIndice ----------
 
+
 def test_indice_construccion_valida() -> None:
     v = ValidacionIndice(
         _resultado_indice(),
@@ -172,9 +168,6 @@ def test_indice_tipo_invalido_falla(tipo_invalido: str) -> None:
 
 
 def test_indice_manifiesto_mixto_falla() -> None:
-    df = pd.concat([_df_indice(tipo="INPC"), _df_indice(tipo="cobertura").rename(
-        index={p: p for p in []}  # noop
-    )])
     df = _df_indice(tipo="INPC")
     df2 = _df_indice(tipo="cobertura")
     df2.index = pd.MultiIndex.from_tuples(
@@ -200,9 +193,7 @@ def test_indice_manifiesto_mixto_falla() -> None:
 def test_indice_falta_col_vista_falla(falta: str) -> None:
     largo = _largo_indice_extendido().drop(columns=[falta])
     with pytest.raises(InvarianteViolado):
-        ValidacionIndice(
-            _resultado_indice(), largo, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-        )
+        ValidacionIndice(_resultado_indice(), largo, pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
 
 
 def test_indice_resultado_cols_correctas() -> None:
@@ -250,6 +241,7 @@ def test_indice_repr_html_string() -> None:
 
 
 # ---------- ValidacionVariacion ----------
+
 
 def test_variacion_construccion_valida() -> None:
     v = ValidacionVariacion(
@@ -327,6 +319,7 @@ def test_variacion_repr_html_string() -> None:
 
 
 # ---------- ValidacionIncidencia ----------
+
 
 def test_incidencia_construccion_valida() -> None:
     v = ValidacionIncidencia(

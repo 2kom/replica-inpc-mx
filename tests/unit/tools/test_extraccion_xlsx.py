@@ -160,7 +160,9 @@ def test_ponderador_coincide_numericamente_con_la_referencia(version: VersionCan
     # parseado de texto, sin aritmetica de por medio -- una tolerancia
     # relativa (~1e-6 default) esconderia una deriva real de precision
     m = _cruce_con_referencia(version)
-    assert (m["ponderador_x"].astype(float).to_numpy() == m["ponderador_r"].astype(float).to_numpy()).all()
+    assert (
+        m["ponderador_x"].astype(float).to_numpy() == m["ponderador_r"].astype(float).to_numpy()
+    ).all()
 
 
 @pytest.mark.requires_data
@@ -184,7 +186,8 @@ def test_encadenamiento_coincide_numericamente_con_la_referencia(version: Versio
     # igualdad exacta -- mismo motivo que test_ponderador_coincide_numericamente_con_la_referencia
     m = _cruce_con_referencia(version)
     assert (
-        m["encadenamiento_x"].astype(float).to_numpy() == m["encadenamiento_r"].astype(float).to_numpy()
+        m["encadenamiento_x"].astype(float).to_numpy()
+        == m["encadenamiento_r"].astype(float).to_numpy()
     ).all()
 
 

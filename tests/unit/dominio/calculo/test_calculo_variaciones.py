@@ -134,7 +134,7 @@ def test_periodica_estado_parcial_propagado() -> None:
         estados={(_Q2, "INPC"): "parcial"},
     )
     r = variacion_periodica(indice, "quincenal")
-    assert r.resultado.largo.loc[(_Q2, "INPC"), "estado_calculo"] == "parcial"  # type: ignore[arg-type]
+    assert r.resultado.largo.loc[(_Q2, "INPC"), "estado_calculo"] == "parcial"  # type: ignore[index]
 
 
 def test_periodica_fuente_sin_datos_ausente_y_en_reporte() -> None:
@@ -142,7 +142,7 @@ def test_periodica_fuente_sin_datos_ausente_y_en_reporte() -> None:
     r = variacion_periodica(indice, "quincenal")
     assert (_Q3, "INPC") not in r.df.index
     assert (_Q3, "INPC") in r.reporte.index
-    assert r.reporte.loc[(_Q3, "INPC"), "estado_calculo"] == "sin_datos"  # type: ignore[arg-type]
+    assert r.reporte.loc[(_Q3, "INPC"), "estado_calculo"] == "sin_datos"  # type: ignore[index]
 
 
 def test_periodica_base_cero_falla() -> None:
@@ -167,7 +167,7 @@ def test_periodica_overflow_en_variacion_falla() -> None:
 def test_periodica_numerador_cero_acepta_menos_cien() -> None:
     indice = _indice({"INPC": [(_Q1, 100.0), (_Q2, 0.0)]})
     r = variacion_periodica(indice, "quincenal")
-    assert r.df.loc[(_Q2, "INPC"), "variacion_pp"] == pytest.approx(-100.0)  # type: ignore[arg-type]
+    assert r.df.loc[(_Q2, "INPC"), "variacion_pp"] == pytest.approx(-100.0)  # type: ignore[index]
 
 
 def test_periodica_manifiesto_y_diagnostico() -> None:
@@ -211,7 +211,7 @@ def test_periodica_todas_las_frecuencias_quincenales(frecuencia: str, lag: int) 
     val_t = 100.0 + 3.0 * (n - 1)
     val_base = 100.0 + 3.0 * (n - 1 - lag)
     esperado = (val_t / val_base - 1.0) * 100.0
-    assert r.df.loc[(ultimo, "INPC"), "variacion_pp"] == pytest.approx(esperado)  # type: ignore[arg-type]
+    assert r.df.loc[(ultimo, "INPC"), "variacion_pp"] == pytest.approx(esperado)  # type: ignore[index]
 
 
 def _avanzar_meses(base: PeriodoMensual, pasos: int) -> PeriodoMensual:
@@ -238,7 +238,7 @@ def test_periodica_todas_las_frecuencias_mensuales(frecuencia: str, lag: int) ->
     val_t = 100.0 + 3.0 * (n - 1)
     val_base = 100.0 + 3.0 * (n - 1 - lag)
     esperado = (val_t / val_base - 1.0) * 100.0
-    assert r.df.loc[(ultimo, "INPC"), "variacion_pp"] == pytest.approx(esperado)  # type: ignore[arg-type]
+    assert r.df.loc[(ultimo, "INPC"), "variacion_pp"] == pytest.approx(esperado)  # type: ignore[index]
 
 
 # -- variacion_acumulada_anual -------------------------------------------------
@@ -250,7 +250,7 @@ def test_acumulada_base_diciembre_anio_anterior() -> None:
     )
     r = variacion_acumulada_anual(indice)
     assert (r.resultado.largo["clase_variacion"] == "acumulada_anual").all()
-    assert r.df.loc[(PeriodoQuincenal(2024, 12, 2), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.df.loc[(PeriodoQuincenal(2024, 12, 2), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[index]
         10.0
     )
     assert len(r.df) == 1
@@ -261,7 +261,7 @@ def test_acumulada_base_diciembre_mensual() -> None:
         {"INPC": [(PeriodoMensual(2023, 12), 100.0), (PeriodoMensual(2024, 12), 108.0)]}
     )
     r = variacion_acumulada_anual(indice)
-    assert r.df.loc[(PeriodoMensual(2024, 12), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.df.loc[(PeriodoMensual(2024, 12), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[index]
         8.0
     )
 
@@ -277,10 +277,10 @@ def test_acumulada_periodo_ordinario_enero() -> None:
         }
     )
     r = variacion_acumulada_anual(indice)
-    assert r.df.loc[(PeriodoQuincenal(2024, 1, 1), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.df.loc[(PeriodoQuincenal(2024, 1, 1), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[index]
         1.0
     )
-    assert r.df.loc[(PeriodoQuincenal(2024, 1, 2), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.df.loc[(PeriodoQuincenal(2024, 1, 2), "INPC"), "variacion_pp"] == pytest.approx(  # type: ignore[index]
         2.0
     )
 
@@ -300,8 +300,8 @@ def test_desde_una_fila_por_indice() -> None:
 
 def test_desde_valores_correctos() -> None:
     r = variacion_desde(_indice_dos(), _Q1, _Q2)
-    assert r.df.loc[(_Q2, "A"), "variacion_pp"] == pytest.approx(10.0)  # type: ignore[arg-type]
-    assert r.df.loc[(_Q2, "B"), "variacion_pp"] == pytest.approx(-10.0)  # type: ignore[arg-type]
+    assert r.df.loc[(_Q2, "A"), "variacion_pp"] == pytest.approx(10.0)  # type: ignore[index]
+    assert r.df.loc[(_Q2, "B"), "variacion_pp"] == pytest.approx(-10.0)  # type: ignore[index]
 
 
 def test_desde_indices_parciales_vacio_si_exacto() -> None:
@@ -321,7 +321,7 @@ def test_desde_incluir_parciales_ajusta_periodo() -> None:
     r = variacion_desde(indice, _Q1, _Q3, incluir_parciales=True)
     assert len(r.df) == 2
     assert r.indices_parciales.loc["B", "periodo_desde_real"] == _Q2  # type: ignore[union-attr]
-    assert r.df.loc[(_Q3, "B"), "variacion_pp"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.df.loc[(_Q3, "B"), "variacion_pp"] == pytest.approx(  # type: ignore[index]
         90 / 95 * 100 - 100
     )
 
@@ -381,7 +381,7 @@ def test_desde_overflow_en_variacion_falla() -> None:
 def test_desde_numerador_cero_acepta_menos_cien() -> None:
     indice = _indice({"A": [(_Q1, 100.0), (_Q2, 0.0)]})
     r = variacion_desde(indice, _Q1, _Q2)
-    assert r.df.loc[(_Q2, "A"), "variacion_pp"] == pytest.approx(-100.0)  # type: ignore[arg-type]
+    assert r.df.loc[(_Q2, "A"), "variacion_pp"] == pytest.approx(-100.0)  # type: ignore[index]
 
 
 def test_desde_hasta_none_usa_ultimo_periodo() -> None:
@@ -398,7 +398,7 @@ def test_desde_incluir_parciales_ajusta_periodo_hasta() -> None:
     )
     r = variacion_desde(indice, _Q1, _Q3, incluir_parciales=True)
     assert r.indices_parciales.loc["B", "periodo_hasta_real"] == _Q2  # type: ignore[union-attr]
-    assert r.df.loc[(_Q2, "B"), "variacion_pp"] == pytest.approx(5.0)  # type: ignore[arg-type]
+    assert r.df.loc[(_Q2, "B"), "variacion_pp"] == pytest.approx(5.0)  # type: ignore[index]
 
 
 def test_desde_reporte_usa_periodos_efectivos_no_los_solicitados() -> None:
@@ -461,7 +461,7 @@ def test_desde_reporte_usa_periodos_efectivos_no_los_solicitados() -> None:
     assert r.indices_parciales.loc["B", "periodo_desde_real"] == _Q2  # type: ignore[union-attr]
     assert r.indices_parciales.loc["B", "periodo_hasta_real"] == _Q3  # type: ignore[union-attr]
 
-    fila_reporte: pd.Series = r.reporte.loc[(_Q3, "B")]  # type: ignore[assignment]
+    fila_reporte: pd.Series = r.reporte.loc[(_Q3, "B")]  # type: ignore[index,assignment]
     assert fila_reporte["periodo_lag"] == _Q2
     assert fila_reporte["indice_t"] == pytest.approx(120.0)
     assert fila_reporte["indice_lag"] == pytest.approx(100.0)
@@ -489,9 +489,9 @@ def test_reporte_propaga_cobertura_del_fuente() -> None:
     )
     indice = _indice({"INPC": [(_Q1, 100.0), (_Q2, 103.0)]}, reporte=reporte)
     r = variacion_periodica(indice, "quincenal")
-    assert r.reporte.loc[(_Q2, "INPC"), "cobertura_pct_t"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.reporte.loc[(_Q2, "INPC"), "cobertura_pct_t"] == pytest.approx(  # type: ignore[index]
         90.0
     )
-    assert r.reporte.loc[(_Q2, "INPC"), "cobertura_pct_lag"] == pytest.approx(  # type: ignore[arg-type]
+    assert r.reporte.loc[(_Q2, "INPC"), "cobertura_pct_lag"] == pytest.approx(  # type: ignore[index]
         88.0
     )

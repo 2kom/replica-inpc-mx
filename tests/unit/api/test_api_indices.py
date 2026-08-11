@@ -71,7 +71,7 @@ def test_rebasar_reenvia_valor_referencia_custom(mocker) -> None:
 
 def test_empalmar_delega(mocker) -> None:
     _empalmar = mocker.patch.object(indices, "_empalmar", return_value="empalmado")
-    salida = indices.empalmar(["a", "b"], forzar=True, version_nombres=2024)  # type: ignore[arg-type]
+    salida = indices.empalmar(["a", "b"], forzar=True, version_nombres=2024)  # type: ignore[list-item]
     assert salida == "empalmado"
     _empalmar.assert_called_once_with(["a", "b"], forzar=True, version_nombres=2024)
 

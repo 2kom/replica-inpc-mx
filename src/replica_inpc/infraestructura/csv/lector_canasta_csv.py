@@ -64,7 +64,9 @@ class LectorCanastaCsv:
 
         canasta = canasta.rename(
             columns={
-                col: col.upper() for col in COLUMNAS_REQUERIDAS if col.upper() in COLUMNAS_CLASIFICACION
+                col: col.upper()
+                for col in COLUMNAS_REQUERIDAS
+                if col.upper() in COLUMNAS_CLASIFICACION
             }
         )
 

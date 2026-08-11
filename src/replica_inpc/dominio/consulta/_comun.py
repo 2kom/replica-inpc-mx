@@ -27,14 +27,11 @@ def _verificar_indice(df: pd.DataFrame, indice: str) -> None:
 
 
 def _verificar_rango(periodo_desde: Periodo | None, periodo_hasta: Periodo | None) -> None:
-    if (
-        periodo_desde is not None
-        and periodo_hasta is not None
-        and periodo_hasta < periodo_desde  # type: ignore[operator]
-    ):
+    if periodo_desde is None or periodo_hasta is None:
+        return
+    if periodo_hasta < periodo_desde:  # type: ignore[operator]
         raise InvarianteViolado(
-            f"'desde' ({periodo_desde}) no puede ser posterior a 'hasta' "
-            f"({periodo_hasta})."
+            f"'desde' ({periodo_desde}) no puede ser posterior a 'hasta' ({periodo_hasta})."
         )
 
 
@@ -68,9 +65,7 @@ def serie_en_rango(
     fin = hasta if hasta is not None else serie.index.max()
     en_rango = serie[(serie.index >= inicio) & (serie.index <= fin)]
     if en_rango.empty:
-        raise InvarianteViolado(
-            f"Sin filas de '{indice}' en el rango [{inicio}, {fin}]."
-        )
+        raise InvarianteViolado(f"Sin filas de '{indice}' en el rango [{inicio}, {fin}].")
     return en_rango
 
 

@@ -41,7 +41,7 @@ from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
-from replica_inpc.dominio.tipos import ManifestCalculo
+from replica_inpc.dominio.tipos import ManifestCalculo, VersionCanasta
 
 # -- periodos ------------------------------------------------------------------
 
@@ -1377,6 +1377,9 @@ def test_fase1_dato_invalido_lanza(caso: str, dic_inpc: float, a_ene: float, pat
 
 _DATA_INPUTS = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"
 
+# Tipada para que `cargar_canasta` reciba `VersionCanasta` y no `int`.
+_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
+
 # Incidencia ANUAL publicada por INEGI para marzo de 2014, en puntos porcentuales.
 # Comunicado de prensa del 9 de abril de 2014, cuadro "INPC, SUBYACENTE Y NO SUBYACENTE",
 # columna "Incidencia anual 1/":
@@ -1400,7 +1403,7 @@ def _historia_mensual(tipo: str) -> ResultadoIndice:
     """Cadena completa 2010-2024, mensual. Rebasa 2010-2013 antes de empalmar con 2018."""
     can = {
         v: rep.cargar_canasta(str(_DATA_INPUTS / "pdf" / f"ponderadores_{v}.csv"), v)
-        for v in (2010, 2013, 2018, 2024)
+        for v in _VERSIONES
     }
     ser = {
         v: rep.cargar_serie(str(_DATA_INPUTS / f"series{s}_horizontal_metadata.CSV"), v)  # type: ignore[arg-type]
@@ -1418,7 +1421,7 @@ def _historia_mensual(tipo: str) -> ResultadoIndice:
 def _canastas_reales() -> dict[int, CanastaCanonica]:
     return {
         v: rep.cargar_canasta(str(_DATA_INPUTS / "pdf" / f"ponderadores_{v}.csv"), v)
-        for v in (2010, 2013, 2018, 2024)
+        for v in _VERSIONES
     }
 
 

@@ -8,7 +8,7 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 def test_incidencia_periodica_delega(mocker) -> None:
     fn = mocker.patch.object(incidencias, "_incidencia_periodica", return_value="ri")
-    assert incidencias.incidencia_periodica("inpc", "clas", {2024: "c"}, "mensual") == "ri"  # type: ignore[arg-type]
+    assert incidencias.incidencia_periodica("inpc", "clas", {2024: "c"}, "mensual") == "ri"  # type: ignore[arg-type,dict-item]
     fn.assert_called_once_with("inpc", "clas", {2024: "c"}, "mensual")
 
 
@@ -18,7 +18,7 @@ def test_incidencia_desde_convierte_desde_y_hasta(mocker) -> None:
     incidencias.incidencia_desde(
         "inpc",  # type: ignore[arg-type]
         "clas",  # type: ignore[arg-type]
-        {2024: "c"},  # type: ignore[arg-type]
+        {2024: "c"},  # type: ignore[dict-item]
         "ene 2024",
         "DIC 2024",
         incluir_parciales=False,
@@ -31,7 +31,7 @@ def test_incidencia_desde_convierte_desde_y_hasta(mocker) -> None:
 
 def test_incidencia_desde_extremos_none(mocker) -> None:
     fn = mocker.patch.object(incidencias, "_incidencia_desde", return_value="ri")
-    incidencias.incidencia_desde("inpc", "clas", {2024: "c"})  # type: ignore[arg-type]
+    incidencias.incidencia_desde("inpc", "clas", {2024: "c"})  # type: ignore[arg-type,dict-item]
     fn.assert_called_once_with("inpc", "clas", {2024: "c"}, None, None, True)
 
 

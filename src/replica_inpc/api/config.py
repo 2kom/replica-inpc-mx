@@ -65,7 +65,7 @@ def mostrar_config() -> None:
         estado_token = "configurado (set_token)"
     else:
         estado_token = "no configurado"
-    n = len(FuenteValidacionApi._cache)
+    n = FuenteValidacionApi.indicadores_en_cache()
     print(
         f"tolerancia_indice:    {tolerancia_indice}\n"
         f"tolerancia_derivados: {tolerancia_derivados}\n"
@@ -80,4 +80,4 @@ def limpiar_cache() -> None:
 
     La siguiente llamada a `validar_*` vuelve a consultar la API.
     """
-    FuenteValidacionApi._cache.clear()
+    FuenteValidacionApi.limpiar_cache()
