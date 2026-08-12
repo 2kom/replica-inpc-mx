@@ -133,4 +133,4 @@ def extremo(
     col = sub[columna]
     etiqueta = col.idxmax() if mayor else col.idxmin()
     periodo, ind = etiqueta  # type: ignore[misc, str-unpack]
-    return periodo, str(ind), float(col.loc[etiqueta])  # type: ignore[arg-type, return-value]
+    return periodo, str(ind), float(col.loc[etiqueta])  # type: ignore[return-value]

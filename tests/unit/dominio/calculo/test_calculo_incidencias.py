@@ -1226,18 +1226,20 @@ def _cross_2seg_mutado(
 
 
 @pytest.mark.parametrize(
-    ("divisor", "celda", "valor"),
+    ("celda", "valor"),
     [
         # (visible, J) — se anula el J del periodo `fin` de cada segmento, que es el
         # denominador de f^(m); y el visible de `b`, denominador de la contribución.
-        ("J_INPC(fin_m)", ("inpc", _T_Q, "INPC"), (105.04, 0.0)),
-        ("J_K(fin_m)", ("clas", _T_Q, "A"), (126.0, 0.0)),
-        ("f_K^(m)", ("clas", _T_Q, "A"), (0.0, 105.0)),  # f_K = 0/105 = 0
-        ("INPC_visible(b)", ("inpc", _B_Q, "INPC"), (0.0, 102.0)),
+        # El id de cada caso nombra el divisor que se lleva a cero.
+        (("inpc", _T_Q, "INPC"), (105.04, 0.0)),
+        (("clas", _T_Q, "A"), (126.0, 0.0)),
+        (("clas", _T_Q, "A"), (0.0, 105.0)),  # f_K = 0/105 = 0
+        (("inpc", _B_Q, "INPC"), (0.0, 102.0)),
     ],
+    ids=["J_INPC(fin_m)", "J_K(fin_m)", "f_K^(m)", "INPC_visible(b)"],
 )
 def test_cross_divisor_cero_lanza(
-    divisor: str, celda: tuple[str, Periodo, str], valor: tuple[float, float]
+    celda: tuple[str, Periodo, str], valor: tuple[float, float]
 ) -> None:
     destino, periodo, indice = celda
     mut = {(periodo, indice): valor}

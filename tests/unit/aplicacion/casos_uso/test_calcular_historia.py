@@ -206,7 +206,7 @@ def test_referencias_inpc_identidad() -> None:
     )
     prev = ResultadoIndice(
         df,
-        [ManifestCalculo(2018, "INPC", "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo(2018, "INPC", "LaspeyresDirecto")],
         pd.DataFrame(),
         pd.DataFrame(),
     )
@@ -230,7 +230,7 @@ def test_referencias_normaliza_clave_renombrada() -> None:
     )
     prev = ResultadoIndice(
         df,
-        [ManifestCalculo(2018, tipo, "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo(2018, tipo, "LaspeyresDirecto")],
         pd.DataFrame(),
         pd.DataFrame(),
     )

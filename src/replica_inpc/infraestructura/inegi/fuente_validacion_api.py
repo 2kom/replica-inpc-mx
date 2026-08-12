@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-import requests  # type: ignore
+import requests
 
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
@@ -191,13 +191,13 @@ def _rango_completo(historico: dict[_Periodo, float | None]) -> list[_Periodo]:
     min_p = min(historico)
     max_p = max(historico)
     if isinstance(min_p, PeriodoMensual):
-        return [  # type: ignore[return-value]
+        return [
             PeriodoMensual(a, m)
             for a in range(min_p.año, max_p.año + 1)
             for m in range(1, 13)
             if min_p <= PeriodoMensual(a, m) <= max_p  # type: ignore[operator]
         ]
-    return [  # type: ignore[return-value]
+    return [
         PeriodoQuincenal(a, m, q)
         for a in range(min_p.año, max_p.año + 1)
         for m in range(1, 13)

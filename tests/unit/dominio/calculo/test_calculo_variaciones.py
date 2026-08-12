@@ -450,9 +450,9 @@ def test_desde_reporte_usa_periodos_efectivos_no_los_solicitados() -> None:
         ),
     )
     manifiesto = [
-        ManifestCalculo(2010, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
-        ManifestCalculo(2013, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
-        ManifestCalculo(2018, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
+        ManifestCalculo(2010, "INPC", "LaspeyresDirecto"),
+        ManifestCalculo(2013, "INPC", "LaspeyresDirecto"),
+        ManifestCalculo(2018, "INPC", "LaspeyresDirecto"),
     ]
     indice = ResultadoIndice(df, manifiesto, reporte_fuente, pd.DataFrame())
 

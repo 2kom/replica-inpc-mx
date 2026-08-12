@@ -53,7 +53,7 @@ def test_inflacion_minima_devuelve_periodo_como_str(mocker) -> None:
 
 def test_inflacion_en_parsea_periodo(mocker) -> None:
     fn = mocker.patch.object(variaciones._consulta, "inflacion_en", return_value="df")
-    assert variaciones.inflacion_en("rv", "dic 2024") == "df"  # type: ignore[arg-type, truthy-bool]
+    assert variaciones.inflacion_en("rv", "dic 2024") == "df"  # type: ignore[arg-type]
     fn.assert_called_once_with("rv", PeriodoMensual(2024, 12))
 
 

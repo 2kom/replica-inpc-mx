@@ -62,5 +62,5 @@ def test_menor_incidencia_devuelve_periodo_como_str(mocker) -> None:
 
 def test_incidencia_en_parsea_periodo(mocker) -> None:
     fn = mocker.patch.object(incidencias._consulta, "incidencia_en", return_value="df")
-    assert incidencias.incidencia_en("ri", "dic 2024") == "df"  # type: ignore[arg-type, truthy-bool]
+    assert incidencias.incidencia_en("ri", "dic 2024") == "df"  # type: ignore[arg-type]
     fn.assert_called_once_with("ri", PeriodoMensual(2024, 12))

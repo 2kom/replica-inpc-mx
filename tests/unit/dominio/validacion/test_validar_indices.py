@@ -76,8 +76,8 @@ def _ri_dos_tramos() -> ResultadoIndice:
     ).set_index(["periodo", "indice"])
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
     manifiesto = [
-        ManifestCalculo(2018, "INPC", "LaspeyresDirecto"),  # type: ignore[arg-type]
-        ManifestCalculo(2024, "INPC", "LaspeyresEncadenadoT2"),  # type: ignore[arg-type]
+        ManifestCalculo(2018, "INPC", "LaspeyresDirecto"),
+        ManifestCalculo(2024, "INPC", "LaspeyresEncadenadoT2"),
     ]
     return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
@@ -201,7 +201,7 @@ def test_mapa_inegi_con_varias_claves_empareja_cada_indice_con_la_suya() -> None
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * 2}, index=df.index)
     resultado = ResultadoIndice(
         df,
-        [ManifestCalculo(2018, "INFLACION COMPONENTE", "LaspeyresDirecto")],  # type: ignore[arg-type]
+        [ManifestCalculo(2018, "INFLACION COMPONENTE", "LaspeyresDirecto")],
         reporte,
         pd.DataFrame(),
     )
@@ -227,8 +227,8 @@ def test_resumen_asigna_a_cada_manifiesto_sus_propias_filas() -> None:
 
     assert list(resumen.index) == [(2018, "INPC"), (2024, "INPC")]
 
-    viejo: pd.Series = resumen.loc[(2018, "INPC")]  # type: ignore[index,assignment]
-    nuevo: pd.Series = resumen.loc[(2024, "INPC")]  # type: ignore[index,assignment]
+    viejo: pd.Series = resumen.loc[(2018, "INPC")]  # type: ignore[assignment]
+    nuevo: pd.Series = resumen.loc[(2024, "INPC")]  # type: ignore[assignment]
 
     assert (viejo["periodo_inicio"], viejo["periodo_fin"]) == (_P1, _P2)
     assert (nuevo["periodo_inicio"], nuevo["periodo_fin"]) == (_P5, _P6)

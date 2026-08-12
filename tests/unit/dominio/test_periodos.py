@@ -60,14 +60,14 @@ def test_mensual_cross_type_no_compara():
     p_m = PeriodoMensual(2024, 7)
     p_q = PeriodoQuincenal(2024, 7, 1)
     with pytest.raises(TypeError):
-        p_m < p_q  # type: ignore[operator]
+        p_m < p_q
 
 
 def test_quincenal_cross_type_no_compara():
     p_q = PeriodoQuincenal(2024, 7, 1)
     p_m = PeriodoMensual(2024, 7)
     with pytest.raises(TypeError):
-        p_q < p_m  # type: ignore[operator]
+        p_q < p_m
 
 
 def test_cross_type_no_son_iguales():
@@ -124,7 +124,7 @@ def test_cross_type_operadores_derivados_lanzan_typeerror(op):
 @pytest.mark.parametrize("p", [PeriodoQuincenal(2024, 7, 1), PeriodoMensual(2024, 7)])
 def test_orden_contra_tipo_ajeno_lanza_typeerror(p):
     with pytest.raises(TypeError):
-        p < 5  # type: ignore[operator]
+        p < 5
 
 
 # --- PeriodoQuincenal ---

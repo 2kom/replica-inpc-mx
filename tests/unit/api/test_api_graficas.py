@@ -80,7 +80,7 @@ def _resultado_variacion(
     reporte = df[[]].copy()
     diag = pd.DataFrame(columns=["periodo", "indice", "estado_calculo", "motivo_error"])
     manifiesto = ManifestDerivado(
-        versiones=[2018],  # type: ignore[list-item]
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",
@@ -243,7 +243,7 @@ def _resultado_incidencia(
         [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018],  # type: ignore[list-item]
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",

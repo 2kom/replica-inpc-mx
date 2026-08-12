@@ -246,7 +246,7 @@ def test_layouts_xlsx_cubre_exactamente_las_4_versiones() -> None:
 
 def test_layout_xlsx_bloquea_reasignar_un_campo() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
-        LAYOUTS_XLSX[2018].col_generico = 99  # type: ignore[misc]
+        LAYOUTS_XLSX[2018].col_generico = 99
 
 
 def test_layout_xlsx_agrupaciones_bloquea_mutacion_interna() -> None:
@@ -254,7 +254,7 @@ def test_layout_xlsx_agrupaciones_bloquea_mutacion_interna() -> None:
     # layout.agrupaciones[6] = (...) mutaria en silencio el dict compartido
     # a nivel de modulo (LAYOUTS_XLSX se reusa en cada llamada a extraer_xlsx)
     with pytest.raises(TypeError):
-        LAYOUTS_XLSX[2018].agrupaciones[6] = ("x", "y", "z")  # type: ignore[index]
+        LAYOUTS_XLSX[2018].agrupaciones[6] = ("x", "y", "z")
 
 
 @pytest.mark.parametrize(

@@ -107,4 +107,4 @@ def resolver_extremo(
         return exacto
     if not incluir_parciales or not validos:
         return None
-    return min(validos) if primero else max(validos)  # type: ignore[type-var]
+    return min(validos) if primero else max(validos)

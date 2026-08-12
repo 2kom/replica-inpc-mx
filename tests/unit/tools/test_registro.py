@@ -49,7 +49,7 @@ def _resolucion(
     valor_xlsx: str | None = None,
     valor_pdf: str | None = None,
 ) -> Resolucion:
-    return Resolucion(columna, genericos, valor_xlsx, valor_pdf, valor_final, origen, metodo)  # type: ignore[arg-type]
+    return Resolucion(columna, genericos, valor_xlsx, valor_pdf, valor_final, origen, metodo)
 
 
 def _leer_json(ruta_salida: Path) -> dict:

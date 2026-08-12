@@ -748,7 +748,7 @@ def test_puntos_agrupan_por_indice_y_linetype_no_solo_indice() -> None:
 
 def _manifiesto_variacion(tipo: str = "INPC", clase: str = "periodica_mensual") -> ManifestDerivado:
     return ManifestDerivado(
-        versiones=[2018],  # type: ignore[list-item]
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",

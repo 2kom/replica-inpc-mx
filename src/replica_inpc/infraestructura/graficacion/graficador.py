@@ -161,7 +161,7 @@ def _construir_grafica_linea(
     return (
         grafica
         + scale_x_datetime(breaks=breaks_x, labels=etiquetas_x, expand=expand_x)  # type: ignore[arg-type]
-        + scale_y_continuous(breaks=breaks_y, expand=expand_y)  # type: ignore[arg-type]
+        + scale_y_continuous(breaks=breaks_y, expand=expand_y)
         + scale_color_manual(values=colores, labels=etiquetas_leyenda)
         + labs(title=titulo, x="Periodo", y=etiqueta_y_final)
         + theme_bw()
@@ -261,7 +261,7 @@ def _construir_grafica_barras(
     return (
         grafica
         + scale_x_datetime(breaks=breaks_x, labels=etiquetas_x, expand=(0.01, 0.01))  # type: ignore[arg-type]
-        + scale_y_continuous(breaks=breaks_y, expand=(0.01, 0.01))  # type: ignore[arg-type]
+        + scale_y_continuous(breaks=breaks_y, expand=(0.01, 0.01))
         + labs(
             title=_titulo(datos),
             x="Periodo",

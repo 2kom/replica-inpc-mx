@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-import requests  # type: ignore
+import requests
 
 from replica_inpc.dominio.errores import (
     ErrorConfiguracion,
@@ -318,7 +318,7 @@ class TestObtenerVariaciones:
 
         fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(ErrorConfiguracion):
-            fuente.obtener_variaciones([_PM1], "invalido")  # type: ignore[arg-type]
+            fuente.obtener_variaciones([_PM1], "invalido")
 
     def test_usa_indicador_periodica(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))

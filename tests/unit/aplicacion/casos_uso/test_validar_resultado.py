@@ -40,7 +40,7 @@ def _r_indice(*tipos: str) -> ResultadoIndice:
     ]
     df = pd.DataFrame(filas).set_index(["periodo", "indice"])
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
-    manifiesto = [ManifestCalculo(2024, tipo, "LaspeyresDirecto") for tipo in tipos]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(2024, tipo, "LaspeyresDirecto") for tipo in tipos]
     return ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
 
@@ -348,7 +348,7 @@ def test_indice_con_periodos_mixtos_falla() -> None:
     ]
     df = pd.DataFrame(filas).set_index(["periodo", "indice"])
     reporte = pd.DataFrame({"cobertura_genericos_pct": [100.0] * len(df)}, index=df.index)
-    manifiesto = [ManifestCalculo(2024, "INPC", "LaspeyresDirecto")]  # type: ignore[arg-type]
+    manifiesto = [ManifestCalculo(2024, "INPC", "LaspeyresDirecto")]
     resultado = ResultadoIndice(df, manifiesto, reporte, pd.DataFrame())
 
     with pytest.raises(InvarianteViolado, match="misma periodicidad"):

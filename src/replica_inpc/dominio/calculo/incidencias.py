@@ -472,7 +472,7 @@ def incidencia_periodica(
     restar = restar_meses if mensual else restar_quincenas
 
     periodos = df_clas.index.get_level_values("periodo")
-    base_periodos = [restar(p, lag) for p in periodos]  # type: ignore[arg-type]
+    base_periodos = [restar(p, lag) for p in periodos]
     return _construir_resultado(
         df_clas,
         df_clas,

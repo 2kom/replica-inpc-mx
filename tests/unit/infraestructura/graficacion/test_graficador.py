@@ -234,7 +234,7 @@ def test_graficar_comparacion_de_otro_tipo_no_lanza(mocker: Any, capsys: Any) ->
     construir = mocker.patch.object(graficador, "_construir_grafica_linea")
     r = _resultado([(_P1, "INPC", 100.0, "ok")])
     rv = _resultado_variacion([(_P1, "INPC", 0.5, "ok")])
-    graficador.graficar(r, comparacion=rv)  # type: ignore[arg-type]
+    graficador.graficar(r, comparacion=rv)
     assert "Error" in capsys.readouterr().out
     construir.assert_not_called()
 
@@ -253,7 +253,7 @@ def test_graficar_comparacion_periodicidad_distinta_no_lanza(mocker: Any, capsys
 
 def _manifiesto_variacion(tipo: str = "INPC", clase: str = "periodica_mensual") -> ManifestDerivado:
     return ManifestDerivado(
-        versiones=[2018],  # type: ignore[list-item]
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",
@@ -465,7 +465,7 @@ def _resultado_incidencia(
         [df.pop("periodo"), df.pop("indice")], names=["periodo", "indice"]
     )
     manifiesto = ManifestDerivado(
-        versiones=[2018],  # type: ignore[list-item]
+        versiones=[2018],
         tipo=tipo,
         clase=clase,
         descripcion="",

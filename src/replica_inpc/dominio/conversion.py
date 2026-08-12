@@ -289,7 +289,7 @@ def rebasar(
         if indice not in df_en_referencia.index:
             indices_sin_referencia.append(str(indice))
             continue
-        fila_referencia: pd.Series = df_en_referencia.loc[indice]  # type: ignore[assignment]
+        fila_referencia: pd.Series = df_en_referencia.loc[indice]
         estado_en_referencia = fila_referencia["estado_calculo"]
         if estado_en_referencia not in _ESTADOS_CON_VALOR:
             raise InvarianteViolado(
@@ -302,7 +302,7 @@ def rebasar(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es NaN; "
                 f"estado_calculo='{estado_en_referencia}' es inconsistente."
             )
-        valor_en_referencia = float(valor_en_referencia_raw)  # type: ignore[arg-type]
+        valor_en_referencia = float(valor_en_referencia_raw)
         if valor_en_referencia == 0:
             raise InvarianteViolado(
                 f"indice_replicado de '{indice}' en {periodo_referencia} es 0; no rebasable."
@@ -323,13 +323,13 @@ def rebasar(
     mask_estado_rebasable = df["estado_calculo"].isin(_ESTADOS_CON_VALOR)
     indice_por_fila = df.index.get_level_values("indice")
     factor_por_fila = pd.Series(
-        indice_por_fila.map(factores_por_indice),  # type: ignore[arg-type]
+        indice_por_fila.map(factores_por_indice),
         index=df.index,
         dtype=float,
     )
     mask_aplicar_factor = mask_estado_rebasable & factor_por_fila.notna()
-    df.loc[mask_aplicar_factor, "indice_replicado"] = (  # type: ignore[index]
-        df.loc[mask_aplicar_factor, "indice_replicado"].astype(float).to_numpy()  # type: ignore[union-attr]
+    df.loc[mask_aplicar_factor, "indice_replicado"] = (
+        df.loc[mask_aplicar_factor, "indice_replicado"].astype(float).to_numpy()
         * factor_por_fila.loc[mask_aplicar_factor].to_numpy()
     )
 
@@ -353,12 +353,10 @@ def rebasar(
         indices_frontera = frontera_out.index.get_level_values("indice")
         mask_frontera_con_factor = indices_frontera.isin(factores_por_indice)
         factores_frontera = (
-            indices_frontera[mask_frontera_con_factor]
-            .map(factores_por_indice)  # type: ignore[arg-type]
-            .astype(float)
+            indices_frontera[mask_frontera_con_factor].map(factores_por_indice).astype(float)
         )
-        frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"] = (  # type: ignore[index]
-            frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"]  # type: ignore[union-attr]
+        frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"] = (
+            frontera_out.loc[mask_frontera_con_factor, "indice_replicado_old"]
             .astype(float)
             .to_numpy()
             * factores_frontera.to_numpy()
