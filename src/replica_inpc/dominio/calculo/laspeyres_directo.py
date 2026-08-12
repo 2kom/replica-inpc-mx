@@ -12,6 +12,7 @@ from replica_inpc.dominio.calculo.base import (
     _laspeyres_por_grupo,
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
+    _validar_serie_cubre_grupo,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -58,6 +59,7 @@ class LaspeyresDirecto(CalculadorBase):
         else:
             categoria_por_generico = canasta.df[tipo].dropna()
         genericos_del_grupo = categoria_por_generico.index
+        _validar_serie_cubre_grupo(genericos_del_grupo, serie, canasta.version, tipo)
 
         serie_recortada = _recortar_series_fecha(serie.df.loc[genericos_del_grupo], canasta.version)
         serie_rellenada, df_diagnostico_relleno, _ = _rellenar_dato_serie_faltante(

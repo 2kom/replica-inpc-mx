@@ -189,7 +189,7 @@ def test_referencia_empalme_denominador_invalido_lanza_error_calculo(
 
 @pytest.mark.parametrize("referencia_invalida", [float("nan"), float("inf"), float("-inf")])
 def test_referencia_empalme_no_finita_lanza_error_calculo(referencia_invalida: float) -> None:
-    # referencia_empalme_por_indice viene de _referencias_normalizadas (calcular_historia.py),
+    # referencia_empalme_por_indice viene de referencias_normalizadas (calcular_historia.py),
     # que ya filtra NaN — esta guardia protege la API pública de LaspeyresDirecto de todas
     # formas, por si se llama directo con datos no saneados
     r = LaspeyresDirecto(referencia_empalme_por_indice={"INPC": referencia_invalida})
@@ -321,6 +321,78 @@ def test_sin_nan_no_produce_estado_rellenado() -> None:
         "tipo_faltante",
         "detalle",
     ]
+
+
+# ---------- cobertura de la serie ----------
+
+
+def _serie_parcial(genericos: list[str]) -> SerieNormalizada:
+    """La serie completa recortada a un subconjunto de genéricos."""
+    return SerieNormalizada(_serie().df.loc[genericos])
+
+
+def _canasta_durabilidad(durabilidad: list[str | None]) -> CanastaCanonica:
+    """Canasta con una clasificación fina, la única que admite genéricos sin valor."""
+    df = pd.DataFrame(
+        {
+            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
+            "encadenamiento": [None, None, None, None],
+            "DURABILIDAD": durabilidad,
+        },
+        index=["arroz", "frijol", "leche", "huevo"],
+    )
+    return CanastaCanonica(df, 2018)
+
+
+def test_serie_sin_generico_del_inpc_falla_con_error_de_dominio() -> None:
+    # sin esta guardia el mensaje era un KeyError crudo de pandas
+    with pytest.raises(ErrorCalculo, match="versiones distintas"):
+        LaspeyresDirecto().calcular(_canasta(), _serie_parcial(["arroz", "frijol"]), "INPC")
+
+
+def test_serie_solo_con_los_genericos_de_la_categoria_calcula() -> None:
+    """Una clasificación con `dropna` no necesita los genéricos que excluye.
+
+    Regresión: una guardia que exigiera la canasta entera rechazaría este
+    cálculo, que el calculador hace bien.
+    """
+    canasta = _canasta_durabilidad(["DURADEROS", None, None, None])
+    r = LaspeyresDirecto().calcular(canasta, _serie_parcial(["arroz"]), "DURABILIDAD")
+
+    assert r.resultado.largo["indice_replicado"].tolist() == [100.0, 101.0, 102.0, 103.0]
+
+
+def test_serie_sin_generico_de_la_categoria_falla() -> None:
+    canasta = _canasta_durabilidad(["DURADEROS", "DURADEROS", None, None])
+    with pytest.raises(ErrorCalculo, match=r"1 de los 2 genéricos que 'DURABILIDAD'"):
+        LaspeyresDirecto().calcular(canasta, _serie_parcial(["arroz"]), "DURABILIDAD")
+
+
+def test_serie_con_genericos_de_sobra_calcula_solo_con_los_del_grupo() -> None:
+    """A la serie le pueden sobrar genéricos, y los sobrantes no entran al índice.
+
+    leche y huevo están en la serie pero fuera de DURABILIDAD; si se colaran, el
+    índice y el ponderador esperado cambiarían.
+    """
+    canasta = _canasta_durabilidad(["DURADEROS", "DURADEROS", None, None])
+    r = LaspeyresDirecto().calcular(canasta, _serie(), "DURABILIDAD")
+
+    largo = r.resultado.largo
+    assert list(largo.index) == [(p, "DURADEROS") for p in _periodos]
+    # Laspeyres sobre arroz (pond 10) y frijol (pond 20), derivado de la definición
+    # y no del código. `rel=0, abs=1e-12` porque el default de approx es rel=1e-6,
+    # que deja pasar una deriva de 5e-7 — verificado con ese mutante.
+    esperado = [
+        100.0,
+        (10 * 101 + 20 * 102) / 30,
+        (10 * 102 + 20 * 104) / 30,
+        (10 * 103 + 20 * 106) / 30,
+    ]
+    assert largo["indice_replicado"].tolist() == pytest.approx(esperado, rel=0, abs=1e-12)
+    assert (largo["estado_calculo"] == "ok").all()
+    assert (r.reporte["genericos_esperados"] == 2).all()
+    assert (r.reporte["genericos_con_indice"] == 2).all()
+    assert (r.reporte["ponderador_esperado"] == 30.0).all()
 
 
 # ---------- dato real ----------

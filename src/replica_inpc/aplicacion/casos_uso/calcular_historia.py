@@ -27,13 +27,13 @@ from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 # Cada versión encadenada requiere su versión base contigua en `insumos`.
-_BASE_ENCADENADA: dict[int, int] = {2013: 2010, 2024: 2018}
+BASE_ENCADENADA: dict[int, int] = {2013: 2010, 2024: 2018}
 _PERIODICIDADES = ("quincenal", "mensual")
 
 _Periodo = PeriodoQuincenal | PeriodoMensual
 
 
-def _referencias_normalizadas(
+def referencias_normalizadas(
     resultado_prev: ResultadoIndice,
     tipo: str,
     version_origen: int,
@@ -119,7 +119,7 @@ class CalcularHistoria:
                 # `previo` es el resultado de UNA versión: el empalme viene después
                 # del bucle, así que su manifiesto tiene exactamente una entrada.
                 (manifiesto_previo,) = previo.manifiesto
-                referencias = _referencias_normalizadas(
+                referencias = referencias_normalizadas(
                     previo, tipo, manifiesto_previo.version, version
                 )
             resultado = para_canasta(canasta, referencias).calcular(canasta, serie, tipo)
@@ -194,7 +194,7 @@ def _validar(
         )
 
     conjunto = set(versiones)
-    for encadenada, base in _BASE_ENCADENADA.items():
+    for encadenada, base in BASE_ENCADENADA.items():
         if encadenada in conjunto and base not in conjunto:
             raise InvarianteViolado(
                 f"la versión {encadenada} (encadenada) requiere su versión base {base} en insumos."

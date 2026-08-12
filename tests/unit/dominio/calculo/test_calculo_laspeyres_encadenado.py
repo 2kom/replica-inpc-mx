@@ -452,6 +452,43 @@ def test_t1_categoria_denominador_invalido_en_traslape_lanza_error_calculo() -> 
         LaspeyresEncadenadoT1({"fantasma": 150.0}).calcular(canasta, serie, "COG")
 
 
+# ---------- cobertura de la serie ----------
+
+
+def test_t2_serie_sin_generico_del_inpc_falla_con_error_de_dominio() -> None:
+    # sin esta guardia el mensaje era un KeyError crudo de pandas
+    serie = SerieNormalizada(_serie_t2().df.loc[["arroz", "frijol"]])
+    with pytest.raises(ErrorCalculo, match="versiones distintas"):
+        LaspeyresEncadenadoT2().calcular(_canasta_t2(), serie, "INPC")
+
+
+def test_t2_serie_solo_con_los_genericos_de_la_categoria_calcula() -> None:
+    """Una clasificación con `dropna` no necesita los genéricos que excluye."""
+    df = pd.DataFrame(
+        {
+            "ponderador": ["10.0", "20.0", "30.0", "40.0"],
+            "encadenamiento": ["1.5", "1.4", "1.6", "1.3"],
+            "DURABILIDAD": ["DURADEROS", None, None, None],
+        },
+        index=["arroz", "frijol", "leche", "huevo"],
+    )
+    canasta = CanastaCanonica(df, 2024)
+    serie = SerieNormalizada(_serie_t2().df.loc[["arroz"]])
+
+    r = LaspeyresEncadenadoT2().calcular(canasta, serie, "DURABILIDAD")
+
+    largo = r.resultado.largo
+    assert list(largo.index) == [(_traslape_t2, "DURADEROS"), (_post_t2, "DURADEROS")]
+    # Un solo genérico en la categoría: f_j=1.5 de-encadena y factor_h lo devuelve,
+    # así que el índice reproduce la serie cruda de arroz. `rel=0, abs=1e-12` porque
+    # el default de approx es rel=1e-6, que deja pasar una deriva de 5e-7.
+    assert largo["indice_replicado"].tolist() == pytest.approx([150.0, 151.5], rel=0, abs=1e-12)
+    assert (largo["estado_calculo"] == "ok").all()
+    assert (r.reporte["genericos_esperados"] == 1).all()
+    assert (r.reporte["genericos_con_indice"] == 1).all()
+    assert (r.reporte["ponderador_esperado"] == 10.0).all()
+
+
 # ---------- dato real ----------
 
 _DATA_DIR = Path(__file__).parent.parent.parent.parent.parent / "data" / "inputs"

@@ -135,6 +135,8 @@ inpc   = rep.rebasar(hist_m, "Jul 2018")
 
 `empalmar([pre_r, inpc_pos])` no requiere `forzar=True` porque `pre_r.periodo_referencia = "2Q Jul 2018"` coincide con la frontera entre ambos bloques.
 
+Acá `i2018` se calcula **sin** `referencia` a propósito: nace en su escala propia y el bloque anterior se rebasa a mano para encontrarlo. Pasarle `referencia=i2013` no es equivalente ni inocuo — el tramo 2018 nacería ya en la escala de la cadena 2010-2013 (medido: `2Q Jul 2018` valdría `133.11` en vez de `100.00`) y entonces sobraría el `rebasar` de `pre`. Ese es el camino que toma `calcular_historia()` internamente. Los dos llegan al mismo histórico —comprobado sobre las cuatro canastas reales: 367 periodos, diferencia máxima `2.8e-14`— pero no se pueden mezclar.
+
 `rebasar` acepta formato quincenal o mensual según la periodicidad del resultado — la restricción de solo quincenal aplica únicamente a `calcular_historia`. `rebasar(hist_m, "Jul 2018")` es correcto porque `hist_m` es mensual; hace `promedio(1Q Jul 2018, 2Q Jul 2018) = 100`. Es la misma convención que usa el INEGI en sus publicaciones mensuales.
 
 **Errores posibles en `calcular_indice`:**
@@ -142,9 +144,11 @@ inpc   = rep.rebasar(hist_m, "Jul 2018")
 | condición | error |
 |---|---|
 | `referencia=None` para versión encadenada (2013 o 2024) | `InvarianteViolado` |
-| sin genéricos con correspondencia canasta↔serie | `CorrespondenciaInsuficiente` |
+| a la serie le falta algún genérico que el `tipo` necesita | `ErrorCalculo` |
 | canasta sin genéricos utilizables para el `tipo` | `CanastaSinGenericos` |
 | `tipo` no reconocido | `InvarianteViolado` |
+
+La cobertura se exige **por tipo**, no sobre la canasta entera: con `tipo="INPC"` hacen falta todos los genéricos; con una clasificación, solo los que tienen valor en esa columna. Faltar uno detiene el cálculo — no se calcula con la intersección.
 
 **Errores posibles en `empalmar`:**
 
@@ -442,9 +446,9 @@ El DataFrame devuelto tiene índice `periodo` (`PeriodoMensual` o `PeriodoQuince
 | `ColumnasMinFaltantes` | columnas requeridas ausentes en canasta |
 | `OrientacionNoDetectable` | CSV de serie sin orientación válida |
 | `SerieVacia` | ninguna fila útil tras normalización |
-| `CorrespondenciaInsuficiente` | sin genéricos comunes canasta↔serie |
 | `CanastaSinGenericos` | canasta sin genéricos utilizables para el `tipo` |
 | `PonderadorFaltante` | ponderador faltante al calcular |
+| `ErrorCalculo` | a la serie le falta un genérico que el `tipo` necesita, o el cálculo no puede completarse |
 | `PeriodoNoInterpretable` | string de periodo con formato inválido |
 | `InvarianteViolado` | contrato de dominio roto (ver función específica) |
 | `ErrorConfiguracion` | configuración inválida o faltante |

@@ -12,6 +12,7 @@ from replica_inpc.dominio.calculo.base import (
     _laspeyres_por_grupo,
     _recortar_series_fecha,
     _rellenar_dato_serie_faltante,
+    _validar_serie_cubre_grupo,
 )
 from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -100,6 +101,7 @@ class _LaspeyresEncadenadoBase(CalculadorBase):
         else:
             cat_por_gen = canasta.df[tipo].dropna()
         gens = cat_por_gen.index
+        _validar_serie_cubre_grupo(gens, serie, canasta.version, tipo)
 
         df_s_raw = _recortar_series_fecha(serie.df.loc[gens], canasta.version)
         df_s, df_corr_relleno, _ = _rellenar_dato_serie_faltante(df_s_raw, canasta.version, tipo)

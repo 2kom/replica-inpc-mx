@@ -25,7 +25,9 @@ El proyecto requiere dos archivos CSV:
 
 Los nombres de los genéricos en la canasta y en las series provienen de fuentes distintas y pueden tener diferencias tipográficas (tildes, espacios, mayúsculas). El proyecto normaliza ambos conjuntos antes de emparejarlos: elimina tildes, convierte a minúsculas y colapsa espacios múltiples.
 
-Solo los genéricos que aparecen en ambas fuentes participan en el cálculo. Los genéricos sin correspondencia se reportan en el diagnóstico de faltantes.
+La correspondencia tiene que ser completa para los genéricos que el cálculo necesita: si a la serie le falta alguno, el cálculo se detiene con `ErrorCalculo` en vez de seguir con la intersección. Cuáles hacen falta depende del tipo — con `"INPC"` son todos los de la canasta; con una clasificación, solo los que tienen valor en esa columna, porque los demás quedan fuera del cálculo de todas formas. A la serie sí le pueden sobrar genéricos.
+
+Esto es distinto de que a un genérico presente le falte el **dato** de un periodo: eso no detiene nada. Se imputa con bfill/ffill, el periodo queda marcado `rellenado` o `sin_datos`, y el faltante se anota en el diagnóstico.
 
 ## Cálculo del INPC general con canastas directas
 

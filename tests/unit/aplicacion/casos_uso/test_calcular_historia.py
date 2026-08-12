@@ -7,14 +7,14 @@ import pandas as pd
 import pytest
 
 from replica_inpc.aplicacion.casos_uso.calcular_historia import (
-    _BASE_ENCADENADA,
+    BASE_ENCADENADA,
     CalcularHistoria,
-    _referencias_normalizadas,
+    referencias_normalizadas,
 )
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.calculo.laspeyres_encadenado import _LaspeyresEncadenadoBase
 from replica_inpc.dominio.correspondencia_canastas import ORDEN_VERSIONES, RENOMBRES_INDICES
-from replica_inpc.dominio.errores import InvarianteViolado
+from replica_inpc.dominio.errores import ErrorCalculo, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.serie import SerieNormalizada
@@ -162,11 +162,11 @@ def test_tipo_sin_normalizar_se_rechaza_antes_de_leer_insumos() -> None:
         historia.ejecutar([(2018, _RC18, _RS18)], "inpc", "quincenal", PeriodoQuincenal(2018, 7, 2))
 
 
-# -- coherencia de _BASE_ENCADENADA con el resto del sistema -------------------
+# -- coherencia de BASE_ENCADENADA con el resto del sistema -------------------
 
 
 def test_base_encadenada_coincide_con_el_calculador_de_cada_version() -> None:
-    # `_BASE_ENCADENADA` repite, en forma de dato, algo que `estrategia.para_canasta`
+    # `BASE_ENCADENADA` repite, en forma de dato, algo que `estrategia.para_canasta`
     # ya decide: qué versiones son encadenadas. Agregar una canasta obliga a tocar
     # los dos sitios, y nada avisaba si se desincronizaban. Esto avisa.
     encadenadas_segun_estrategia = {
@@ -174,13 +174,13 @@ def test_base_encadenada_coincide_con_el_calculador_de_cada_version() -> None:
         for v in ORDEN_VERSIONES
         if isinstance(para_canasta(_canasta(v, encadenado=True)), _LaspeyresEncadenadoBase)
     }
-    assert encadenadas_segun_estrategia == set(_BASE_ENCADENADA)
+    assert encadenadas_segun_estrategia == set(BASE_ENCADENADA)
 
 
 def test_base_encadenada_apunta_a_la_version_inmediatamente_anterior() -> None:
     # La otra mitad del dato: con qué versión empalma cada encadenada. Siempre es
     # su vecina previa en ORDEN_VERSIONES, nunca una arbitraria.
-    for encadenada, base in _BASE_ENCADENADA.items():
+    for encadenada, base in BASE_ENCADENADA.items():
         i = ORDEN_VERSIONES.index(cast(VersionCanasta, encadenada))
         assert i > 0, f"{encadenada} es la primera versión; no puede ser encadenada"
         assert ORDEN_VERSIONES[i - 1] == base
@@ -217,7 +217,23 @@ def test_periodo_referencia_inexistente_falla() -> None:
         historia.ejecutar([(2018, _RC18, _RS18)], "INPC", "quincenal", PeriodoQuincenal(2099, 1, 1))
 
 
-# -- _referencias_normalizadas -------------------------------------------------
+def test_serie_sin_generico_de_la_canasta_falla_con_error_de_dominio() -> None:
+    """Regresión: el flujo automático entra al calculador sin pasar por `api/`.
+
+    Una guardia puesta solo en `api/indices.py` dejaba escapar por acá un
+    `KeyError: "['b'] not in index"` crudo de pandas.
+    """
+    canastas = {_RC18: _canasta(2018, encadenado=False)}
+    serie_incompleta = SerieNormalizada(_serie(_P18, [100.0, 110.0], [100.0, 110.0]).df.loc[["a"]])
+    historia = CalcularHistoria(
+        _LectorCanastaFake(canastas), _LectorSeriesFake({_RS18: serie_incompleta})
+    )
+
+    with pytest.raises(ErrorCalculo, match="versiones distintas"):
+        historia.ejecutar([(2018, _RC18, _RS18)], "INPC", "quincenal", PeriodoQuincenal(2018, 7, 2))
+
+
+# -- referencias_normalizadas -------------------------------------------------
 
 
 def test_referencias_inpc_identidad() -> None:
@@ -237,7 +253,7 @@ def test_referencias_inpc_identidad() -> None:
         pd.DataFrame(),
         pd.DataFrame(),
     )
-    refs = _referencias_normalizadas(prev, "INPC", 2018, 2024)
+    refs = referencias_normalizadas(prev, "INPC", 2018, 2024)
     assert refs == {"INPC": pytest.approx(123.4)}
 
 
@@ -261,5 +277,5 @@ def test_referencias_normaliza_clave_renombrada() -> None:
         pd.DataFrame(),
         pd.DataFrame(),
     )
-    refs = _referencias_normalizadas(prev, tipo, 2018, 2024)
+    refs = referencias_normalizadas(prev, tipo, 2018, 2024)
     assert refs == {new: pytest.approx(55.5)}

@@ -14,6 +14,24 @@ from replica_inpc.dominio.periodos import PeriodoQuincenal
 from replica_inpc.dominio.tipos import RANGOS_CANASTAS, VersionCanasta
 
 
+def _validar_serie_cubre_grupo(
+    genericos_del_grupo: pd.Index,
+    serie: SerieNormalizada,
+    version: VersionCanasta,
+    tipo: str,
+) -> None:
+    """Rechaza una serie a la que le falte algún genérico del grupo que se va a calcular."""
+    faltantes = sorted(str(g) for g in genericos_del_grupo.difference(serie.df.index))
+    if not faltantes:
+        return
+    muestra = ", ".join(faltantes[:3])
+    raise ErrorCalculo(
+        f"la serie no tiene {len(faltantes)} de los {len(genericos_del_grupo)} genéricos "
+        f"que '{tipo}' necesita de la canasta {version} (por ejemplo: {muestra}). Suele "
+        f"significar que la canasta y la serie son de versiones distintas."
+    )
+
+
 def _rellenar_dato_serie_faltante(
     df_serie: pd.DataFrame,
     version: VersionCanasta,

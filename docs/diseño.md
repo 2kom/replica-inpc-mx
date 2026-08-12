@@ -1945,7 +1945,7 @@ def calcular_indice(
 | `canasta` | `CanastaCanonica` | canasta ya cargada; versión determinada por el objeto |
 | `serie` | `SerieNormalizada` | serie ya cargada; misma versión que `canasta` |
 | `tipo` | `str` | tipo de índice a calcular; se normaliza con `tipo.upper()` al inicio de la función; valores válidos en `TIPO_INPC ∪ COLUMNAS_CLASIFICACION` (ej. `"INPC"`, `"INFLACION COMPONENTE"`, `"DURABILIDAD"`) |
-| `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; requerido para versiones encadenadas (2013 → base 2010, 2024 → base 2018); `None` para versiones base (2010, 2018) |
+| `referencia` | `ResultadoIndice \| None` | resultado del tramo anterior; obligatorio para versiones encadenadas (2013 → base 2010, 2024 → base 2018); **opcional pero no inerte** en versiones base (2010, 2018) |
 
 Devuelve `ResultadoIndice` para el tramo de la canasta; `periodo_referencia = None`.
 
@@ -1954,8 +1954,18 @@ Devuelve `ResultadoIndice` para el tramo de la canasta; `periodo_referencia = No
 | `canasta` sin genéricos utilizables | `CanastaSinGenericos` |
 | ponderador faltante para el cálculo | `PonderadorFaltante` |
 | `referencia=None` cuando la versión requiere encadenamiento | `InvarianteViolado` |
+| a `serie` le falta algún genérico que `tipo` necesita | `ErrorCalculo` |
 | `tipo` no en `TIPO_INPC ∪ COLUMNAS_CLASIFICACION` | `InvarianteViolado` |
 | `tipo in COLUMNAS_CLASIFICACION` con columna 100% vacía en `canasta.df` | `InvarianteViolado` |
+
+**`referencia` en versiones base afecta el número.** `LaspeyresDirecto` consume `referencia_empalme_por_indice` igual que los encadenados: con referencia, el tramo se reexpresa en la escala del resultado anterior; sin ella, se ancla en 100 en su propio periodo de traslape. Medido sobre datos reales el 2026-08-12, canasta 2018 con y sin referencia de la cadena 2010-2013: las 145 filas cambian, diferencia máxima **45.06**, y `2Q Jul 2018` pasa de `100.000000` a `133.111710`. `CalcularHistoria.ejecutar` cuenta con ese comportamiento —pasa referencias a toda versión tras la primera, 2018 incluida— y por eso no necesita rebasar el bloque previo por separado. El flujo manual de `docs/uso.md` toma el otro camino: calcula cada bloque en su escala propia y rebasa a mano antes de empalmar. Ambos llegan al mismo sitio; lo que no es cierto es que el argumento se ignore.
+
+**Cobertura de la serie.** El cruce de canasta y serie de versiones distintas salía como `KeyError` crudo de pandas (`"['alfombras y otros materiales para pisos', ...] not in index"`), incumpliendo la convención de que todo error hacia el usuario es `ReplicaInpcError`. Ahora `base._validar_serie_cubre_grupo` lo convierte en `ErrorCalculo`.
+
+La guardia vive en `dominio/calculo/base.py` y la llaman los dos calculadores —`laspeyres_directo.py` y `laspeyres_encadenado.py`— justo después de resolver el grupo. Las dos decisiones importan:
+
+- **En el dominio, no en `api/`.** `CalcularHistoria.ejecutar` entra directo a `para_canasta(...).calcular(...)`: una guardia puesta solo en la fachada dejaba escapar el `KeyError` por el flujo automático, que es la ruta principal.
+- **Sobre el grupo, no sobre la canasta entera.** Exige `genericos_del_grupo ⊆ serie.df.index`, y `genericos_del_grupo` ya trae aplicado el `dropna()` del tipo. Comprobar la canasta completa rechazaría cálculos válidos: con `tipo="DURABILIDAD"` sobre una canasta donde solo un genérico tiene valor en esa columna, el calculador produce el índice correcto usando únicamente ese genérico.
 
 Una canasta a la vez; historia completa = varias llamadas + `empalmar`.
 
