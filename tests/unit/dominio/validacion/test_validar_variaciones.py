@@ -170,3 +170,37 @@ def test_clase_no_mapeable_falla() -> None:
     resultado = _rv([(_P1, 1.0, "ok")], clase="periodica_bimestral")
     with pytest.raises(ErrorConfiguracion):
         validar_variaciones(resultado, _INEGI)
+
+
+@pytest.mark.parametrize("tolerancia_pp", [-1.0, float("nan"), float("inf")])
+def test_tolerancia_no_finita_o_negativa_falla(tolerancia_pp: float) -> None:
+    with pytest.raises(InvarianteViolado):
+        validar_variaciones(_rv(_FILAS), _INEGI, tolerancia_pp=tolerancia_pp)
+
+
+@pytest.mark.parametrize(
+    "tolerancia_pp, esperado",
+    [(0.5, "ok"), (0.4999, "diferencia_detectada")],
+    ids=["error_igual_a_tolerancia", "error_apenas_mayor"],
+)
+def test_frontera_de_la_tolerancia_es_inclusiva(tolerancia_pp: float, esperado: str) -> None:
+    validacion = validar_variaciones(
+        _rv([(_P1, 1.0, "ok")]),
+        {"INPC": {_P1: 1.5}},
+        tolerancia_pp=tolerancia_pp,
+    )
+    assert validacion.resultado.largo.loc[(_P1, "INPC"), "estado_validacion"] == esperado  # type: ignore[index]
+
+
+# -- propagación del valor oficial al largo ------------------------------------
+
+
+def test_valor_oficial_y_error_llegan_al_largo() -> None:
+    # El largo se arma reindexando el reporte; sin esto solo se afirmaba que
+    # estado_validacion cruzaba, no el valor de INEGI ni el error.
+    largo = _validacion().resultado.largo
+    assert largo.loc[(_P2, "INPC"), "variacion_inegi_pp"] == pytest.approx(2.0)  # type: ignore[index]
+    assert largo.loc[(_P2, "INPC"), "error_absoluto_pp"] == pytest.approx(1.0)  # type: ignore[index]
+    # _P4 está en el mapa con None: INEGI cubre el periodo pero no publicó valor.
+    assert pd.isna(largo.loc[(_P4, "INPC"), "variacion_inegi_pp"])  # type: ignore[index]
+    assert pd.isna(largo.loc[(_P4, "INPC"), "error_absoluto_pp"])  # type: ignore[index]

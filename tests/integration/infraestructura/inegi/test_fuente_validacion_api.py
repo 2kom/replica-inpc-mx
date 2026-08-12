@@ -88,13 +88,22 @@ class TestRespuestaQuincenal:
         assert resultado["INPC"][_P1] == pytest.approx(145.446)
         assert resultado["INPC"][_P2] == pytest.approx(144.551)
 
-    def test_periodo_no_en_api_devuelve_none(self, mocker):
+    @pytest.mark.parametrize(
+        "fuera_de_rango",
+        [PeriodoQuincenal(2000, 1, 1), PeriodoQuincenal(2030, 1, 1)],
+        ids=["anterior_al_historico", "posterior_al_historico"],
+    )
+    def test_periodo_fuera_del_historico_se_omite(self, mocker, fuera_de_rango):
+        # Clave ausente = fuera_rango_inegi; None = INEGI cubre el periodo pero no
+        # publicó valor. Un periodo fuera del histórico por cualquiera de los dos
+        # extremos es lo primero, no lo segundo — ver el esquema del puerto.
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="INPC")
-        resultado = fuente.obtener_indices([PeriodoQuincenal(2000, 1, 1)])
+        resultado = fuente.obtener_indices([fuera_de_rango, _P1])
 
-        assert resultado["INPC"][PeriodoQuincenal(2000, 1, 1)] is None
+        assert fuera_de_rango not in resultado["INPC"]
+        assert resultado["INPC"][_P1] == pytest.approx(145.446)
 
     def test_obs_value_null_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_QUINCENAL_CON_NULL))
@@ -116,13 +125,19 @@ class TestRespuestaMensual:
         assert resultado["INPC"][_PM1] == pytest.approx(145.200)
         assert resultado["INPC"][_PM2] == pytest.approx(144.300)
 
-    def test_periodo_mensual_no_en_api_devuelve_none(self, mocker):
+    @pytest.mark.parametrize(
+        "fuera_de_rango",
+        [PeriodoMensual(2000, 1), PeriodoMensual(2030, 1)],
+        ids=["anterior_al_historico", "posterior_al_historico"],
+    )
+    def test_periodo_mensual_fuera_del_historico_se_omite(self, mocker, fuera_de_rango):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
 
         fuente = FuenteValidacionApi(token="token", tipo="INPC")
-        resultado = fuente.obtener_indices([PeriodoMensual(2000, 1)])
+        resultado = fuente.obtener_indices([fuera_de_rango, _PM1])
 
-        assert resultado["INPC"][PeriodoMensual(2000, 1)] is None
+        assert fuera_de_rango not in resultado["INPC"]
+        assert resultado["INPC"][_PM1] == pytest.approx(145.200)
 
     def test_obs_value_null_mensual_devuelve_none(self, mocker):
         mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL_CON_NULL))
@@ -420,6 +435,49 @@ class TestObtenerVariacionesQuincenal:
             "agropecuarios",
             "energeticos y tarifas autorizadas por el gobierno",
         }
+
+
+class TestRecorteHistoricoDerivados:
+    @pytest.mark.parametrize(
+        "metodo, extra",
+        [
+            ("obtener_variaciones", ("periodica",)),
+            ("obtener_incidencias", ("periodica",)),
+        ],
+    )
+    def test_recorta_ambos_extremos_y_conserva_periodos_interiores(self, mocker, metodo, extra):
+        mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))
+        anterior = PeriodoMensual(2000, 1)
+        posterior = PeriodoMensual(2030, 1)
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+
+        resultado = getattr(fuente, metodo)(
+            [anterior, _PM2, _PM1, posterior],
+            *extra,
+        )["INPC"]
+
+        assert list(resultado) == [_PM2, _PM1]
+        assert resultado[_PM2] == pytest.approx(144.300)
+        assert resultado[_PM1] == pytest.approx(145.200)
+
+    @pytest.mark.parametrize(
+        "metodo, extra",
+        [
+            ("obtener_variaciones", ("periodica",)),
+            ("obtener_incidencias", ("periodica",)),
+        ],
+    )
+    def test_periodo_interior_sin_publicacion_conserva_none(self, mocker, metodo, extra):
+        mocker.patch(
+            "requests.get",
+            return_value=_mock_resp(200, _RESPUESTA_MENSUAL_CON_NULL),
+        )
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+
+        resultado = getattr(fuente, metodo)([_PM2, _PM1], *extra)["INPC"]
+
+        assert resultado[_PM2] == pytest.approx(144.300)
+        assert resultado[_PM1] is None
 
 
 class TestPeriodosVacios:

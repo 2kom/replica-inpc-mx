@@ -1627,14 +1627,20 @@ Solo admite `resultado.manifiesto.tipo ∈ INDICES_VALIDABLES`. Solo `clase_inci
 
 **Estados de validación y rollup**
 
-| `estado_validacion` | Cuando |
-| --- | --- |
-| `ok` | error ≤ tolerancia |
-| `diferencia_detectada` | error > tolerancia y `estado_calculo ∈ {ok, rellenado}` |
-| `diferencia_por_parcial` | error > tolerancia y `estado_calculo = parcial` |
-| `sin_calculo` | `estado_calculo ∈ {sin_datos, fallida}` — sin valor replicado |
-| `fuera_rango_inegi` | periodo no cubierto por la fuente |
-| `no_disponible` | INEGI no publicó valor para ese `(periodo, indice)` |
+La clasificación es una cascada, no un conjunto de reglas independientes: se evalúa **en el orden de la tabla** y la primera que aplica gana. El orden importa porque las condiciones se solapan — una fila `sin_datos` cuyo periodo INEGI no cubre sale `fuera_rango_inegi`, no `sin_calculo`, porque la ausencia del lado oficial se decide antes de mirar el estado del cálculo.
+
+| # | `estado_validacion` | Cuando |
+| --- | --- | --- |
+| 1 | `fuera_rango_inegi` | el periodo no está en el mapa de la fuente: fuera del histórico publicado por cualquiera de los dos extremos |
+| 2 | `no_disponible` | el periodo está en el mapa con valor `None`: INEGI lo cubre pero no publicó valor |
+| 3 | `sin_calculo` | hay valor oficial pero `estado_calculo ∈ {sin_datos, fallida}` — no hay valor replicado que comparar |
+| 4 | `ok` | error ≤ tolerancia (frontera **inclusiva**) |
+| 5 | `diferencia_por_parcial` | error > tolerancia y `estado_calculo = parcial` |
+| 6 | `diferencia_detectada` | error > tolerancia y `estado_calculo ∈ {ok, rellenado}` |
+
+`error_absoluto[_pp]` queda en `NaN` en los casos 1, 2 y 3: sin ambos operandos no hay diferencia que reportar.
+
+La `tolerancia` debe ser un número finito y no negativo; `verificar_tolerancia` (en `validacion/_comun.py`) rechaza lo demás desde los tres comparadores. Una tolerancia negativa o `NaN` no fallaría sola — haría falso el caso 4 en toda fila y reportaría series idénticas como `diferencia_detectada` con error `0.0`.
 
 `rollup_global` por prioridad descendente: `diferencia_detectada` > `diferencia_por_parcial` > `sin_calculo` > `no_disponible` (solo cuando no hay ninguna fila comparable) > `ok`. `fuera_rango_inegi` nunca afecta el estado global.
 
@@ -2817,7 +2823,7 @@ Todos los métodos devuelven `dict[str, dict[Periodo, float | None]]`:
 | interior | `Periodo` | el periodo consultado |
 | interior valor | `float` | valor publicado por INEGI |
 | interior valor | `None` | INEGI tiene el periodo en rango pero sin dato (`no_disponible`) |
-| interior ausente | — | periodo antes del inicio del histórico INEGI (`fuera_rango_inegi`) |
+| interior ausente | — | periodo fuera del histórico INEGI por cualquiera de sus dos extremos (`fuera_rango_inegi`) |
 
 **Claves de retorno por tipo**
 

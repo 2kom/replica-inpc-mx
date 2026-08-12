@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import numpy as np
 import pandas as pd
 
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
 from replica_inpc.dominio.modelos.validacion import ValidacionIndice
-from replica_inpc.dominio.tipos import INDICES_VALIDABLES, VersionCanasta
+from replica_inpc.dominio.tipos import INDICES_VALIDABLES
 from replica_inpc.dominio.validacion._comun import (
     PeriodoT,
     SeriesInegi,
     contar,
     rollup_global,
+    verificar_tolerancia,
 )
 
 _COLS_DIAGNOSTICO = [
@@ -50,6 +49,7 @@ def validar_indices(
         raise InvarianteViolado(
             f"validar_indices: tipo(s) {sorted(invalidos)} fuera de INDICES_VALIDABLES."
         )
+    verificar_tolerancia(tolerancia, "validar_indices")
 
     largo = resultado.resultado.largo
 
@@ -121,20 +121,33 @@ def _construir_diagnostico(largo_val: pd.DataFrame) -> pd.DataFrame:
 
 
 def _construir_resumen(largo_val: pd.DataFrame, resultado: ResultadoIndice) -> pd.DataFrame:
+    # `version` y `tipo` salen del manifiesto, que ya los tiene tipados; el índice
+    # del `.resumen` es el string "version:tipo", un formato de presentación para
+    # el notebook (diseño.md §5.7), y parsearlo obligaba a reconstruir por texto
+    # ese mismo dato. Acá el string se CONSTRUYE para buscar la fila, nunca se
+    # parsea: un emparejamiento posicional (zip) cruzaría los datos en silencio si
+    # `.resumen` cambiara de orden, mientras que un `.loc` con clave equivocada
+    # levanta KeyError. Una misma clave puede aparecer varias veces cuando se
+    # empalman bloques de la misma versión; `ResultadoIndice.resumen` calcula
+    # esas filas con la misma máscara, de modo que los campos usados aquí son
+    # idénticos. En ese caso se toma una fila escalar y se conserva una salida
+    # por cada manifiesto.
     base = resultado.resumen
     filas = []
-    for idx, fila in base.iterrows():
-        version_str, tipo = cast(str, idx).split(":", 1)
-        version = cast(VersionCanasta, int(version_str))
-        mascara = (largo_val["version"] == version) & (largo_val["tipo"] == tipo)
+    for manifiesto in resultado.manifiesto:
+        fila_base = base.loc[f"{manifiesto.version}:{manifiesto.tipo}"]
+        fila = fila_base.iloc[0] if isinstance(fila_base, pd.DataFrame) else fila_base
+        mascara = (largo_val["version"] == manifiesto.version) & (
+            largo_val["tipo"] == manifiesto.tipo
+        )
         sub = largo_val[mascara]
         conteos = contar(sub["estado_validacion"])
         comparables = conteos["n_comparables"]
         error_max = float(sub["error_absoluto"].max()) if comparables > 0 else float("nan")
         filas.append(
             {
-                "version": version,
-                "tipo": tipo,
+                "version": manifiesto.version,
+                "tipo": manifiesto.tipo,
                 "estado_calculo": fila["estado_calculo"],
                 "periodo_inicio": fila["periodo_inicio"],
                 "periodo_fin": fila["periodo_fin"],

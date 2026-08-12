@@ -16,6 +16,7 @@ from replica_inpc.dominio.validacion._comun import (
     SeriesInegi,
     contar,
     rollup_global,
+    verificar_tolerancia,
 )
 
 #: Valores que acepta `FuenteValidacion.obtener_incidencias`.
@@ -74,6 +75,7 @@ def validar_incidencias(
     # Rechaza la clase aunque el llamador ya la haya validado: protege al
     # comparador cuando se lo invoca directo, sin pasar por el caso de uso.
     resolver_tipo_incidencia_inegi(resultado.manifiesto.clase)
+    verificar_tolerancia(tolerancia_pp, "validar_incidencias")
 
     largo = resultado.resultado.largo
     # El .reporte heredado incluye filas no computables ausentes del largo;

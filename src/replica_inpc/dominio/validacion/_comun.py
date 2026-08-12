@@ -9,11 +9,13 @@ en cada una (los esquemas divergen).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from typing import TypeAlias, TypeVar
 
 import pandas as pd
 
+from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.periodos import PeriodoMensual, PeriodoQuincenal
 
 Periodo: TypeAlias = PeriodoQuincenal | PeriodoMensual
@@ -35,6 +37,25 @@ SeriesInegi: TypeAlias = Mapping[str, Mapping[PeriodoT, float | None]]
 
 # Estados que cuentan como comparación realizada contra INEGI.
 _COMPARABLES = frozenset({"ok", "diferencia_detectada", "diferencia_por_parcial"})
+
+
+def verificar_tolerancia(tolerancia: float, metodo: str) -> None:
+    """Exige una tolerancia finita y no negativa.
+
+    Sin esta guardia una tolerancia negativa o `NaN` no falla: hace que
+    `error <= tolerancia` sea falso en toda fila, y dos series idénticas se
+    reportan como `diferencia_detectada` con `error_absoluto = 0.0`. El valor
+    llega desde `rep.tolerancia_indice`/`rep.tolerancia_derivados`, que son
+    superficie pública y configurable, así que la comprobación vive acá —
+    protege también a quien invoque el comparador directo.
+
+    Raises:
+        InvarianteViolado: Si `tolerancia` es negativa, `NaN` o infinita.
+    """
+    if math.isnan(tolerancia) or math.isinf(tolerancia) or tolerancia < 0:
+        raise InvarianteViolado(
+            f"{metodo}: la tolerancia debe ser un número finito >= 0; se recibió {tolerancia}."
+        )
 
 
 def rollup_global(estados: Iterable[str]) -> str:

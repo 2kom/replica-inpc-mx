@@ -30,7 +30,8 @@ class FuenteValidacion(Protocol):
     - clave interior: el `Periodo` consultado.
     - valor `float`: valor publicado por INEGI.
     - valor `None`: INEGI tiene el periodo en rango pero sin dato.
-    - periodo ausente del dict interior: anterior al inicio del histórico INEGI.
+    - periodo ausente del dict interior: fuera del histórico INEGI por cualquiera
+      de sus dos extremos.
 
     Errores comunes a los tres métodos:
 

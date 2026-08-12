@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 import requests  # type: ignore
 
@@ -206,6 +206,24 @@ def _rango_completo(historico: dict[_Periodo, float | None]) -> list[_Periodo]:
     ]
 
 
+def _recortar_al_historico(
+    periodos: list[_Periodo], historico: dict[_Periodo, float | None]
+) -> dict[_Periodo, float | None]:
+    """Deja solo los periodos que caen dentro del histórico publicado.
+
+    La ausencia de una clave significa `fuera_rango_inegi` para el comparador, y
+    `None` significa `no_disponible` (INEGI cubre el periodo pero no publicó
+    valor). Recortar por AMBOS extremos es lo que mantiene esa distinción: un
+    periodo posterior al último publicado —el caso corriente cuando la réplica
+    llega más lejos que la publicación oficial— no es un hueco de la serie, es
+    territorio que INEGI todavía no cubre.
+    """
+    if not historico:
+        return {}
+    min_p, max_p = min(historico), max(historico)
+    return {p: historico.get(p) for p in periodos if min_p <= p <= max_p}  # type: ignore[operator]
+
+
 def _exigir_periodos(periodos: list[_Periodo], metodo: str) -> None:
     """Rechaza una lista de periodos vacía antes de tocar caché o red."""
     if not periodos:
@@ -271,7 +289,7 @@ class FuenteValidacionApi:
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)
             historico = self._cache[indicador]
-            resultado[nombre] = {p: historico.get(p) for p in periodos}
+            resultado[nombre] = _recortar_al_historico(periodos, historico)
         return resultado
 
     def obtener_variaciones(
@@ -283,7 +301,8 @@ class FuenteValidacionApi:
 
         Detecta automáticamente si los periodos son mensuales o quincenales y
         usa el mapa de indicadores correspondiente. Solo incluye en el resultado
-        periodos >= min(historico) — ausencia de clave indica fuera_de_rango_inegi.
+        periodos entre `min(historico)` y `max(historico)`, inclusive; una clave
+        ausente indica `fuera_rango_inegi`.
 
         Raises:
             InvarianteViolado: Si `periodos` está vacío.
@@ -307,11 +326,7 @@ class FuenteValidacionApi:
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)
             historico = self._cache[indicador]
-            if historico:
-                min_p = min(historico.keys())
-                resultado[nombre] = {p: historico.get(p) for p in periodos if p >= min_p}  # type: ignore[operator]
-            else:
-                resultado[nombre] = {}
+            resultado[nombre] = _recortar_al_historico(periodos, historico)
         return resultado
 
     def obtener_incidencias(
@@ -321,8 +336,9 @@ class FuenteValidacionApi:
     ) -> dict[str, dict[PeriodoMensual, float | None]]:
         """Devuelve series de incidencia publicadas por INEGI.
 
-        Solo soporta PeriodoMensual e incidencia interanual. Ausencia de clave
-        en el resultado indica fuera_de_rango_inegi (no publicado por INEGI aún).
+        Solo soporta `PeriodoMensual` e incidencia periódica. Una clave ausente
+        indica `fuera_rango_inegi`: el periodo cae fuera del histórico publicado
+        por cualquiera de sus dos extremos.
 
         Raises:
             InvarianteViolado: Si `periodos` está vacío.
@@ -345,15 +361,8 @@ class FuenteValidacionApi:
             if indicador not in self._cache:
                 self._cache[indicador] = self._fetch(indicador)
             historico = self._cache[indicador]
-            if historico:
-                min_p = min(historico.keys())
-                resultado[nombre] = {
-                    p: historico.get(p)
-                    for p in periodos
-                    if p >= min_p  # type: ignore[operator]
-                }
-            else:
-                resultado[nombre] = {}
+            recortado = _recortar_al_historico(list(periodos), historico)
+            resultado[nombre] = cast(dict[PeriodoMensual, float | None], recortado)
         return resultado
 
     def historico_indices(

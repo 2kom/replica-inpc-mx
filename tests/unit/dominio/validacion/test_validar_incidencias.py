@@ -170,3 +170,34 @@ def test_clase_no_mapeable_falla() -> None:
     resultado = _ri([(_P1, 1.0, "ok")], clase="periodica_quincenal")
     with pytest.raises(ErrorConfiguracion):
         validar_incidencias(resultado, _INEGI)
+
+
+@pytest.mark.parametrize("tolerancia_pp", [-1.0, float("nan"), float("inf")])
+def test_tolerancia_no_finita_o_negativa_falla(tolerancia_pp: float) -> None:
+    with pytest.raises(InvarianteViolado):
+        validar_incidencias(_ri(_FILAS), _INEGI, tolerancia_pp=tolerancia_pp)
+
+
+@pytest.mark.parametrize(
+    "tolerancia_pp, esperado",
+    [(0.5, "ok"), (0.4999, "diferencia_detectada")],
+    ids=["error_igual_a_tolerancia", "error_apenas_mayor"],
+)
+def test_frontera_de_la_tolerancia_es_inclusiva(tolerancia_pp: float, esperado: str) -> None:
+    validacion = validar_incidencias(
+        _ri([(_P1, 1.0, "ok")]),
+        {"subyacente": {_P1: 1.5}},
+        tolerancia_pp=tolerancia_pp,
+    )
+    assert validacion.resultado.largo.loc[(_P1, "subyacente"), "estado_validacion"] == esperado  # type: ignore[index]
+
+
+# -- propagación del valor oficial al largo ------------------------------------
+
+
+def test_valor_oficial_y_error_llegan_al_largo() -> None:
+    largo = _validacion().resultado.largo
+    assert largo.loc[(_P2, "subyacente"), "incidencia_inegi_pp"] == pytest.approx(2.0)  # type: ignore[index]
+    assert largo.loc[(_P2, "subyacente"), "error_absoluto_pp"] == pytest.approx(1.0)  # type: ignore[index]
+    assert pd.isna(largo.loc[(_P4, "subyacente"), "incidencia_inegi_pp"])  # type: ignore[index]
+    assert pd.isna(largo.loc[(_P4, "subyacente"), "error_absoluto_pp"])  # type: ignore[index]
