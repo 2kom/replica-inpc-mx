@@ -24,9 +24,18 @@ class ResultadoIndice(Resultado):
         df_diagnostico: DataFrame plano, una fila por celda `(periodo, generico)`
             sin dato — esquema `DiagnosticoFaltantes`, no comparte índice con
             `df_resultado`.
-        periodo_referencia: Periodo en el que los valores del índice son
-            `valor_base` (default 100). `None` = resultado en escala natural
-            del cálculo; lo setea `rebasar()`.
+        periodo_referencia: Ancla de escala — el periodo cuyo valor se fijó en
+            `valor_base` (default 100) al rebasar, y respecto del cual está
+            expresada toda la serie. `None` = resultado en escala natural del
+            cálculo; lo setea `rebasar()`.
+
+            No es necesariamente un periodo presente en el índice: `a_mensual`
+            lo propaga sin convertir, así que una serie mensual rebasada en
+            quincenal conserva la quincena como ancla, igual que el INPC mensual
+            publicado conserva la base "2Q jul 2018 = 100". En ese caso no se
+            garantiza que el mes que contiene al ancla valga 100 —es el promedio
+            de sus dos quincenas—, y eso es correcto: el ancla describe la
+            escala, no promete un valor en el eje.
         frontera: Anclas de junta de canasta para reconstrucción cross-canasta
             mensual. `None` en quincenal y en resultados directos sin
             junta; lo crea `a_mensual`.

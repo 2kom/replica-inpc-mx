@@ -96,17 +96,17 @@ _INSUMOS_3: list[tuple[VersionCanasta, Path, Path]] = [
 
 def test_una_version_directo() -> None:
     historia = _historia_3_versiones()
-    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoQuincenal(2018, 7, 2), "quincenal")
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", "quincenal", PeriodoQuincenal(2018, 7, 2))
     assert isinstance(r, ResultadoIndice)
     assert r.periodo_referencia == PeriodoQuincenal(2018, 7, 2)
     assert {m.version for m in r.manifiesto} == {2018}
 
 
 def test_tres_versiones_contiguas_fold_left() -> None:
-    # calcular_historia encadena versiones vía fold-left con forzar=True;
-    # cada par consecutivo comparte exactamente 1 periodo (frontera).
+    # calcular_historia encadena versiones vía fold-left; cada par consecutivo
+    # comparte exactamente 1 periodo (frontera).
     historia = _historia_3_versiones()
-    r = historia.ejecutar(_INSUMOS_3, "INPC", PeriodoQuincenal(2013, 4, 1), "quincenal")
+    r = historia.ejecutar(_INSUMOS_3, "INPC", "quincenal", PeriodoQuincenal(2013, 4, 1))
     assert isinstance(r, ResultadoIndice)
     assert {m.version for m in r.manifiesto} == {2010, 2013, 2018}
     assert r.periodo_referencia == PeriodoQuincenal(2013, 4, 1)
@@ -120,21 +120,43 @@ def test_tres_versiones_propagacion_referencia_empalme() -> None:
     historia = _historia_3_versiones()
     base = PeriodoQuincenal(2013, 3, 1)
     traslape = PeriodoQuincenal(2013, 3, 2)
-    cadena = historia.ejecutar(_INSUMOS_3, "INPC", base, "quincenal")
-    solo_2010 = historia.ejecutar([(2010, _RC10, _RS10)], "INPC", base, "quincenal")
+    cadena = historia.ejecutar(_INSUMOS_3, "INPC", "quincenal", base)
+    solo_2010 = historia.ejecutar([(2010, _RC10, _RS10)], "INPC", "quincenal", base)
     assert cadena.df.loc[cast(Any, (traslape, "INPC")), "indice_replicado"] == pytest.approx(
         solo_2010.df.loc[cast(Any, (traslape, "INPC")), "indice_replicado"]
     )
 
 
-def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
-    # _P18 solo trae 2Q Jul y 1Q Ago 2018 — la referencia debe caer en un mes con
-    # su 2Q real presente (2Q Jul), si no el rebase (quincenal, previo a a_mensual)
-    # no tiene dato para ningún índice y falla.
+def test_periodicidad_mensual_conserva_la_base_quincenal() -> None:
+    # La base no se mueve al mensualizar: promediar 1Q y 2Q no cambia el periodo
+    # en el que el índice vale 100, y ese periodo es una quincena. Antes se
+    # convertía a PeriodoMensual, con lo que el campo afirmaba una base que el
+    # mes no tenía (el mes es el promedio de la quincena base con la otra).
     historia = _historia_3_versiones()
-    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoMensual(2018, 7), "mensual")
-    assert r.periodo_referencia == PeriodoMensual(2018, 7)
+    r = historia.ejecutar([(2018, _RC18, _RS18)], "INPC", "mensual", PeriodoQuincenal(2018, 7, 2))
+    assert r.periodo_referencia == PeriodoQuincenal(2018, 7, 2)
     assert all(isinstance(p, PeriodoMensual) for p in r.df.index.get_level_values("periodo"))
+
+
+def test_referencia_mensual_se_rechaza_temprano() -> None:
+    # El flujo automático es quincenal de punta a punta. Quien necesite un mes
+    # anclado en 100 mensualiza y rebasa a mano — ver el comentario de `ejecutar`.
+    historia = _historia_3_versiones()
+    with pytest.raises(InvarianteViolado, match="debe ser quincenal"):
+        historia.ejecutar(
+            [(2018, _RC18, _RS18)],
+            "INPC",
+            "mensual",
+            cast(Any, PeriodoMensual(2018, 7)),
+        )
+
+
+def test_tipo_sin_normalizar_se_rechaza_antes_de_leer_insumos() -> None:
+    # La fachada normaliza con .upper(); invocando el caso de uso directo el
+    # error salía recién dentro del calculador, tras leer canasta y serie.
+    historia = _historia_3_versiones()
+    with pytest.raises(InvarianteViolado, match="mayúsculas"):
+        historia.ejecutar([(2018, _RC18, _RS18)], "inpc", "quincenal", PeriodoQuincenal(2018, 7, 2))
 
 
 # -- errores -------------------------------------------------------------------
@@ -156,7 +178,7 @@ def test_periodicidad_mensual_preserva_periodo_referencia() -> None:
 def test_validaciones_fallan(insumos: list, periodicidad: str) -> None:
     historia = _historia_3_versiones()
     with pytest.raises(InvarianteViolado):
-        historia.ejecutar(insumos, "INPC", PeriodoQuincenal(2018, 7, 2), periodicidad)  # type: ignore[arg-type]
+        historia.ejecutar(insumos, "INPC", periodicidad, PeriodoQuincenal(2018, 7, 2))  # type: ignore[arg-type]
 
 
 def test_periodo_referencia_inexistente_falla() -> None:
@@ -165,7 +187,7 @@ def test_periodo_referencia_inexistente_falla() -> None:
     # sin reescalar con periodo_referencia seteado igual).
     historia = _historia_3_versiones()
     with pytest.raises(InvarianteViolado, match="ningún índice tiene dato"):
-        historia.ejecutar([(2018, _RC18, _RS18)], "INPC", PeriodoQuincenal(2099, 1, 1), "quincenal")
+        historia.ejecutar([(2018, _RC18, _RS18)], "INPC", "quincenal", PeriodoQuincenal(2099, 1, 1))
 
 
 # -- _referencias_normalizadas -------------------------------------------------

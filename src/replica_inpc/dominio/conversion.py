@@ -430,10 +430,12 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     disponible, usa su valor solo y marca `parcial`. También agrega `.reporte`
     (peor caso de cobertura entre 1Q/2Q), filtra `.manifiesto` a las versiones
     con al menos una fila tras la agregación (conserva la lista original si
-    todas quedarían huérfanas), convierte `.periodo_referencia` de quincenal a
-    mensual si existía, y crea `._frontera` para preservar las anclas de junta
-    de canasta que el promedio destruiría. `.diagnostico` se propaga sin tocar
-    (queda indexado por quincena, a diferencia de `.reporte`/`.resultado`).
+    todas quedarían huérfanas), propaga `.periodo_referencia` **sin convertir**
+    (promediar no mueve la base, y no se garantiza que el mes que contiene a la
+    quincena base valga 100: es el promedio de sus dos quincenas; para anclar un
+    mes en 100, rebasar el resultado ya mensual), y crea `._frontera` para
+    preservar las anclas de junta de canasta que el promedio destruiría. `.diagnostico` se propaga sin tocar (queda indexado por
+    quincena, a diferencia de `.reporte`/`.resultado`).
 
     Precedencia de `motivo_error` entre dos quincenas con el mismo estado
     irregular: para `sin_datos`, prioriza 2Q (mismo criterio que
@@ -551,15 +553,18 @@ def a_mensual(resultado: ResultadoIndice) -> ResultadoIndice:
     if not manifiesto_filtrado:
         manifiesto_filtrado = resultado.manifiesto
 
-    ref = resultado.periodo_referencia
-    if isinstance(ref, PeriodoQuincenal):
-        ref = PeriodoMensual(ref.año, ref.mes)
-
+    # `periodo_referencia` se propaga SIN convertir: promediar 1Q y 2Q no mueve la
+    # base. El mes que contiene a la quincena base es el promedio de esa quincena
+    # con la otra, así que no hay garantía de que valga 100 — coincide solo si la
+    # otra quincena también vale 100, o si el mes aporta una sola quincena al
+    # tramo. Convertirlo a `PeriodoMensual` afirmaba justo lo que el campo
+    # promete y no podía sostener. Para obtener un mes anclado en 100, `rebasar`
+    # acepta un `ResultadoIndice` ya mensual con un `PeriodoMensual`.
     return ResultadoIndice(
         df_result,
         manifiesto_filtrado,
         _reporte_a_mensual(df_result, resultado.reporte),
         resultado.diagnostico,
-        periodo_referencia=ref,
+        periodo_referencia=resultado.periodo_referencia,
         frontera=_construir_frontera(df),
     )

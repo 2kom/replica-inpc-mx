@@ -110,7 +110,7 @@ Sin `referencia`, el proyecto usa como fallback $f_h = \sum_k w_k f_k / \sum_k w
 
 **Serie histórica continua:** para obtener una serie continua que abarque los
 tramos 2010, 2013, 2018 y 2024, el modo automático orquesta carga, cálculo,
-empalme, conversión y rebase en una sola llamada:
+empalme, rebase y conversión de frecuencia —en ese orden— en una sola llamada:
 
 ```python
 import replica_inpc as rep

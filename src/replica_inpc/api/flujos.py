@@ -17,18 +17,24 @@ from replica_inpc.infraestructura.csv.lector_series_csv import LectorSeriesCsv
 def calcular_historia(
     insumos: list[tuple[VersionCanasta, str, str]],
     tipo: str = "INPC",
-    referencia: str = "2Q Jul 2018",
     periodicidad: Literal["quincenal", "mensual"] = "mensual",
+    referencia: str = "2Q Jul 2018",
 ) -> ResultadoIndice:
-    """Calcula el índice histórico empalmado, rebased y en la periodicidad dada.
+    """Calcula el índice histórico empalmado, rebasado y en la periodicidad dada.
 
-    Orquesta carga → cálculo por versión → empalme por pares vecinos →
-    conversión de frecuencia → rebase. Para control granular, usar las
-    funciones manuales de `insumos` e `indices`.
+    Orquesta carga → cálculo por versión → empalme por pares vecinos → rebase →
+    conversión de frecuencia. Para control granular, usar las funciones manuales
+    de `insumos` e `indices`.
 
-    `referencia` debe estar en formato quincenal (`"NQ Mmm AAAA"`). Los
-    cálculos internos son siempre quincenales; cuando `periodicidad="mensual"`
-    la conversión a periodo mensual ocurre automáticamente.
+    `referencia` debe estar en formato quincenal (`"NQ Mmm AAAA"`) porque la base
+    del INPC siempre es una quincena: 2Q dic 2010 para las canastas 2010 y 2013,
+    2Q jul 2018 para 2018 y 2024. Con `periodicidad="mensual"` la serie se
+    promedia al final y la base sigue siendo esa quincena, que es la que reporta
+    `periodo_referencia`. No se garantiza que el mes que contiene al ancla valga
+    100: es el promedio de sus dos quincenas, y solo coincide con 100 si la otra
+    quincena también vale 100 o si el mes tiene una sola quincena en el tramo. Si
+    necesitas un mes anclado en 100 (por ejemplo para comparar contra un índice
+    mensual), pide `periodicidad="mensual"` y rebasa después con `rebasar`.
     """
     tipo = tipo.upper()
     try:
@@ -49,4 +55,4 @@ def calcular_historia(
         for version, ruta_canasta, ruta_series in insumos
     ]
     caso = CalcularHistoria(LectorCanastaCsv(), LectorSeriesCsv())
-    return caso.ejecutar(insumos_path, tipo, periodo_referencia, periodicidad)
+    return caso.ejecutar(insumos_path, tipo, periodicidad, periodo_referencia)

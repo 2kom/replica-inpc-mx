@@ -1102,13 +1102,18 @@ def test_a_mensual_propaga_manifiesto() -> None:
     assert rm.manifiesto == r.manifiesto
 
 
-def test_a_mensual_periodo_referencia_convierte_a_mensual() -> None:
+def test_a_mensual_conserva_la_referencia_quincenal() -> None:
+    # Promediar no mueve la base. El mes que contiene a la quincena base vale el
+    # promedio de esa quincena con la otra (101.0), no 100, así que declararlo
+    # como periodo_referencia contradecía el contrato del campo.
     r = _resultado(
         [(_q1, "INPC", 100.0, "ok", None), (_q2, "INPC", 102.0, "ok", None)],
         periodo_referencia=_q1,
     )
     rm = a_mensual(r)
-    assert rm.periodo_referencia == PeriodoMensual(_q1.año, _q1.mes)
+    assert rm.periodo_referencia == _q1
+    mes = PeriodoMensual(_q1.año, _q1.mes)
+    assert rm.df.loc[cast(Any, (mes, "INPC")), "indice_replicado"] == pytest.approx(101.0)
 
 
 def test_a_mensual_sin_periodo_referencia_queda_none() -> None:

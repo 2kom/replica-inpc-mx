@@ -23,7 +23,7 @@ resultado.df.to_csv("output/inpc.csv")
 
 ## Flujo 1 — INPC histórico (modo automático)
 
-El camino más corto. `calcular_historia` orquesta carga → cálculo → empalme → conversión → rebase en una sola llamada. Usar cuando no se necesita acceso a resultados intermedios por versión.
+El camino más corto. `calcular_historia` orquesta carga → cálculo → empalme → rebase → conversión de frecuencia en una sola llamada. Usar cuando no se necesita acceso a resultados intermedios por versión.
 
 ```python
 import replica_inpc as rep
@@ -36,7 +36,8 @@ insumos = [
 ]
 
 inpc = rep.calcular_historia(insumos)
-# ResultadoIndice mensual, base Jul 2018 = 100
+# ResultadoIndice mensual, base 2Q Jul 2018 = 100 (la base es siempre quincenal,
+# también cuando la serie es mensual)
 # nomenclatura de categorías: versión 2024 (la más reciente)
 
 display(inpc)           # tabla HTML en el notebook
@@ -48,8 +49,10 @@ display(inpc.resumen)   # estado por tramo (estado_calculo, periodos, versión)
 | parámetro | default | descripción |
 |---|---|---|
 | `tipo` | `"inpc"` | índice a calcular; debe existir en todas las canastas de `insumos` |
-| `referencia` | `"2Q Jul 2018"` | periodo base (= 100); solo formato quincenal `"NQ Mmm AAAA"`; con `periodicidad="mensual"` se convierte automáticamente a su equivalente mensual |
-| `periodicidad` | `"mensual"` | frecuencia del resultado: `"mensual"` o `"quincenal"` |
+| `periodicidad` | `"mensual"` | frecuencia del resultado: `"mensual"` o `"quincenal"`. Solo decide si la serie se promedia al final; no altera la base |
+| `referencia` | `"2Q Jul 2018"` | periodo base (= 100); solo formato quincenal `"NQ Mmm AAAA"`, también con `periodicidad="mensual"` — la base del INPC siempre es una quincena y se conserva tal cual al mensualizar |
+
+El orden de los dos últimos parámetros cambió el 2026-08-11: antes era `(..., tipo, referencia, periodicidad)`. Si tenías llamadas posicionales de cuatro argumentos, ahora la referencia se interpreta como periodicidad; usar argumentos nombrados evita el problema.
 
 **Reglas de `insumos`:**
 - Si incluye 2013 → debe incluir 2010
@@ -97,7 +100,7 @@ hist_m = rep.a_mensual(hist)
 inpc   = rep.rebasar(hist_m, "Jul 2018")
 ```
 
-`cargar_serie` devuelve siempre periodos quincenales. Este orden (mensualizar, luego rebasar con referencia mensual) ancla exacto en 100 el promedio 1Q+2Q de "Jul 2018". El orden inverso (`rebasar` con referencia quincenal, luego `a_mensual`) — el que usa `calcular_historia()` internamente — ancla exacto la quincena oficial de base (2Q Jul 2018, ver `data/glosario.md`) y deja el promedio mensual solo aproximado. Ninguno anula la referencia (`a_mensual` la propaga, no la descarta); son dos definiciones válidas de "Jul 2018 = 100", no un error si se invierte.
+`cargar_serie` devuelve siempre periodos quincenales. Este orden (mensualizar, luego rebasar con referencia mensual) ancla exacto en 100 el promedio 1Q+2Q de "Jul 2018", y ahí `periodo_referencia` es un mes que sí vale 100. El orden inverso (`rebasar` con referencia quincenal, luego `a_mensual`) — el que usa `calcular_historia()` internamente — ancla exacto la quincena oficial de base (2Q Jul 2018, ver `data/glosario.md`); entonces no se garantiza que el mes que contiene al ancla valga 100 —es el promedio de sus dos quincenas— y `periodo_referencia` conserva la quincena, igual que el INPC mensual publicado conserva su base quincenal. Ninguno anula la referencia (`a_mensual` la propaga sin convertir); son dos anclajes válidos, no un error si se invierte.
 
 ### Caso completo: 4 versiones
 

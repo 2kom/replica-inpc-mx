@@ -1,8 +1,8 @@
 """Caso de uso `CalcularHistoria`.
 
-Orquesta carga, cálculo, empalme, conversión de frecuencia y rebase para
-producir un `ResultadoIndice` histórico a partir de insumos por versión de
-canasta. Reemplaza a `EjecutarCorrida` (v1).
+Orquesta carga, cálculo, empalme, rebase y conversión de frecuencia —en ese
+orden— para producir un `ResultadoIndice` histórico a partir de insumos por
+versión de canasta. Reemplaza a `EjecutarCorrida` (v1).
 """
 
 from __future__ import annotations
@@ -62,8 +62,19 @@ def _referencias_normalizadas(
 
 
 class CalcularHistoria:
-    """Produce un `ResultadoIndice` histórico empalmado, rebased y en la
-    periodicidad indicada."""
+    """Ruta automática del cálculo histórico: resuelve la cadena completa de una vez.
+
+    Hace por el usuario lo que de otro modo se compone a mano — cargar los
+    insumos de cada versión, calcular directo (2010, 2018) o encadenado (2013,
+    2024) propagando la referencia de empalme, unir los tramos y anclarlos a una
+    base común.
+
+    Args:
+        lector_canasta: puerto de lectura de canastas.
+        lector_series: puerto de lectura de series de índices.
+
+    Ver: docs/diseño.md §7.2
+    """
 
     def __init__(self, lector_canasta: LectorCanasta, lector_series: LectorSeries) -> None:
         self._lector_canasta = lector_canasta
@@ -73,10 +84,29 @@ class CalcularHistoria:
         self,
         insumos: list[tuple[VersionCanasta, Path, Path]],
         tipo: str,
-        periodo_referencia: _Periodo,
         periodicidad: Literal["quincenal", "mensual"],
+        periodo_referencia: PeriodoQuincenal,
     ) -> ResultadoIndice:
-        self._validar(insumos, periodicidad)
+        """Calcula la serie histórica completa, empalmada y rebasada.
+
+        Args:
+            insumos: una tupla `(version, ruta_canasta, ruta_series)` por versión
+                de canasta. Deben ser contiguas y cada versión encadenada exige
+                la suya base.
+            tipo: `"INPC"` o una columna de clasificación, en mayúsculas.
+            periodicidad: decide únicamente si el resultado se mensualiza al
+                final; no altera la base.
+            periodo_referencia: quincena en la que el índice vale 100.
+
+        Raises:
+            InvarianteViolado: si los insumos están vacíos, traen versiones
+                duplicadas, no contiguas o sin su base encadenada; si la
+                periodicidad no es válida; o si `tipo`/`periodo_referencia` no
+                cumplen su contrato.
+
+        Ver: docs/diseño.md §7.2
+        """
+        _validar(insumos, tipo, periodicidad, periodo_referencia)
         ordenados = sorted(insumos, key=lambda insumo: insumo[0])
 
         resultados: list[tuple[VersionCanasta, ResultadoIndice]] = []
@@ -94,44 +124,74 @@ class CalcularHistoria:
 
         acc = resultados[0][1]
         for version, resultado in resultados[1:]:
-            acc = empalmar([acc, resultado], forzar=True, version_nombres=version)
+            # Sin `forzar`: los tramos recién calculados llegan con
+            # `periodo_referencia=None`, así que la guardia de juntura discontinua
+            # de `empalmar` no se dispara acá. Forzarla la dejaría desarmada para
+            # un futuro en que sí llegara un tramo ya rebasado.
+            acc = empalmar([acc, resultado], version_nombres=version)
 
-        ref_rebase = periodo_referencia
-        if periodicidad == "mensual" and isinstance(periodo_referencia, PeriodoMensual):
-            ref_rebase = PeriodoQuincenal(periodo_referencia.año, periodo_referencia.mes, 2)
-        acc = rebasar(acc, ref_rebase)
+        # Rebase ANTES de mensualizar: ancla exacta la quincena base, que es la
+        # que el INPC publica (`data/glosario.md`, "Periodo base / de referencia").
+        # El promedio mensual queda entonces aproximado a propósito — no se
+        # garantiza que el mes que contiene al ancla valga 100, y
+        # `periodo_referencia` sigue nombrando la quincena real.
+        #
+        # Para admitir una base MENSUAL exacta —útil para comparar contra un
+        # índice de periodicidad mensual, como el INPP— hay que invertir el orden
+        # solo en ese caso: `a_mensual` primero y `rebasar` después, con un
+        # `PeriodoMensual`. Ambos órdenes son válidos y `rebasar` ya acepta un
+        # resultado mensual (docs/diseño.md §5.10); lo que falta es ensanchar el
+        # tipo de `periodo_referencia` y ramificar acá. Hoy la guardia de
+        # `_validar` lo rechaza antes de llegar a este punto.
+        acc = rebasar(acc, periodo_referencia)
         if periodicidad == "mensual":
             acc = a_mensual(acc)
         return acc
 
-    @staticmethod
-    def _validar(insumos: list[tuple[VersionCanasta, Path, Path]], periodicidad: str) -> None:
-        if not insumos:
-            raise InvarianteViolado("insumos no puede estar vacío.")
-        if periodicidad not in _PERIODICIDADES:
+
+def _validar(
+    insumos: list[tuple[VersionCanasta, Path, Path]],
+    tipo: str,
+    periodicidad: str,
+    periodo_referencia: _Periodo,
+) -> None:
+    """Rechaza insumos, tipo, periodicidad o referencia inválidos antes de leer nada."""
+    if not insumos:
+        raise InvarianteViolado("insumos no puede estar vacío.")
+    if periodicidad not in _PERIODICIDADES:
+        raise InvarianteViolado(f"periodicidad '{periodicidad}' inválida; usa {_PERIODICIDADES}.")
+    if not tipo or tipo != tipo.upper():
+        raise InvarianteViolado(
+            f"tipo '{tipo}' debe venir en mayúsculas y no vacío; la fachada lo normaliza."
+        )
+    # El INPC se calcula por quincena y su base oficial siempre es una quincena
+    # —2Q dic 2010 para las canastas 2010/2013, 2Q jul 2018 para 2018/2024—, así
+    # que una base mensual no tiene contraparte en este flujo. Ver el comentario
+    # de `ejecutar` para qué haría falta si algún día se admite.
+    if not isinstance(periodo_referencia, PeriodoQuincenal):
+        raise InvarianteViolado(
+            f"periodo_referencia debe ser quincenal; se recibió "
+            f"{type(periodo_referencia).__name__}. Los cálculos son quincenales y la "
+            f"base del INPC siempre es una quincena."
+        )
+
+    versiones = [insumo[0] for insumo in insumos]
+    if len(versiones) != len(set(versiones)):
+        raise InvarianteViolado(f"insumos tiene versiones duplicadas: {sorted(versiones)}.")
+    desconocidas = [v for v in versiones if v not in _ORDEN_VERSIONES]
+    if desconocidas:
+        raise InvarianteViolado(f"versiones fuera de {_ORDEN_VERSIONES}: {desconocidas}.")
+
+    posiciones = sorted(_ORDEN_VERSIONES.index(v) for v in versiones)
+    contiguas = list(range(posiciones[0], posiciones[0] + len(posiciones)))
+    if posiciones != contiguas:
+        raise InvarianteViolado(
+            f"las versiones de insumos no son contiguas en {_ORDEN_VERSIONES}: {sorted(versiones)}."
+        )
+
+    conjunto = set(versiones)
+    for encadenada, base in _BASE_ENCADENADA.items():
+        if encadenada in conjunto and base not in conjunto:
             raise InvarianteViolado(
-                f"periodicidad '{periodicidad}' inválida; usa {_PERIODICIDADES}."
+                f"la versión {encadenada} (encadenada) requiere su versión base {base} en insumos."
             )
-
-        versiones = [insumo[0] for insumo in insumos]
-        if len(versiones) != len(set(versiones)):
-            raise InvarianteViolado(f"insumos tiene versiones duplicadas: {sorted(versiones)}.")
-        desconocidas = [v for v in versiones if v not in _ORDEN_VERSIONES]
-        if desconocidas:
-            raise InvarianteViolado(f"versiones fuera de {_ORDEN_VERSIONES}: {desconocidas}.")
-
-        posiciones = sorted(_ORDEN_VERSIONES.index(v) for v in versiones)
-        contiguas = list(range(posiciones[0], posiciones[0] + len(posiciones)))
-        if posiciones != contiguas:
-            raise InvarianteViolado(
-                f"las versiones de insumos no son contiguas en {_ORDEN_VERSIONES}: "
-                f"{sorted(versiones)}."
-            )
-
-        conjunto = set(versiones)
-        for encadenada, base in _BASE_ENCADENADA.items():
-            if encadenada in conjunto and base not in conjunto:
-                raise InvarianteViolado(
-                    f"la versión {encadenada} (encadenada) requiere su versión "
-                    f"base {base} en insumos."
-                )
