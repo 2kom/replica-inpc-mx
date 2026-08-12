@@ -100,6 +100,8 @@ hist_m = rep.a_mensual(hist)
 inpc   = rep.rebasar(hist_m, "Jul 2018")
 ```
 
+`cargar_canasta` imprime una tabla resumen de la canasta cargada; pasar `resumen=False` la suprime, útil al cargar varias seguidas. El `version` de `cargar_serie` no cambia cómo se lee el archivo: verifica que el tramo de periodos de la serie toque el de esa canasta, lo que atrapa confundir series lejanas (una de 2024 declarada 2010) pero no vecinas (ver `docs/diseño.md` §D3).
+
 `cargar_serie` devuelve siempre periodos quincenales. Este orden (mensualizar, luego rebasar con referencia mensual) ancla exacto en 100 el promedio 1Q+2Q de "Jul 2018", y ahí `periodo_referencia` es un mes que sí vale 100. El orden inverso (`rebasar` con referencia quincenal, luego `a_mensual`) — el que usa `calcular_historia()` internamente — ancla exacto la quincena oficial de base (2Q Jul 2018, ver `data/glosario.md`); entonces no se garantiza que el mes que contiene al ancla valga 100 —es el promedio de sus dos quincenas— y `periodo_referencia` conserva la quincena, igual que el INPC mensual publicado conserva su base quincenal. Ninguno anula la referencia (`a_mensual` la propaga sin convertir); son dos anclajes válidos, no un error si se invierte.
 
 ### Caso completo: 4 versiones
@@ -107,10 +109,10 @@ inpc   = rep.rebasar(hist_m, "Jul 2018")
 El bloque 2010/2013 y el bloque 2018/2024 viven en escalas naturales distintas: "2Q Jul 2018" vale ~X en el bloque 2010/2013 y vale 100 en el bloque 2018/2024. Hay que rebasar el bloque anterior a "2Q Jul 2018" antes de empalmar con el bloque 2018/2024.
 
 ```python
-# Cargar (2010 y 2013 adicionales)
-c2010 = rep.cargar_canasta("data/ponderadores_2010.csv", version=2010)
+# Cargar (2010 y 2013 adicionales). resumen=False evita imprimir una tabla por canasta
+c2010 = rep.cargar_canasta("data/ponderadores_2010.csv", version=2010, resumen=False)
 s2010 = rep.cargar_serie("data/series_2010.csv", version=2010)
-c2013 = rep.cargar_canasta("data/ponderadores_2013.csv", version=2013)
+c2013 = rep.cargar_canasta("data/ponderadores_2013.csv", version=2013, resumen=False)
 s2013 = rep.cargar_serie("data/series_2013.csv", version=2013)
 
 # Calcular por versión

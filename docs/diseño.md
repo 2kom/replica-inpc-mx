@@ -1747,7 +1747,19 @@ Funciones públicas aceptan `str` en parámetros de periodo; nunca `Periodo*` en
 
 **§D2 — Token híbrido en config.py:** `get_token()` busca la env var `INEGI_TOKEN` primero y solo después el valor de `set_token`. El orden no es arbitrario: en CI y en CLI el token se fija por entorno sin escribir código, y ese contexto debe ganar sobre un `set_token` dejado por error en una celda de notebook. En un notebook interactivo, donde no hay env var, `set_token` sigue siendo el único mecanismo. Si ninguno está disponible, `get_token()` lanza `ErrorConfiguracion`.
 
-**§D3 — Versión explícita en insumos:** `version` es obligatorio en `cargar_canasta` y `cargar_serie` porque las canastas 2010 y 2013 tienen genéricos idénticos; auto-detect no puede distinguirlas y elegiría mal en silencio, produciendo un cálculo erróneo sin error visible.
+**§D3 — Versión explícita en insumos:** `version` es obligatorio en `cargar_canasta` y `cargar_serie`, por razones distintas en cada una.
+
+En `cargar_canasta` no es inferible: las canastas 2010 y 2013 tienen genéricos idénticos, el CSV no trae marca de versión, y de ella dependen el mapa de renombres entre canastas y la elección de calculador (directo o encadenado). Un auto-detect elegiría mal en silencio y produciría un cálculo erróneo sin error visible.
+
+En `cargar_serie` no cambia cómo se lee el archivo: se usa para verificar que el tramo de periodos de la serie **toque** el de esa canasta (`RANGOS_CANASTAS`). La comprobación es deliberadamente parcial. No se puede exigir contención —las series del BIE traen histórico previo a su propia canasta: la serie 2018 arranca en 1Q Ene 2018 y el tramo de la canasta 2018 empieza en 2Q Jul 2018— así que solo se exige intersección no vacía. Eso atrapa confusiones lejanas (una serie de 2024 declarada 2010) pero no vecinas, porque los tramos de canastas contiguas comparten frontera. Ambos extremos del toque son inclusivos: una serie que empieza exactamente donde termina la canasta, o termina exactamente donde la canasta empieza, se acepta. Matriz medida el 2026-08-12 sobre `data/inputs/series{2010,2018,2024}_vertical_metadata.CSV`:
+
+| serie \ canasta | 2010 | 2013 | 2018 | 2024 |
+| --- | --- | --- | --- | --- |
+| 2010 | OK | OK | OK | rechaza |
+| 2018 | rechaza | OK | OK | OK |
+| 2024 | rechaza | rechaza | OK | OK |
+
+La diagonal nunca rechaza: cero falsos positivos sobre datos reales. Los cinco archivos de serie 2024 de `data/inputs/` no terminan todos en el mismo periodo (`horizontal_metadata` llega a 1Q Jul 2026, los `_nometadata` y `vertical_metadata` a 2Q Mar 2026, la copia a 1Q Oct 2025) — el extremo derecho depende de cuándo se descargó cada uno. La matriz no cambia por eso: ninguno de esos extremos cruza una frontera de canasta.
 
 **§D4 — Re-export en `replica_inpc/__init__.py`:** el paquete raíz re-exporta en `__all__` los tipos de error de `dominio/errores.py` (`rep.ArchivoNoEncontrado`, `rep.InvarianteViolado`, etc.), los tipos de periodo (`rep.PeriodoMensual`, `rep.PeriodoQuincenal`, `rep.periodo_desde_str`), `rep.VersionCanasta` y `rep.INDICES_VALIDABLES`. El usuario no necesita importar desde rutas internas. `api/__init__.py` es vacío — el ensamblado ocurre solo en el paquete raíz.
 
@@ -1848,6 +1860,7 @@ IO de inputs. Sin transformaciones de dominio; solo carga y normalización de CS
 def cargar_canasta(
     ruta: str,
     version: Literal[2010, 2013, 2018, 2024],
+    resumen: bool = True,
 ) -> CanastaCanonica:
 ```
 
@@ -1855,14 +1868,18 @@ def cargar_canasta(
 | --- | --- | --- |
 | `ruta` | `str` | ruta al CSV; relativa o absoluta |
 | `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta; explícita siempre — sin auto-detect (ver §D3) |
+| `resumen` | `bool` | si imprime la tabla resumen a stdout; `True` por defecto |
 
 Devuelve `CanastaCanonica` — índice = `generico`; columnas `ponderador` y `encadenamiento` como `str`.
+
+Imprime a stdout una tabla con el conteo de genéricos, encadenamientos y categorías por columna de clasificación, salvo que se pase `resumen=False`. Es un efecto de la ruta manual únicamente: `calcular_historia` usa `LectorCanastaCsv` directo y no imprime nada.
 
 | Condición | Error |
 | --- | --- |
 | `ruta` no existe | `ArchivoNoEncontrado` |
 | archivo existe pero vacío | `ArchivoVacio` |
 | CSV no parseable | `ArchivoCorrupto` |
+| archivo no legible como texto | `EncodingNoLegible` |
 | columnas requeridas ausentes | `ColumnasMinFaltantes` |
 | `version` fuera de `[2010, 2013, 2018, 2024]` | `InvarianteViolado` |
 
@@ -1882,7 +1899,7 @@ def cargar_serie(
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
 | `ruta` | `str` | ruta al CSV; relativa o absoluta |
-| `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta correspondiente |
+| `version` | `Literal[2010, 2013, 2018, 2024]` | versión de la canasta a la que se aplicará la serie; no cambia cómo se lee el archivo, se usa para verificar cobertura (ver §D3) |
 
 Devuelve `SerieNormalizada` — índice = `generico`; columnas = `PeriodoQuincenal`.
 
@@ -1894,6 +1911,7 @@ Devuelve `SerieNormalizada` — índice = `generico`; columnas = `PeriodoQuincen
 | orientación de columnas no detectable | `OrientacionNoDetectable` |
 | ninguna fila útil tras normalización | `SerieVacia` |
 | `version` fuera de `[2010, 2013, 2018, 2024]` | `InvarianteViolado` |
+| el tramo de la serie no toca el de la canasta declarada | `InvarianteViolado` |
 
 Siempre quincenal — datos mensuales se obtienen vía `a_mensual(resultado)`, nunca cargando CSV mensuales. Soporta formato BIE jerárquico (2010/2013) y estándar (2018/2024).
 
