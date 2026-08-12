@@ -6,9 +6,9 @@ import warnings
 import pandas as pd
 
 from replica_inpc.dominio.correspondencia_canastas import (
-    _ORDEN_VERSIONES,
+    ORDEN_VERSIONES,
     _aplicar_renombre,
-    _construir_mapa_renombre,
+    construir_mapa_renombre,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
@@ -21,7 +21,7 @@ _ESTADOS_CON_VALOR = frozenset({"ok", "parcial", "rellenado"})
 # límite inferior del tramo nuevo; el tramo viejo lo posee en el empalme.
 _JUNTAS_FRONTERA: list[tuple[PeriodoQuincenal, VersionCanasta, VersionCanasta]] = [
     (RANGOS_CANASTAS[v_new][0], v_old, v_new)
-    for v_old, v_new in zip(_ORDEN_VERSIONES, _ORDEN_VERSIONES[1:])
+    for v_old, v_new in zip(ORDEN_VERSIONES, ORDEN_VERSIONES[1:])
 ]
 
 
@@ -170,7 +170,7 @@ def empalmar(
         vc = int(version_nombres)
 
     vers_labels = {max(m.version for m in r.manifiesto) for r in ordenados}
-    vers_en_orden = sorted(v for v in vers_labels if v in _ORDEN_VERSIONES)
+    vers_en_orden = sorted(v for v in vers_labels if v in ORDEN_VERSIONES)
     if version_nombres is not None and vers_en_orden:
         if vc < min(vers_en_orden) or vc > max(vers_en_orden):
             raise InvarianteViolado(
@@ -186,7 +186,7 @@ def empalmar(
 
     for r in ordenados:
         version_origen = max(m.version for m in r.manifiesto)
-        mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
+        mapa = construir_mapa_renombre(tipo_unico, version_origen, vc)
 
         df_completo = _aplicar_renombre(r._df_resultado, tipo_unico, version_origen, mapa)
         reporte = _aplicar_renombre(r.reporte, tipo_unico, version_origen, mapa)
@@ -231,7 +231,7 @@ def empalmar(
         if fr is None:
             continue
         version_origen = max(m.version for m in r.manifiesto)
-        mapa = _construir_mapa_renombre(tipo_unico, version_origen, vc)
+        mapa = construir_mapa_renombre(tipo_unico, version_origen, vc)
         fronteras_df.append(_aplicar_renombre(fr, tipo_unico, version_origen, mapa))
     frontera_out: pd.DataFrame | None = None
     if fronteras_df:

@@ -17,9 +17,9 @@ from replica_inpc.aplicacion.puertos.lector_series import LectorSeries
 from replica_inpc.dominio.calculo.estrategia import para_canasta
 from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
 from replica_inpc.dominio.correspondencia_canastas import (
-    _ORDEN_VERSIONES,
-    _construir_mapa_renombre,
-    _renombrar_valor,
+    ORDEN_VERSIONES,
+    construir_mapa_renombre,
+    renombrar_valor,
 )
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
@@ -47,7 +47,7 @@ def _referencias_normalizadas(
     encadenado busca la referencia con el nombre de la canasta actual.
     """
     traslape = RANGOS_CANASTAS[version_destino][0]  # type: ignore[index]
-    mapa = _construir_mapa_renombre(tipo, version_origen, version_destino)
+    mapa = construir_mapa_renombre(tipo, version_origen, version_destino)
     df = resultado_prev.df
     refs: dict[str, float] = {}
     for indice in df.index.get_level_values("indice").unique():
@@ -57,7 +57,7 @@ def _referencias_normalizadas(
             continue
         if pd.isna(valor):
             continue
-        refs[_renombrar_valor(str(indice), tipo, version_origen, mapa)] = float(valor)  # type: ignore[arg-type]
+        refs[renombrar_valor(str(indice), tipo, version_origen, mapa)] = float(valor)  # type: ignore[arg-type]
     return refs
 
 
@@ -116,8 +116,12 @@ class CalcularHistoria:
             serie = self._lector_series.leer(ruta_series)
             referencias: dict[str, float] | None = None
             if previo is not None:
-                version_origen = max(m.version for m in previo.manifiesto)
-                referencias = _referencias_normalizadas(previo, tipo, version_origen, version)
+                # `previo` es el resultado de UNA versión: el empalme viene después
+                # del bucle, así que su manifiesto tiene exactamente una entrada.
+                (manifiesto_previo,) = previo.manifiesto
+                referencias = _referencias_normalizadas(
+                    previo, tipo, manifiesto_previo.version, version
+                )
             resultado = para_canasta(canasta, referencias).calcular(canasta, serie, tipo)
             resultados.append((version, resultado))
             previo = resultado
@@ -178,15 +182,15 @@ def _validar(
     versiones = [insumo[0] for insumo in insumos]
     if len(versiones) != len(set(versiones)):
         raise InvarianteViolado(f"insumos tiene versiones duplicadas: {sorted(versiones)}.")
-    desconocidas = [v for v in versiones if v not in _ORDEN_VERSIONES]
+    desconocidas = [v for v in versiones if v not in ORDEN_VERSIONES]
     if desconocidas:
-        raise InvarianteViolado(f"versiones fuera de {_ORDEN_VERSIONES}: {desconocidas}.")
+        raise InvarianteViolado(f"versiones fuera de {ORDEN_VERSIONES}: {desconocidas}.")
 
-    posiciones = sorted(_ORDEN_VERSIONES.index(v) for v in versiones)
+    posiciones = sorted(ORDEN_VERSIONES.index(v) for v in versiones)
     contiguas = list(range(posiciones[0], posiciones[0] + len(posiciones)))
     if posiciones != contiguas:
         raise InvarianteViolado(
-            f"las versiones de insumos no son contiguas en {_ORDEN_VERSIONES}: {sorted(versiones)}."
+            f"las versiones de insumos no son contiguas en {ORDEN_VERSIONES}: {sorted(versiones)}."
         )
 
     conjunto = set(versiones)

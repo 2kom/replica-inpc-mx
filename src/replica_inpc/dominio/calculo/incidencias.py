@@ -51,11 +51,11 @@ from replica_inpc.dominio.calculo._temporal import (
     restar_quincenas,
 )
 from replica_inpc.dominio.correspondencia_canastas import (
-    _ORDEN_VERSIONES,
+    ORDEN_VERSIONES,
     RENOMBRES_GENERICOS,
     _componer_mapas,
-    _construir_mapa_renombre,
-    _renombrar_valor,
+    construir_mapa_renombre,
+    renombrar_valor,
 )
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
@@ -167,9 +167,9 @@ def _obtener_lag_y_mensual(df_clas: pd.DataFrame, frecuencia: Frecuencia) -> tup
 def _construir_mapa_generico(version_origen: int, version_canonica: int) -> dict[str, str]:
     """Compone `RENOMBRES_GENERICOS` de `version_origen` a `version_canonica`.
 
-    Análogo a `_construir_mapa_renombre` pero sobre genéricos (sin `tipo`).
+    Análogo a `construir_mapa_renombre` pero sobre genéricos (sin `tipo`).
     """
-    orden: list[int] = list(_ORDEN_VERSIONES)
+    orden: list[int] = list(ORDEN_VERSIONES)
     if version_origen == version_canonica:
         return {}
     try:
@@ -210,12 +210,12 @@ def _es_clasificacion_estable(tipo: str, canastas: dict[int, CanastaCanonica]) -
         if tipo not in df.columns:
             return False
         serie = df[tipo].dropna()
-        mapa_cat = _construir_mapa_renombre(tipo, int(v), vc)
+        mapa_cat = construir_mapa_renombre(tipo, int(v), vc)
         mapa_gen = _construir_mapa_generico(int(v), vc)
         d: dict[str, str] = {}
         for gen_nat, cat_nat in serie.items():
             gen_c = mapa_gen.get(str(gen_nat), str(gen_nat))
-            cat_c = _renombrar_valor(str(cat_nat), tipo, int(v), mapa_cat)
+            cat_c = renombrar_valor(str(cat_nat), tipo, int(v), mapa_cat)
             d[gen_c] = cat_c
         gen_cat.append(d)
         cat_sets.append(set(d.values()))
@@ -240,7 +240,7 @@ def _partir_en_segmentos(
     enlace oculto). Lanza `InvarianteViolado` si `ver_b`/`ver_t` no forman un cruce
     hacia adelante (consistencia: una fila cross siempre debe producir ≥2 segmentos).
     """
-    orden: list[int] = list(_ORDEN_VERSIONES)
+    orden: list[int] = list(ORDEN_VERSIONES)
     try:
         i = orden.index(int(ver_b))
         j = orden.index(int(ver_t))
@@ -676,9 +676,9 @@ def _construir_ponderadores_por_version(
     pond_por_version: dict[int, pd.Series] = {}
     for v, c in canastas.items():
         ponds = c.df["ponderador"].astype(float).groupby(c.df[tipo_clas]).sum()
-        mapa = _construir_mapa_renombre(tipo_clas, int(v), vc)
+        mapa = construir_mapa_renombre(tipo_clas, int(v), vc)
         renombres = {
-            cast(str, x): _renombrar_valor(str(x), tipo_clas, int(v), mapa) for x in ponds.index
+            cast(str, x): renombrar_valor(str(x), tipo_clas, int(v), mapa) for x in ponds.index
         }
         ponds = ponds.rename(index=renombres).groupby(level=0).sum()
         pond_por_version[v] = ponds

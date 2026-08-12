@@ -34,7 +34,7 @@ from replica_inpc.dominio.calculo.laspeyres_directo import LaspeyresDirecto
 from replica_inpc.dominio.calculo.laspeyres_encadenado import LaspeyresEncadenadoT2
 from replica_inpc.dominio.calculo.variaciones import variacion_periodica
 from replica_inpc.dominio.conversion import a_mensual, empalmar, rebasar
-from replica_inpc.dominio.correspondencia_canastas import _construir_mapa_renombre
+from replica_inpc.dominio.correspondencia_canastas import construir_mapa_renombre
 from replica_inpc.dominio.errores import ErrorConfiguracion, InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.incidencia import ResultadoIncidencia
@@ -732,7 +732,7 @@ def test_cross_canasta_renombre_alinea_ponderador() -> None:
     # (2024), pero el ponderador 2018 se indexa con el nombre NATIVO. Sin alinear vocabularios
     # la fila cross (base 2018) caería como "sin ponderador". El fix renombra el ponderador
     # al vocabulario canónico antes de buscarlo.
-    mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
+    mapa = construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
     nativo_2018, (canonico, _codigo) = next((k, v) for k, v in mapa.items() if v[0] != k)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)
@@ -758,7 +758,7 @@ def test_vc_inferido_soporta_version_nombres_no_max() -> None:
     # nombres de índice son los NATIVOS de 2018 aunque haya filas versión 2024. `vc` NO puede
     # inferirse como max(version)=2024; se infiere como la versión cuyos nombres caben en su
     # canasta nativa (2018). Si fallara, la fila cross caería como "sin ponderador".
-    mapa = _construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
+    mapa = construir_mapa_renombre("CCIF DIVISION", 2018, 2024)
     nativo_2018, (nativo_2024, _codigo) = next((k, v) for k, v in mapa.items() if v[0] != k)
     feb = PeriodoMensual(2024, 2)
     mar = PeriodoMensual(2024, 3)

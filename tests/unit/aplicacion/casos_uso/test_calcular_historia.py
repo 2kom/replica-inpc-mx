@@ -7,10 +7,13 @@ import pandas as pd
 import pytest
 
 from replica_inpc.aplicacion.casos_uso.calcular_historia import (
+    _BASE_ENCADENADA,
     CalcularHistoria,
     _referencias_normalizadas,
 )
-from replica_inpc.dominio.correspondencia_canastas import RENOMBRES_INDICES
+from replica_inpc.dominio.calculo.estrategia import para_canasta
+from replica_inpc.dominio.calculo.laspeyres_encadenado import _LaspeyresEncadenadoBase
+from replica_inpc.dominio.correspondencia_canastas import ORDEN_VERSIONES, RENOMBRES_INDICES
 from replica_inpc.dominio.errores import InvarianteViolado
 from replica_inpc.dominio.modelos.canasta import CanastaCanonica
 from replica_inpc.dominio.modelos.indice import ResultadoIndice
@@ -157,6 +160,30 @@ def test_tipo_sin_normalizar_se_rechaza_antes_de_leer_insumos() -> None:
     historia = _historia_3_versiones()
     with pytest.raises(InvarianteViolado, match="mayúsculas"):
         historia.ejecutar([(2018, _RC18, _RS18)], "inpc", "quincenal", PeriodoQuincenal(2018, 7, 2))
+
+
+# -- coherencia de _BASE_ENCADENADA con el resto del sistema -------------------
+
+
+def test_base_encadenada_coincide_con_el_calculador_de_cada_version() -> None:
+    # `_BASE_ENCADENADA` repite, en forma de dato, algo que `estrategia.para_canasta`
+    # ya decide: qué versiones son encadenadas. Agregar una canasta obliga a tocar
+    # los dos sitios, y nada avisaba si se desincronizaban. Esto avisa.
+    encadenadas_segun_estrategia = {
+        v
+        for v in ORDEN_VERSIONES
+        if isinstance(para_canasta(_canasta(v, encadenado=True)), _LaspeyresEncadenadoBase)
+    }
+    assert encadenadas_segun_estrategia == set(_BASE_ENCADENADA)
+
+
+def test_base_encadenada_apunta_a_la_version_inmediatamente_anterior() -> None:
+    # La otra mitad del dato: con qué versión empalma cada encadenada. Siempre es
+    # su vecina previa en ORDEN_VERSIONES, nunca una arbitraria.
+    for encadenada, base in _BASE_ENCADENADA.items():
+        i = ORDEN_VERSIONES.index(cast(VersionCanasta, encadenada))
+        assert i > 0, f"{encadenada} es la primera versión; no puede ser encadenada"
+        assert ORDEN_VERSIONES[i - 1] == base
 
 
 # -- errores -------------------------------------------------------------------

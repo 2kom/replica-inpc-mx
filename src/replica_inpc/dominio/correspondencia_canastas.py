@@ -438,7 +438,7 @@ RENOMBRES_CODIGOS_INDICES: dict[str, dict[int, dict[str, tuple[str, str]]]] = {
     },
 }
 
-_ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
+ORDEN_VERSIONES: tuple[VersionCanasta, ...] = (2010, 2013, 2018, 2024)
 
 # CCIF DIVISION/GRUPO/CLASE traen código numérico de prefijo cuando la canasta viene de
 # pdf ("12 bienes y servicios diversos"), pero no cuando viene de xlsx ("bienes y
@@ -476,7 +476,7 @@ def _corregir_nombre(nombre: str, tipo: str, version: int) -> str:
     return nombre
 
 
-def _construir_mapa_renombre(
+def construir_mapa_renombre(
     tipo: str, version_origen: int, version_canonica: int
 ) -> dict[str, tuple[str, str | None]]:
     """nombre_origen (ya corregido de typos/clasificación) -> (nombre_destino, código_destino).
@@ -486,7 +486,7 @@ def _construir_mapa_renombre(
     """
     if tipo not in RENOMBRES_INDICES or version_origen == version_canonica:
         return {}
-    orden: list[int] = list(_ORDEN_VERSIONES)
+    orden: list[int] = list(ORDEN_VERSIONES)
     try:
         idx_o = orden.index(version_origen)
         idx_c = orden.index(version_canonica)
@@ -529,7 +529,7 @@ def _construir_mapa_renombre(
     return {k: v for k, v in mapa.items() if v != (k, None)}
 
 
-def _renombrar_valor(
+def renombrar_valor(
     x: str, tipo: str, version_origen: int, mapa: dict[str, tuple[str, str | None]]
 ) -> str:
     """Aplica typo/clasificación/renombre/código a un valor crudo de `indice` o categoría CCIF."""
@@ -555,7 +555,7 @@ def _aplicar_renombre(
     def renombrar(x: object) -> object:
         if not isinstance(x, str):
             return x
-        return _renombrar_valor(x, tipo, version_origen, mapa)
+        return renombrar_valor(x, tipo, version_origen, mapa)
 
     new_indice = df.index.get_level_values("indice").map(renombrar)
     new_periodo = df.index.get_level_values("periodo")
