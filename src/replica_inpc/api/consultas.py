@@ -36,8 +36,22 @@ def consultar_indice(
 ) -> pd.DataFrame:
     """Devuelve el histórico de índices publicados por INEGI para `tipo`.
 
-    Requiere token INEGI configurado (`rep.set_token(...)` o `INEGI_TOKEN`).
-    Ver: docs/diseño.md §6.8.
+    Cubre desde el primer hasta el último periodo que INEGI tiene en su serie.
+    Un periodo intermedio sin dato aparece como `NaN` (gap visible); un
+    periodo anterior al inicio de la serie simplemente no existe en el
+    resultado — son dos ausencias distintas, no confundirlas.
+
+    Args:
+        tipo: se normaliza con `.upper()`. Valores soportados: `"INPC"`,
+            `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"`.
+        periodicidad: frecuencia del histórico a devolver. Default `"mensual"`.
+
+    Raises:
+        ErrorConfiguracion: `periodicidad` inválida, `tipo` sin indicador
+            INEGI, o no hay token configurado (`rep.set_token(...)` o
+            `INEGI_TOKEN`).
+        FuenteNoDisponible: la API de INEGI no responde o devuelve error HTTP.
+        RespuestaInvalida: la respuesta de INEGI tiene formato inesperado.
     """
     tipo = tipo.upper()
     if periodicidad not in ("mensual", "quincenal"):
@@ -57,7 +71,25 @@ def consultar_variacion(
 
     `frecuencia` selecciona la clase: `"mensual"` / `"quincenal"` = vs periodo
     anterior; `"anual"` = vs mismo periodo año anterior; `"acumulada_anual"` =
-    vs diciembre año anterior. Ver tabla de mapeo en docs/diseño.md §6.8.
+    vs diciembre año anterior. `"mensual"` exige `periodicidad="mensual"` y
+    `"quincenal"` exige `periodicidad="quincenal"` — son la única frecuencia
+    atada a una periodicidad concreta; `"anual"` y `"acumulada_anual"`
+    funcionan con cualquiera de las dos. Mismo comportamiento de rango
+    completo que `consultar_indice`: gaps internos visibles como `NaN`,
+    prehistoria simplemente ausente.
+
+    Args:
+        tipo: se normaliza con `.upper()`. Valores soportados: `"INPC"`,
+            `"INFLACION COMPONENTE"`, `"INFLACION SUBCOMPONENTE"`.
+        periodicidad: frecuencia del histórico. Default `"mensual"`.
+        frecuencia: tipo de variación. Default `"mensual"`.
+
+    Raises:
+        ErrorConfiguracion: `periodicidad` o `frecuencia` inválida, la
+            combinación `frecuencia`/`periodicidad` no es compatible, `tipo`
+            sin indicador INEGI, o no hay token configurado.
+        FuenteNoDisponible: la API de INEGI no responde o devuelve error HTTP.
+        RespuestaInvalida: la respuesta de INEGI tiene formato inesperado.
     """
     tipo = tipo.upper()
     if periodicidad not in ("mensual", "quincenal"):
