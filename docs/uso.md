@@ -413,7 +413,8 @@ df = rep.consultar_variacion("inpc", "quincenal", "quincenal")      # quincenal,
 df = rep.consultar_variacion("inpc", "mensual", "anual")            # mensual, vs mismo mes año anterior
 df = rep.consultar_variacion("inpc", "mensual", "acumulada_anual")  # mensual, vs dic año anterior
 
-# Incidencia (solo mensual; INEGI no publica quincenales)
+# Incidencia (solo mensual; el BIE no expone incidencias quincenales — INEGI sí las
+# publica, pero en sus comunicados, no en esta fuente)
 df = rep.consultar_incidencia("inpc")
 df = rep.consultar_incidencia("inflacion componente")
 ```

@@ -289,10 +289,11 @@ class FuenteValidacionApi:
             if es_mensual
             else _INDICADORES_QUINCENALES[self._tipo]
         )
+        tipo_periodo: type[_Periodo] = PeriodoMensual if es_mensual else PeriodoQuincenal
         resultado: dict[str, dict[_Periodo, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, tipo_periodo)
             historico = self._cache[indicador]
             resultado[nombre] = _recortar_al_historico(periodos, historico)
         return resultado
@@ -326,10 +327,11 @@ class FuenteValidacionApi:
                 f"Tipos soportados: {list(indicadores_tipo)}"
             )
         indicadores = indicadores_tipo[self._tipo]
+        tipo_periodo: type[_Periodo] = PeriodoQuincenal if es_quincenal else PeriodoMensual
         resultado: dict[str, dict[PeriodoMensual | PeriodoQuincenal, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, tipo_periodo)
             historico = self._cache[indicador]
             resultado[nombre] = _recortar_al_historico(periodos, historico)
         return resultado
@@ -364,7 +366,7 @@ class FuenteValidacionApi:
         resultado: dict[str, dict[PeriodoMensual, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, PeriodoMensual)
             historico = self._cache[indicador]
             recortado = _recortar_al_historico(list(periodos), historico)
             resultado[nombre] = cast(dict[PeriodoMensual, float | None], recortado)
@@ -389,10 +391,11 @@ class FuenteValidacionApi:
             if es_mensual
             else _INDICADORES_QUINCENALES[self._tipo]
         )
+        tipo_periodo: type[_Periodo] = PeriodoMensual if es_mensual else PeriodoQuincenal
         resultado: dict[str, dict[_Periodo, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, tipo_periodo)
             historico = self._cache[indicador]
             rango = _rango_completo(historico)
             resultado[nombre] = {p: historico.get(p) for p in rango}
@@ -420,10 +423,13 @@ class FuenteValidacionApi:
                 f"'{tipo_variacion}'. Tipos soportados: {list(indicadores_tipo)}"
             )
         indicadores = indicadores_tipo[self._tipo]
+        tipo_periodo: type[_Periodo] = (
+            PeriodoQuincenal if periodicidad == "quincenal" else PeriodoMensual
+        )
         resultado: dict[str, dict[_Periodo, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, tipo_periodo)
             historico = self._cache[indicador]
             rango = _rango_completo(historico)
             resultado[nombre] = {p: historico.get(p) for p in rango}
@@ -448,13 +454,13 @@ class FuenteValidacionApi:
         resultado: dict[str, dict[_Periodo, float | None]] = {}
         for nombre, indicador in indicadores.items():
             if indicador not in self._cache:
-                self._cache[indicador] = self._fetch(indicador)
+                self._cache[indicador] = self._fetch(indicador, PeriodoMensual)
             historico = self._cache[indicador]
             rango = _rango_completo(historico)
             resultado[nombre] = {p: historico.get(p) for p in rango}
         return resultado
 
-    def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:
+    def _fetch(self, indicador: str, tipo_periodo: type[_Periodo]) -> dict[_Periodo, float | None]:
         # La URL lleva el token en texto plano (formato fijo de la API del BIE) —
         # nunca incluir `str(exc)` en el mensaje. Tampoco alcanza con `from None`
         # DENTRO del except: __context__ sigue apuntando a la excepción original
@@ -488,6 +494,10 @@ class FuenteValidacionApi:
             if not series:
                 raise RespuestaInvalida("La API devolvió 'Series' vacío.")
             observations = series[0]["OBSERVATIONS"]
+            if not observations:
+                raise RespuestaInvalida(
+                    f"La API devolvió 'OBSERVATIONS' vacío para el indicador {indicador!r}."
+                )
         except (KeyError, IndexError, ValueError) as exc:
             raise RespuestaInvalida(f"Respuesta del INEGI con formato inesperado: {exc}") from exc
 
@@ -503,6 +513,11 @@ class FuenteValidacionApi:
                     periodo = PeriodoMensual(int(partes[0]), int(partes[1]))
                 else:
                     raise ValueError(f"TIME_PERIOD con {len(partes)} partes")
+                if not isinstance(periodo, tipo_periodo):
+                    raise RespuestaInvalida(
+                        f"Indicador {indicador!r} esperaba periodos {tipo_periodo.__name__}, "
+                        f"pero TIME_PERIOD={obs['TIME_PERIOD']!r} da {type(periodo).__name__}."
+                    )
                 raw = obs["OBS_VALUE"]
                 valor = None if raw is None else float(raw)
                 resultado[periodo] = valor

@@ -323,6 +323,29 @@ class TestRespuestaInvalida:
         with pytest.raises(RespuestaInvalida):
             fuente.obtener_indices([_P1])
 
+    def test_observations_vacio_lanza_respuesta_invalida(self, mocker):
+        # Series no vacío, pero la única serie no trae observaciones — antes
+        # producía un histórico {} silencioso en vez de fallar.
+        mocker.patch(
+            "requests.get", return_value=_mock_resp(200, {"Series": [{"OBSERVATIONS": []}]})
+        )
+
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+        with pytest.raises(RespuestaInvalida, match="OBSERVATIONS"):
+            fuente.obtener_indices([_P1])
+
+    def test_periodicidad_cruzada_lanza_respuesta_invalida(self, mocker):
+        # Se pide mensual (_PM1) pero la respuesta trae TIME_PERIOD quincenal —
+        # antes se aceptaba, dejando PeriodoQuincenal en un histórico "mensual".
+        respuesta = {
+            "Series": [{"OBSERVATIONS": [{"TIME_PERIOD": "2026/03/01", "OBS_VALUE": "145.4"}]}]
+        }
+        mocker.patch("requests.get", return_value=_mock_resp(200, respuesta))
+
+        fuente = FuenteValidacionApi(token="token", tipo="INPC")
+        with pytest.raises(RespuestaInvalida, match="PeriodoMensual"):
+            fuente.obtener_indices([_PM1])
+
     def test_time_period_malformado_lanza_respuesta_invalida(self, mocker):
         respuesta = {
             "Series": [
