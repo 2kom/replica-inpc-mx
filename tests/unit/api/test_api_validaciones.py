@@ -34,6 +34,16 @@ def test_crear_fuente_sin_token_falla() -> None:
         validaciones._crear_fuente("INPC")
 
 
+def test_crear_fuente_timeout_invalido_falla() -> None:
+    # Ruta pública: config.timeout_api llega sin validar hasta acá. La guardia
+    # real vive en FuenteValidacionApi.__init__, pero esto prueba que el valor
+    # de config sí se propaga y sí se rechaza.
+    config.set_token("tok")
+    config.timeout_api = 0
+    with pytest.raises(ErrorConfiguracion, match="timeout"):
+        validaciones._crear_fuente("INPC")
+
+
 def test_crear_fuente_usa_token_tipo_y_timeout_de_config(mocker) -> None:
     config.set_token("tok")
     config.timeout_api = 7

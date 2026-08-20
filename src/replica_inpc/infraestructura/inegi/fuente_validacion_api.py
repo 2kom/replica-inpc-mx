@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Literal, cast
 
 import requests
@@ -257,6 +258,10 @@ class FuenteValidacionApi:
                 f"tipo '{tipo}' no tiene indicador INEGI disponible. "
                 f"Tipos soportados: {list(_INDICADORES_QUINCENALES)}"
             )
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ErrorConfiguracion(
+                f"timeout {timeout!r} inválido; debe ser un valor finito mayor a 0 segundos."
+            )
         self._token = token
         self._tipo = tipo
         self._timeout = timeout
@@ -450,12 +455,32 @@ class FuenteValidacionApi:
         return resultado
 
     def _fetch(self, indicador: str) -> dict[_Periodo, float | None]:
+        # La URL lleva el token en texto plano (formato fijo de la API del BIE) —
+        # nunca incluir `str(exc)` en el mensaje. Tampoco alcanza con `from None`
+        # DENTRO del except: __context__ sigue apuntando a la excepción original
+        # (con el token) aunque se suprima su impresión en el traceback por
+        # defecto. Levantar la excepción sanitizada FUERA del try/except es lo
+        # que evita que __context__ se fije en absoluto.
         url = _URL.format(indicador=indicador, token=self._token)
+        resp: requests.Response | None = None
+        error_msg: str | None = None
         try:
             resp = requests.get(url, timeout=self._timeout)
             resp.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "desconocido"
+            error_msg = (
+                f"La API del INEGI respondió {status} para el indicador {indicador!r}. "
+                f"Verifica el token INEGI configurado."
+            )
         except requests.exceptions.RequestException as exc:
-            raise FuenteNoDisponible(f"No se pudo conectar a la API del INEGI: {exc}") from exc
+            error_msg = (
+                f"No se pudo conectar a la API del INEGI ({type(exc).__name__}) para "
+                f"el indicador {indicador!r}."
+            )
+        if error_msg is not None:
+            raise FuenteNoDisponible(error_msg)
+        assert resp is not None  # error_msg es None solo si el try completó sin excepción
 
         try:
             data = resp.json()

@@ -14,7 +14,7 @@ from replica_inpc.infraestructura.inegi.fuente_validacion_api import FuenteValid
 
 _token: str | None = None
 
-# Variables configurables — ver api.md §config.py.
+# Variables configurables — ver docs/diseño.md §6.1.
 tolerancia_indice: float = 0.0009
 tolerancia_derivados: float = 0.009
 timeout_api: int = 10
@@ -23,7 +23,12 @@ timeout_api: int = 10
 def set_token(token: str) -> None:
     """Almacena el token INEGI para la sesión actual.
 
-    La validez del token se verifica al llamar `validar_*`, no aquí.
+    Cualquier string se acepta aquí — la validez recién se pone a prueba cuando
+    una llamada de `validar_*`/`consultar_*` dispara una petición real a la API.
+    Si el indicador ya está en cache (`FuenteValidacionApi._cache`), ni siquiera
+    entonces: la respuesta se sirve desde ahí sin tocar la red, así que un token
+    inválido puede pasar desapercibido toda la sesión si los datos ya se
+    descargaron antes con un token válido.
     """
     global _token
     _token = token
@@ -33,10 +38,16 @@ def get_token() -> str:
     """Devuelve el token INEGI configurado (uso interno).
 
     Busca primero la variable de entorno `INEGI_TOKEN` y, si no existe, el
-    valor fijado con `set_token` — ver api.md §D2.
+    valor fijado con `set_token`. El orden no es arbitrario: en CI y en CLI el
+    token se fija por entorno sin escribir código, y ese contexto debe ganar
+    sobre un `set_token` dejado por error en una celda de notebook. En un
+    notebook interactivo, donde no hay variable de entorno, `set_token` sigue
+    siendo el único mecanismo.
 
     Raises:
         ErrorConfiguracion: Si no hay token por ninguna de las dos vías.
+
+    Ver: docs/diseño.md §6.1, §D2
     """
     token = os.environ.get("INEGI_TOKEN") or _token
     if not token:
@@ -57,8 +68,6 @@ def reset_config() -> None:
 
 def mostrar_config() -> None:
     """Imprime el estado actual de la configuración en stdout."""
-    import os
-
     if os.environ.get("INEGI_TOKEN"):
         estado_token = "configurado (INEGI_TOKEN)"
     elif _token:
@@ -78,6 +87,8 @@ def mostrar_config() -> None:
 def limpiar_cache() -> None:
     """Vacía el cache de respuestas INEGI.
 
-    La siguiente llamada a `validar_*` vuelve a consultar la API.
+    El cache es de clase (`FuenteValidacionApi._cache`), compartido por todas
+    las instancias — la siguiente llamada a `validar_*` o a `consultar_*`
+    vuelve a descargar el indicador, no solo la primera de las dos familias.
     """
     FuenteValidacionApi.limpiar_cache()

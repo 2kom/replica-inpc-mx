@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import traceback
+
 import pytest
 import requests
 
@@ -76,6 +78,20 @@ class TestInicializacion:
 
     def test_tipo_valido_no_lanza(self):
         FuenteValidacionApi(token="cualquier-token", tipo="INPC")
+
+    @pytest.mark.parametrize(
+        "timeout",
+        [0, -1, -10, float("nan"), float("inf"), float("-inf")],
+        ids=["cero", "negativo", "negativo_grande", "nan", "inf", "menos_inf"],
+    )
+    def test_timeout_no_positivo_lanza_error_configuracion(self, timeout):
+        # timeout<=0 no atrapa NaN ni inf (ambas comparaciones dan False) — la
+        # guardia real exige valor finito Y positivo, no solo "no <= 0".
+        with pytest.raises(ErrorConfiguracion, match="timeout"):
+            FuenteValidacionApi(token="cualquier-token", tipo="INPC", timeout=timeout)
+
+    def test_timeout_positivo_no_lanza(self):
+        FuenteValidacionApi(token="cualquier-token", tipo="INPC", timeout=1)
 
 
 class TestRespuestaQuincenal:
@@ -237,6 +253,60 @@ class TestApiNoDisponible:
         with pytest.raises(FuenteNoDisponible):
             fuente.obtener_indices([_P1])
 
+    def test_error_no_expone_token_en_mensaje_ni_traceback(self, mocker):
+        # La URL real de la API lleva el token en texto plano; un HTTPError de
+        # requests incluye la URL completa en su propio mensaje. `_fetch` no debe
+        # dejarlo pasar ni en el mensaje de FuenteNoDisponible ni encadenado como
+        # causa (eso también lo imprime el traceback por defecto).
+        resp = requests.Response()
+        resp.status_code = 401
+        resp.reason = "Unauthorized"
+        resp.url = (
+            "https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/"
+            "INDICATOR/910420/es/00/false/BIE-BISE/2.0/TOKEN_SECRETO?type=json"
+        )
+        mocker.patch("requests.get", return_value=resp)
+
+        fuente = FuenteValidacionApi(token="TOKEN_SECRETO", tipo="INPC")
+        with pytest.raises(FuenteNoDisponible) as exc_info:
+            fuente.obtener_indices([_P1])
+
+        assert "TOKEN_SECRETO" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
+        assert exc_info.value.__context__ is None
+        traza = "".join(
+            traceback.format_exception(
+                type(exc_info.value), exc_info.value, exc_info.value.__traceback__
+            )
+        )
+        assert "TOKEN_SECRETO" not in traza
+
+    def test_connection_error_no_expone_token_en_mensaje_ni_traceback(self, mocker):
+        # Cubre la rama genérica RequestException (no HTTPError): el mensaje de
+        # requests.exceptions.ConnectionError también trae la URL completa —
+        # sin este caso, restaurar str(exc) solo ahí volvería a filtrar el token
+        # sin que el test de HTTPError se enterara.
+        mocker.patch(
+            "requests.get",
+            side_effect=requests.exceptions.ConnectionError(
+                "No se pudo conectar a https://www.inegi.org.mx/.../2.0/TOKEN_SECRETO?type=json"
+            ),
+        )
+
+        fuente = FuenteValidacionApi(token="TOKEN_SECRETO", tipo="INPC")
+        with pytest.raises(FuenteNoDisponible) as exc_info:
+            fuente.obtener_indices([_P1])
+
+        assert "TOKEN_SECRETO" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
+        assert exc_info.value.__context__ is None
+        traza = "".join(
+            traceback.format_exception(
+                type(exc_info.value), exc_info.value, exc_info.value.__traceback__
+            )
+        )
+        assert "TOKEN_SECRETO" not in traza
+
 
 class TestRespuestaInvalida:
     def test_sin_clave_series_lanza_respuesta_invalida(self, mocker):
@@ -313,12 +383,12 @@ class TestObtenerVariaciones:
         assert resultado["INPC"][_PM1] == pytest.approx(145.200)
         assert resultado["INPC"][_PM2] == pytest.approx(144.300)
 
-    def test_tipo_variacion_invalido_lanza_error(self, mocker):
+    def test_tipo_variacion_invalido_lanza_error(self):
         from replica_inpc.dominio.errores import ErrorConfiguracion
 
         fuente = FuenteValidacionApi(token="token", tipo="INPC")
         with pytest.raises(ErrorConfiguracion):
-            fuente.obtener_variaciones([_PM1], "invalido")
+            fuente.obtener_variaciones([_PM1], "invalido")  # pyright: ignore[reportArgumentType]
 
     def test_usa_indicador_periodica(self, mocker):
         mock_get = mocker.patch("requests.get", return_value=_mock_resp(200, _RESPUESTA_MENSUAL))

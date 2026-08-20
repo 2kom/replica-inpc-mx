@@ -1775,7 +1775,7 @@ Configuración global de la sesión.
 def set_token(token: str) -> None:
 ```
 
-Almacena el token INEGI en memoria para la sesión. La validez del token se verifica al llamar `validar_*`, no aquí. Cualquier string es aceptado. En CLI usar env var `INEGI_TOKEN`; `set_token` no aplica en CLI.
+Almacena el token INEGI en memoria para la sesión. Cualquier string es aceptado aquí — la validez recién se pone a prueba cuando una llamada de `validar_*`/`consultar_*` dispara una petición real a la API. Si el indicador ya está en cache (`FuenteValidacionApi._cache`), ni siquiera entonces: la respuesta se sirve desde ahí sin tocar la red. En CLI usar env var `INEGI_TOKEN`; `set_token` no aplica en CLI.
 
 | Parámetro | Tipo | Contrato |
 | --- | --- | --- |
@@ -1795,7 +1795,7 @@ export INEGI_TOKEN="mi-token-inegi"
 def limpiar_cache() -> None:
 ```
 
-Limpia el cache de respuestas INEGI (`FuenteValidacionApi._cache`). La siguiente llamada a `validar_*` vuelve a consultar la API. Útil en notebooks de larga duración donde los datos INEGI pueden haber cambiado.
+Limpia el cache de respuestas INEGI (`FuenteValidacionApi._cache`). Es un cache de clase, compartido por todas las instancias — la siguiente llamada a `validar_*` o a `consultar_*` vuelve a descargar el indicador, no solo la primera de las dos familias. Útil en notebooks de larga duración donde los datos INEGI pueden haber cambiado.
 
 ```python
 rep.limpiar_cache()
