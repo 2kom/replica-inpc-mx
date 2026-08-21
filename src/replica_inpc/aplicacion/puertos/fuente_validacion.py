@@ -22,7 +22,7 @@ class FuenteValidacion(Protocol):
     `ValidarResultado`, que resuelve el I/O y le pasa el mapa ya obtenido a
     `dominio/validacion/` — el dominio no conoce este contrato.
 
-    Ver: docs/diseño.md §7.1, §11.9, §11.25
+    Ver: docs/diseño.md §7.1, §11.8
 
     Esquema de retorno compartido — `dict[str, dict[Periodo, float | None]]`:
 

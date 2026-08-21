@@ -111,7 +111,7 @@ class ResultadoIndice(Resultado):
         # INPC: una fila por junta (indice="INPC"), `indice_replicado_old`=INPC_visible(e).
         # Clasificación: una fila por (junta, categoría), `indice_replicado_old`=I_K_visible(e).
         # Lo que la frontera de clasificación NO guarda es INPC_visible(e) — ese vive solo en
-        # la del INPC, porque `rebasar(clasificacion)` no conoce k_INPC (docs/diseño §11.29).
+        # la del INPC, porque `rebasar(clasificacion)` no conoce k_INPC (docs/diseño §11.23).
         self._frontera = frontera
 
     @property

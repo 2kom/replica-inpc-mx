@@ -36,7 +36,7 @@ def _construir_frontera(df: pd.DataFrame) -> pd.DataFrame | None:
     el INPC es `INPC_visible(e)`; para clasificación es `I_K_visible(e)` de cada categoría.
     Lo que la frontera de clasificación **no** guarda es `INPC_visible(e)` — ese vive solo
     en la del INPC, porque `rebasar(clasificacion)` no conoce `k_INPC` (ver
-    docs/diseño §11.29). El motor de incidencias necesita `I_K_visible(e)` para derivar el
+    docs/diseño §11.23). El motor de incidencias necesita `I_K_visible(e)` para derivar el
     ancla del lado nuevo de la junta sin suponer que vale 100.
     """
     tiene_inc = "indice_incidencia" in df.columns

@@ -413,7 +413,7 @@ def _calcular_incidencia_cross_encadenada(
         InvarianteViolado: Si la fila cross no produce ≥2 segmentos, o si algún operando
             presente es no finito o un divisor vale cero.
 
-    Ver: docs/diseño.md §11.29, data/glosario.md (símbolos `J_K`/`J_INPC`/`f_K^(m)`/
+    Ver: docs/diseño.md §11.23, data/glosario.md (símbolos `J_K`/`J_INPC`/`f_K^(m)`/
         `f_INPC^(m)`/ancla, sección "Notación matemática").
     """
     segmentos = _partir_en_segmentos(ver_b, ver_t, b, t)
@@ -704,7 +704,7 @@ def _seleccionar_escala_por_fila(
 ) -> _EscalaPorFila:
     """Selecciona la escala por fila: `indice_incidencia` (within) o `indice_replicado`
     (cross, continuo — `indice_incidencia` es discontinuo en la junta). Aplica igual a la
-    clasificación y al INPC del periodo base. Ver `docs/diseño.md §11.29`.
+    clasificación y al INPC del periodo base. Ver `docs/diseño.md §11.23`.
     """
     col_inc = _columna_incidencia(df_emitir)
     col_inc_lk = _columna_incidencia(df_lookup)

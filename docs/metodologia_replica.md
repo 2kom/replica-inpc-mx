@@ -23,7 +23,7 @@ El proyecto requiere dos archivos CSV:
 
 ## Correspondencia genérico <-> serie
 
-Los nombres de los genéricos en la canasta y en las series provienen de fuentes distintas y pueden tener diferencias tipográficas (tildes, espacios, mayúsculas). El proyecto normaliza ambos conjuntos antes de emparejarlos: elimina tildes, convierte a minúsculas y colapsa espacios múltiples.
+Los nombres de los genéricos en la canasta y en las series provienen de fuentes distintas y pueden tener diferencias tipográficas (tildes, espacios, mayúsculas, puntuación). El proyecto normaliza ambos conjuntos antes de emparejarlos: elimina tildes vocálicas, elimina puntuación (comas, puntos — relevante porque hay nombres como "Vestidos, faldas y pantalones…" y ramas SCIAN que llegan con punto final), colapsa espacios múltiples y convierte a minúsculas. La `ñ` se conserva (no es una tilde vocálica). Un puñado de erratas reales del archivo BIE 2010 (`niña`/`niñas`, `deshechables`/`desechables`) no son diferencias tipográficas resolubles por esta normalización — se corrigen aparte, con una tabla de alias fija al cargar la serie 2010.
 
 La correspondencia tiene que ser completa para los genéricos que el cálculo necesita: si a la serie le falta alguno, el cálculo se detiene con `ErrorCalculo` en vez de seguir con la intersección. Cuáles hacen falta depende del tipo — con `"INPC"` son todos los de la canasta; con una clasificación, solo los que tienen valor en esa columna, porque los demás quedan fuera del cálculo de todas formas. A la serie sí le pueden sobrar genéricos.
 
@@ -119,16 +119,14 @@ import replica_inpc as rep
 
 insumos = [
     (2010, "data/ponderadores_2010.csv", "data/series_2010.csv"),
-    (2013, "data/ponderadores_2013.csv", "data/series_2013.csv"),
+    (2013, "data/ponderadores_2013.csv", "data/series_2010.csv"),  # 2013 reusa las series BIE de 2010
     (2018, "data/ponderadores_2018.csv", "data/series_2018.csv"),
     (2024, "data/ponderadores_2024.csv", "data/series_2024.csv"),
 ]
 inpc = rep.calcular_historia(insumos, tipo="inpc")
 ```
 
-Internamente, el proyecto combina 2010+2013, rebasa ese bloque de forma endógena
-a `2Q Jul 2018 = 100` usando su propio valor replicado en ese periodo, y después
-empalma con 2018+2024.
+Internamente, el modo automático calcula cada tramo en fold — pasando al calculador el resultado replicado del tramo anterior como referencia — y va empalmando incrementalmente en el mismo orden; el rebase a `2Q Jul 2018 = 100` es un solo paso al final, sobre el resultado ya empalmado completo (no un rebase intermedio del bloque 2010+2013 antes de empalmar con 2018+2024 — eso es el flujo manual descrito abajo). Ambos caminos llegan al mismo resultado.
 
 Para empalmar manualmente tramos individuales ya calculados:
 
@@ -140,7 +138,7 @@ hist_m = rep.a_mensual(hist)
 inpc   = rep.rebasar(hist_m, "Jul 2018")
 ```
 
-`empalmar` excluye del tramo anterior los periodos ya cubiertos por el posterior. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 entre versiones de canasta. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen.
+En el periodo frontera (compartido por ambos tramos), `empalmar` conserva la fila del tramo **anterior** y excluye la del posterior — no al revés. Para clasificadores con cambios de nombre entre canastas, normaliza automáticamente los renombres 1:1 entre versiones de canasta. Las categorías nuevas, eliminadas, splits o fusiones aparecen solo en los periodos donde existen.
 
 ## Cálculo de variaciones
 
@@ -163,20 +161,20 @@ rv_a = rep.variacion_periodica(inpc, frecuencia="anual")     # lag = 24 quincena
 
 Frecuencias soportadas: `quincenal` (1), `mensual` (2), `bimestral` (4), `trimestral` (6), `cuatrimestral` (8), `semestral` (12), `anual` (24).
 
-**Regla drop/keep:** si el índice base $I_a$ es NaN (quincena sin dato), la variación no puede calcularse y la fila se elimina. Si el índice corriente $I_t$ es NaN pero existe su base, la fila se conserva con variación NaN — para no ocultar periodos sin dato.
+**Regla drop/keep:** una fila es computable solo si el índice tiene dato tanto en $t$ como en la base $a$; si cualquiera de los dos es NaN, la fila se elimina del resultado. El faltante no se pierde: queda trazado en `.reporte`/`.diagnostico` con su `estado_calculo` y motivo — la fila desaparece del resultado, no del diagnóstico.
 
 ### variacion_desde
 
-Calcula la variación acumulada desde un periodo base hasta cada quincena del rango:
+Calcula la variación total de un rango — **una fila por índice**, no una serie de variaciones por quincena:
 
 ```python
 rv = rep.variacion_desde(inpc, desde="1Q Ene 2024")
 rv = rep.variacion_desde(inpc, desde="1Q Ene 2024", hasta="2Q Jun 2024")
 ```
 
-La base es la quincena **inmediatamente anterior** a `desde`. Para un índice con dato en esa quincena base, la variación en `desde` refleja el cambio respecto al cierre del periodo anterior.
+La base es `desde` mismo: `variación = (I_hasta/I_desde − 1) × 100`.
 
-Para índices que no tienen dato en la quincena base (índices parciales), el parámetro `incluir_parciales=True` los incluye usando como base su primer dato disponible dentro del rango, con variación 0 en ese primer periodo.
+Si un índice no tiene dato exacto en `desde`/`hasta` (índice parcial), `incluir_parciales=True` usa como extremo real el primer/último periodo con dato dentro del rango, en vez de descartar el índice — no hay ninguna fila con variación forzada a 0.
 
 ### variacion_acumulada_anual
 

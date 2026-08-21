@@ -4,7 +4,7 @@ Orquesta el I/O que antes hacía el propio dominio: decide qué periodos consult
 pide la serie al puerto una sola vez y le entrega a `dominio/validacion/` un mapa
 ya resuelto. Los comparadores quedan puros — reciben datos, no un puerto.
 
-Ver: docs/diseño.md §7, §11.9
+Ver: docs/diseño.md §7, §11.8
 """
 
 from __future__ import annotations

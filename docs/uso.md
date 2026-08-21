@@ -30,7 +30,7 @@ import replica_inpc as rep
 
 insumos = [
     (2010, "data/ponderadores_2010.csv", "data/series_2010.csv"),
-    (2013, "data/ponderadores_2013.csv", "data/series_2013.csv"),
+    (2013, "data/ponderadores_2013.csv", "data/series_2010.csv"),  # 2013 reusa las series BIE de 2010
     (2018, "data/ponderadores_2018.csv", "data/series_2018.csv"),
     (2024, "data/ponderadores_2024.csv", "data/series_2024.csv"),
 ]
@@ -57,7 +57,7 @@ El orden de los dos últimos parámetros cambió el 2026-08-11: antes era `(...,
 **Reglas de `insumos`:**
 - Si incluye 2013 → debe incluir 2010
 - Si incluye 2024 → debe incluir 2018
-- Sin versiones duplicadas; en orden cronológico
+- Sin versiones duplicadas; contiguas en versión (no hace falta pasarlas en orden — `CalcularHistoria` las ordena internamente)
 
 **Errores posibles:**
 
@@ -113,7 +113,7 @@ El bloque 2010/2013 y el bloque 2018/2024 viven en escalas naturales distintas: 
 c2010 = rep.cargar_canasta("data/ponderadores_2010.csv", version=2010, resumen=False)
 s2010 = rep.cargar_serie("data/series_2010.csv", version=2010)
 c2013 = rep.cargar_canasta("data/ponderadores_2013.csv", version=2013, resumen=False)
-s2013 = rep.cargar_serie("data/series_2013.csv", version=2013)
+s2013 = rep.cargar_serie("data/series_2010.csv", version=2013)  # 2013 reusa las series BIE de 2010
 
 # Calcular por versión
 i2010 = rep.calcular_indice(c2010, s2010, tipo="inpc")
@@ -135,7 +135,7 @@ inpc   = rep.rebasar(hist_m, "Jul 2018")
 
 `empalmar([pre_r, inpc_pos])` no requiere `forzar=True` porque `pre_r.periodo_referencia = "2Q Jul 2018"` coincide con la frontera entre ambos bloques.
 
-Acá `i2018` se calcula **sin** `referencia` a propósito: nace en su escala propia y el bloque anterior se rebasa a mano para encontrarlo. Pasarle `referencia=i2013` no es equivalente ni inocuo — el tramo 2018 nacería ya en la escala de la cadena 2010-2013 (medido: `2Q Jul 2018` valdría `133.11` en vez de `100.00`) y entonces sobraría el `rebasar` de `pre`. Ese es el camino que toma `calcular_historia()` internamente. Los dos llegan al mismo histórico —comprobado sobre las cuatro canastas reales: 367 periodos, diferencia máxima `2.8e-14`— pero no se pueden mezclar.
+Acá `i2018` se calcula **sin** `referencia` a propósito: nace en su escala propia y el bloque anterior se rebasa a mano para encontrarlo. Pasarle `referencia=i2013` no es equivalente ni inocuo — el tramo 2018 nacería ya en la escala de la cadena 2010-2013 (medido: `2Q Jul 2018` valdría `133.11` en vez de `100.00`) y entonces sobraría el `rebasar` de `pre`. Ese es el camino que toma `calcular_historia()` internamente. Con el mismo anclaje (quincenal en ambos casos, `2Q Jul 2018 = 100`), los dos llegan al mismo histórico —diferencia máxima `2.8e-14`, medida sobre las cuatro canastas reales— pero no se pueden mezclar. El conteo de periodos no es una constante del código: depende de qué tan reciente sea la serie 2024 cargada.
 
 `rebasar` acepta formato quincenal o mensual según la periodicidad del resultado — la restricción de solo quincenal aplica únicamente a `calcular_historia`. `rebasar(hist_m, "Jul 2018")` es correcto porque `hist_m` es mensual; hace `promedio(1Q Jul 2018, 2Q Jul 2018) = 100`. Es la misma convención que usa el INEGI en sus publicaciones mensuales.
 
@@ -145,7 +145,6 @@ Acá `i2018` se calcula **sin** `referencia` a propósito: nace en su escala pro
 |---|---|
 | `referencia=None` para versión encadenada (2013 o 2024) | `InvarianteViolado` |
 | a la serie le falta algún genérico que el `tipo` necesita | `ErrorCalculo` |
-| canasta sin genéricos utilizables para el `tipo` | `CanastaSinGenericos` |
 | `tipo` no reconocido | `InvarianteViolado` |
 
 La cobertura se exige **por tipo**, no sobre la canasta entera: con `tipo="INPC"` hacen falta todos los genéricos; con una clasificación, solo los que tienen valor en esa columna. Faltar uno detiene el cálculo — no se calcula con la intersección.
@@ -186,6 +185,7 @@ cog = rep.rebasar(rep.a_mensual(rep.empalmar([i2018_cog, i2024_cog])), "Jul 2018
 | `"inpc"` | Índice Nacional de Precios al Consumidor |
 | `"inflacion componente"` | subyacente / no subyacente |
 | `"inflacion subcomponente"` | desglose de subyacente y no subyacente |
+| `"inflacion agrupacion"` | desglose más fino de subyacente y no subyacente |
 | `"COG"` | Objeto del Gasto |
 | `"CCIF division"` | COICOP nivel división |
 | `"CCIF grupo"` | COICOP nivel grupo |
@@ -193,7 +193,8 @@ cog = rep.rebasar(rep.a_mensual(rep.empalmar([i2018_cog, i2024_cog])), "Jul 2018
 | `"SCIAN sector"` | sector SCIAN |
 | `"SCIAN rama"` | rama SCIAN |
 | `"durabilidad"` | bienes duraderos / semi / no duraderos / servicios |
-| `"origen"` | nacionales / importados |
+| `"canasta basica"` | pertenece / no pertenece a la canasta básica |
+| `"canasta consumo minimo"` | pertenece / no pertenece a la canasta de consumo mínimo (solo canasta 2024) |
 
 Los tipos disponibles en cada canasta dependen de su versión. Si un `tipo` no existe en alguna canasta de `insumos`, `calcular_historia` lanza `InvarianteViolado`.
 
@@ -306,7 +307,7 @@ inc_m = rep.incidencia_periodica(inpc, comp, canastas, frecuencia="mensual")
 # Incidencia acumulada anual (propiedad: ∑ genéricos = variación anual del INPC en ese periodo)
 inc_anual = rep.incidencia_acumulada_anual(inpc, comp, canastas)
 
-# Incidencia de un rango (una fila por genérico)
+# Incidencia de un rango (una fila por categoría de "clasificacion" — aquí, subyacente/no subyacente)
 inc_2024 = rep.incidencia_desde(inpc, comp, canastas, desde="Ene 2024", hasta="Dic 2024")
 ```
 
@@ -358,8 +359,9 @@ rep.set_token("mi-token-inegi")
 
 # Validar índice
 val_ind = rep.validar_indice(inpc)
-val_ind.aprobado    # bool
-val_ind.df          # DataFrame con diferencias por (periodo, índice)
+val_ind.resumen                # una fila por (version, tipo); estado_validacion_global resume el peor caso
+val_ind.resultado.largo        # diferencias por (periodo, índice): indice_inegi, error_absoluto, estado_validacion
+# Validacion es terminal — no tiene .df ni .pipe()
 
 # Validar variaciones (solo clase_variacion compatible con INEGI)
 vars_m   = rep.variacion_periodica(inpc, frecuencia="mensual")
@@ -372,7 +374,7 @@ val_inc  = rep.validar_incidencia(inc_m)
 
 **Tipos validables:** `"inpc"`, `"inflacion componente"`, `"inflacion subcomponente"`. Otros tipos lanzan `ErrorConfiguracion`.
 
-**Variaciones validables:** `clase_variacion` en `{"periodica_mensual", "periodica_anual", "acumulada_anual"}` para resultado mensual; `{"periodica_quincenal", "periodica_anual"}` para quincenal. `clase_variacion="desde"` lanza `ErrorConfiguracion`.
+**Variaciones validables:** `clase_variacion` en `{"periodica_mensual", "periodica_anual", "acumulada_anual"}` para resultado mensual; `{"periodica_quincenal", "periodica_anual", "acumulada_anual"}` para quincenal (el BIE también publica acumulada quincenal). `clase_variacion="desde"` lanza `ErrorConfiguracion`.
 
 **Tolerancias ajustables:**
 
@@ -447,8 +449,6 @@ El DataFrame devuelto tiene índice `periodo` (`PeriodoMensual` o `PeriodoQuince
 | `ColumnasMinFaltantes` | columnas requeridas ausentes en canasta |
 | `OrientacionNoDetectable` | CSV de serie sin orientación válida |
 | `SerieVacia` | ninguna fila útil tras normalización |
-| `CanastaSinGenericos` | canasta sin genéricos utilizables para el `tipo` |
-| `PonderadorFaltante` | ponderador faltante al calcular |
 | `ErrorCalculo` | a la serie le falta un genérico que el `tipo` necesita, o el cálculo no puede completarse |
 | `PeriodoNoInterpretable` | string de periodo con formato inválido |
 | `InvarianteViolado` | contrato de dominio roto (ver función específica) |
