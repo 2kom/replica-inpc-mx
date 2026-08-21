@@ -20,9 +20,9 @@ Para profundizar:
 - [docs/metodologia_inegi.md](docs/metodologia_inegi.md) — metodología oficial de cálculo según el INEGI
 - [docs/metodologia_replica.md](docs/metodologia_replica.md) — cómo este proyecto replica el INPC
 
-## Alcance (v2.0.0)
+## Alcance (v3.0.0)
 
-La v2.0.0 del proyecto permite:
+La v3.0.0 del proyecto permite:
 
 - cargar canastas y series de genéricos desde CSV (`cargar_canasta`, `cargar_serie`);
 - calcular el INPC general mediante Laspeyres directo (canastas 2010 y 2018) o encadenado (canastas 2013 y 2024);
@@ -33,8 +33,11 @@ La v2.0.0 del proyecto permite:
 - imputar periodos faltantes en series vía bfill/ffill con trazabilidad completa (`estado_calculo`);
 - convertir resultados quincenales a mensuales vía `a_mensual`;
 - calcular variaciones periódicas, acumuladas anuales y desde un periodo base (quincenales y mensuales);
-- calcular incidencias periódicas, acumuladas anuales y desde un periodo base por subíndice clasificador (mensuales o quincenales), incluyendo flujos multi-canasta;
-- validar índices, variaciones e incidencias contra lo publicado por el INEGI vía su API.
+- calcular incidencias periódicas, acumuladas anuales y desde un periodo base por subíndice clasificador (mensuales o quincenales), incluyendo flujos multi-canasta, con reparto exacto por segmentos en las juntas entre canastas cuando la clasificación es estable;
+- validar índices, variaciones e incidencias contra lo publicado por el INEGI vía su API;
+- consultar directamente el histórico publicado por el INEGI sin comparación propia (`consultar_indice`, `consultar_variacion`, `consultar_incidencia`);
+- graficar índices, variaciones e incidencias (`graficar`);
+- generar la canasta canónica en CSV a partir del xlsx/PDF oficial de INEGI (`tools/generar_canasta.py`, ver [tools/uso_generar_canasta.md](tools/uso_generar_canasta.md)).
 
 El proyecto **no** incluye todavía:
 
@@ -94,9 +97,39 @@ rep.inflacion_en(rv, "Jun 2024")   # DataFrame con variación de cada índice en
 # Validar contra INEGI
 validacion = rep.validar_indice(resultado)
 validacion.resumen
+
+# Graficar el índice
+rep.graficar(resultado)
+
+# Incidencias: cuánto aporta cada categoría a la variación del INPC.
+# Requiere un subíndice de clasificación con el MISMO periodo_referencia
+# que "resultado", y las canastas por versión (canastas dict).
+comp = rep.calcular_historia(
+    insumos=[
+        (2018, "ruta/a/ponderadores_2018.csv", "ruta/a/series_2018.CSV"),
+        (2024, "ruta/a/ponderadores_2024.csv", "ruta/a/series_2024.CSV"),
+    ],
+    tipo="inflacion componente",
+    referencia="2Q Jul 2018",
+    periodicidad="mensual",
+)
+canastas = {
+    2018: rep.cargar_canasta("ruta/a/ponderadores_2018.csv", version=2018),
+    2024: rep.cargar_canasta("ruta/a/ponderadores_2024.csv", version=2024),
+}
+inc = rep.incidencia_periodica(resultado, comp, canastas, frecuencia="mensual")
+
+# Graficar la incidencia con la variación del INPC superpuesta como línea
+rep.graficar(inc, comparacion=rv)
 ```
 
-Para uso detallado (modo manual, subíndices, incidencias, validaciones), ver [docs/uso.md](docs/uso.md).
+![INPC](docs/img/quickstart_inpc.png)
+*Generada con `demo/notebook_demo.ipynb`, datos sintéticos.*
+
+![Incidencia por componente de inflación, barras apiladas con línea de INPC](docs/img/quickstart_incidencia.png)
+*Generada con `demo/notebook_demo.ipynb`, datos sintéticos.*
+
+Para uso detallado (modo manual, subíndices, incidencias, validaciones), ver [docs/uso.md](docs/uso.md). Para correr el ejemplo completo con datos sintéticos, ver [demo/notebook_demo.ipynb](demo/notebook_demo.ipynb).
 
 ## Política de insumos
 
